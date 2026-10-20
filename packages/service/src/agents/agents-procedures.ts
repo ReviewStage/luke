@@ -13,7 +13,10 @@
  * (`coder-host/start.ts`), reaching eve as the request's own caller
  * (`coder-host/stop.ts`'s `eveFor`), and answers 201 for the agent it made
  * or 200 for the one a retry under the same key made before; a blank one
- * hands the agent nothing and reaches no eve. The calls into an agent
+ * hands the agent nothing and reaches no eve. A Start from an agent
+ * (`POST /api/agents/{id}/agents`) takes the same path in the place that
+ * agent stands in, its task or, with none, its workspace and repository,
+ * and answers alike. The calls into an agent
  * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
  * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
  * MCP servers switched off, or a model and effort, and answers the agent as
@@ -80,7 +83,7 @@ import {
   type PublishedReach,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
-import { acceptedAgentChoice, startRequestedAgent } from "./coder-host/start.js";
+import { acceptedAgentChoice, placeOfAgent, startRequestedAgent } from "./coder-host/start.js";
 import {
   codingAgentPage,
   codingAgentSummary,
@@ -210,6 +213,23 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
   const signedIn = hosted.agents.use(accountMiddleware(seams.resolveUserId));
   const inSandbox = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.provide(effect, seams.sandbox);
+  const summaryModelOf = Effect.map(
+    HostedEnvironment,
+    (environment): SummaryModelOf =>
+      seams.summaryModel ??
+      ((owner, chosen, effort) =>
+        productionSummaryModel(owner, chosen, effort).pipe(
+          Effect.provideService(HostedEnvironment, environment),
+        )),
+  );
+  // A Start answers 201 for the agent it made, 200 for the one a retry under its key made before.
+  const startAnswer = (started: {
+    readonly agent: CodingAgentSummary;
+    readonly created: boolean;
+  }) => ({
+    status: started.created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
+    body: { agent: started.agent },
+  });
   return {
     /**
      * A workspace's agents, on a task or with none, newest started first,
@@ -264,24 +284,36 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      */
     start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
-      const environment = yield* HostedEnvironment;
-      const summaryModel: SummaryModelOf =
-        seams.summaryModel ??
-        ((owner, chosen, effort) =>
-          productionSummaryModel(owner, chosen, effort).pipe(
-            Effect.provideService(HostedEnvironment, environment),
-          ));
-      const { agent, created } = yield* startRequestedAgent(
+      const started = yield* startRequestedAgent(
         eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
-        taskId,
+        { taskId },
         input.body,
-        summaryModel,
+        yield* summaryModelOf,
       );
-      return {
-        status: created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
-        body: { agent },
-      };
+      return startAnswer(started);
+    }),
+    /**
+     * An agent started from the one the path names, which the body's `from`
+     * must name too, in that agent's own place: its task, or its workspace
+     * and repository where it has none, on the one start path, so the reach,
+     * the key, and the replay are a task's Start's. A source the account does
+     * not reach is not found, as one of another task is.
+     */
+    startFrom: signedIn.startFrom.effect(function* ({ input, context }) {
+      const sourceId = yield* pathUuid(input.params.id);
+      if (input.body.from?.agentId !== sourceId) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
+      const started = yield* startRequestedAgent(
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        context.userId,
+        placeOfAgent(source),
+        input.body,
+        yield* summaryModelOf,
+      );
+      return startAnswer(started);
     }),
     /** The agent as its own page, an agent with no task as much as one on a task. */
     read: signedIn.read.effect(function* ({ input, context }) {

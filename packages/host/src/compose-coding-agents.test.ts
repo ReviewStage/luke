@@ -277,6 +277,11 @@ function fakeService() {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
+    startFrom: (request) =>
+      Effect.sync(() => {
+        asked.push(`start-from:${request.from?.agentId}:${request.idempotencyKey}`);
+        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
+      }),
     messagesNow: (agentId, after, callId) =>
       Effect.sync(() => {
         asked.push(
@@ -1048,6 +1053,37 @@ it.effect(
       );
       assert.deepEqual(signedOut.asked, []);
       assert.deepEqual(offline.asked, []);
+    }),
+);
+
+it.effect(
+  "a Start from an agent that names no task asks the service to start where that agent is, one on a task still starts on it, and one naming neither a task nor an agent is refused, asking nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+
+      const fromTaskless = yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        idempotencyKey: "press-continue",
+        from: { agentId: AGENT_ID },
+      });
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        taskId: TASK_ID,
+        idempotencyKey: "press-fork",
+        from: { agentId: AGENT_ID },
+      });
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_START, {
+          idempotencyKey: "press-nowhere",
+          prompt: "Go.",
+        }),
+      );
+
+      assert.deepEqual(fromTaskless, { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(asked, [
+        `start-from:${AGENT_ID}:press-continue`,
+        `start:${TASK_ID}:press-fork:default`,
+      ]);
     }),
 );
 

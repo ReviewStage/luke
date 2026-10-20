@@ -258,11 +258,17 @@ export const codingAgentListAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 
-/** Starting an agent, as the window asks it: the task, and the Start request the service takes. */
+/**
+ * Starting an agent, as the window asks it: the task, and the Start request
+ * the service takes; or, for a Start from another agent, no task, the new
+ * agent going where that agent is, its task or its workspace where it has
+ * none. A Start naming neither a task nor an agent to start from starts
+ * nowhere, and is refused.
+ */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
+  taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   ...codingAgentStartRequestFields,
-});
+}).check(EffectSchema.makeFilter(({ taskId, from }) => taskId !== undefined || from !== undefined));
 
 export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
 

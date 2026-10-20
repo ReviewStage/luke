@@ -135,6 +135,7 @@ export type CodingAgentClient = Pick<
   | "list"
   | "listWorkspace"
   | "start"
+  | "startFrom"
   | "messagesNow"
   | "agentTranscriptLive"
   | "message"
@@ -395,9 +396,12 @@ function composed(
         const { taskId, ...request } = yield* read(
           codingAgentStartParamsSchema,
           params,
-          "starting an agent names a task and the press's own key",
+          "starting an agent names a task or an agent to start from, and the press's own key",
         );
-        const answer = yield* asked(client.start(taskId, request));
+        // A Start from another agent that names no task goes where that agent is, its task or its workspace.
+        const answer = yield* asked(
+          taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
+        );
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
