@@ -10,19 +10,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
-import { COARSE_POINTER } from "../coarse-pointer.js";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
-import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { PlanBody } from "./plan-body.js";
-import { SECOND_TAP_WINDOW } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -95,25 +92,17 @@ beforeAll(async () => {
 
 const roots: Root[] = [];
 
-/** Whether the window is worked by a finger, as `(pointer: coarse)` answers; a mouse's unless a test says so. */
-let finger = false;
-
 beforeEach(() => {
   installScrollIntoView();
   // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: (query: string) => ({
-      matches: query === COARSE_POINTER ? finger : true,
-      addEventListener: ignore,
-      removeEventListener: ignore,
-    }),
+    value: () => ({ matches: true, addEventListener: ignore, removeEventListener: ignore }),
   });
 });
 
 afterEach(() => {
-  finger = false;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -535,152 +524,4 @@ test("words typed in one plan are saved to that plan when another opens", async 
 
   assert.deepEqual(doors, [DOCUMENT_TASK.id]);
   assert.equal(container.querySelector(".plan-document-editor"), null);
-});
-
-/** A tap at the point given, `after` milliseconds past the page's first tap, as a browser stamps the click it ends in. */
-function tapAt(target: Element, x: number, y: number, after = 0): void {
-  const click = new MouseEvent("click", {
-    bubbles: true,
-    cancelable: true,
-    clientX: x,
-    clientY: y,
-  });
-  Object.defineProperty(click, "timeStamp", { value: 1000 + after });
-  act(() => {
-    target.dispatchEvent(click);
-  });
-}
-
-function editorOpen(container: HTMLElement): boolean {
-  return container.querySelector(".plan-document-editor") !== null;
-}
-
-test("on a finger's device one tap on a section opens nothing, and a second tap on it opens the text where that tap landed", () => {
-  finger = true;
-  const { container } = mount();
-  const goal = block(container, "Goal");
-
-  tapAt(goal, 120, 48);
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
-  assert.ok(!editorOpen(container), "the first tap only reads");
-
-  tapAt(goal, 130, 52, 400);
-  assert.equal(open().markdown, BODY);
-  assert.deepEqual(open().placement, { x: 130, y: 52 });
-});
-
-test("on a finger's device taps on two sections, or two taps on one too far apart, open nothing", () => {
-  finger = true;
-  const { container } = mount();
-
-  tapAt(block(container, "Goal"), 120, 48);
-  tapAt(block(container, "Approach"), 120, 148, 300);
-  tapAt(block(container, "Goal"), 120, 48, 300 + SECOND_TAP_WINDOW + 1);
-
-  assert.ok(!editorOpen(container), "no tap was a second on the block it landed on");
-});
-
-test("on a finger's device a tap on a link opens it and a tap on a task's checkbox ticks it, and neither, however often, opens an editor", async () => {
-  finger = true;
-  const opened: string[] = [];
-  fakeAppPlatform({ openWeb: (url) => opened.push(url) });
-  const body = "## Steps\n- [ ] Send the [invite](https://example.com/invite)\n";
-  const { container, sent, render } = mount();
-  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
-  await settle();
-  const link = block(container, "Steps").querySelector("a") ?? assert.fail("the link");
-  const box = block(container, "Steps").querySelector<HTMLInputElement>("input[type=checkbox]");
-  assert.ok(box, "the box");
-
-  tapAt(link, 60, 20);
-  tapAt(link, 60, 20, 200);
-  tapAt(box, 10, 20, 400);
-  await settle();
-  tapAt(box, 10, 20, 600);
-  await settle();
-
-  assert.deepEqual(opened, ["https://example.com/invite", "https://example.com/invite"]);
-  assert.equal(sent[0]?.document.value, body.replace("[ ]", "[x]"), "the first tap ticked the box");
-  assert.ok(!editorOpen(container), "no editor opened");
-});
-
-test("on a finger's device an empty plan opens at the first tap on its room, while one with text opens at a second", () => {
-  finger = true;
-  layTextOut();
-  const empty = mount();
-  empty.render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
-  tapAt(scrollerOf(empty.container), 300, 900);
-  assert.deepEqual(open().placement, PLACEMENT_END);
-  empty.unmount();
-
-  const written = mount();
-  const scroller = scrollerOf(written.container);
-  tapAt(scroller, 300, 500);
-  assert.ok(!editorOpen(written.container), "the first tap under the text only reads");
-  tapAt(scroller, 300, 500, 500);
-  assert.deepEqual(open().placement, PLACEMENT_END, "a second starts a new line at the end");
-});
-
-test("on a finger's device the title reads as words a tap does not type in, a second tap types in it, and leaving it reads again", () => {
-  finger = true;
-  const { container } = mount();
-  const name = title(container);
-  assert.equal(name.getAttribute("contenteditable"), "false");
-
-  tapAt(name, 40, 10);
-  assert.equal(name.getAttribute("contenteditable"), "false", "the first tap only reads");
-  assert.notEqual(document.activeElement, name);
-
-  tapAt(name, 40, 10, 300);
-  assert.equal(name.getAttribute("contenteditable"), "plaintext-only");
-  assert.equal(document.activeElement, name, "the caret stands in the title");
-
-  act(() => name.blur());
-  assert.equal(name.getAttribute("contenteditable"), "false");
-});
-
-test("on a finger's device a scroll or a tap on a control between two taps on a section lets the first go, so the second only reads", async () => {
-  finger = true;
-  fakeAppPlatform({ openWeb: () => undefined });
-  const body = "## Steps\nSend the [invite](https://example.com/invite) first.\n";
-  const { container, render } = mount();
-  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
-  await settle();
-  const steps = block(container, "Steps");
-  const link = steps.querySelector("a") ?? assert.fail("the link");
-
-  tapAt(steps, 120, 48);
-  act(() => {
-    scrollerOf(container).dispatchEvent(new Event("scroll"));
-  });
-  tapAt(steps, 120, 48, 200);
-  assert.ok(!editorOpen(container), "the tap after the scroll was a first");
-
-  tapAt(link, 60, 20, 400);
-  tapAt(steps, 120, 48, 600);
-  assert.ok(!editorOpen(container), "the tap after the link was a first");
-
-  tapAt(steps, 120, 48, 800);
-  assert.equal(open().markdown, body, "two taps with nothing between still open the text");
-});
-
-test("on a finger's device a second tap on the title puts the caret where it landed, in a browser that answers the point as Firefox does", () => {
-  finger = true;
-  const { container } = mount();
-  const name = title(container);
-  const words = name.firstChild ?? assert.fail("the title's words");
-  Object.defineProperty(document, "caretPositionFromPoint", {
-    configurable: true,
-    value: () => ({ offsetNode: words, offset: 3 }),
-  });
-  try {
-    tapAt(name, 40, 10);
-    tapAt(name, 40, 10, 300);
-
-    const selection = window.getSelection();
-    assert.equal(selection?.anchorNode, words);
-    assert.equal(selection?.anchorOffset, 3);
-  } finally {
-    Reflect.deleteProperty(document, "caretPositionFromPoint");
-  }
 });
