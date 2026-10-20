@@ -123,6 +123,14 @@ import type { TaskTranscript } from "./transcript-wire.js";
 export interface TaskStarted {
   readonly task: Task;
   readonly agent?: CodingAgentAgentAnswer;
+  /** The transaction the task was written in, which the task list followed live carries once it lands. */
+  readonly txid?: string;
+}
+
+/** A task as a write answered it, and the transaction the write committed in where it changed a row. */
+export interface TaskWritten {
+  readonly task: Task;
+  readonly txid?: string;
 }
 
 /** One call's answer, or why there is none. */
@@ -413,7 +421,11 @@ export class HostedTaskClient {
   setRepository(
     taskId: string,
     repository: string | null,
-  ): Effect.Effect<TaskCallResult<Task, RepositoryCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    TaskCallResult<TaskWritten, RepositoryCallFailure>,
+    never,
+    HttpClient.HttpClient
+  > {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ repository }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(this.#update(taskId, admitted), REPOSITORY_REFUSALS);
@@ -428,7 +440,7 @@ export class HostedTaskClient {
   move(
     taskId: string,
     workspaceId: string,
-  ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskCallResult<TaskWritten, TaskCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ workspaceId }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
@@ -803,11 +815,13 @@ export class HostedTaskClient {
     );
   }
 
-  /** Deletes one task with its document and its conversation; whether the service deleted it. */
-  delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  /** Deletes one task with its document and its conversation; the transaction it went in, or nothing where the service deleted nothing. */
+  delete(
+    taskId: string,
+  ): Effect.Effect<{ readonly txid?: string } | undefined, never, HttpClient.HttpClient> {
     return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
-      onFailure: () => false,
-      onSuccess: (answer) => answer.deleted,
+      onFailure: () => undefined,
+      onSuccess: (answer) => (answer.txid === undefined ? {} : { txid: answer.txid }),
     });
   }
 
@@ -819,7 +833,7 @@ export class HostedTaskClient {
   rename(
     taskId: string,
     request: TaskRenameRequest,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
@@ -833,7 +847,7 @@ export class HostedTaskClient {
   setStanding(
     taskId: string,
     standing: TaskStanding,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(standing));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
@@ -847,7 +861,7 @@ export class HostedTaskClient {
   mark(
     taskId: string,
     marks: TaskMarks,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(marks));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
@@ -857,10 +871,13 @@ export class HostedTaskClient {
   #update(
     taskId: string,
     changes: TaskUpdateRequest,
-  ): Effect.Effect<Task, HostedFailure, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten, HostedFailure, HttpClient.HttpClient> {
     return Effect.map(
       askHosted(this.#hosted.plans.update, { params: { id: taskId }, body: changes }),
-      (changed) => changed.plan,
+      (changed) =>
+        changed.txid === undefined
+          ? { task: changed.plan }
+          : { task: changed.plan, txid: changed.txid },
     );
   }
 
@@ -939,11 +956,14 @@ export class HostedTaskClient {
 
 /** A started task as the service answered it, with the agent started on it, or why it was not, where one was asked for. */
 function taskStartedOf(started: TaskStartAnswer): TaskStarted {
-  if (started.agent !== undefined) return { task: started.plan, agent: { agent: started.agent } };
-  if (started.agentRefusal !== undefined) {
-    return { task: started.plan, agent: startRefusedAs(started.agentRefusal) };
+  const written = started.txid === undefined ? {} : { txid: started.txid };
+  if (started.agent !== undefined) {
+    return { task: started.plan, agent: { agent: started.agent }, ...written };
   }
-  return { task: started.plan };
+  if (started.agentRefusal !== undefined) {
+    return { task: started.plan, agent: startRefusedAs(started.agentRefusal), ...written };
+  }
+  return { task: started.plan, ...written };
 }
 
 /** A comment call's answer, or why there was none: not found where the service said so, unanswered for anything else. */

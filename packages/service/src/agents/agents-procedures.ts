@@ -29,13 +29,14 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  archiveCodingAgent,
+  archiveCodingAgentCommitted,
+  type CodingAgentCommitted,
   type CodingAgentLine,
   hasRepository,
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
-  pinCodingAgent,
-  renameCodingAgent,
+  pinCodingAgentCommitted,
+  renameCodingAgentCommitted,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
@@ -145,6 +146,22 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<{ agent: CodingAgentSummary }, HostedRefusal, DatabaseServices> {
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return { agent: yield* summaryOf(userId, changed.value) };
+});
+
+/**
+ * An agent as a write left it, answered with the transaction the write
+ * committed in where it changed a row, as Neon's mutations guide says, so a
+ * desktop following the task list waits for it to arrive before it
+ * confirms the write.
+ */
+const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  changed: Option.Option<CodingAgentCommitted>,
+): Effect.fn.Return<{ agent: CodingAgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
+  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const agent = yield* summaryOf(userId, changed.value.agent);
+  const { txid } = changed.value;
+  return txid === undefined ? { agent } : { agent, txid };
 });
 
 /**
@@ -268,7 +285,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           productionSummaryModel(owner, chosen, effort).pipe(
             Effect.provideService(HostedEnvironment, environment),
           ));
-      const { agent, created } = yield* startRequestedAgent(
+      const { agent, created, txid } = yield* startRequestedAgent(
         eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
         taskId,
@@ -277,7 +294,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       return {
         status: created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
-        body: { agent },
+        body: txid === undefined ? { agent } : { agent, txid },
       };
     }),
     /** The agent as its own page, an agent with no task as much as one on a task. */
@@ -315,10 +332,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { body } = input;
       if ("title" in body) {
         const { title } = body;
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
+            renameCodingAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
           ),
         );
       }
@@ -327,16 +344,18 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
           yield* stoppedForGood(seams, writer, context.request, userId, agent);
         }
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
-          yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, body.archived)),
+          yield* hostedStoreOrUnavailable(
+            archiveCodingAgentCommitted(userId, agent.id, body.archived),
+          ),
         );
       }
       if ("pinned" in body) {
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            pinCodingAgent(userId, agent.id, body.pinned, body.position),
+            pinCodingAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
         );
       }

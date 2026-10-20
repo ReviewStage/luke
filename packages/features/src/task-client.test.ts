@@ -262,7 +262,7 @@ it.effect(
       });
       assert.deepEqual(moved, { ok: false, failure: TASK_CALL_FAILURE.TASK_ARCHIVED });
       assert.equal(renamed, undefined);
-      assert.equal(deleted, false);
+      assert.equal(deleted, undefined);
       assert.deepEqual(
         api.requests().map((request) => JSON.parse(request.body ?? "null")),
         [

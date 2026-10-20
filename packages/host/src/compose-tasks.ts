@@ -1351,7 +1351,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         const marked = yield* served(client.mark(taskId, marks));
         if (marked === undefined) return { changed: false };
-        takeMarks(marked);
+        takeMarks(marked.task);
         return { changed: true };
       }),
     );
@@ -1849,7 +1849,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* serial(
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
-            if (!deleted) return { deleted: false };
+            if (deleted === undefined) return { deleted: false };
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(conversationRead);
@@ -1873,8 +1873,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, name } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const renamed = yield* served(client.rename(taskId, { name }));
-            if (renamed === undefined) return { renamed: false };
+            const written = yield* served(client.rename(taskId, { name }));
+            if (written === undefined) return { renamed: false };
+            const renamed = written.task;
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
             );
@@ -1908,7 +1909,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* served(client.setStanding(taskId, standing));
             if (changed === undefined) return { changed: false };
-            takeAnswered(changed);
+            takeAnswered(changed.task);
             return { changed: true };
           }),
         );
@@ -2007,8 +2008,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* served(client.setRepository(taskId, repository));
             if (!changed.ok) return carried<TasksSetRepositoryAnswer>({ failure: changed.failure });
-            takeAnswered(changed.answer);
-            return carried<TasksSetRepositoryAnswer>({ repository: changed.answer.repository });
+            takeAnswered(changed.answer.task);
+            return carried<TasksSetRepositoryAnswer>({
+              repository: changed.answer.task.repository,
+            });
           }),
         );
       }),
@@ -2028,8 +2031,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const moved = yield* served(client.move(taskId, workspaceId));
             if (!moved.ok) return carried<TasksMoveAnswer>({ failure: moved.failure });
-            takeAnswered(moved.answer);
-            return carried<TasksMoveAnswer>({ workspaceId: moved.answer.workspaceId });
+            takeAnswered(moved.answer.task);
+            return carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId });
           }),
         );
       }),

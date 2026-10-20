@@ -9,7 +9,7 @@ import {
   pinCodingAgent,
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
-import { listTasks, updateTask } from "@luke/database/models/task-store";
+import { listTasks, updateTask, updateTaskCommitted } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { messages, turns } from "@luke/database/schemas/storage";
@@ -198,6 +198,31 @@ const PUBLISHED = {
 };
 
 it.layer(getTestDB())("the plan list's live statements", (it) => {
+  it.effect(
+    "a write that changes the task answers the transaction it committed in, and one that changes nothing answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+
+        const renamed = Option.getOrThrow(
+          yield* updateTaskCommitted(owner, plan.id, { name: "Invitations" }),
+        );
+        const pinned = Option.getOrThrow(
+          yield* updateTaskCommitted(owner, plan.id, { pinned: true }),
+        );
+        const again = Option.getOrThrow(
+          yield* updateTaskCommitted(owner, plan.id, { pinned: true }),
+        );
+
+        assert.match(renamed.txid ?? "", /^[0-9]+$/u);
+        assert.match(pinned.txid ?? "", /^[0-9]+$/u);
+        assert.notEqual(renamed.txid, pinned.txid, "each write is its own transaction");
+        assert.equal(again.txid, undefined, "a pin asked again writes nothing to wait for");
+        assert.equal(renamed.task.name, "Invitations");
+      }),
+  );
+
   it.effect("call only functions Postgres marks immutable, as Realtime requires", () =>
     Effect.gen(function* () {
       const { plans, agents } = Option.getOrThrow(taskListLiveStatements("user-immutable"));

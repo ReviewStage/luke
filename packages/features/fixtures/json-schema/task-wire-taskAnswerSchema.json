@@ -283,6 +283,9 @@
         "document"
       ],
       "additionalProperties": false
+    },
+    "txid": {
+      "type": "string"
     }
   },
   "required": [

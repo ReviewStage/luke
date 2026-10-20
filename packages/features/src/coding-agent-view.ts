@@ -4,6 +4,7 @@ import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from 
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
+  codingAgentAnswerSchema,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
@@ -251,7 +252,10 @@ export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
 
 /** An agent started, messaged, or stopped, as the window hears it: the agent as it then stands, or why it was not. */
 export const codingAgentAgentAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ agent: codingAgentSummarySchema }),
+  EffectSchema.Struct({
+    agent: codingAgentSummarySchema,
+    txid: codingAgentAnswerSchema.fields.txid,
+  }),
   failedReaching,
 ]);
 

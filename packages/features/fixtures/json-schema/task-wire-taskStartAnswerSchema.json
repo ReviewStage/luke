@@ -558,6 +558,9 @@
         "error"
       ],
       "additionalProperties": false
+    },
+    "txid": {
+      "type": "string"
     }
   },
   "required": [

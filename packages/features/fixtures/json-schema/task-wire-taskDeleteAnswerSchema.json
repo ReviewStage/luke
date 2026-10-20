@@ -6,6 +6,9 @@
       "enum": [
         true
       ]
+    },
+    "txid": {
+      "type": "string"
     }
   },
   "required": [

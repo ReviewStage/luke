@@ -60,13 +60,13 @@ import {
   unlinkTaskIssue,
 } from "@luke/database/models/task-issue-store";
 import {
-  createTask,
-  deleteTask,
+  createTaskCommitted,
+  deleteTaskCommitted,
   listTasks,
   readTask,
   readTaskHeader,
   type TaskHeader,
-  updateTask,
+  updateTaskCommitted,
 } from "@luke/database/models/task-store";
 import { readTranscript } from "@luke/database/models/transcript-store";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
@@ -467,8 +467,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      const task = yield* hostedStoreOrUnavailable(
-        createTask(userId, {
+      const { task, txid } = yield* hostedStoreOrUnavailable(
+        createTaskCommitted(userId, {
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
           repository: reached.repository,
@@ -488,7 +488,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         agent === undefined
           ? { plan: task }
           : yield* startedAgentOn(seams, request, userId, task, agent);
-      return { status: TASK_START_STATUS.CREATED, body: answer };
+      return {
+        status: TASK_START_STATUS.CREATED,
+        body: txid === undefined ? answer : { ...answer, txid },
+      };
     }),
 
     /** One plan with its saved document. */
@@ -554,7 +557,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           { discard: true },
         );
       }
-      const task = yield* updateTask(
+      const task = yield* updateTaskCommitted(
         userId,
         taskId,
         {
@@ -581,7 +584,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { plan: task.value };
+      const { task: plan, txid } = task.value;
+      return txid === undefined ? { plan } : { plan, txid };
     }),
 
     /**
@@ -615,7 +619,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       const stopped = new Set(agents.map(({ id }) => id));
       const deleted = yield* hostedStoreOrUnavailable(
-        deleteTask(userId, taskId, {
+        deleteTaskCommitted(userId, taskId, {
           stoppedAgentIds: stopped,
           // Note that the sessions are retired under the plan's lock and before its conversations are
           // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
@@ -630,8 +634,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent started while the others were stopped is one this delete has not stopped yet.
       if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-      if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { deleted: true as const };
+      if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { deleted: true as const, txid: deleted.value.txid };
     }),
 
     /** The plan's board, with Luke's latest drawing. */

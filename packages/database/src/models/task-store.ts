@@ -294,16 +294,33 @@ const findPin = SqlSchema.findOneOption({
 });
 
 /** The reader's pin of the plan, from now; one already standing keeps its instant. */
-const insertPin = SqlSchema.void({
+/**
+ * The id of the transaction a write committed in, read in the write's own
+ * `RETURNING`, as Neon's mutations guide says, so a client following the
+ * task list waits for that transaction to arrive before it confirms the
+ * write.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
+/** The transaction a pin's write committed in; none where the pin stood as asked already. */
+const TxidRowSchema = Schema.Struct({ txid: Schema.String });
+
+const insertPin = SqlSchema.findOneOption({
+  Result: TxidRowSchema,
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, now: Schema.Date }),
   execute: ({ userId, taskId, now }) =>
     Database.use((db) =>
-      db.insert(taskPin).values({ userId, taskId, pinnedAt: now }).onConflictDoNothing(),
+      db
+        .insert(taskPin)
+        .values({ userId, taskId, pinnedAt: now })
+        .onConflictDoNothing()
+        .returning({ txid: TXID }),
     ),
 });
 
 /** The reader's pin of the plan at the position given, from now where it was not pinned; one already standing keeps its instant and moves. */
-const placePin = SqlSchema.void({
+const placePin = SqlSchema.findOneOption({
+  Result: TxidRowSchema,
   Request: Schema.Struct({
     userId: Schema.String,
     taskId: Schema.String,
@@ -315,16 +332,21 @@ const placePin = SqlSchema.void({
       db
         .insert(taskPin)
         .values({ userId, taskId, position, pinnedAt: now })
-        .onConflictDoUpdate({ target: [taskPin.userId, taskPin.taskId], set: { position } }),
+        .onConflictDoUpdate({ target: [taskPin.userId, taskPin.taskId], set: { position } })
+        .returning({ txid: TXID }),
     ),
 });
 
 /** The reader's pin of the plan taken away; every other member's stands. */
-const removePin = SqlSchema.void({
+const removePin = SqlSchema.findOneOption({
   Request: TaskKeySchema,
+  Result: TxidRowSchema,
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
-      db.delete(taskPin).where(and(eq(taskPin.userId, userId), eq(taskPin.taskId, taskId))),
+      db
+        .delete(taskPin)
+        .where(and(eq(taskPin.userId, userId), eq(taskPin.taskId, taskId)))
+        .returning({ txid: TXID }),
     ),
 });
 
@@ -530,9 +552,14 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
 
 const insertTask = SqlSchema.findOne({
   Request: TaskInsertSchema,
-  Result: TaskRowSchema,
+  Result: Schema.Struct({ ...TaskRowSchema.fields, txid: Schema.String }),
   execute: (write) =>
-    Database.use((db) => db.insert(task).values(taskValues(write)).returning(TASK_COLUMNS)),
+    Database.use((db) =>
+      db
+        .insert(task)
+        .values(taskValues(write))
+        .returning({ ...TASK_COLUMNS, txid: TXID }),
+    ),
 });
 
 /** A task inserted under its id where none stands under it yet; nothing where one does, written by nothing. */
@@ -702,10 +729,14 @@ const applyChanges = SqlSchema.findOne({
     taskId: Schema.String,
     ...TaskColumnChangesSchema.fields,
   }),
-  Result: TaskRowSchema,
+  Result: Schema.Struct({ ...TaskRowSchema.fields, txid: Schema.String }),
   execute: ({ userId, taskId, ...changes }) =>
     Database.use((db) =>
-      db.update(task).set(changes).where(reachableTask(userId, taskId)).returning(TASK_COLUMNS),
+      db
+        .update(task)
+        .set(changes)
+        .where(reachableTask(userId, taskId))
+        .returning({ ...TASK_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -761,13 +792,13 @@ const insertTaskConversation = SqlSchema.findOne({
 
 const removeTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: Schema.Struct({ conversationId: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({ conversationId: Schema.NullOr(Schema.String), txid: Schema.String }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .delete(task)
         .where(reachableTask(userId, taskId))
-        .returning({ conversationId: task.conversationId }),
+        .returning({ conversationId: task.conversationId, txid: TXID }),
     ),
 });
 
@@ -932,11 +963,25 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
     };
   });
 
+/** A task as a write left it, and the transaction it committed in; none where it changed no row. */
+export interface TaskCommitted<A> {
+  readonly task: A;
+  readonly txid?: string;
+}
+
 export function createTask(userId: string, started: NewTask): TaskStoreEffect<Task> {
+  return Effect.map(createTaskCommitted(userId, started), (created) => created.task);
+}
+
+/** A task started, as `createTask` starts one, and the transaction its row was written in. */
+export function createTaskCommitted(
+  userId: string,
+  started: NewTask,
+): TaskStoreEffect<TaskCommitted<Task>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const row = yield* insertTask(yield* insertOf(userId, started)).pipe(
+        const { txid, ...row } = yield* insertTask(yield* insertOf(userId, started)).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
@@ -950,7 +995,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
             }),
           );
         }
-        return yield* taskOf(userId, row);
+        return { task: yield* taskOf(userId, row), txid };
       }),
     ),
   );
@@ -1152,7 +1197,7 @@ function pinAsAsked(
   pinned: boolean,
   position: string | undefined,
   now: Date,
-): TaskStoreEffect<void> {
+): TaskStoreEffect<Option.Option<typeof TxidRowSchema.Type>> {
   if (!pinned) return removePin({ userId, taskId });
   return position === undefined
     ? insertPin({ userId, taskId, now })
@@ -1341,6 +1386,28 @@ export function updateTask<E = never, R = never, RA = never>(
   TaskStoreFailure | TaskArchived | TaskAgentUnstopped | E,
   DatabaseServices | R | RA
 > {
+  return Effect.map(
+    updateTaskCommitted(userId, taskId, changes, moveGuard, archiveGuard),
+    Option.map((updated) => updated.task),
+  );
+}
+
+/**
+ * A task changed, as `updateTask` changes one, and the transaction the change
+ * committed in, read from the write that changed the row or the reader's pin;
+ * none where the change wrote neither.
+ */
+export function updateTaskCommitted<E = never, R = never, RA = never>(
+  userId: string,
+  taskId: string,
+  changes: TaskChanges,
+  moveGuard?: TaskMoveGuard<E, R>,
+  archiveGuard?: TaskArchiveGuard<RA>,
+): Effect.Effect<
+  Option.Option<TaskCommitted<Task>>,
+  TaskStoreFailure | TaskArchived | TaskAgentUnstopped | E,
+  DatabaseServices | R | RA
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1368,9 +1435,10 @@ export function updateTask<E = never, R = never, RA = never>(
         if (changes.archived === false && standing !== null) {
           yield* unarchivedAgents(taskId, standing);
         }
-        if (changes.pinned !== undefined) {
-          yield* pinAsAsked(userId, taskId, changes.pinned, changes.pinPosition, now);
-        }
+        const pinned =
+          changes.pinned === undefined
+            ? Option.none()
+            : yield* pinAsAsked(userId, taskId, changes.pinned, changes.pinPosition, now);
         const moved =
           changes.organizationId !== undefined &&
           changes.organizationId !== locked.value.organizationId;
@@ -1378,13 +1446,14 @@ export function updateTask<E = never, R = never, RA = never>(
         const movedNumber = moved ? yield* nextTaskNumber(changes.organizationId) : undefined;
         const columns = columnChangesOf(changes, locked.value, now, movedNumber);
         // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
-        const row =
+        const { txid: written, ...row } =
           Object.keys(columns).length === 0
-            ? locked.value
+            ? { ...locked.value, txid: undefined }
             : yield* applyChanges({ userId, taskId, ...columns }).pipe(
                 // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
                 Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
               );
+        const txid = written ?? Option.getOrUndefined(pinned)?.txid;
         if (changes.organizationId !== undefined || changes.repository !== undefined) {
           yield* followingAutomations({
             taskId,
@@ -1401,7 +1470,8 @@ export function updateTask<E = never, R = never, RA = never>(
         if (changes.archived === true) {
           yield* handTaskCallsToSweep({ taskId, detachedAt: HANDED_TO_SWEEP_AT });
         }
-        return Option.some(yield* taskOf(userId, row));
+        const changed = yield* taskOf(userId, row);
+        return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
       }),
     ),
   );
@@ -1473,11 +1543,24 @@ export function deleteTask<R = never>(
   taskId: string,
   guard?: TaskDeleteGuard<R>,
 ): Effect.Effect<boolean, TaskStoreFailure | TaskAgentUnstopped, DatabaseServices | R> {
+  return Effect.map(deleteTaskCommitted(userId, taskId, guard), Option.isSome);
+}
+
+/** A task deleted, as `deleteTask` deletes one, and the transaction its row went in; none where the account reached no such task. */
+export function deleteTaskCommitted<R = never>(
+  userId: string,
+  taskId: string,
+  guard?: TaskDeleteGuard<R>,
+): Effect.Effect<
+  Option.Option<{ readonly txid: string }>,
+  TaskStoreFailure | TaskAgentUnstopped,
+  DatabaseServices | R
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockTask({ userId, taskId });
-        if (Option.isNone(locked)) return false;
+        if (Option.isNone(locked)) return Option.none();
         const agents = yield* findAgentConversations({ userId, taskId });
         if (guard !== undefined && agents.some(({ id }) => !guard.stoppedAgentIds.has(id))) {
           return yield* new TaskAgentUnstopped();
@@ -1489,13 +1572,13 @@ export function deleteTask<R = never>(
         ];
         if (guard !== undefined) yield* guard.beforeDelete(conversationIds);
         const removed = yield* removeTask({ userId, taskId });
-        if (Option.isNone(removed)) return false;
+        if (Option.isNone(removed)) return Option.none();
         yield* removeEndedCalls({ userId, taskId });
         if (conversationIds.length > 0) {
           const now = yield* DateTime.nowAsDate;
           yield* stampConversations({ conversationIds, now });
         }
-        return true;
+        return Option.some({ txid: removed.value.txid });
       }),
     ),
   );

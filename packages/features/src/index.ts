@@ -149,6 +149,7 @@ export {
   type TaskCallResult,
   type TaskMarks,
   type TaskStarted,
+  type TaskWritten,
 } from "./task-client.js";
 export {
   HostedTerminalClient,
