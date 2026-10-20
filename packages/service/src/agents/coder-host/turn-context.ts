@@ -1,34 +1,34 @@
 /**
- * turn-context.ts -- what a coding agent's turn opens with beside its session's prompt: the call's words, and the task as it stands as a message of its own.
+ * turn-context.ts -- what a coding agent's turn opens with as a message of its own: the call's words, the time, and the task and chat where they changed.
  *
  * The session's prompt (`instructions.ts`) is composed once, as the session
- * starts, and stands for its life; a turn's own system instruction is
- * composed as the turn opens and remembered by none
- * (`apps/dev/instructions/prompt.ts`). A spoken turn is the developer
- * speaking on a call, through Luke's voice: its system instruction is the
- * words for a call, adapted from the brain's (`../brain-host/brain.ts`'s
- * `BRAIN_INSTRUCTIONS`): that every word is heard, how to speak, the
- * question queue, summarising rather than reading out, and never waiting;
- * an agent on a task is told too how to talk its plan through, since on a
- * call the agent is who the developer plans with. Those words are the same
- * on every spoken turn, so the system message stays the same from turn to
- * turn.
+ * starts, and stands for its life, and every tool is offered on every turn
+ * (`tool-set.ts`'s `runCallTool`), so the system message and the tools that
+ * lead every request are the same whatever kind of turn it is. What does
+ * change from turn to turn rides as a user-role message of the turn's own,
+ * which eve appends to the history after what came before
+ * (`apps/dev/instructions/turn-message.ts`): the provider's prompt cache
+ * then holds the system prompt, the tools, and the whole history from one
+ * turn to the next, a call that starts on an agent mid-PR among them.
  *
- * The task as it stands (`../agent-runtime/standing-context.ts`) and the
- * chat the agent has not read change from turn to turn, so they ride as a
- * user-role message of the turn's own, which eve appends to the history
- * after what came before (`apps/dev/instructions/turn-message.ts`): the
- * provider's prompt cache then holds the system prompt, the tools, and the
- * whole history from one turn to the next, where a turn's system
- * instruction that changed would have sent the whole history again
- * uncached. Each turn's message says the developer's time; the rest of the
- * task only where it changed since the session last handed it, and the
- * chat only where it holds what was not handed before, so the history
- * grows by what is new rather than by the task again every turn.
+ * A spoken turn is the developer speaking on a call, through Luke's voice:
+ * the first of a run of them opens with the words for a call, adapted from
+ * the brain's (`../brain-host/brain.ts`'s `BRAIN_INSTRUCTIONS`): that every
+ * word is heard, how to speak, the question queue, summarising rather than
+ * reading out, and never waiting; an agent on a task is told too how to
+ * talk its plan through, since on a call the agent is who the developer
+ * plans with. A later spoken turn says in a line that the words stand, and
+ * a typed turn after spoken ones that they no longer do. Then the task as
+ * it stands (`../agent-runtime/standing-context.ts`) and the chat the agent
+ * has not read: the developer's time on every turn, the rest of the task
+ * only where it changed since the session last handed it, and the chat only
+ * where it holds what was not handed before, so the history grows by what
+ * is new rather than by the same words every turn.
  */
 
 import { createHash } from "node:crypto";
 import type { StoredTask } from "@luke/database/models/task-store";
+import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import {
@@ -37,6 +37,7 @@ import {
   PLAN_FIELD_PURPOSE,
 } from "@luke/features/plan-template";
 import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
+import { openThreadsText } from "../../tasks/comment-tools.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** Each section of the default template as the developer reads it, what it holds, and when it is done. */
@@ -99,12 +100,15 @@ const TURN_MESSAGE_LEAD = {
 /**
  * What a session has handed its agent in its turns' messages, as content
  * addresses kept in eve's durable session state: the task, by the parts
- * of it no save of the plan changes (`taskKey`), and the chat digest.
- * Nothing yet for a session whose turns handed none.
+ * of it no save of the plan changes (`taskKey`), the chat digest, and
+ * whether the call's words stand. Nothing yet for a session whose turns
+ * handed none, or whose history eve compacted since.
  */
 export interface TurnHanded {
   readonly task?: string;
   readonly chat?: string;
+  /** Whether the session's last turn was spoken, so the call's words already stand in the history. */
+  readonly spoken?: boolean;
 }
 
 /** A content address: the same text always answers the same key. */
@@ -113,12 +117,14 @@ export function contentKey(text: string): string {
 }
 
 /**
- * The address of what a turn hands of the task beyond its plan: its name,
- * brief, linked issues, open comment threads, and whiteboard. Note that the
- * saved document, the agents' notes, and the sections the developer wrote
- * are left out, because every save of the plan changes them, the agent's
- * own among them; whether someone else saved is read from the plan's
- * revisions (`savedByAnotherSince`).
+ * The address of what a turn hands of the task beyond its plan, as the
+ * model reads it: its name, brief, linked issues, open comment threads
+ * (`openThreadsText`), and whiteboard (`boardText`), so a change the model
+ * would not see, a resolved thread's or a drawing's own fields, hands the
+ * task again no sooner. Note that the saved document, the agents' notes,
+ * and the sections the developer wrote are left out, because every save of
+ * the plan changes them, the agent's own among them; whether someone else
+ * saved is read from the plan's revisions (`savedByAnotherSince`).
  */
 export function taskKey(
   stored: StoredTask,
@@ -126,14 +132,33 @@ export function taskKey(
   comments: readonly PlanCommentThread[],
 ): string {
   const { name } = stored.task;
-  return contentKey(
-    JSON.stringify([name, stored.brief ?? null, stored.issueLinks, comments, board]),
-  );
+  const read = [name, stored.brief ?? null, stored.issueLinks, openThreadsText(comments)];
+  return contentKey(JSON.stringify([...read, boardText(board)]));
 }
 
-/** The words a spoken turn opens with: the call's, and how to talk the plan through for an agent on a task. */
-export function spokenTurnWords(onTask: boolean): string {
-  return onTask ? `${SPOKEN_WORDS}\n\n${DOCUMENT_TALK_WORDS}` : SPOKEN_WORDS;
+/** The line a turn opens with where its kind is the last turn's, or a typed one follows spoken ones. */
+const TURN_KIND_LINE = {
+  SPOKEN_AGAIN:
+    'This turn is spoken too: the developer is still on the call, and "This turn is spoken" above still holds.',
+  TYPED_AFTER_CALL:
+    'This turn is typed: no call is live, so "This turn is spoken" above no longer holds. Your words are read, not heard, and a question for the developer goes to the inbox.',
+} as const;
+
+/**
+ * What a turn opens with of its kind: on a spoken turn the call's words,
+ * and how to talk the plan through for an agent on a task, where the turn
+ * before was not spoken, and a line saying they still hold where it was;
+ * on a typed turn after a spoken one, a line saying they no longer do; and
+ * nothing on a typed turn after a typed one.
+ */
+export function turnKindWords(
+  spoken: boolean,
+  afterSpoken: boolean,
+  onTask: boolean,
+): string | undefined {
+  if (spoken && afterSpoken) return TURN_KIND_LINE.SPOKEN_AGAIN;
+  if (spoken) return onTask ? `${SPOKEN_WORDS}\n\n${DOCUMENT_TALK_WORDS}` : SPOKEN_WORDS;
+  return afterSpoken ? TURN_KIND_LINE.TYPED_AFTER_CALL : undefined;
 }
 
 /**

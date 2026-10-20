@@ -132,9 +132,9 @@ export const CODER_DEPLOYMENT_TURNS = {
  * channel does. Note that a spoken ask is therefore a principal of the
  * deployment's type, so eve never steers it into a typed turn running under
  * the developer's bearer, nor a typed line into a spoken turn: each waits
- * for the other's turn to end and opens one of its own, which runs under
- * its own kind's tools and words (`tool-set.ts`'s `turnToolsOf`,
- * `turn-context.ts`). The cost is that a call on an agent mid-turn waits for that
+ * for the other's turn to end and opens one of its own, whose call tools
+ * answer by its kind and whose message says it (`tool-set.ts`'s
+ * `runCallTool`, `turn-context.ts`). The cost is that a call on an agent mid-turn waits for that
  * turn's end before it is answered. It also admits the deployment's read of
  * a session's stream, which the voice function follows a spoken ask's turn
  * on; a cancel and a reset are minted as the deployment's principal, which

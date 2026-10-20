@@ -20,7 +20,7 @@ import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
-import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
+import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store, and the two things the
@@ -176,6 +176,8 @@ export default defineHook({
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);
+      // A compaction may summarise away what the turns' messages handed, so the next turn hands it again.
+      if (event.type === "compaction.completed") pinnedState(turnHanded).update(() => ({}));
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         const openedAt = seams.now();
         const memberToken = await onMemberToken(ctx);

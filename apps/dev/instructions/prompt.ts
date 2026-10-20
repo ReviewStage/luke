@@ -8,14 +8,11 @@ import { sessionPrompt } from "../session-prompt.js";
 /**
  * The instructions a session runs under, set once at its start and standing
  * for the session's life, with the content address kept in the session's
- * state so every turn row names the prompt the model actually reads, and
- * what each turn adds to them as its own system instruction, replaced each
- * turn and remembered by none: on a spoken turn the call's words, the same
- * on every one, and on a typed turn nothing
- * (`packages/service/src/agents/coder-host/turn-context.ts`). What changes
- * from turn to turn, the task as it stands and the chat, rides after the
- * history instead (`turn-message.ts`), so the system message stays the
- * provider's cached prefix. The plan itself is the session's first message
+ * state so every turn row names the prompt the model actually reads. No
+ * turn adds to them: what changes from turn to turn, the call's words, the
+ * task as it stands, and the chat, rides after the history instead
+ * (`turn-message.ts`), so the system message stays the provider's cached
+ * prefix whatever kind of turn each is. The plan itself is the session's first message
  * and no instruction. A session the host does not admit, or whose
  * conversation is no agent's, runs under nothing.
  */
@@ -44,15 +41,5 @@ export default defineDynamic({
         }),
       );
     },
-    "turn.started": (_event, ctx) =>
-      runAgent(
-        Effect.gen(function* () {
-          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (Result.isFailure(admitted)) return null;
-          const turn = host.turnKind(ctx.session.auth);
-          const content = yield* host.turnInstructions(admitted.success, turn);
-          return content === undefined ? null : defineInstructions({ content });
-        }),
-      ),
   },
 });

@@ -183,11 +183,11 @@ import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import {
   contentKey,
   savedByAnotherSince,
-  spokenTurnWords,
   type TurnHanded,
   taskKey,
   taskWithLead,
   timeWithLead,
+  turnKindWords,
 } from "./turn-context.js";
 
 /**
@@ -260,7 +260,7 @@ export interface CoderSessionPromptRecord extends SessionPromptRecord {
 }
 
 /** The turn opening: its kind, as its request named it, and its store id. */
-export interface CoderTurn {
+interface CoderTurn {
   readonly kind: BrainHostTurn | undefined;
   readonly turnId: string | undefined;
 }
@@ -440,22 +440,13 @@ export interface CoderHost extends HostAdmission {
   /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
   turnKind(auth: SessionAuth): BrainHostTurn | undefined;
   /**
-   * What a turn of the kind given opens with as its own system instruction,
-   * beside the session's prompt (`turn-context.ts`): the call's words on a
-   * spoken turn, the same on every one, so the system message a spoken turn
-   * sends does not change from turn to turn; nothing on a typed turn, or
-   * where the conversation is no agent's.
-   */
-  turnInstructions(
-    admitted: AdmittedConversation,
-    turn: BrainHostTurn | undefined,
-  ): Effect.Effect<string | undefined, never, DatabaseServices>;
-  /**
    * What a turn opens with as a user-role message of its own, which eve
    * appends to the history after what came before, so the system prompt,
    * the tools, and the history stay the provider's cached prefix from one
-   * turn to the next (`turn-context.ts`): the developer's time on every
-   * turn; the task as it stands where someone other than the agent saved
+   * turn to the next, whatever kind of turn each is (`turn-context.ts`):
+   * the call's words on a spoken turn where the turn before was not one, and
+   * a line naming the turn's kind where it changed; the developer's time on
+   * every turn; the task as it stands where someone other than the agent saved
    * the plan since its previous turn started, or the rest of it is not what
    * the session last handed (`handed`); and what the agent has not read in
    * its workspace's chat (`chat.ts`), where its starter turned Chat on and
@@ -759,7 +750,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     userId: string,
     agent: CodingAgent,
     prompt: CoderSessionPromptRecord,
-    turn: BrainHostTurn | undefined,
   ) => {
     const written = Effect.suspend(() => {
       switch (event.type) {
@@ -775,7 +765,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
                 prompt.chatOn ?? false,
               ).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
-              turn,
             },
             seams.now(),
           );
@@ -1243,17 +1232,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     turnKind: (auth) => turnKindOf(auth.current),
 
-    turnInstructions: (admitted, turn) =>
-      Effect.gen(function* () {
-        if (turn !== BRAIN_HOST_TURN.SPOKEN) return undefined;
-        const found = yield* agentOf(admitted).pipe(
-          Effect.tapError(logStoreFailure),
-          Effect.orElseSucceed(() => Result.fail(CODER_REFUSAL.NO_AGENT)),
-        );
-        if (Result.isFailure(found)) return undefined;
-        return spokenTurnWords(found.success.taskId !== null);
-      }),
-
     turnMessage: (admitted, turn, handed) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted).pipe(
@@ -1272,12 +1250,16 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // The digest is handed again only where it holds what the last one did not.
         const chatKey = digest === undefined ? handed.chat : contentKey(digest);
         const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
+        const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
+        const kind = turnKindWords(spoken, handed.spoken === true, agent.taskId !== null);
         const taskHanded = task === undefined ? handed.task : task.key;
         const next: TurnHanded = {
           ...(taskHanded === undefined ? undefined : { task: taskHanded }),
           ...(chatKey === undefined ? undefined : { chat: chatKey }),
+          ...(spoken ? { spoken } : undefined),
         };
-        return { text: [standing, ...chat].join("\n\n"), handed: next };
+        const parts = [...(kind === undefined ? [] : [kind]), standing, ...chat];
+        return { text: parts.join("\n\n"), handed: next };
       }),
 
     showPage: (admitted, input, sandbox) =>
@@ -1384,7 +1366,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           state,
         });
         if (agent === undefined) return;
-        yield* recordContext(event, admitted.target.userId, agent, prompt, turn);
+        yield* recordContext(event, admitted.target.userId, agent, prompt);
         const titleModel = seams.titleModel(admitted.target.userId);
         if (titleModel === undefined || !asksTitle(event)) return;
         // Note that the title is awaited here rather than forked, because eve's step, and the

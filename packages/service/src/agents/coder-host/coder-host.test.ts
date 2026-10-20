@@ -87,6 +87,7 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
+  type BrainHostTurn,
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import type { RepositorySandbox } from "../repository-shell.js";
@@ -100,7 +101,7 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, turnToolsOf } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, runCallTool } from "./tool-set.js";
 import { CURSOR_START, transcriptNow, transcriptPast } from "./transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
 import type { TurnHanded } from "./turn-context.js";
@@ -1770,54 +1771,55 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "a spoken turn's system instruction is the call's words and how to talk the plan through, and it is offered the call's own tools; a typed turn's has none of it and is offered none",
+    "the call's words open the first of a run of spoken turns as its message, a later spoken turn says in a line they still hold, and a typed turn after them says they no longer do",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
+        const turnOf = (kind: BrainHostTurn, handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind, turnId: undefined }, handed);
 
-        const spoken = (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN)) ?? "";
+        const typed = yield* turnOf(BRAIN_HOST_TURN.TYPED, {});
+        assert.ok(!typed.text?.includes("This turn is"), typed.text ?? "");
+
+        const called = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, typed.handed);
         for (const told of [
           "## This turn is spoken",
           `\`${CODER_TOOL.QUEUE_QUESTION}\``,
           "## Talking the plan through",
         ]) {
-          assert.ok(spoken.includes(told), told);
+          assert.ok(called.text?.includes(told), told);
         }
-        assert.deepEqual(
-          [...turnToolsOf(host.turnKind(spokenSeat(admitted.target)))],
-          [CODER_TOOL.QUEUE_QUESTION, CODER_TOOL.WITHDRAW_QUESTION, CODER_TOOL.END_CALL],
-        );
 
-        assert.equal(yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED), undefined);
-        assert.deepEqual(
-          [
-            ...turnToolsOf(
-              host.turnKind(ownSeat(admitted.target.userId, admitted.target.conversationId)),
-            ),
-          ],
-          [],
-        );
+        const still = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, called.handed);
+        assert.ok(still.text?.startsWith("This turn is spoken too"), still.text ?? "");
+        assert.ok(!still.text?.includes("## Talking the plan through"), still.text ?? "");
+
+        const after = yield* turnOf(BRAIN_HOST_TURN.TYPED, still.handed);
+        assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
+        const again = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, after.handed);
+        assert.ok(again.text?.includes("## This turn is spoken"), again.text ?? "");
       }),
   );
 
   it.effect(
-    "two consecutive spoken turns send the same system instruction though the plan and the task changed between them, since the task rides in the turn's own message",
+    "the call's own tools run on a spoken turn and are refused on a typed one, so both are offered the same tools",
     () =>
-      Effect.gen(function* () {
-        const host = yield* hostOverStore();
-        const { userId, agent, admitted } = yield* openAgent(host);
-        assert.ok(agent.taskId !== null);
-        const first = yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN);
-        yield* saveNotes({ userId, taskId: agent.taskId }, [
-          added(PLAN_HEADING.HARD_PARTS, "- A withdrawn invite never grants access."),
-        ]);
-        yield* updateTask(userId, agent.taskId, { name: "Teammate invitations, by link" });
-        const second = yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN);
-        assert.ok(first !== undefined);
-        assert.equal(second, first);
-        assert.ok(!first.includes("[saved document]"), first);
-        assert.ok(!first.includes("[the developer's time]"), first);
+      Effect.sync(() => {
+        const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
+        for (const tool of [
+          CODER_TOOL.QUEUE_QUESTION,
+          CODER_TOOL.WITHDRAW_QUESTION,
+          CODER_TOOL.END_CALL,
+        ] as const) {
+          assert.deepEqual(
+            runCallTool(BRAIN_HOST_TURN.SPOKEN, tool, () => accepted),
+            accepted,
+          );
+          const refused = runCallTool(BRAIN_HOST_TURN.TYPED, tool, () => accepted);
+          assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+          assert.match(String(refused.reason), /No call is live/u);
+        }
       }),
   );
 
