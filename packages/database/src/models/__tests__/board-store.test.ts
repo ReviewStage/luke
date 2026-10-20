@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
@@ -14,7 +15,8 @@ import { createTask } from "../task-store.js";
  * Where a task's board stands as Neon Realtime reads it, over a real
  * dialect: a member of the task's workspace reads one row that moves as
  * Luke draws and as a save lands the drawing and its image, and an account
- * outside the workspace reads none.
+ * outside the workspace reads none, nor does a member who does not reach
+ * the repository of a task on its owner's own GitHub token.
  *
  * Synthetic accounts, drawings, and a stand-in for the image throughout.
  */
@@ -66,6 +68,29 @@ it.layer(getTestDB())("a board's live statement", (it) => {
         ]);
 
         assert.deepEqual(yield* liveRows(outsider, task.id), [], "an outsider reads nothing");
+      }),
+  );
+
+  it.effect(
+    "a task on its owner's own GitHub token is read by its owner, and not by a member whose access does not reach its repository",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const task = yield* createTask(owner, {
+          organizationId: workspace,
+          name: "Side project",
+          repository: "octo-member/side",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        yield* writeDrawing(owner, task.id, BOX);
+
+        assert.deepEqual(yield* liveRows(owner, task.id), [
+          { taskId: task.id, drawingNumber: 1, appliedDrawing: 0, imaged: false },
+        ]);
+        assert.deepEqual(yield* liveRows(teammate, task.id), []);
       }),
   );
 });

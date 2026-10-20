@@ -20,8 +20,10 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  */
 
 export interface BoardFollowDependencies {
-  /** The board sealed again, for renewing; a failure where the service sealed none. */
-  readonly seal: () => Effect.Effect<TaskBoardLiveAnswer | { readonly failure: string }>;
+  /** The board sealed again, for renewing; a failure where the service sealed none, `gone` where the task is no longer the account's. */
+  readonly seal: () => Effect.Effect<
+    TaskBoardLiveAnswer | { readonly failure: string; readonly gone?: boolean }
+  >;
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;

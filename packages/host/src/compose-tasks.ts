@@ -1125,8 +1125,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       let delivered = false;
       const moves = boardMoves(
         {
+          // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing it.
           seal: () =>
-            following() ? seal() : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+            following()
+              ? Effect.map(seal(), (renewed) =>
+                  "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
+                    ? { ...renewed, gone: true }
+                    : renewed,
+                )
+              : Effect.succeed({ failure: BOARD_FOLLOW_ENDED, gone: true }),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
         },

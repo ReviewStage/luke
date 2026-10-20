@@ -13,7 +13,7 @@ import { Database, type DatabaseServices, queryBuilder } from "../core/query.js"
 import { member } from "../schemas/auth.js";
 import { task, taskBoard } from "../schemas/task.js";
 import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
-import { reachableTask } from "./workspace-store.js";
+import { reachableTask, taskSeenBy } from "./workspace-store.js";
 
 /**
  * board-store.ts -- a task's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
@@ -251,9 +251,11 @@ export function writeDrawing(
  * written. It is a mark, none of the elements or the image it marks, which
  * the desktop reads again (`readBoard`) once the row moves. The account is
  * joined through its membership of the task's workspace, as Neon's guide
- * authorizes a live read, so one that leaves the workspace stops seeing the
- * row. None where a value cannot be carried, which a caller answers as the
- * board not being live.
+ * authorizes a live read, and held to the task's GitHub access as every
+ * read of it is (`taskSeenBy`), so one that leaves the workspace, or loses
+ * the repository a task on its owner's token names, stops seeing the row.
+ * None where a value cannot be carried, which a caller answers as the board
+ * not being live.
  */
 export function boardLiveStatement(userId: string, taskId: string): Option.Option<LiveStatement> {
   return liveStatementOf(
@@ -272,6 +274,6 @@ export function boardLiveStatement(userId: string, taskId: string): Option.Optio
         member,
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
       )
-      .where(eq(taskBoard.taskId, taskId)),
+      .where(and(eq(taskBoard.taskId, taskId), taskSeenBy(userId))),
   );
 }
