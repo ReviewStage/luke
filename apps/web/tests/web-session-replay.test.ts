@@ -125,6 +125,8 @@ test("a production build with the site's key records the tab under the desktop's
   assert.equal(recording.maskAttributeFn?.("title", "roadmap", link), "*******");
   assert.equal(recording.maskAttributeFn?.("href", "/assets/app.css", link), "/assets/app.css");
   assert.equal(recording.maskAttributeFn?.("href", "/x", document.createElement("a")), "**");
+  const chip = document.createElement("button");
+  assert.equal(recording.maskAttributeFn?.("data-link-href", "/x", chip), "**");
 
   usePage();
   await vi.advanceTimersByTimeAsync(10_000);

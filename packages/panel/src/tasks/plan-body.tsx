@@ -22,6 +22,7 @@ import { ActorStack } from "../actor-ref.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
+import { useEditedLinksHost } from "../link-menu.js";
 import {
   type LinkDrawer,
   MARKDOWN_MARK,
@@ -944,6 +945,8 @@ export const PlanBody = memo(function PlanBody({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  // A link in the plan's words being edited opens, from its right-click, where the plan stands.
+  const editedLinks = useEditedLinksHost();
   // The open editor's handle, which a comment started on its words is measured through.
   const editorHandle = useRef<PlanEditorHandle | undefined>(undefined);
   // A press on the document's empty room opens its text there, at its end
@@ -1184,7 +1187,13 @@ export const PlanBody = memo(function PlanBody({
     >
       <DocumentScroll ref={scroller}>
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
-        <div ref={body} className={BODY_CLASS}>
+        <div
+          ref={(element) => {
+            body.current = element;
+            editedLinks(element);
+          }}
+          className={BODY_CLASS}
+        >
           {taskStanding === undefined || page !== undefined ? null : (
             <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
           )}

@@ -84,6 +84,8 @@ const WORDS = new Set([
   "placeholder",
   "src",
   "content",
+  // A control's link address (`@luke/ui`'s `LINK_HREF_ATTRIBUTE`), masked as an `href` is.
+  "data-link-href",
 ]);
 const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {

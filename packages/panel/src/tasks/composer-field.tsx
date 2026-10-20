@@ -1,5 +1,6 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEditedLinksHost } from "../link-menu.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -124,6 +125,8 @@ export function ComposerField({
   children?: ReactNode;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
+  // A link in the draft opens, from its right-click, where the box stands.
+  const editedLinks = useEditedLinksHost();
   const [chips, setChips] = useState<readonly DrawnChip[]>([]);
   // The last words the editor handed back, which a draft from outside is told against.
   const emitted = useRef(draft);
@@ -214,7 +217,13 @@ export function ComposerField({
   useLayoutEffect(() => editor.current?.setAria(aria));
 
   return (
-    <div ref={room} className="agent-composer-field">
+    <div
+      ref={(element) => {
+        room.current = element;
+        editedLinks(element);
+      }}
+      className="agent-composer-field"
+    >
       {draft === "" ? (
         <span className="agent-composer-placeholder" aria-hidden="true">
           {placeholder}

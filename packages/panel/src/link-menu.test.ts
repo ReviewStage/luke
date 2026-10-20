@@ -6,7 +6,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { LinkMenu } from "./link-menu.js";
+import { LinkMenu, useEditedLinksHost } from "./link-menu.js";
+import { OpenHereProvider } from "./tasks/use-open-link.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { TextLink } from "./text-link.js";
@@ -115,6 +116,50 @@ test("a right-click on a row that opens an address offers the same menu, opening
   choose("Copy link");
   await act(async () => undefined);
   assert.deepEqual(copied, [ADDRESS]);
+});
+
+/** Words being edited, as a plan's body holds them, with a link in them. */
+function EditedWords(): React.JSX.Element {
+  const host = useEditedLinksHost();
+  return createElement(
+    "div",
+    { ref: host },
+    createElement(
+      "div",
+      { contentEditable: true, suppressContentEditableWarning: true },
+      createElement(
+        "a",
+        {
+          href: ADDRESS,
+          onClick: () => assert.fail("a press in the editor only places the caret"),
+        },
+        "the pull request",
+      ),
+    ),
+  );
+}
+
+test("a link in words being edited opens where the words stand, through the place's own opener", () => {
+  const openedHere: string[] = [];
+  mount(
+    createElement(
+      OpenHereProvider,
+      {
+        value: (href: string) => {
+          openedHere.push(href);
+          return true;
+        },
+      },
+      createElement(EditedWords),
+    ),
+  );
+  const link = document.querySelector("a");
+  assert.ok(link);
+
+  rightClick(link);
+  choose("Open link");
+
+  assert.deepEqual(openedHere, [ADDRESS]);
 });
 
 /** A row hanging a menu of its own on a right-click, as a task's row does, around a link. */

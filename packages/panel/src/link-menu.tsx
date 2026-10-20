@@ -8,8 +8,10 @@
  * own keeps it; a right-click that lands on a link and nothing else's menu
  * hangs the link's. Open link is the link's own press, so it opens where a
  * click would, in the panel beside an Inbox item or a task's pull request
- * tab as much as in the browser; a link in words being edited opens through
- * the window instead, because a press there only places the caret. Copy
+ * tab as much as in the browser. A link in words being edited opens through
+ * the opener of the place the words stand in (`useEditedLinksHost`), as a
+ * press on the same link drawn there would, because a press in the editor
+ * only places the caret; the window's own where no place said one. Copy
  * link copies the address as written and says Link copied, as every menu's
  * copy does.
  */
@@ -22,7 +24,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ExternalLinkIcon, LinkIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { ActionMenu } from "./desktop/action-menu.js";
 import { opensAsLink, useOpenLink } from "./tasks/use-open-link.js";
@@ -41,6 +43,21 @@ const LINK_MENU_LABEL = "Link";
 
 /** What the menu's opening item is called. */
 const OPEN_LINK_LABEL = "Open link";
+
+/** What words being edited stand in: an element the editor made editable, and not one inside it it made fixed. */
+const EDITED_WORDS = '[contenteditable]:not([contenteditable="false"])';
+
+/** The opener of each place holding words being edited, by the element that holds them (`useEditedLinksHost`). */
+const EDITED_LINK_OPENERS = new WeakMap<Element, (href: string) => void>();
+
+/** The opener of the nearest place around `element` that holds words being edited and said one; none where none did. */
+function editedLinkOpenerOf(element: Element): ((href: string) => void) | undefined {
+  for (let at: Element | null = element; at !== null; at = at.parentElement) {
+    const open = EDITED_LINK_OPENERS.get(at);
+    if (open !== undefined) return open;
+  }
+  return undefined;
+}
 
 /** The link a right-click landed on or in, where its address is one the window opens; nothing otherwise. */
 function linkAt(target: EventTarget | null): HeardLink | undefined {
@@ -97,7 +114,10 @@ export function LinkMenu(): React.JSX.Element | null {
           {
             label: OPEN_LINK_LABEL,
             icon: <ExternalLinkIcon aria-hidden="true" />,
-            onSelect: () => (element.isContentEditable ? openLink(href) : element.click()),
+            onSelect: () => {
+              if (element.closest(EDITED_WORDS) === null) element.click();
+              else (editedLinkOpenerOf(element) ?? openLink)(href);
+            },
           },
           {
             label: LINK_COPY.LABEL,
@@ -108,4 +128,19 @@ export function LinkMenu(): React.JSX.Element | null {
       ]}
     />
   );
+}
+
+/**
+ * The ref of an element holding words being edited, a plan's body or a
+ * composer's field: a link in them that the link menu opens opens through
+ * the opener where the element stands, the place's own around it
+ * (`OpenHereProvider`) included, as a press on the link drawn there would.
+ */
+export function useEditedLinksHost(): (element: Element | null) => void {
+  const openLink = useOpenLink();
+  const latest = useRef(openLink);
+  latest.current = openLink;
+  return useCallback((element: Element | null) => {
+    if (element !== null) EDITED_LINK_OPENERS.set(element, (href) => latest.current(href));
+  }, []);
 }
