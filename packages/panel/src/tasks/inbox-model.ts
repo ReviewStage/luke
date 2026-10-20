@@ -1,4 +1,4 @@
-import type { FileChip } from "@luke/features/attachment-model";
+import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -6,6 +6,7 @@ import {
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
+  inboxAttachmentIdsIn,
   inboxAttachmentOf,
   inboxPictureDestination,
 } from "@luke/features/inbox-attachment-link";
@@ -153,6 +154,34 @@ export function inboxFileChips(
       url: read !== undefined && "url" in read ? read.url : "",
     };
   });
+}
+
+/** A comment's files as they are drawn after its words: its pictures, and every other file. */
+export interface InboxCommentFiles {
+  readonly pictures: readonly InboxFile[];
+  readonly others: readonly InboxFile[];
+}
+
+/**
+ * A comment's files as they are drawn after its words, each in the order
+ * attached: a picture its words already name left out, since it stands
+ * where they name it, as an agent's pictures do, then the pictures and
+ * every other file apart, as each is drawn in its own way.
+ */
+export function inboxCommentFiles(
+  files: readonly InboxFile[],
+  words: string | undefined,
+  itemId: string,
+): InboxCommentFiles {
+  const named = new Set(words === undefined ? [] : inboxAttachmentIdsIn(words, itemId));
+  const after = files.filter((file) => !named.has(file.attachmentId));
+  const picture = (file: InboxFile) =>
+    attachmentView({ name: file.name, mediaType: file.mediaType, url: "" }) ===
+    ATTACHMENT_VIEW.IMAGE;
+  return {
+    pictures: after.filter(picture),
+    others: after.filter((file) => !picture(file)),
+  };
 }
 
 /** The board as the tab draws it. */

@@ -108,6 +108,7 @@ import {
   type InboxHolder,
   type InboxKnownAsk,
   type InboxMissing,
+  inboxCommentFiles,
   inboxFileChips,
   inboxThreadOf,
   isUnread,
@@ -199,7 +200,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * comment says it took the item back, and
  * why. The thread's messages, a member's or the agent's, written at any
  * point, stand among these comments in the order they were written, each
- * by its writer's face and name, its files and its words drawn as an
+ * by its writer's face and name, its words and then its files drawn as an
  * answer's are; a thread read cut to its latest says the earlier ones are
  * in the agent's tab. The box stays docked on a settled item too, where it
  * writes a message on the thread rather than an answer, the next item that
@@ -224,7 +225,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * An item from version 5 is drawn as its thread instead (`inbox-model.ts`'s
  * `inboxThreadOf`): under its title alone, every message, oldest first,
  * each a Markdown document by its writer's face and name, drawn with the
- * item's own pictures, pairs, and lone-link cards, and its files. A member's answer
+ * item's own pictures, pairs, and lone-link cards, and its files after it,
+ * never as a strip over its words: a picture its words draw stands there
+ * alone, every other one as a picture after them, and any other file as its
+ * chip (`CommentFiles`). A member's answer
  * leads with the ask's card it answered, its kind and how it was answered
  * at its head and its controls under it as the answer left them,
  * read-only; where the thread read no longer carries the ask, it leads
@@ -1142,42 +1146,66 @@ function pickOf(
   return words === undefined ? sentenceCased(did) : undefined;
 }
 
-/** The files of one comment, and how their bytes are read. */
+/** The files of one comment, the words they follow, and how their bytes are read. */
 interface CommentFilesProps {
   itemId: string;
   files: NonNullable<InboxItem["answerFiles"]>;
+  /** The comment's words, whose own pictures stand where they name them; none where it wrote none. */
+  words: string | undefined;
   images: TaskInboxControl["images"];
   onImage: TaskInboxControl["onImage"];
   onRetryImage: TaskInboxControl["onRetryImage"];
 }
 
 /**
- * The files the developer's answer or a message on the thread carried, as
- * the agent's tab draws a sent message's (`attached-file-chips.tsx`): each
- * asks for its bytes as it is first drawn, through the same read an image
- * block's picture takes, and is drawn by its name alone until they land;
- * where a read did not answer, a line under the files says so with Retry,
- * as an image block's does.
+ * The files the developer's answer or a message on the thread carried,
+ * drawn after its words, never as a strip over them. A picture its words
+ * name already stands there, as an agent's do, so it is not drawn again;
+ * every other picture is drawn as one in the words is, side by side where
+ * several, the item's viewer walking it with the rest (`inbox-pictures.tsx`),
+ * and any other file as the agent's tab draws a sent message's, its chip
+ * (`attached-file-chips.tsx`). Each asks for its bytes as it is first
+ * drawn, through the same read an image block's picture takes, and a chip
+ * is drawn by its name alone until they land; where a file's read did not
+ * answer, a line under the files says so with Retry, as a picture's does.
  */
 function CommentFiles({
   itemId,
   files,
+  words,
   images,
   onImage,
   onRetryImage,
 }: CommentFilesProps): React.ReactNode {
+  const { pictures, others } = useMemo(
+    () => inboxCommentFiles(files, words, itemId),
+    [files, words, itemId],
+  );
   useEffect(() => {
-    for (const file of files) {
+    for (const file of others) {
       if (!images.has(file.attachmentId)) onImage(itemId, file.attachmentId);
     }
-  }, [files, images, itemId, onImage]);
-  const failed = files.filter((file) => {
+  }, [others, images, itemId, onImage]);
+  const failed = others.filter((file) => {
     const read = images.get(file.attachmentId);
     return read !== undefined && "failed" in read;
   });
   return (
     <>
-      <AttachedFileChips files={inboxFileChips(files, images)} />
+      {pictures.length === 0 ? null : (
+        <div className="transcript-pictures" data-inbox-file-pictures="">
+          {pictures.map((file) => (
+            <InboxPicture
+              key={file.attachmentId}
+              attachmentId={file.attachmentId}
+              alt={file.name}
+              caption={undefined}
+              name={file.name}
+            />
+          ))}
+        </div>
+      )}
+      {others.length === 0 ? null : <AttachedFileChips files={inboxFileChips(others, images)} />}
       {failed.length === 0 ? null : (
         <div data-inbox-files-failed="">
           <ErrorState
@@ -1234,7 +1262,7 @@ function AnswerValues({
  * name, when, and where it went, then what they picked as a chip, where
  * the question does not draw it picked already, a form's values where it
  * does not draw them in its fields (one of a response this build does not
- * know), the files they attached, and what they wrote.
+ * know), what they wrote, and the files they attached after it.
  */
 function Answered({
   item,
@@ -1293,19 +1321,20 @@ function Answered({
       {settled.values === undefined || drawn ? null : (
         <AnswerValues values={item.answer?.values ?? []} texts={NO_TEXT_LABELS} />
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={item.answerFiles ?? NO_FILES}
-        images={images}
-        onImage={onImage}
-        onRetryImage={onRetryImage}
-      />
       {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
       {settled.note === undefined ? null : (
         <div className="inbox-words" data-inbox-note="">
           <SentWords text={settled.note} asDocument />
         </div>
       )}
+      <CommentFiles
+        itemId={item.id}
+        files={item.answerFiles ?? NO_FILES}
+        words={settled.note}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
     </Comment>
   );
 }
@@ -1395,8 +1424,8 @@ function Closed({
  * One message on the thread as its writer's comment: a member by their
  * face and name, "You" for the reader's own, someone unnamed where their
  * account is gone; the agent by its tile and name, as its question is.
- * The files it carried are drawn as an answer's are, then its words as the
- * agent's tab draws a sent message, its mentions chips; a message of files
+ * Its words are drawn as the agent's tab draws a sent message, its mentions
+ * chips, then the files it carried, as an answer's are; a message of files
  * alone draws them alone.
  */
 function Message({
@@ -1434,13 +1463,6 @@ function Message({
         </>
       }
     >
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        images={images}
-        onImage={onImage}
-        onRetryImage={onRetryImage}
-      />
       {message.text === "" ? null : (
         <div
           className="inbox-words"
@@ -1451,6 +1473,14 @@ function Message({
           <SentWords text={message.text} asDocument />
         </div>
       )}
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        words={message.text}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
     </Comment>
   );
 }
@@ -2117,8 +2147,9 @@ const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
  * and name and a quiet "agent" after it, then when. An answer leads with
  * the card of the ask it answered, filled in as it was answered
  * (`AnsweredCard`), or, where the thread read no longer carries that ask,
- * its stamp and its values listed; then the files it carried and its words,
- * the agent's drawn as its question's are and a member's as a sent message's;
+ * its stamp and its values listed; then its words, the agent's drawn as its
+ * question's are and a member's as a sent message's, and the files it
+ * carried after them, a picture its words draw standing there alone;
  * an agent's message that asks ends with its ask's box, until it is answered.
  */
 function ThreadMessage({
@@ -2171,13 +2202,6 @@ function ThreadMessage({
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        images={control.images}
-        onImage={control.onImage}
-        onRetryImage={control.onRetryImage}
-      />
       {message.text === "" ? null : (
         <div
           className="inbox-words inbox-message-words"
@@ -2192,6 +2216,14 @@ function ThreadMessage({
           )}
         </div>
       )}
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        words={message.text}
+        images={control.images}
+        onImage={control.onImage}
+        onRetryImage={control.onRetryImage}
+      />
       {message.ask === undefined ? null : (
         <AskBox
           item={item}

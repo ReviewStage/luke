@@ -1897,6 +1897,103 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
+test("a thread draws no strip of files over a comment's words: an agent's pictures stand once, where its words draw them, one they do not draw after them, and a member's picture and file after their words, the viewer walking each picture once", async () => {
+  const [before, after, unnamed, mine, spec] = [
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c80",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c81",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c82",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c83",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c84",
+  ];
+  const picture = (attachmentId: string) =>
+    inboxAttachmentAddress(
+      { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+      attachmentId,
+      "acme",
+    );
+  const png = (attachmentId: string, name: string) => ({
+    attachmentId,
+    name,
+    mediaType: INBOX_IMAGE_TYPE.PNG,
+  });
+  const agents: InboxMessage = {
+    ...threadMessage(
+      "c1b2c3d4-0000-4000-8000-000000000050",
+      "agent",
+      `The form, before and after.\n\n![Before](${picture(before)} "Before") ![After](${picture(after)} "After")`,
+      1_000,
+    ),
+    // The service keeps each picture the words draw as a file of the message; an older one may keep one they do not draw.
+    files: [png(before, "before.png"), png(after, "after.png"), png(unnamed, "older.png")],
+  };
+  const members: InboxMessage = {
+    ...threadMessage(
+      "c1b2c3d4-0000-4000-8000-000000000051",
+      { member: TEAMMATE },
+      "Here is mine.",
+      2_000,
+    ),
+    files: [
+      png(mine, "mine.png"),
+      { attachmentId: spec, name: "spec.pdf", mediaType: "application/pdf" },
+    ],
+  };
+  const pane = await mountThread(threadItem([agents, members]));
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+
+  const [agent, member] = [...pane.querySelectorAll('[data-inbox-comment="message"]')];
+  assert.ok(agent && member, "both messages are drawn");
+  assert.equal(
+    pane.querySelectorAll('[aria-label="Attached files"] img').length,
+    0,
+    "no thumbnails",
+  );
+  const alts = (within: Element) =>
+    [...within.querySelectorAll<HTMLImageElement>(".picture-block img")].map((image) => image.alt);
+  assert.deepEqual(alts(agent), ["Before", "After", "older.png"], "each picture stands once");
+  assert.deepEqual(alts(member), ["mine.png"]);
+  assert.deepEqual(attachedNames(agent), []);
+  assert.deepEqual(attachedNames(member), ["spec.pdf"]);
+  // What the message carried stands after its words, never over them.
+  for (const [comment, carried] of [
+    [agent, agent.querySelector("[data-inbox-file-pictures]")],
+    [member, member.querySelector("[data-inbox-file-pictures]")],
+    [member, member.querySelector('[aria-label="Attached files"]')],
+  ] as const) {
+    const words = comment.querySelector("[data-inbox-message-text]");
+    assert.ok(words && carried, "the words and the files are drawn");
+    assert.ok(words.compareDocumentPosition(carried) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+
+  const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
+  assert.ok(press, "the picture is pressed to enlarge it");
+  act(() => press.click());
+  const viewer = () => {
+    const card = document.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(card, "the viewer is open");
+    return [
+      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector(".attachment-viewer-place")?.textContent,
+    ];
+  };
+  const key = (name: string) =>
+    act(() =>
+      document
+        .querySelector('[role="dialog"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
+        ),
+    );
+  assert.deepEqual(viewer(), ["After.png", "2 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["older.png", "3 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["mine.png", "4 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
+});
+
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
@@ -3128,7 +3225,7 @@ test("an item that needs no reply says a file attached in its box will be sent t
   assert.equal(quiet(), "Your answer and its files will be sent to the agent.");
 });
 
-test("an answered item draws the files its answer carried as a sent message's are, a picture by its thumbnail once read and any other file by its name, and files alone stand under the answer's head with no pick and no empty note", async () => {
+test("an answered item draws the files its answer carried after its words, never as a strip of thumbnails: a picture as a picture in its words is drawn, once read, and any other file as its chip; files alone stand under the answer's head with no pick and no empty note", async () => {
   const answered: InboxItem = {
     ...THRESHOLD,
     response: { type: INBOX_RESPONSE.TEXT },
@@ -3154,7 +3251,11 @@ test("an answered item draws the files its answer carried as a sent message's ar
   const comment = () =>
     itemPane(page).querySelector('[data-inbox-comment="answered"]') ??
     assert.fail("the answer is drawn");
-  assert.deepEqual(attachedNames(comment()), ["alerts.png", "spec.pdf"]);
+  assert.deepEqual(
+    attachedNames(comment()),
+    ["spec.pdf"],
+    "only the file that is no picture is a chip",
+  );
   assert.equal(comment().querySelector("[data-inbox-pick]"), null, "no chip says it was answered");
   assert.equal(comment().querySelector("[data-inbox-note]"), null, "no empty note stands");
 
@@ -3163,9 +3264,14 @@ test("an answered item draws the files its answer carried as a sent message's ar
   });
   await settle();
   assert.equal(
-    comment().querySelector('[aria-label="Attached files"] img')?.getAttribute("src"),
-    "data:image/png;base64,iVBORw0KGgo=",
+    comment().querySelectorAll('[aria-label="Attached files"] img').length,
+    0,
+    "no thumbnail",
   );
+  const picture = comment().querySelector<HTMLImageElement>(".picture-block img");
+  assert.equal(picture?.alt, "alerts.png");
+  assert.equal(picture?.getAttribute("src"), "data:image/png;base64,iVBORw0KGgo=");
+  assert.ok(comment().querySelector('button[aria-label="Enlarge alerts.png"]'), "it opens larger");
 });
 
 test("in the window's Inbox an @ in an item's box offers its plan's repository's files, and the file picked reaches the agent in the note as its link", async () => {
