@@ -404,6 +404,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** What the Inbox was asked to open, leaving it. */
@@ -1809,6 +1810,72 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   act(() => crumbs[1]?.click());
   assert.deepEqual(asked.shownTasks, [BILLING.id]);
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+/** What an intersection observer reports of the heading it watches: in the thread's view, or scrolled up past its top. */
+type HeadingSeen = (entries: readonly Partial<IntersectionObserverEntry>[]) => void;
+
+/** The headings the pane's intersection observers watch, each with its observer's callback. */
+const headingsWatched = new Map<Element, HeadingSeen>();
+
+/** An intersection observer that reports nothing until a test scrolls the heading it watches. */
+class HeadingObserver {
+  readonly #callback: HeadingSeen;
+  constructor(callback: HeadingSeen) {
+    this.#callback = callback;
+  }
+  observe(target: Element): void {
+    headingsWatched.set(target, this.#callback);
+  }
+  disconnect(): void {
+    for (const [target, callback] of headingsWatched)
+      if (callback === this.#callback) headingsWatched.delete(target);
+  }
+}
+
+/** Scrolls the shown item's heading up out of the thread's view, or back into it, as its scroller would report it. */
+function scrollHeading(page: HTMLElement, away: boolean): void {
+  const heading =
+    page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]") ??
+    assert.fail("the item's heading is drawn");
+  const seen = headingsWatched.get(heading) ?? assert.fail("the heading is watched");
+  const rootBounds = DOMRect.fromRect({ y: 100, width: 600, height: 500 });
+  const boundingClientRect = DOMRect.fromRect({ y: away ? 40 : 120, width: 600, height: 30 });
+  act(() => seen([{ isIntersecting: !away, rootBounds, boundingClientRect }]));
+}
+
+/** The words of the item's bar's path, crumb by crumb, as a reader meets them. */
+function pathWords(page: HTMLElement): (string | null)[] {
+  return [
+    ...page.querySelectorAll('.inbox-view-items:not([hidden]) nav[aria-label="Path"] li'),
+  ].map((crumb) => crumb.textContent);
+}
+
+test("once the item's heading scrolls out of the thread's view, its title joins the bar's path as its last words, the page the reader stands on, and leaves it again once the heading is back, so it never stands twice", async () => {
+  vi.stubGlobal("IntersectionObserver", HeadingObserver);
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts"], "the heading names it");
+
+  scrollHeading(page, true);
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts", "Alert at 80%?"]);
+  const title = page.querySelector(
+    '.inbox-view-items nav[aria-label="Path"] [aria-current="page"]',
+  );
+  assert.equal(title?.textContent, "Alert at 80%?", "the title is where the reader stands");
+  assert.equal(title?.closest("button"), null, "the title is words, not a press");
+
+  scrollHeading(page, false);
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts"]);
+
+  scrollHeading(page, true);
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.deepEqual(
+    pathWords(page),
+    ["Billing usage alerts", "Alerts"],
+    "another item opens with its own heading in view",
+  );
 });
 
 test("an image an item shows is drawn, and a press opens it over the window", async () => {
