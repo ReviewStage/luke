@@ -45,7 +45,7 @@ import tokens from "@luke/ui/tokens.css?inline";
  */
 
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
-const SHEET_BY_IMPORT: Readonly<Record<string, string>> = {
+const SHEET_BY_IMPORT = {
   "@luke/ui/tokens.css": tokens,
   "@luke/brand/motion-tokens.css": motionTokens,
   "./settings.css": settings,
@@ -58,11 +58,11 @@ const SHEET_BY_IMPORT: Readonly<Record<string, string>> = {
   "./tasks.css": tasks,
   "./desktop.css": desktop,
   "./call.css": call,
-};
+} as const;
 
 /** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in. */
 const SHEETS = [...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier]) => {
-  const sheet = specifier === undefined ? undefined : SHEET_BY_IMPORT[specifier];
+  const sheet = Object.entries(SHEET_BY_IMPORT).find(([named]) => named === specifier)?.[1];
   if (sheet === undefined) throw new Error(`container-width.ts lays no sheet for ${specifier}`);
   return sheet;
 });
