@@ -9,13 +9,14 @@ import {
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
 import { and, asc, eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { isSqlError } from "effect/sql/SqlError";
 import { Database } from "../core/query.js";
 import { accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
-import type { TaskStoreEffect } from "./task-store.js";
+import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 
 /**
  * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.
@@ -106,6 +107,20 @@ const findEveryRow = SqlSchema.findAll({
     ),
 });
 
+/**
+ * Whether a save failed on the primary key, which names no kind yet: the
+ * provider holds a row of another kind, which the conflict target, on the
+ * kind, does not take. The primary key moves onto the kind in a later
+ * change, once no deployment upserts on the provider alone.
+ */
+function otherKindHeld(failure: TaskStoreFailure): boolean {
+  const beneath =
+    failure._tag === "EffectDrizzleQueryError" && Cause.isCause(failure.cause)
+      ? Cause.squash(failure.cause)
+      : failure;
+  return isSqlError(beneath) && beneath.reason._tag === "UniqueViolation";
+}
+
 /** The row written where the provider holds none or one of the same kind; nothing where it holds the other kind. */
 const upsertRow = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -138,7 +153,7 @@ const upsertRow = SqlSchema.findAll({
         .insert(accountProviderKey)
         .values({ userId: write.userId, provider: write.provider, kind: write.kind, ...row })
         .onConflictDoUpdate({
-          target: [accountProviderKey.userId, accountProviderKey.provider],
+          target: [accountProviderKey.userId, accountProviderKey.provider, accountProviderKey.kind],
           set: row,
           setWhere: eq(accountProviderKey.kind, write.kind),
         })
@@ -257,9 +272,9 @@ export function saveProviderKey(
   fastAccess: FastAccess | null,
   now: Date,
 ): TaskStoreEffect<boolean> {
-  return Effect.map(
-    upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, now }),
-    (kept) => kept.length > 0,
+  return upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, now }).pipe(
+    Effect.map((kept) => kept.length > 0),
+    Effect.catchIf(otherKindHeld, () => Effect.succeed(false)),
   );
 }
 
