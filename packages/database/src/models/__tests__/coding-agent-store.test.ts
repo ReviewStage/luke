@@ -33,15 +33,21 @@ import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
+  type CodingAgent,
+  type CodingAgentLine,
+  codingAgentLineOf,
   continuationsOf,
   createCodingAgent,
   delegationsOf,
   IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
+  listCodingAgentLines,
   listCodingAgentsOnPullRequest,
+  listPublishedCodingAgents,
   listPublishedCodingAgentsById,
   listTasklessCodingAgents,
+  listWorkspaceCodingAgentLines,
   listWorkspaceCodingAgents,
   listWorldCodingAgents,
   pinCodingAgent,
@@ -1407,6 +1413,139 @@ it.layer(getTestDB())("the coding-agent store's GitHub access", (it) => {
           GITHUB_ACCESS.TOKEN,
         );
         assert.equal(unnamed.githubAccess, GITHUB_ACCESS.APP);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
+  /** Text the size of a long plan, which an agent may be handed and no line carries. */
+  const largeText = "Any member may invite a teammate by email.\n".repeat(6_000);
+
+  /** What a line says of an agent, and which of the text columns it carries, which should be none. */
+  const said = (line: CodingAgentLine) => ({
+    id: line.id,
+    title: line.title,
+    handedPrompt: line.handedPrompt,
+    automationName: line.automationName,
+    startedFrom: line.startedFrom,
+    text: ["planSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
+  });
+
+  /** The agent a Start made, failing the test where it made none. */
+  const made = (answer: Option.Option<{ readonly agent: CodingAgent }>) =>
+    Option.getOrElse(answer, () => assert.fail("the start made no agent")).agent;
+
+  it.effect(
+    "every list reads an agent handed a large plan, a prompt, or an automation's run as its line: its brief, its automation's name, and its source, with none of the text, for a member alone",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const onTask = yield* createTask(starter, { organizationId: workspace, name: "Invites" });
+        const asked = {
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+        };
+        const snapshotted = made(
+          yield* createCodingAgent(starter, {
+            ...asked,
+            taskId: onTask.id,
+            planSnapshot: largeText,
+            prompt: null,
+            title: "Invite emails",
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        yield* TestClock.adjust("1 minute");
+        const source = { agentId: snapshotted.id, steps: 2, totalSteps: 4 };
+        const continued = made(
+          yield* createCodingAgent(starter, {
+            ...asked,
+            taskId: onTask.id,
+            planSnapshot: null,
+            prompt: largeText,
+            startedFrom: source,
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        yield* TestClock.adjust("1 minute");
+        const run = made(
+          yield* createCodingAgent(starter, {
+            ...asked,
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: largeText,
+            automationOrigin: {
+              name: "Nightly triage",
+              firing: { kind: "webhook", bytes: largeText.length },
+              prompt: largeText,
+              body: largeText,
+            },
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        const lines = {
+          snapshotted: {
+            id: snapshotted.id,
+            title: "Invite emails",
+            handedPrompt: false,
+            automationName: null,
+            startedFrom: null,
+            text: [],
+          },
+          continued: {
+            id: continued.id,
+            title: null,
+            handedPrompt: true,
+            automationName: null,
+            startedFrom: source,
+            text: [],
+          },
+          run: {
+            id: run.id,
+            title: null,
+            handedPrompt: true,
+            automationName: "Nightly triage",
+            startedFrom: null,
+            text: [],
+          },
+        };
+
+        assert.deepEqual((yield* listCodingAgentLines(starter, onTask.id)).map(said), [
+          lines.snapshotted,
+          lines.continued,
+        ]);
+        assert.deepEqual(
+          (yield* listPublishedCodingAgents(starter, [onTask.id])).map(({ agent }) => said(agent)),
+          [lines.snapshotted, lines.continued],
+        );
+        assert.deepEqual(
+          (yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 10 })).map(said),
+          [lines.run, lines.continued, lines.snapshotted],
+        );
+        assert.deepEqual((yield* listTasklessCodingAgents(starter)).map(said), [lines.run]);
+
+        // Every other column reads as a whole read reads it, and the line a whole read draws is the listed one.
+        const whole = Option.getOrThrow(yield* readCodingAgent(starter, run.id));
+        const {
+          automationOrigin: _origin,
+          planSnapshot: _snapshot,
+          prompt: _prompt,
+          ...rest
+        } = whole;
+        const expected = { ...rest, automationName: "Nightly triage", handedPrompt: true };
+        const [listed] = yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 1 });
+        assert.deepEqual(listed, expected);
+        assert.deepEqual(codingAgentLineOf(whole), expected);
+
+        assert.deepEqual(yield* listCodingAgentLines(outsider, onTask.id), []);
+        assert.deepEqual(
+          yield* listWorkspaceCodingAgentLines(outsider, workspace, { limit: 10 }),
+          [],
+        );
       }),
   );
 });

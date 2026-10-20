@@ -30,8 +30,9 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
-  listCodingAgents,
-  listWorkspaceCodingAgents,
+  type CodingAgentLine,
+  listCodingAgentLines,
+  listWorkspaceCodingAgentLines,
   pinCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
@@ -117,10 +118,10 @@ function listsArchived(archived: string | undefined): boolean {
   return archived === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
-/** The agents listed, each with its status, who it names, and what continued it, as the lists answer them. */
+/** The agents listed, each read as its line, with its status, who it names, and what continued it, as the lists answer them. */
 const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agents: readonly Parameters<typeof codingAgentSummary>[0][],
+  agents: readonly CodingAgentLine[],
 ): Effect.fn.Return<{ agents: CodingAgentSummary[] }, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
@@ -229,7 +230,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listWorkspaceCodingAgents(context.userId, workspaceId, {
+        listWorkspaceCodingAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
@@ -244,7 +245,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
       if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listCodingAgents(context.userId, taskId, {
+        listCodingAgentLines(context.userId, taskId, {
           includeArchived: listsArchived(input.archived),
         }),
       );
