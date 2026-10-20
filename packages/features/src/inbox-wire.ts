@@ -1074,16 +1074,18 @@ function checklistLines(todo: InboxTodoTicks | undefined): string {
 }
 
 /**
- * The steps of the `do` ask an answer answers, as the item's thread
- * carries it, and those the answer ticked; nothing where the answer is to
- * another kind of ask, its ask names no steps, or the thread read no
- * longer carries it.
+ * The steps of the `do` ask an answer answers, and those the answer
+ * ticked: the ask as given where the caller holds it, since a long
+ * thread's read may have left it out, else as the item's thread carries
+ * it; nothing where the answer is to another kind of ask, its ask names no
+ * steps, or neither carries it.
  */
 export function inboxTodoTicks(
   item: Pick<InboxItem, "thread">,
   answers: InboxAnswers,
+  answered?: InboxAsk,
 ): InboxTodoTicks | undefined {
-  const ask = (item.thread ?? []).find((message) => message.id === answers.ask)?.ask;
+  const ask = answered ?? (item.thread ?? []).find((message) => message.id === answers.ask)?.ask;
   if (ask?.type !== INBOX_ASK.DO) return undefined;
   const steps = (ask as { readonly steps?: readonly string[] }).steps ?? [];
   return steps.length === 0 ? undefined : { steps, ticked: answers.steps ?? [] };

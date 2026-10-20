@@ -76,4 +76,14 @@ test("a to-do's ticks are read off the thread by the ask the answer names, and n
     inboxTodoTicks(item, { ask: "00000000-0000-4000-8000-000000000002", reply: INBOX_REPLY.DONE }),
     undefined,
   );
+  const older = { type: "do", steps: ["Rotate the key."] } as const;
+  assert.deepEqual(
+    inboxTodoTicks(
+      { thread: [] },
+      { ask, reply: INBOX_REPLY.ANSWERED, steps: [0] },
+      older as Parameters<typeof inboxTodoTicks>[2],
+    ),
+    { steps: ["Rotate the key."], ticked: [0] },
+    "the ask answered, given, stands for one a long thread's read left out",
+  );
 });

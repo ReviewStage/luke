@@ -266,7 +266,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(item, reply, inboxTodoTicks(item, answers)),
+      text: inboxAnswerMessage(item, reply, inboxTodoTicks(item, answers, answered.value.ask)),
       attachments,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
