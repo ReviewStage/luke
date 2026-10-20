@@ -45,6 +45,14 @@ import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
  * it released while it ran leave the journal with its words as it ends, so a
  * reader past what the shortened projection holds still hears the end. The
  * end is the last event of every turn.
+ *
+ * A spoken ask that joined an agent's typed turn under way hears only the
+ * steps that turn began after it joined, so a call into an agent an hour
+ * into a pull request is never read the hour's words, and its run is
+ * answered, and ends, once one of those steps said something and the step
+ * after it began, since the turn it joined may run on for that hour. The
+ * agent's going back to its work is no news to the call, so a slow step is
+ * told only ahead of that answer.
  */
 
 /** How a terminal turn status reads to a client telling a reply from a refusal; nothing for a turn still under way. */
@@ -127,6 +135,26 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
 }
 
 /**
+ * The journal from the step after the first `afterStep` steps on, which is
+ * what a spoken ask that joined the turn there hears: its steps' boundaries
+ * and parts, nothing of the steps before it; the whole journal where the
+ * ask is its whole turn's (`afterStep` absent).
+ */
+export function journalAfterStep(
+  journal: StoredUIMessage | undefined,
+  afterStep: number | undefined,
+): StoredUIMessage | undefined {
+  if (journal === undefined || afterStep === undefined) return journal;
+  let begun = 0;
+  for (const [index, part] of journal.parts.entries()) {
+    if (part.type !== UI_PART_TYPE.STEP_START) continue;
+    begun += 1;
+    if (begun > afterStep) return { ...journal, parts: journal.parts.slice(index) };
+  }
+  return { ...journal, parts: [] };
+}
+
+/**
  * The turn's events as the record now stands, numbered from one, walked
  * step by step: a step's sentences, then what its calls tell. The slow step
  * and the end of the call, once per run each, every question a brain call
@@ -141,20 +169,29 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
  * A completed turn tells every sentence and then its end, the settled mark
  * standing ahead of them even where it said nothing. A cancelled or failed
  * turn tells no sentence, since its words leave the journal at its end; what
- * it released while it ran was said, and its end is numbered past it.
+ * it released while it ran was said, and its end is numbered past it. Given
+ * `joinedAfterStep`, the place a spoken ask joined a typed turn at, the
+ * events are those of the steps after it alone, numbered from one, and the
+ * first of them that says something is the ask's answer: its words and the
+ * code it showed are told, and once a later step began the run completes,
+ * the turn still running or not.
  */
 export function projectTurnEvents(
   turn: ProjectedTurn,
   journal: StoredUIMessage | undefined,
+  joinedAfterStep?: number,
 ): readonly TurnEvent[] {
   const end = TURN_END_OF_STATUS[turn.status];
   const speaks = end === undefined || end === TURN_END.COMPLETED;
+  const joined = joinedAfterStep !== undefined;
+  const steps = stepsOf(journalAfterStep(journal, joinedAfterStep)?.parts ?? []);
   const bodies: TurnEventBody[] = [];
   let slowStepTold = false;
   let endTold = false;
   let settledTold = false;
   let unsettled = false;
-  for (const step of stepsOf(journal?.parts ?? [])) {
+  let answered = false;
+  for (const [index, step] of steps.entries()) {
     const sentences = speaks ? replySentences(replyTextOf(step)) : [];
     // A turn that completed has everything it did on record, whatever its calls' parts say.
     if (sentences.length > 0 && unsettled && end === undefined) break;
@@ -164,18 +201,26 @@ export function projectTurnEvents(
     }
     for (const sentence of sentences)
       bodies.push({ kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence });
+    // A joined ask's answer is the first step after the join that says something.
+    const answering = joined && sentences.length > 0;
     for (const part of step) {
       if (!isStoredToolPart(part)) continue;
       if (!isSettledToolPartState(part.state)) unsettled = true;
       const told = callEventOf(part);
-      if (told === undefined || (told.kind === TURN_EVENT_KIND.SLOW_STEP && slowStepTold)) continue;
+      if (told === undefined) continue;
+      if (told.kind === TURN_EVENT_KIND.SLOW_STEP && (slowStepTold || answering)) continue;
       if (told.kind === TURN_EVENT_KIND.CALL_ENDING && endTold) continue;
       slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;
       endTold ||= told.kind === TURN_EVENT_KIND.CALL_ENDING;
       bodies.push(told);
     }
+    if (answering) {
+      answered = index < steps.length - 1;
+      break;
+    }
   }
-  if (end === TURN_END.COMPLETED && !settledTold) {
+  const ended = end ?? (answered ? TURN_END.COMPLETED : undefined);
+  if (ended === TURN_END.COMPLETED && !settledTold) {
     bodies.push({ kind: TURN_EVENT_KIND.ACTIONS_SETTLED });
   }
   const events: TurnEvent[] = bodies.map((body, index) => ({
@@ -183,7 +228,7 @@ export function projectTurnEvents(
     turnId: turn.id,
     seq: index + 1,
   }));
-  if (end === undefined) return events;
-  const seq = end === TURN_END.COMPLETED ? events.length + 1 : UNANSWERED_TURN_END_SEQ;
-  return [...events, { kind: TURN_EVENT_KIND.ENDED, end, turnId: turn.id, seq }];
+  if (ended === undefined) return events;
+  const seq = ended === TURN_END.COMPLETED ? events.length + 1 : UNANSWERED_TURN_END_SEQ;
+  return [...events, { kind: TURN_EVENT_KIND.ENDED, end: ended, turnId: turn.id, seq }];
 }

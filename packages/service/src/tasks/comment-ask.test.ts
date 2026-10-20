@@ -124,6 +124,7 @@ function brainBehindDoor(members: ReadonlySet<string>, conversationId: string) {
       secret: Redacted.make(SECRET),
       admits: DEPLOYMENT_TURNS,
       presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+      streams: true,
     },
   ).auth;
   const layer = fakeHttpClientLayer(async (url, init) => {
