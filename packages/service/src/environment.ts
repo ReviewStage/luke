@@ -31,7 +31,7 @@ export interface HostedEnvironmentValues {
   readonly posthogProjectApiKey: Redacted.Redacted | undefined;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   readonly posthogIngestHost: string | undefined;
-  /** Vercel's own bearer on every scheduled call, and nothing else's; absent refuses every sweep. */
+  /** Vercel's own bearer on every scheduled call, which the maintenance routes asked by hand take too and eve's door never does; absent refuses every sweep. */
   readonly cronSecret: Redacted.Redacted | undefined;
   /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by both eve services; absent refuses every delegation. */
   readonly eveDeploymentSecret: Redacted.Redacted | undefined;
