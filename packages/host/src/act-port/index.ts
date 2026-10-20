@@ -108,9 +108,8 @@ export interface ActPortDependencies {
  * schema could not encode, is answered with the procedure's own sentence, so
  * the window never hears what a failure held and never meets an error it
  * does not draw. That failure is logged here, in main, before it is replaced.
- * The host's procedures sit beside the platform's own, as the host's act
- * rows sit beside the platform's on `app:act` (`createHostActRouter`), and
- * together they answer every kind of the contract.
+ * The host's procedures sit beside the platform's own, and together they
+ * answer every kind of the contract.
  */
 export function createActPortHandler<Sender>(
   dependencies: ActPortDependencies,

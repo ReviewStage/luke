@@ -19,6 +19,10 @@ import {
   type WorkspacesProcedureSeams,
   workspacesProcedures,
 } from "../accounts/workspaces-procedures.js";
+import {
+  type AgentPullRequestProcedureSeams,
+  agentPullRequestProcedures,
+} from "../agents/agent-pull-request-procedures.js";
 import { type MessagesProcedureSeams, messagesProcedures } from "../agents/messages-procedures.js";
 import {
   type AutomationsProcedureSeams,
@@ -62,6 +66,7 @@ import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
 export type HostedRouterSeams = AccountProcedureSeams &
+  AgentPullRequestProcedureSeams &
   AutomationsProcedureSeams &
   DictationProcedureSeams &
   FactoryProcedureSeams &
@@ -83,6 +88,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
 export function hostedRouter(seams: HostedRouterSeams) {
   return hosted.router({
     account: accountProcedures(seams),
+    agentPullRequests: agentPullRequestProcedures(seams),
     automations: automationsProcedures(seams),
     dictation: dictationProcedures(seams),
     factory: factoryProcedures(seams),

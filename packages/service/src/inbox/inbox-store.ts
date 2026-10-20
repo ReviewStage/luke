@@ -2773,6 +2773,9 @@ export const INBOX_ASK_ANSWER = {
 
 type InboxAskAnswer = (typeof INBOX_ASK_ANSWER)[keyof typeof INBOX_ASK_ANSWER];
 
+/** Why an answer under a key the thread already holds is refused: the key names another message, or the same key with other words, files, or answer. */
+const KEY_NAMES_ANOTHER_MESSAGE = "The key names another message of the thread.";
+
 /** What an answer to an ask came to: the item as it then stands, what this write did, and why it was refused, where it was. */
 interface InboxAskAnswered {
   readonly item: InboxItem;
@@ -2787,8 +2790,11 @@ interface InboxAskAnswered {
  * message carrying it under the client's key, with its words and files,
  * the ask stood answered, and the item answered with the answer's view for
  * a desktop before version 5; nothing where the account reaches no such
- * item. An answer sent again under the key it was taken by finds it taken;
- * an ask the item no longer holds open takes none.
+ * item. The same answer sent again under the key it was taken by, by the
+ * same member with the same words and files, finds it taken; any other
+ * under a key the thread already holds is refused, so the agent never hears
+ * what the thread does not show. An ask the item no longer holds open
+ * takes none.
  */
 export function answerInboxAsk(
   userId: string,
@@ -2812,9 +2818,23 @@ export function answerInboxAsk(
             outcome,
             ...(refusal === undefined ? undefined : { refusal }),
           });
-        if (found.value.answerKey === sent.clientKey) return standing(INBOX_ASK_ANSWER.REPEATED);
-        if (yield* keyTaken(itemId, sent.clientKey)) {
-          return standing(INBOX_ASK_ANSWER.REFUSED, "The key names another message of the thread.");
+        const keyed = yield* findKeyedMessage({ itemId, clientKey: sent.clientKey });
+        if (Option.isSome(keyed)) {
+          // Only the same answer sent again is the one taken, so the agent never hears what the thread does not hold.
+          const resent =
+            found.value.answerKey === sent.clientKey &&
+            sameAnswers(keyed.value.answers, sent.answers) &&
+            sameMessage(keyed.value, {
+              userId,
+              text: sent.text,
+              files: files.map((file) => ({ name: file.name, contentType: file.mediaType })),
+            });
+          return resent
+            ? standing(INBOX_ASK_ANSWER.REPEATED)
+            : standing(INBOX_ASK_ANSWER.REFUSED, KEY_NAMES_ANOTHER_MESSAGE);
+        }
+        if (found.value.answerKey === sent.clientKey) {
+          return standing(INBOX_ASK_ANSWER.REFUSED, KEY_NAMES_ANOTHER_MESSAGE);
         }
         const asking = yield* findOpenAsk({ userId, itemId });
         if (
@@ -2891,9 +2911,10 @@ const KeyedMessageSchema = Schema.Struct({
   userId: Schema.NullOr(Schema.String),
   text: Schema.String,
   files: Schema.Array(Schema.Struct({ name: Schema.String, mediaType: Schema.String })),
+  answers: Schema.NullOr(inboxAnswersSchema),
 });
 
-/** The message standing under a member's key on the item: who wrote it, its words, and its files by name and type in order. */
+/** The message standing under a member's key on the item: who wrote it, its words, its files by name and type in order, and the answer it carries. */
 const findKeyedMessage = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
   Result: KeyedMessageSchema,
@@ -2904,11 +2925,45 @@ const findKeyedMessage = SqlSchema.findOneOption({
           userId: inboxMessage.userId,
           text: inboxMessage.text,
           files: sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('name', ${attachment.name}, 'mediaType', ${attachment.contentType}) order by ${attachment.position}), '[]'::jsonb) from ${attachment} where ${attachment.inboxMessageId} = ${MESSAGE.id})`,
+          answers: inboxMessage.answers,
         })
         .from(inboxMessage)
         .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey))),
     ),
 });
+
+/** Whether two lists hold the same entries in the same order, by the test given; an absent list holds none. */
+function sameList<T>(
+  standing: readonly T[] | undefined,
+  sent: readonly T[] | undefined,
+  same: (left: T, right: T) => boolean = (left, right) => left === right,
+): boolean {
+  const left = standing ?? [];
+  const right = sent ?? [];
+  return (
+    left.length === right.length &&
+    left.every((each, at) => {
+      const other = right[at];
+      return other !== undefined && same(each, other);
+    })
+  );
+}
+
+/** Whether the answer standing on a message is the one sent again: the same ask, reply, picks, values, and ticks, in order. */
+function sameAnswers(standing: InboxAnswers | null, sent: InboxAnswers): boolean {
+  return (
+    standing !== null &&
+    standing.ask === sent.ask &&
+    standing.reply === sent.reply &&
+    sameList(standing.choices, sent.choices) &&
+    sameList(standing.steps, sent.steps) &&
+    sameList(
+      standing.values,
+      sent.values,
+      (left, right) => left.label === right.label && left.value === right.value,
+    )
+  );
+}
 
 /** Whether the message standing under the key is the one sent again: the same member, the same words, and the same files by name and type. */
 function sameMessage(
@@ -2916,7 +2971,7 @@ function sameMessage(
   sent: {
     readonly userId: string;
     readonly text: string;
-    readonly files: readonly MessageFile[];
+    readonly files: readonly Pick<MessageFile, "name" | "contentType">[];
   },
 ): boolean {
   return (

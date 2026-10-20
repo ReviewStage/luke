@@ -1,7 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
-  type CodingAgent,
   listCodingAgents,
   listWorkspaceCodingAgents,
   pinCodingAgent,
@@ -21,31 +20,27 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
-  CODING_AGENT_STATUS,
   CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentAttachment,
-  type CodingAgentPullRequest,
-  type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentPinRequestSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
-  PULL_REQUEST_STATE,
-  type PullRequestMerging,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
-import { githubPullRequestNumberSchema } from "@luke/features/github-repositories-wire";
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_STATUS,
+  type InboxAnswers,
   type InboxItem,
   type InboxReply,
   inboxAnswerHeard,
   inboxAnswerMessage,
   inboxAnswerRequestSchema,
+  inboxAnswersReply,
   inboxClosedMessage,
   inboxCloseRequestSchema,
   inboxCursorSchema,
@@ -55,64 +50,21 @@ import {
   inboxThreadMessage,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
-import {
-  PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
-  PULL_REQUEST_WRITE_OUTCOME,
-  type PullRequestActionRequest,
-  type PullRequestViewedAnswer,
-  pullRequestActionRequestSchema,
-} from "@luke/features/pull-request-write-wire";
 import { readEither } from "@luke/wire/effect";
-import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effect";
+import { Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
+import { changesPeople, namedReviewOptions } from "../github/github-people.js";
+import { githubReadOrRefusal } from "../github/github-refusal.js";
 import {
-  changesPeople,
-  namedOverviewConversation,
-  namedOverviewPullRequest,
-  namedReviewOptions,
-} from "../github/github-people.js";
-import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
-import { pullRequestMerging } from "../github/pull-request-merging.js";
-import {
-  addLineComment,
-  commentOnPullRequest,
-  discardPendingReview,
-  type GitHubWriteFailure,
-  mergePullRequest,
-  pullRequestNodeId,
-  pullRequestViewedStates,
-  reactOnPullRequest,
-  replyToReviewThread,
-  setAutoMerge,
-  setFileViewed,
-  setLabelled,
-  setPullRequestDraft,
-  setPullRequestOpen,
-  setPullRequestTitle,
-  setReviewRequested,
-  setReviewThreadResolved,
-  submitPullRequestReview,
-  takeOutOfMergeQueue,
-} from "../github/pull-request-writes.js";
-import {
-  GRAPHQL_REACTION_OF,
   imageCommits,
-  type PullRequestReadFailure,
   pullRequestByNumber,
-  pullRequestChecks,
-  pullRequestConversation,
-  pullRequestDeployments,
   pullRequestFiles,
-  pullRequestOverview,
   pullRequestReviewOptions,
-  viewerPendingReviewOf,
-  viewerReactionsOf,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -128,8 +80,10 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import {
+  answerInboxAsk,
   answerInboxItem,
   closeInboxItemAsMember,
+  INBOX_ASK_ANSWER,
   INBOX_MESSAGE_OUTCOME,
   inboxItemArchived,
   markInboxItemRead,
@@ -146,12 +100,11 @@ import {
 import type { ModelCatalog, ModelChoiceRefused } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
+import { askedPullRequest, pullRequestNumberOf } from "./asked-pull-request.js";
 import { accountInboxPast, agentInboxPast, taskInboxPast } from "./coder-host/inbox-page.js";
 import {
-  agentPullRequestOfNumber,
   agentPullRequestReach,
   type PublishedCache,
-  PublishedKey,
   withPublishedCache,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
@@ -173,18 +126,11 @@ import {
   type EveReach,
   eveFor,
   standingsOf,
-  statusOf,
   stoppedForGood,
   stoppedTurn,
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import {
-  type MemberPullRequest,
-  memberPullRequestWrite,
-  memberReadToken,
-  writeAnswerOf,
-} from "./pull-request-write.js";
 
 /**
  * coding-agents-app.ts -- a task's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
@@ -231,34 +177,18 @@ import {
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
  * anything the agent pushed stays.
- * What the agent published (`GET /api/agents/{id}/pull-request`) is the
- * branch and pull request its own transcript names, as GitHub holds them
- * now (`packages/service/src/agents/coder-host/published.ts`), kept per agent for a short while
- * so a tab asking beside every held page does not ask GitHub as often.
+ * What the agent published, its Pull request tab's overview, a change to
+ * its pull request, and which files the member marked viewed are the hosted
+ * oRPC router's (`agent-pull-request-procedures.ts`), and the pull request
+ * those reads are about is decided once for both (`asked-pull-request.ts`).
  * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
- * the pull request that answer names, read from GitHub afresh on each ask
+ * that pull request, read from GitHub afresh on each ask
  * (`github/pull-requests.ts`), each with its patch, or none where the
- * agent has opened none yet. Its overview, which its Pull request tab
- * draws, is read afresh on each ask on the same terms in three reads the
- * tab asks for at once and draws as each lands: the pull request itself,
- * its description, branches, mergeability, author, and the reviewers it
- * asks for (`GET /api/agents/{id}/overview/pull-request`); its head's checks
- * one by one and its deployments (`GET /api/agents/{id}/overview/checks`); and its conversation
- * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
- * its words as GitHub renders them. A change to that pull request
- * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
- * review, submitting a review, replying on or resolving a review thread,
- * or commenting on it, is made on GitHub as the member who asks, on their own GitHub
- * sign-in and never the App's, through the one seam every such change takes
- * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
- * published answer is let go, so the next read asks GitHub afresh. What the
+ * agent has opened none yet. What the
  * reviewer and label pickers offer (`GET /api/agents/{id}/review-options`),
  * the repository's labels, collaborators, and teams, is read on a token for
- * the agent's repository, as the overview is. Which of its files the member
- * marked viewed on GitHub, a mark GitHub keeps for each account, is read
- * through the member's own sign-in (`GET /api/agents/{id}/pull-request/viewed`),
- * and set by two of the changes. An image
- * those words name (`GET /api/agents/{id}/github-image`) is
+ * the agent's repository, as the overview is. An image the overview's
+ * words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
  */
@@ -270,19 +200,8 @@ const AGENTS_PATH = {
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
-  /** GET reads what the agent published; the rewrite moves the path's agent id into the `id` query. */
-  PULL_REQUEST: "/api/agents/pull-request",
   /** GET reads the agent's changes, its pull request's files; the rewrite moves the path's agent id into the `id` query. */
   CHANGES: "/api/agents/changes",
-  /** GET reads the agent's pull request itself, as its Pull request tab's overview draws it; the rewrite moves the path's agent id into the `id` query. */
-  OVERVIEW_PULL_REQUEST: "/api/agents/overview-pull-request",
-  /** GET reads the checks on the agent's pull request's head, as its overview draws them; the rewrite moves the path's agent id into the `id` query. */
-  OVERVIEW_CHECKS: "/api/agents/overview-checks",
-  /** GET reads the agent's pull request's conversation, as its overview draws it; the rewrite moves the path's agent id into the `id` query. */
-  OVERVIEW_CONVERSATION: "/api/agents/overview-conversation",
-  /** POST makes one change to the agent's pull request as the asking member; the rewrite moves the path's agent id into the `id` query. */
-  PULL_REQUEST_ACTION: "/api/agents/pull-request-action",
-  PULL_REQUEST_VIEWED: "/api/agents/pull-request-viewed",
   /** GET reads what the reviewer and label pickers of the agent's Pull request tab offer; the rewrite moves the path's agent id into the `id` query. */
   REVIEW_OPTIONS: "/api/agents/review-options",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
@@ -339,14 +258,6 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
-
-/**
- * A change to a pull request names the change and its few fields, a
- * review's words the longest of them, so a body past this is no change.
- * Note that each of those words' characters may take six bytes as JSON,
- * a control character escaped as `\u0000`.
- */
-const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
@@ -639,122 +550,6 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
-/** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
-const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
-  published: PublishedCache,
-  userId: string,
-  agent: CodingAgent,
-): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
-  // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
-  const status = yield* statusOf(agent);
-  const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
-  return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
-        case "NoSuchAgent":
-          return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
-});
-
-/** The pull request number the request names under `number`, or none where it names none; refused where it names one off the wire's shape or more than one. */
-const pullRequestNumberOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<number | undefined, HostedRefusal> {
-  const named = new URL(request.url).searchParams.getAll(QUERY.NUMBER);
-  if (named.length === 0) return undefined;
-  const read =
-    named.length === 1
-      ? readEither(githubPullRequestNumberSchema)(unparsedWire(Number(named[0])))
-      : undefined;
-  if (read === undefined || Result.isFailure(read)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  return read.success;
-});
-
-/**
- * What a read of the agent's Pull request tab is about: the pull request of
- * the agent's repository the request names by its number (`number`), read
- * afresh, as a tab showing a pull request other than the agent's own asks;
- * else what the agent published, from the instance's kept answers.
- */
-const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
-  published: PublishedCache,
-  userId: string,
-  agent: CodingAgent,
-  request: Request,
-): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
-  const number = yield* pullRequestNumberOf(request);
-  if (number === undefined) return yield* keptPublished(published, userId, agent);
-  return yield* agentPullRequestOfNumber(userId, agent, number).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
-});
-
-/** The pull request a read or a change of the agent's Pull request tab is about (`askedPublished`), null where there is none. */
-const askedPullRequest = (
-  published: PublishedCache,
-  userId: string,
-  agent: CodingAgent,
-  request: Request,
-) =>
-  Effect.map(
-    askedPublished(published, userId, agent, request),
-    (answer): CodingAgentPullRequest | null => answer.pullRequest,
-  );
-
-/**
- * The instance's kept answers for the agent let go, every member's and on
- * either side of its end, so the next ask on this instance reads GitHub
- * afresh whoever asks. Note that another instance keeps its own for at most
- * `CODER.PUBLISHED_TTL`, as it keeps one past a change made on GitHub itself.
- */
-const forgetPublished = (published: PublishedCache, agentId: string) =>
-  Effect.flatMap(Cache.keys(published), (keys) =>
-    Effect.forEach(
-      [...keys].filter((key) => key.agentId === agentId),
-      (key) => Cache.invalidate(published, key),
-      { discard: true },
-    ),
-  );
-
-/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers; or, where the request names a number, that pull request of its repository (`askedPublished`). */
-const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  published: PublishedCache,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  const answer = yield* askedPublished(published, userId, agent, request);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-});
-
 /**
  * GET reads the agent's changes: the files of the pull request its kept
  * published answer names, who it names (`github-people.ts`), and the
@@ -773,7 +568,8 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const pullRequest = yield* askedPullRequest(published, userId, agent, request);
+  const number = yield* pullRequestNumberOf(new URL(request.url).searchParams.getAll(QUERY.NUMBER));
+  const pullRequest = yield* askedPullRequest(published, userId, agent, number);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
@@ -812,344 +608,6 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
     },
   });
 });
-
-/** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
-type OverviewRead<A> = (
-  token: Redacted.Redacted,
-  agent: CodingAgent,
-  pullRequest: CodingAgentPullRequest,
-  /** The member reading, whose own reads mark what is theirs. */
-  userId: string,
-) => Effect.Effect<A | null, PullRequestReadFailure, AgentsServices>;
-
-/**
- * GET reads one part of the agent's pull request's overview: the pull
- * request its kept published answer names, read from GitHub afresh on a
- * token minted for the agent's repository; none where it names no pull
- * request yet. Each part is a route of its own, so each lands on its own.
- */
-const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
-  seams: CodingAgentsAppSeams,
-  published: PublishedCache,
-  read: OverviewRead<A>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  const pullRequest = yield* askedPullRequest(published, userId, agent, request);
-  if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
-  const part = yield* Effect.gen(function* () {
-    const { token } = yield* agentPullRequestReach(userId, agent);
-    return yield* read(token, agent, pullRequest, userId);
-  }).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
-  // Note that a part may carry what is the reader's own, such as the reactions they gave or the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
-});
-
-/** Whether the pull request was open as last read, which is when the stack it stands in is worth a read of GitHub's open pull requests. */
-function stackable(pullRequest: CodingAgentPullRequest): boolean {
-  return (
-    pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT
-  );
-}
-
-/**
- * GET reads the agent's pull request itself: its description, branches,
- * mergeability, who opened it, who it asks for a review, its labels, and,
- * while it was open as last read, the stack it stands in, its people named
- * against the workspace's members and its stack by their agents
- * (`github-people.ts`), with who its row says it writes as; none where the
- * repository no longer holds it.
- */
-const overviewPullRequestEndpoint = /* @__PURE__ */ Effect.fn(
-  "web/agentOverviewPullRequestEndpoint",
-)(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
-  return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-    Effect.gen(function* () {
-      const [read, merging] = yield* Effect.all(
-        [
-          pullRequestOverview(token, agent.repository, pullRequest.number, stackable(pullRequest)),
-          mergingOrNone(token, agent.repository, pullRequest.number),
-        ],
-        { concurrency: "unbounded" },
-      );
-      if (Option.isNone(read)) return null;
-      const named = yield* namedOverviewPullRequest(agent, read.value);
-      return Option.isNone(merging) ? named : { ...named, merging: merging.value };
-    }),
-  );
-});
-
-/**
- * How the pull request may be merged, for its merge box; none where GitHub
- * would not say, logged by its kind, since the header it rides with stands
- * without it.
- */
-const mergingOrNone = (token: Redacted.Redacted, repository: string, number: number) =>
-  pullRequestMerging(token, repository, number).pipe(
-    Effect.catch((failure) =>
-      Effect.as(logGitHubReadFailure(failure), Option.none<PullRequestMerging>()),
-    ),
-  );
-
-/**
- * GET reads the checks on the agent's pull request's head, failures first,
- * up to the bound, and its head's deployments beside them: three requests
- * to GitHub at once whatever their number, the check runs, the commit
- * statuses, and the deployments.
- */
-const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewChecksEndpoint")(
-  function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
-    return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-      Effect.map(
-        Effect.all(
-          [
-            pullRequestChecks(token, agent.repository, pullRequest.number),
-            pullRequestDeployments(token, agent.repository, pullRequest.number),
-          ],
-          { concurrency: "unbounded" },
-        ),
-        ([checks, deployments]) => ({ checks, deployments }),
-      ),
-    );
-  },
-);
-
-/** Which reactions the member gave on the pull request, read on their own token; none where they hold none GitHub takes. */
-const memberReactions = (userId: string, repository: string, number: number) =>
-  Effect.flatMap(memberReadToken(userId), (token) =>
-    token === undefined ? Effect.succeed(undefined) : viewerReactionsOf(token, repository, number),
-  );
-
-/** The review the member holds pending on the pull request, read on their own token; none where they hold none, or no sign-in GitHub takes. */
-const memberPendingReview = (userId: string, repository: string, number: number) =>
-  Effect.flatMap(memberReadToken(userId), (token) =>
-    token === undefined ? Effect.succeed(null) : viewerPendingReviewOf(token, repository, number),
-  );
-
-/**
- * GET reads the agent's pull request's conversation: its comments, its
- * reviews and their threads, and where each reviewer stands by their
- * reviews, its people named against the workspace's members; and, read
- * beside it on the member's own token, which reactions are theirs.
- */
-const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
-  "web/agentOverviewConversationEndpoint",
-)(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
-  return yield* overviewPart(seams, published, (token, agent, pullRequest, userId) =>
-    Effect.map(
-      Effect.all(
-        [
-          Effect.flatMap(
-            pullRequestConversation(
-              token,
-              agent.repository,
-              pullRequest,
-              memberReactions(userId, agent.repository, pullRequest.number),
-            ),
-            (read) => namedOverviewConversation(agent, pullRequest.number, read),
-          ),
-          memberPendingReview(userId, agent.repository, pullRequest.number),
-        ],
-        { concurrency: "unbounded" },
-      ),
-      ([conversation, pendingReview]) =>
-        conversation === null ? null : { ...conversation, pendingReview },
-    ),
-  );
-});
-
-/** The changes made by the pull request's number on GitHub's REST API, its requested reviewers and labels, which GraphQL cannot take a reviewer off of. */
-type RestActionRequest = Extract<
-  PullRequestActionRequest,
-  {
-    readonly action:
-      | typeof PULL_REQUEST_ACTION.REQUEST_REVIEW
-      | typeof PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST
-      | typeof PULL_REQUEST_ACTION.ADD_LABEL
-      | typeof PULL_REQUEST_ACTION.REMOVE_LABEL;
-  }
->;
-
-/** The write a change makes on the pull request, on the member's token, by the pull request's GraphQL id. */
-function writeOf(
-  request: Exclude<PullRequestActionRequest, RestActionRequest>,
-  token: Redacted.Redacted,
-  id: string,
-): Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> {
-  switch (request.action) {
-    case PULL_REQUEST_ACTION.READY_FOR_REVIEW:
-      return setPullRequestDraft(token, id, false);
-    case PULL_REQUEST_ACTION.CONVERT_TO_DRAFT:
-      return setPullRequestDraft(token, id, true);
-    case PULL_REQUEST_ACTION.MERGE:
-      return mergePullRequest(token, id, request.method, request.headSha);
-    case PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE:
-      return setAutoMerge(token, id, { method: request.method, headSha: request.headSha });
-    case PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE:
-      return setAutoMerge(token, id, undefined);
-    case PULL_REQUEST_ACTION.DEQUEUE:
-      return takeOutOfMergeQueue(token, id);
-    case PULL_REQUEST_ACTION.CLOSE:
-      return setPullRequestOpen(token, id, false);
-    case PULL_REQUEST_ACTION.REOPEN:
-      return setPullRequestOpen(token, id, true);
-    case PULL_REQUEST_ACTION.EDIT_TITLE:
-      return setPullRequestTitle(token, id, request.title);
-    case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
-      return submitPullRequestReview(token, id, request);
-    case PULL_REQUEST_ACTION.REPLY_TO_THREAD:
-      return replyToReviewThread(token, id, request);
-    case PULL_REQUEST_ACTION.RESOLVE_THREAD:
-    case PULL_REQUEST_ACTION.UNRESOLVE_THREAD:
-      return setReviewThreadResolved(
-        token,
-        id,
-        request.threadId,
-        request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD,
-      );
-    case PULL_REQUEST_ACTION.COMMENT:
-      return commentOnPullRequest(token, id, request.body);
-    case PULL_REQUEST_ACTION.ADD_REACTION:
-    case PULL_REQUEST_ACTION.REMOVE_REACTION:
-      return reactOnPullRequest(token, id, {
-        subject: request.subject,
-        content: GRAPHQL_REACTION_OF[request.content],
-        add: request.action === PULL_REQUEST_ACTION.ADD_REACTION,
-      });
-    case PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT: {
-      const { action: _action, ...comment } = request;
-      return addLineComment(token, id, comment);
-    }
-    case PULL_REQUEST_ACTION.DISCARD_REVIEW:
-      return discardPendingReview(token, id);
-    case PULL_REQUEST_ACTION.MARK_FILE_VIEWED:
-    case PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED:
-      return setFileViewed(
-        token,
-        id,
-        request.path,
-        request.action === PULL_REQUEST_ACTION.MARK_FILE_VIEWED,
-      );
-  }
-}
-
-/** The write a change makes on the pull request, on the member's token. */
-function actionWrite(
-  request: PullRequestActionRequest,
-): (
-  pullRequest: MemberPullRequest,
-) => Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> {
-  return ({ token, repository, number }) => {
-    switch (request.action) {
-      case PULL_REQUEST_ACTION.REQUEST_REVIEW:
-      case PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST:
-        return setReviewRequested(
-          token,
-          repository,
-          number,
-          request.reviewer,
-          request.action === PULL_REQUEST_ACTION.REQUEST_REVIEW,
-        );
-      case PULL_REQUEST_ACTION.ADD_LABEL:
-      case PULL_REQUEST_ACTION.REMOVE_LABEL:
-        return setLabelled(
-          token,
-          repository,
-          number,
-          request.label,
-          request.action === PULL_REQUEST_ACTION.ADD_LABEL,
-        );
-      default:
-        return Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
-          writeOf(request, token, id),
-        );
-    }
-  };
-}
-
-/**
- * POST makes one change to the pull request the agent's kept published
- * answer names, as the asking member on their own GitHub sign-in
- * (`pull-request-write.ts`), and answers how GitHub took it; not found
- * where it names no pull request yet. Whatever GitHub answered, the kept
- * answer is let go, so the reads after it ask GitHub afresh.
- */
-const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestActionEndpoint")(
-  function* (
-    seams: CodingAgentsAppSeams,
-    published: PublishedCache,
-  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    if (incoming.method !== HTTP_METHOD.POST) {
-      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-    }
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const { userId, agent } = yield* reachedAgent(seams, request);
-    const body = yield* readJsonBodyEffect(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES);
-    const asked = readEither(pullRequestActionRequestSchema)(body);
-    if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    const pullRequest = yield* askedPullRequest(published, userId, agent, request);
-    if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const written = yield* memberPullRequestWrite(
-      userId,
-      agent,
-      pullRequest.number,
-      actionWrite(asked.success),
-    ).pipe(Effect.ensuring(forgetPublished(published, agent.id)));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, writeAnswerOf(written));
-  },
-);
-
-/**
- * GET reads which of the files of the pull request the agent's kept
- * published answer names the asking member marked viewed on GitHub, on
- * their own GitHub sign-in (`pull-request-write.ts`), since GitHub keeps the
- * mark for each account alone and the App sees none of it; no files where it
- * names no pull request yet. Nothing is let go, as nothing changed.
- */
-const pullRequestViewedEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestViewedEndpoint")(
-  function* (
-    seams: CodingAgentsAppSeams,
-    published: PublishedCache,
-  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    if (incoming.method !== HTTP_METHOD.GET) {
-      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-    }
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const { userId, agent } = yield* reachedAgent(seams, request);
-    const pullRequest = yield* askedPullRequest(published, userId, agent, request);
-    if (pullRequest === null) {
-      const none: PullRequestViewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
-      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, none);
-    }
-    const read = yield* memberPullRequestWrite(userId, agent, pullRequest.number, (member) =>
-      pullRequestViewedStates(member.token, member.repository, member.number),
-    );
-    const answer: PullRequestViewedAnswer =
-      read.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE
-        ? { outcome: read.outcome, files: read.value }
-        : read;
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  },
-);
 
 /**
  * GET reads one image the agent's pull request's overview names, by the
@@ -1539,9 +997,15 @@ const inboxCloseEndpoint = /* @__PURE__ */ Effect.fn("web/inboxCloseEndpoint")(f
   return inboxAnswered(taken, true);
 });
 
-/** A message is its words and the files a message may carry: the words' bound at JSON's widest escape, the files, and room for the key. */
+/** A message is its words, the files a message may carry, and the answer it may carry: the words' and the answer's picks and values at JSON's widest escape, the files, and room for the key, the ask, and the steps. */
 const MAXIMUM_INBOX_MESSAGE_BODY_BYTES =
-  6 * INBOX_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048;
+  6 *
+    (INBOX_BOUNDS.MAX_MESSAGE_CHARS +
+      INBOX_BOUNDS.MAX_FIELDS *
+        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
+      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
+  2_048;
 
 /**
  * POST writes a member's message on the thread of one item of the account's
@@ -1557,7 +1021,10 @@ const MAXIMUM_INBOX_MESSAGE_BODY_BYTES =
  * written and handed off again, which the steer's own key makes reach the
  * agent once, and another message under a key already taken, by another
  * member or with other words or files, is refused. An agent whose session has ended for good can
- * hear nothing again, so its item keeps the message.
+ * hear nothing again, so its item keeps the message. A message that carries
+ * the answer to the thread's open ask is the reply that answers it, as
+ * `inboxAnswerByReply` takes one; one without is a plain reply, which never
+ * answers, even while an ask stands open.
  */
 const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -1573,7 +1040,15 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
   const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_MESSAGE_BODY_BYTES);
   const asked = readEither(inboxMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { text, clientKey, attachments = [] } = asked.success;
+  const { text, clientKey, attachments = [], answers } = asked.success;
+  if (answers !== undefined) {
+    return yield* inboxAnswerByReply(seams, writer, request, userId, itemId, {
+      text,
+      clientKey,
+      attachments,
+      answers,
+    });
+  }
   const posted = yield* hostedStoreOrUnavailable(
     postInboxMessage(userId, itemId, { text, clientKey, files: attachments }),
   );
@@ -1603,6 +1078,86 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
     Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item });
+});
+
+/**
+ * A member's reply that answers the thread's open ask, as the window sends
+ * one from version 5: the answer taken first, with the reply's words and
+ * files, as the member's message that carries it (`answerInboxAsk`), and
+ * then, by the rule an answer by revision follows (`inboxAnswerHeard`),
+ * handed to the agent under the answer's own lead, its files with it, under
+ * the reply's key through the one steer path; otherwise kept for the agent
+ * to read in its own time. An item put away with its task is not answered.
+ * An answer to an ask the thread no longer holds open, to another message,
+ * or one the ask does not take is refused, as a message's request is. A
+ * hand-off that fails, is interrupted, or dies takes the answer back, as
+ * one by revision does, so the thread never reads answered while the agent
+ * was not told; an answer sent again under the key it was taken by is
+ * handed off again, which the steer's own key makes reach the agent once.
+ * An agent whose session has ended for good can hear nothing again, so its
+ * item keeps the answer. It answers as a plain reply does: the item as it
+ * then stands.
+ */
+const inboxAnswerByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  itemId: string,
+  sent: {
+    readonly text: string;
+    readonly clientKey: string;
+    readonly attachments: readonly CodingAgentAttachment[];
+    readonly answers: InboxAnswers;
+  },
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const { text, clientKey, attachments, answers } = sent;
+  // An item put away with its task is read but not answered, as an answer by revision is not, until the task is back.
+  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  }
+  const answered = yield* hostedStoreOrUnavailable(
+    answerInboxAsk(userId, itemId, { answers, text, clientKey, files: attachments }),
+  );
+  if (Option.isNone(answered)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { item, outcome } = answered.value;
+  if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const messaged = hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item });
+  // An answer sent again under the key it was taken under is the same answer, counted once.
+  const counted =
+    outcome === INBOX_ASK_ANSWER.TAKEN
+      ? recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {})
+      : Effect.void;
+  const reply = inboxAnswersReply(answers, text);
+  if (!inboxAnswerHeard(item, reply, attachments)) {
+    yield* counted;
+    return messaged;
+  }
+  const handedOver = Effect.gen(function* () {
+    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
+    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
+    const eve = yield* eveFor(seams, request, userId);
+    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+      text: inboxAnswerMessage(item, reply),
+      attachments,
+      clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    });
+  });
+  yield* handedOver.pipe(
+    Effect.catchIf(retiredRefusal, () => Effect.void),
+    Effect.onError(() =>
+      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.ignore,
+      ),
+    ),
+  );
+  // Counted only once the hand-off stands, since a failed one withdraws the answer above.
+  yield* counted;
+  return messaged;
 });
 
 /** A request to mark every item read names at most a workspace, so a few hundred bytes hold it. */
@@ -1699,38 +1254,8 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
         HttpRouter.add(
           ANY_METHOD,
-          AGENTS_PATH.PULL_REQUEST,
-          hostedRefusing(pullRequestEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
           AGENTS_PATH.CHANGES,
           hostedRefusing(changesEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.OVERVIEW_PULL_REQUEST,
-          hostedRefusing(overviewPullRequestEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.OVERVIEW_CHECKS,
-          hostedRefusing(overviewChecksEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.OVERVIEW_CONVERSATION,
-          hostedRefusing(overviewConversationEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.PULL_REQUEST_ACTION,
-          hostedRefusing(pullRequestActionEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.PULL_REQUEST_VIEWED,
-          hostedRefusing(pullRequestViewedEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,

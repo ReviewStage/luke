@@ -47,13 +47,14 @@ beforeEach(() => {
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request.kind);
-      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
   fakeActPort({
+    [ACT_KIND.TASKS_PICTURE_KEEP]: () => {
+      sent.push(ACT_KIND.TASKS_PICTURE_KEEP);
+      return Promise.resolve({ id: KEPT_ID });
+    },
     [ACT_KIND.TASKS_EDIT]: ({ edit }) => {
       sent.push(ACT_KIND.TASKS_EDIT);
       // The one edit this page sends is the document's whole text.

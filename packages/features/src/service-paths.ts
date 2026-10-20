@@ -393,14 +393,6 @@ export function agentStopPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/stop`;
 }
 
-/** What one agent published (GET): the branch it pushed and the pull request from it, as GitHub holds them; `coding-agent-wire.ts` declares the answer. With a `number`, this and the Pull request tab's reads and changes below are of that pull request of the agent's repository instead. */
-export function agentPullRequestPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/pull-request`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
 /** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
 export function agentChangesPath(agentId: string, number?: number): string {
   const path = `/api/agents/${encodeURIComponent(agentId)}/changes`;
@@ -409,49 +401,9 @@ export function agentChangesPath(agentId: string, number?: number): string {
   return `${path}?${query}`;
 }
 
-/** One agent's pull request itself as its overview draws it (GET): its description, branches, mergeability, author, and the reviewers it asks for; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewPullRequestPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/overview/pull-request`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** The checks on one agent's pull request's head as its overview draws them (GET); `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewChecksPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/overview/checks`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** One agent's pull request's conversation as its overview draws it (GET): its comments, reviews, threads, and where its reviewers stand; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewConversationPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/overview/conversation`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
 /** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
 export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
-}
-
-/** One change to an agent's pull request (POST), made on GitHub as the member who asks; `pull-request-write-wire.ts` declares the request and the answer. */
-export function agentPullRequestActionPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** Which of an agent's pull request's files the asking member marked viewed on GitHub (GET), read on their own sign-in; `pull-request-write-wire.ts` declares the answer. */
-export function agentPullRequestViewedPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/pull-request/viewed`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
 }
 
 /** What the reviewer and label pickers of an agent's Pull request tab offer: its repository's labels, collaborators, and teams. */

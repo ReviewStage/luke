@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
@@ -13,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
 import { lineWords } from "../testing/actor-line.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
@@ -64,19 +64,17 @@ function standHost(
   unanswered: ReadonlySet<string> = new Set(),
 ): void {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      asked.push(request.payload.attachmentId);
-      return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: pictures.has(request.payload.attachmentId)
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.TASKS_PICTURE_READ]: ({ attachmentId }) => {
+      asked.push(attachmentId);
+      return Promise.resolve(
+        pictures.has(attachmentId)
           ? { contentType: "image/png", base64: PNG_BASE64 }
-          : {
-              failure: unanswered.has(request.payload.attachmentId) ? "unanswered" : "not-found",
-            },
-      });
+          : { failure: unanswered.has(attachmentId) ? "unanswered" : "not-found" },
+      );
     },
   });
 }

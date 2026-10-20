@@ -40,3 +40,40 @@ test("a build with a DSN starts the SDK under the deployment's environment and r
   // SDK's own `dataCollection` (v11's successor to `sendDefaultPii`), widened by nothing here.
   assert.equal(options?.dataCollection, undefined);
 });
+
+/** A refusal as the browser says it, which jsdom does not construct itself. */
+function refusal(effectiveDirective: string, blockedURI: string): Event {
+  return Object.assign(new Event("securitypolicyviolation"), { effectiveDirective, blockedURI });
+}
+
+test("each kind of request the page's policy refuses is sent once as a warning, by its directive and origin alone, however often the SDK starts", async () => {
+  // A tab whose app mounted, closed, and mounted again starts the SDK twice.
+  await startWebSentry({ dsn: DSN, environment: "production", release: "abc123" });
+  await Sentry.getClient()?.close();
+  await startWebSentry({ dsn: DSN, environment: "production", release: "abc123" });
+  const sent: { message: string | undefined; level: string | undefined }[] = [];
+  // Read before Sentry's own deduplication, which would hide a second listener's copy.
+  Sentry.getClient()?.on("preprocessEvent", (event) => {
+    sent.push({ message: event.message, level: event.level });
+  });
+
+  const socket = "wss://br-x-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/v1?token=t";
+  document.dispatchEvent(refusal("connect-src", socket));
+  document.dispatchEvent(refusal("connect-src", socket));
+  document.dispatchEvent(refusal("script-src-elem", "inline"));
+  document.dispatchEvent(refusal("img-src", "not a url?token=t"));
+  await Sentry.flush(1_000);
+
+  assert.deepEqual(sent, [
+    {
+      message:
+        "Content-Security-Policy refused connect-src to wss://br-x-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech",
+      level: "warning",
+    },
+    { message: "Content-Security-Policy refused script-src-elem to inline", level: "warning" },
+    {
+      message: "Content-Security-Policy refused img-src to an unreadable address",
+      level: "warning",
+    },
+  ]);
+});

@@ -7,7 +7,7 @@ import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
-import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
+import { createActRouter, type PlatformActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { channels } from "@luke/host/bridge";
@@ -172,12 +172,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...voiceRuntimeProcedures(voiceRuntime),
   };
 
-  const router = createHostActRouter<WebContents>(
-    {
-      tasks: { host: operator.host, colourCode: highlightSnippet },
-    },
-    platformRows,
-  );
+  const router = createActRouter<WebContents>(platformRows);
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
@@ -254,6 +249,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          colourCode: highlightSnippet,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,
