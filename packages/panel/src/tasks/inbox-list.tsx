@@ -241,19 +241,16 @@ const SHOW_TAB_WORDS = [
 ] as const;
 
 /**
- * What the list says where its tab leaves out every item it holds: a title,
- * and the line under it. Everything leaves out only what Whose does.
+ * What the list says where its tab leaves out every item it holds.
+ * Everything leaves out only what Whose does.
  */
 const SHOW_EMPTY = {
-  [INBOX_SHOW.NEEDS_YOU]: { title: NEEDS_YOU.NONE, body: NEEDS_YOU.ANSWERED },
-  [INBOX_SHOW.UNREAD]: { title: "Nothing unread", body: "You've read everything" },
-  [INBOX_SHOW.OPEN]: { title: "Nothing open", body: "Every item is answered" },
-  [INBOX_SHOW.ALL]: { title: "Nothing here", body: "Nothing in the Inbox is theirs" },
-  [INBOX_SHOW.ARCHIVED]: {
-    title: "Nothing archived",
-    body: "An archived task's items stand here until it is unarchived",
-  },
-} as const satisfies Record<InboxShow, { title: string; body: string }>;
+  [INBOX_SHOW.NEEDS_YOU]: NEEDS_YOU.NONE,
+  [INBOX_SHOW.UNREAD]: "Nothing unread",
+  [INBOX_SHOW.OPEN]: "Nothing open",
+  [INBOX_SHOW.ALL]: "Nothing in the Inbox is theirs",
+  [INBOX_SHOW.ARCHIVED]: "Nothing archived",
+} as const satisfies Record<InboxShow, string>;
 
 /** What the empty state's press says, by the tab it shows instead. */
 const SHOW_INSTEAD = {
@@ -980,7 +977,7 @@ export function ShowEmpty({
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
-  const { title, body } = SHOW_EMPTY[show.show];
+  const line = SHOW_EMPTY[show.show];
   const instead = insteadOf(show.show, counts);
   const everyone =
     instead === undefined && whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE
@@ -989,7 +986,6 @@ export function ShowEmpty({
   return (
     <EmptyState
       icon={<InboxIcon />}
-      title={title}
       action={
         instead !== undefined
           ? {
@@ -1010,7 +1006,7 @@ export function ShowEmpty({
             : undefined
       }
     >
-      {body}
+      {line}
     </EmptyState>
   );
 }

@@ -27,7 +27,7 @@ const FEEDBACK_DEFAULTS = {
 /** What the send failed as, in words the composer can put under its field. */
 const FEEDBACK_REFUSAL = {
   UNREACHABLE: "Could not reach the feedback service. Check the connection and try again.",
-  REFUSED: "The feedback service could not take this right now. Try again in a moment.",
+  REFUSED: "The feedback service did not take that. Try again.",
 } as const;
 
 /** The content type a serialized body names, the one type this call sends. */

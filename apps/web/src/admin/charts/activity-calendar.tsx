@@ -217,7 +217,7 @@ export function ActivityCalendar({
           </div>
         ) : null
       }
-      legend="Each cell is one UTC day across the weeks shown, whatever window is chosen above — a deeper fill is more hosted calls against the busiest day shown, and the dashed cell is today, still filling."
+      legend="Each cell is one UTC day, whatever the window. A deeper fill is more hosted calls against the busiest day shown, and the dashed cell is today, still filling."
     >
       <div ref={gridAreaRef}>
         {weeks.length === 0 ? null : (

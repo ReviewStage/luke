@@ -6,15 +6,8 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ExternalLinkIcon,
-  GlobeIcon,
-  RotateCwIcon,
-  XIcon,
-} from "lucide-react";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -505,11 +498,7 @@ export function BrowserPane({
         </div>
       </header>
       <div ref={body} className="browser-view-body">
-        {!opened && !refused ? (
-          <EmptyState icon={<GlobeIcon />}>
-            Type an address above. Your own dev server works too, like localhost:3000.
-          </EmptyState>
-        ) : refused ? (
+        {!opened && !refused ? null : refused ? (
           <ErrorState
             onRetry={() => openAt(browserAddressOf(address) ?? address)}
             placement={ERROR_STATE_PLACEMENT.CENTRED}

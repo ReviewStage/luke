@@ -84,9 +84,6 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * the stream is out of it whole besides (`ph-no-capture`).
  */
 
-/** What For you says it holds, under its name. */
-const FOR_YOU_META = "Asks, direct messages, and mentions waiting on you";
-
 /** What For you says with nothing waiting. */
 const NOTHING_WAITS = "Nothing waits on you.";
 
@@ -94,7 +91,7 @@ const NOTHING_WAITS = "Nothing waits on you.";
 const NOTHING_POSTED = "Nothing posted here yet.";
 
 /** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others. */
-const ARCHIVED_CHANNEL = "This channel is archived, so nothing more is posted in it.";
+const ARCHIVED_CHANNEL = "This channel is archived.";
 const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
 
 /** What a row says of a block this build does not know. */
@@ -545,7 +542,7 @@ export function ChatPane({
     const entries = forYou(chat);
     return (
       <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
-        <PlaceHead title="For you" meta={FOR_YOU_META} lead={lead} />
+        <PlaceHead title="For you" meta={undefined} lead={lead} />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
         ) : (

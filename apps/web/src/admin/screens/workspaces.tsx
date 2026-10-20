@@ -241,7 +241,7 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
             label="Invites accepted"
             value={formatShare(summary.invitations.acceptanceRate)}
             hint={`${formatNumber(summary.invitations.pending)} pending · ${formatNumber(summary.invitations.expired)} expired`}
-            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open, across every workspace: an invitation is how a workspace becomes shared`}
+            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open, across every workspace`}
           />
         </div>
         <div className={STAT_CELL}>

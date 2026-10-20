@@ -197,7 +197,7 @@ function mount(address: string | undefined, browserId: string = crypto.randomUUI
 test("a blank tab asks for an address, and opens a dev server on the Mac over plain http", async () => {
   const doors = main();
   const tab = mount(undefined);
-  assert.match(tab.container.textContent ?? "", /Type an address above/u);
+  assert.match(tab.field().placeholder, /localhost:3000/u);
   assert.ok(tab.container.querySelector(".browser-view.ph-no-capture"), "out of the recording");
 
   await tab.go("localhost:3000");

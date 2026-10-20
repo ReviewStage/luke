@@ -611,7 +611,7 @@ test("with Needs you on, the item a task's Inbox chose for itself stays shown on
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
   assert.deepEqual(inbox.rows(), []);
-  assert.equal(inbox.filteredOut()?.[0], "Nothing needs you");
+  assert.equal(inbox.filteredOut()?.[1], "Nothing needs you");
   assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
   window.localStorage.clear();
   inbox.unmount();
@@ -629,11 +629,7 @@ test("a task's Inbox holding only settled items, on the Needs you tab, lists no 
   wide.pressNeedsYou();
   assert.deepEqual(wide.head(), ["Inbox", "Needs you"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(wide.filteredOut(), [
-    "Nothing needs you",
-    "You've answered everything",
-    "Show everything",
-  ]);
+  assert.deepEqual(wide.filteredOut(), [undefined, "Nothing needs you", "Show everything"]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
   assert.deepEqual(wide.head(), ["Inbox", "Everything"]);

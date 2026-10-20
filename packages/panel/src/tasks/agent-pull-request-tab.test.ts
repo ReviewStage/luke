@@ -2550,7 +2550,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   const panel = openReview(tab);
   assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
     "CommentSubmit general feedback without approval.",
-    "ApproveApprove this pull request.",
+    "Approve",
     "Request changesSubmit feedback that must be addressed.",
   ]);
 
