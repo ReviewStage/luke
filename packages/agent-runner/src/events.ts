@@ -14,6 +14,7 @@ import {
   Duration,
   Effect,
   Fiber,
+  Predicate,
   Queue,
   Redacted,
   Schedule,
@@ -73,21 +74,40 @@ export interface EventSink {
 /** What a secret is replaced with wherever an event carried it. */
 const REDACTED = "[redacted]";
 
+/** A value as it crosses to Luke: JSON's own shapes. */
+type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
+
+/** A text with every secret taken out. */
+function redactedText(text: string, secrets: readonly string[]): string {
+  return secrets.reduce((scrubbing, secret) => scrubbing.replaceAll(secret, REDACTED), text);
+}
+
+/** A value with every secret taken out of each string in it, keys included. */
+function redacted(value: Json, secrets: readonly string[]): Json {
+  if (Predicate.isString(value)) return redactedText(value, secrets);
+  if (Array.isArray(value)) return value.map((each) => redacted(each, secrets));
+  if (!Predicate.isObject(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, each]) => [
+      redactedText(key, secrets),
+      redacted(each, secrets),
+    ]),
+  );
+}
+
 /**
  * A batch as the text Luke is sent, with every secret the launch holds taken
  * out. Note that we scrub every event, the SDK's included, because a tool's
  * output or a CLI's error is text the runner never wrote; the command sandbox
  * keeps both secrets from the agent's commands, and this is the second fence.
+ * Note too that we scrub the strings themselves, before they are spelled as
+ * JSON, so no escape can hide a secret or be cut in half by its removal.
  */
 function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[]): string {
-  return secrets.reduce<string>((text, secret) => {
-    const value = Redacted.value(secret);
-    if (value === "") return text;
-    // Note that we replace the secret as the batch's JSON spells it, escapes
-    // and all, since that is how it stands in the text.
-    const spelled = JSON.stringify(value).slice(1, -1);
-    return text.replaceAll(spelled, JSON.stringify(REDACTED).slice(1, -1));
-  }, JSON.stringify(batch));
+  const values = secrets.map(Redacted.value).filter((value) => value !== "");
+  // Note that the batch is JSON already, as the SDK parsed it from the CLI's stdout.
+  const json: Json = JSON.parse(JSON.stringify(batch));
+  return JSON.stringify(redacted(json, values));
 }
 
 /** One batch, posted until Luke takes it or answers that it never will. */

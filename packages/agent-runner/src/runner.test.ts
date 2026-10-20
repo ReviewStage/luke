@@ -33,8 +33,8 @@ import {
 } from "./testing/recorded-stream.js";
 
 const BEARER = "runner-bearer-for-tests";
-/** Note the quote and the backslash, which a token's JSON spells escaped. */
-const CLAUDE_TOKEN = 'plan-token-"for\\tests';
+/** Note the quote, the backslash, and the newline, which a token's JSON spells escaped. */
+const CLAUDE_TOKEN = 'plan-token-"for\\tests\n';
 const EVENTS_URL = "https://luke.test/runner/events";
 const FIRST_SEQUENCE = 7;
 
@@ -300,7 +300,12 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
     const leak: Step = {
       emit: {
         type: "assistant",
-        message: { content: [{ type: "text", text: `${CLAUDE_TOKEN} ${BEARER}` }] },
+        message: {
+          content: [
+            { type: "text", text: `${CLAUDE_TOKEN} ${BEARER}` },
+            { type: "text", text: "a literal \\n stays" },
+          ],
+        },
         parent_tool_use_id: null,
       },
     };
@@ -311,7 +316,12 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
 
     assert.deepEqual(luke.applied[0]?.message, {
       type: "assistant",
-      message: { content: [{ type: "text", text: "[redacted] [redacted]" }] },
+      message: {
+        content: [
+          { type: "text", text: "[redacted] [redacted]" },
+          { type: "text", text: "a literal \\n stays" },
+        ],
+      },
       parent_tool_use_id: null,
     });
     const posted = JSON.stringify(luke.applied);
