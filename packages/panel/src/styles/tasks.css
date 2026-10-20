@@ -3464,10 +3464,12 @@
    stage-cli's merge status stands: a status chip at the pill's size saying
    what holds the merge up, then the one press. A narrow header draws the
    chip's glyph alone, its word still read, so the press keeps its words and
-   nothing runs past the row. */
+   nothing runs past the row. It stands a control's height with or without
+   a press, so a chip alone is level with the title's first line too. */
 .merge-control {
   display: flex;
   min-width: 0;
+  min-height: var(--luke-control-height);
   align-items: center;
   gap: var(--luke-space-8);
 }
