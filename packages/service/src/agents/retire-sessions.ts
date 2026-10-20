@@ -135,7 +135,7 @@ export function retireSessions(
     if (Option.isSome(finished)) return;
     const skipped = sessions.length - (yield* Ref.get(settled));
     yield* Effect.logWarning(
-      `eve was not asked to retire ${skipped} of ${sessions.length} sessions within the delete's budget`,
+      `eve did not retire ${skipped} of ${sessions.length} sessions within the delete's budget`,
     );
   });
 }

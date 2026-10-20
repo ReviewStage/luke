@@ -162,7 +162,7 @@ const SECOND = "20260102000000_second";
 const THIRD = "20260103000000_third";
 
 it.effect(
-  "a run waits at most five seconds on any lock, so a DDL statement blocked by live traffic fails the build rather than stalling the traffic queued behind it",
+  "a run leaves its session's lock_timeout at five seconds, so a DDL statement blocked by live traffic fails the build rather than stalling the traffic queued behind it",
   () =>
     onFreshDatabase(
       Effect.scoped(
