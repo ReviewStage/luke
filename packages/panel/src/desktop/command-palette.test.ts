@@ -617,6 +617,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   } as const;
   const listed: (string | undefined)[] = [];
   fakeAppBridge({
+    // The Issues list follows its workspace's issues, pushed on nothing here.
+    onIssues: () => () => undefined,
     act: (): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
@@ -1355,6 +1357,8 @@ function membersAnswer(
   members: () => Promise<PortActResult<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>>,
 ): void {
   fakeAppBridge({
+    // The Issues list follows its workspace's issues, pushed on nothing here.
+    onIssues: () => () => undefined,
     act: (): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
@@ -1795,6 +1799,8 @@ test("with the Issues filter chosen, Issues turning off shows All again, which f
   issuesAnswer(() => Promise.resolve({ issues: [] }));
   let deliver: (snapshot: AppStateSnapshot) => void = () => undefined;
   fakeAppBridge({
+    // The Issues list follows its workspace's issues, pushed on nothing here.
+    onIssues: () => () => undefined,
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.ISSUES), {})),
     onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
