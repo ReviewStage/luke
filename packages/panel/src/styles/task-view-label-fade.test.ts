@@ -13,15 +13,15 @@ import { PullRequestLabels } from "../tasks/pull-request-labels.js";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * label-fade.test.ts -- a label of the task's views cut short fades out at
- * its end, as a browser's tab title does, rather than ending in an
- * ellipsis, and one that fits ends on its last letter, neither faded nor
- * cut: a call's verb in a transcript, an MCP server's name in its row,
+ * task-view-label-fade.test.ts -- a label of the task's views cut short
+ * fades out at its end, as a browser's tab title does, rather than ending
+ * in an ellipsis, and one that fits ends on its last letter, neither faded
+ * nor cut: a call's verb in a transcript, an MCP server's name in its row,
  * and a pull request's label pill, whose name, standing in its own
  * direction, fades at its left where it reads right to left. jsdom lays
- * nothing out, so the panel's sheets are laid (`testing/container-width.ts`), a box is stood in for as 120px wide
- * and its words as 8px a letter, and the observer reports each box once as
- * a first layout would.
+ * nothing out, so the panel's sheets are laid (`testing/container-width.ts`),
+ * a box is stood in for as 120px wide and its words as 8px a letter, and the
+ * observer reports each box once as a first layout would.
  */
 
 declare global {
