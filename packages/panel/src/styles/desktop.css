@@ -4034,6 +4034,20 @@ ul.actor-stack {
   }
 }
 
+/* A narrow room's item bar has no room for its crumbs beside the way back
+   and the Resolve, which squeezed them to a glyph and a letter, so they take
+   a line of their own under them, the whole bar wide, each cut short by its
+   share as anywhere. */
+.desktop-shell[data-room="narrow"] .inbox-view-items > .desktop-toolbar {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-4);
+}
+
+.desktop-shell[data-room="narrow"] .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
+  order: 1;
+  flex-basis: 100%;
+}
+
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
    keeps its own inset then. */
 .desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
@@ -6619,13 +6633,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
    glyph alone, centred: its label, its detail, its end mark, and its × give
    way, and its hint says its name. Note that under the pointer it wears no
    fade at its end, because the fade makes room for a × it no longer has,
-   and is wider than the glyph's whole side of the pill. */
+   and is wider than the glyph's whole side of the pill. A narrow room's
+   tabs keep their labels (below), since a phone has no hint to name a
+   glyph and two agents' glyphs look alike. */
 @container tab (width < 72px) {
-  .tab-strip .tab:not([data-selected="true"]) :is(.tab-label, .tab-end-mark, .tab-close) {
+  .desktop-shell:not([data-room="narrow"])
+    .tab-strip
+    .tab:not([data-selected="true"])
+    :is(.tab-label, .tab-end-mark, .tab-close) {
     display: none;
   }
 
-  .tab-strip .tab:not([data-selected="true"]) .tab-button {
+  .desktop-shell:not([data-room="narrow"]) .tab-strip .tab:not([data-selected="true"]) .tab-button {
     justify-content: center;
     padding: 0;
   }
@@ -6639,6 +6658,15 @@ polygon.factory-campus-edge[data-edge="selected"] {
       mask-image: none;
     }
   }
+}
+
+/* A narrow room's tabs each keep a short label rather than turning to
+   glyphs: every tab stands at least a glyph and a few letters wide, its
+   label cut short with the fade, and the strip scrolls along past the ones
+   that do not fit, as a phone's browser scrolls its tabs. */
+.desktop-shell[data-room="narrow"] .tab-strip .tab {
+  --tab-widest: 160px;
+  min-width: 96px;
 }
 
 /* The chosen tab keeps a share of its own, its glyph, its label, and its ×

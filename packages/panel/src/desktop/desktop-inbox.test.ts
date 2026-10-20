@@ -899,7 +899,7 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
 });
 
-test("an open item's Close asks first, then settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Close", async () => {
+test("an open item's Resolve, never called Close beside the panel's own Close, asks first, then settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Resolve", async () => {
   onlyAsking({ type: INBOX_RESPONSE.APPROVAL }, { needsReply: true });
   const { page } = mount();
   await settle();
@@ -927,19 +927,20 @@ test("an open item's Close asks first, then settles it without an answer at the 
   });
   const closeButton = () =>
     [...itemPane(page).querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
-      (button) => (button.getAttribute("aria-label") ?? button.textContent) === "Close",
+      (button) => (button.getAttribute("aria-label") ?? button.textContent) === "Resolve",
     );
 
-  await act(async () => (closeButton() ?? assert.fail("an open item offers Close")).click());
+  await act(async () => (closeButton() ?? assert.fail("an open item offers Resolve")).click());
   await settle();
-  assert.deepEqual(sent, [], "Close asks first");
+  assert.deepEqual(sent, [], "Resolve asks first");
   const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Close asks first");
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Resolve asks first");
   assert.equal(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
   const confirmClose = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Close",
+    (button) => button.textContent === "Resolve",
   );
-  await act(async () => (confirmClose ?? assert.fail("the question offers Close")).click());
+  await act(async () => (confirmClose ?? assert.fail("the question offers Resolve")).click());
   await settle();
 
   assert.deepEqual(
@@ -951,7 +952,7 @@ test("an open item's Close asks first, then settles it without an answer at the 
     assert.fail("the close is a comment of the closer's");
   assert.match(wordsOf(closed.querySelector(".inbox-comment-head")) ?? "", /Sent to/u);
   assert.equal(closed.querySelector("[data-inbox-pick]")?.textContent, "Closed without answering");
-  assert.equal(closeButton(), undefined, "a settled item offers no Close");
+  assert.equal(closeButton(), undefined, "a settled item offers no Resolve");
 });
 
 test("a teammate's open item leads with its title alone, and its box still takes your answer", async () => {
@@ -1565,8 +1566,8 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
-    ["Close"],
-    "beside the crumbs the bar holds the open item's Close alone",
+    ["Resolve"],
+    "beside the crumbs the bar holds the open item's Resolve alone",
   );
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());

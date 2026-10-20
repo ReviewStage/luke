@@ -1929,31 +1929,36 @@ function ThreadMessage({
   );
 }
 
-/** The pane's Close, which settles an open item without an answer: its words, and what its tooltip says it does. */
+/**
+ * The pane's Resolve, which settles an open item without an answer: its
+ * words, and what its tooltip says it does. Note that it is not called
+ * Close, because the bar of a side panel or a window standing it full
+ * screen already holds a Close that only puts the panel away.
+ */
 const CLOSE_ITEM = {
-  LABEL: "Close",
-  HINT: "Close without answering",
+  LABEL: "Resolve",
+  HINT: "Resolve without answering",
 } as const;
 
-/** The Close's tooltip, which says what it does whether its word is folded away or not, as the way back's does. */
+/** The Resolve's tooltip, which says what it does whether its word is folded away or not, as the way back's does. */
 const CloseHint: FoldingButtonHint = ({ children }) => (
   <Tooltip label={CLOSE_ITEM.HINT}>{children}</Tooltip>
 );
 
-/** What the Close asks first: which item, and whether its agent is told now or reads it later. */
+/** What the Resolve asks first: which item, and whether its agent is told now or reads it later. */
 function closeQuestion(item: InboxItem): DialogQuestion {
   return {
-    title: `Close “${cardTitle(item.title)}” without answering?`,
+    title: `Resolve “${cardTitle(item.title)}” without answering?`,
     body: item.needsReply
-      ? "The agent is told you closed it. Only the agent can open it again."
-      : "The agent reads that you closed it the next time it reads its inbox. Only the agent can open it again.",
+      ? "The agent is told you resolved it. Only the agent can open it again."
+      : "The agent reads that you resolved it the next time it reads its inbox. Only the agent can open it again.",
     verb: CLOSE_ITEM.LABEL,
-    running: "Closing…",
+    running: "Resolving…",
   };
 }
 
 /**
- * An open item's Close in the pane's bar, which asks first, since only the
+ * An open item's Resolve in the pane's bar, which asks first, since only the
  * agent can open an item again (`packages/panel/AGENTS.md`'s Confirms). It
  * is keyed by its item, so a question asked on one item never closes the
  * next, and the question goes with the pane once it is hidden. Note that

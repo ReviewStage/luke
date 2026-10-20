@@ -276,6 +276,10 @@ interface InboxViewControl {
   readonly listed: boolean;
   /** Stands the list alone, or the item chosen. */
   readonly onListed: (listed: boolean) => void;
+  /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
+  readonly single?: boolean;
+  /** Says whether the Inbox shows one column. */
+  readonly onSingle?: (single: boolean) => void;
   /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
@@ -1177,6 +1181,8 @@ export function useTasksTab(input: {
       : undefined,
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
+  // Whether the window's Inbox shows one column, as it measures itself.
+  const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
   const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
@@ -3167,6 +3173,8 @@ export function useTasksTab(input: {
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
+      single: inboxView !== undefined && inboxSingle,
+      onSingle: setInboxSingle,
       pages: inboxPages.pages,
       onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,

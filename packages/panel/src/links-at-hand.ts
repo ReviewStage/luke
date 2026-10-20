@@ -41,8 +41,9 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * Board, a new automation's page, and the home page have none. A narrow
  * room, which shows one pane at a time, names the pane it shows as the
  * step: the side panel's tab over the plan, where the tab has a link, the
- * Inbox's item standing alone, Settings' page list, whose link names no
- * page, and Chat's rail, whose link names no channel.
+ * Inbox's item standing alone (as it is in an Inbox showing one column by
+ * its own width, in a room still wide), Settings' page list, whose link
+ * names no page, and Chat's rail, whose link names no channel.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -249,8 +250,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
       "taskId" in chosen
         ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
         : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
-    // A narrow room's item standing alone is a step of its own.
-    if (at.narrow === true && !tasks.inboxView.listed) {
+    // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
+    if ((at.narrow === true || tasks.inboxView.single === true) && !tasks.inboxView.listed) {
       return [
         at_(item, LINK_THING.INBOX_ITEM),
         within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),

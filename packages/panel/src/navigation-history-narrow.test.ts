@@ -82,6 +82,8 @@ interface Standing {
     readonly open: boolean;
     readonly chosen: InboxChoice | undefined;
     readonly listed: boolean;
+    /** Whether the Inbox shows one column by its own width, as one narrower than its split does in a room still wide. */
+    readonly single?: boolean;
   };
   readonly chat: { readonly open: boolean; readonly place: ChatPlace; readonly listed: boolean };
   readonly versions: {
@@ -217,6 +219,7 @@ function tasksTab(
       open: at.inbox.open,
       chosen: at.inbox.chosen,
       listed: at.inbox.listed,
+      single: at.inbox.single ?? false,
       onOpen: () => inbox({ open: true }),
       onClose: () => inbox({ open: false }),
       onChoose: (chosen) => inbox({ chosen }),
@@ -499,6 +502,26 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
 
   assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
   assert.equal(window.standingAddress(), copiedHere());
+  const shownItem = (at: Standing) => (at.inbox.listed ? undefined : at.inbox.chosen);
+  backAndForth(window, shownItem, undefined, ITEM);
+
+  window.press(() => window.shown().inboxView.onListed(true));
+  assert.equal(shownItem(window.at()), undefined, "the way back stands the list");
+  assert.equal(window.history().canGoForward, true, "as a step back, the item ahead");
+  assert.equal(window.standingAddress(), "/acme/inbox");
+});
+
+test("in a room still wide, as a 700px stage is, an Inbox showing one column by its own width holds its item as a step after its list, and its way back steps back to the list", () => {
+  const window = mount(SHELL_ROOM.WIDE, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, listed: true, single: true },
+  });
+  window.press(() => {
+    window.shown().inboxView.onChoose(ITEM);
+    window.shown().inboxView.onListed(false);
+  });
+
+  assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
   const shownItem = (at: Standing) => (at.inbox.listed ? undefined : at.inbox.chosen);
   backAndForth(window, shownItem, undefined, ITEM);
 
