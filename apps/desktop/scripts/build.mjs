@@ -439,8 +439,8 @@ await Promise.all(
 //
 // Note that a build that uploads its source maps is not measured, because the
 // upload plugin adds a debug-ID snippet of a few hundred bytes to every file,
-// past a small bundle's slack. The release job runs `check.sh`, which builds
-// the same source without the token and measures it, before it runs this one.
+// past a small bundle's slack. CI's Linux check builds the same source without
+// the token and measures it on the PR and in the merge queue, before a tag.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
 const { metafile } = await rendererBuild;
 const rendererEntries = [...Object.keys(WINDOW_ENTRIES), ...Object.keys(SIDE_BUNDLE_ENTRIES)].map(

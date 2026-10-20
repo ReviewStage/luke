@@ -15,10 +15,10 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
-CI runs the portable check on Linux alone. The release rehearsal
-(`release.yml`'s `macos-15` job, run on a `v*` tag push or a manual dispatch)
-is the only Mac gate, so a green PR says nothing about the Mac and there is no
-macOS check to wait for.
+CI runs the portable check on Linux alone, and no workflow runs the tests on a
+Mac: the release job (`release.yml`'s `macos-15` job, run on a `v*` tag push or
+a manual dispatch) only builds, signs, notarizes, and verifies the app. A green
+PR says nothing about the Mac and there is no macOS check to wait for.
 
 ## Layout
 

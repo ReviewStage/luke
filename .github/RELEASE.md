@@ -77,11 +77,12 @@ value and upload nothing, and neither does a rehearsal (below).
    git push origin v0.1.0
    ```
 
-5. **Let Actions finish.** The run bootstraps the workspace, runs `./scripts/check.sh`,
-   imports the Developer ID certificate into a throwaway keychain, builds the signed and
+5. **Let Actions finish.** The run bootstraps the workspace, imports the Developer ID
+   certificate into a throwaway keychain, builds the signed and
    notarized artifacts, validates them, and then creates a published, non-draft release
    titled `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is
-   removed whether the run succeeds or fails.
+   removed whether the run succeeds or fails. The run does not run the tests: the tagged
+   commit already passed CI on Linux, and no workflow runs the tests on a Mac.
 
 Re-running the workflow on the same tag is safe: an existing release is reused and its
 assets are replaced with `gh release upload --clobber`. The release must stay non-draft
