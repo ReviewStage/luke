@@ -15,13 +15,17 @@ import {
   macCommandsAnswerSchema,
 } from "../mac-command-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** Two outputs at their bound, and room for the rest of the body. */
+const RESULT_BODY_BYTES = 256 * 1_024;
 
 export const macCommandsContract = {
   waiting: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.MAC_COMMANDS }))
     .output(EffectSchema.flip(macCommandsAnswerSchema)),
   settle: hostedProcedure
+    .meta(bodyCap(RESULT_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.MAC_COMMANDS }))
     .input(exactInput(macCommandSettleRequestSchema))
     .output(EffectSchema.flip(macCommandSettledAnswerSchema)),

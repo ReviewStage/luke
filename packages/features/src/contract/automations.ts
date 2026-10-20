@@ -21,6 +21,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  AUTOMATION_BOUNDS,
   AUTOMATION_LIST_QUERY,
   automationAnswerSchema,
   automationChangeRequestSchema,
@@ -31,7 +32,17 @@ import {
   automationRunsAnswerSchema,
 } from "../automation-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+
+/**
+ * A body past this is no automation: the prompt's bound at six bytes a
+ * character, which is the most JSON spends on one (`\u0000`), and the rest of
+ * the frame with room, so every prompt the schema takes fits.
+ */
+const BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
+
+/** A "Run now" body past this carries more than its key. */
+const RUN_BODY_BYTES = AUTOMATION_BOUNDS.MAX_KEY_CHARS * 4 + 64;
 
 /** One automation, by the id its path names. */
 const AUTOMATION_PATH = `${HOSTED_SERVICE_PATH.AUTOMATIONS}/{id}` as const;
@@ -56,6 +67,7 @@ export const automationsContract = {
     .input(automationListQuerySchema)
     .output(EffectSchema.flip(automationListAnswerSchema)),
   create: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -70,14 +82,17 @@ export const automationsContract = {
     .input(EffectSchema.Struct(pathId))
     .output(EffectSchema.flip(automationAnswerSchema)),
   change: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AUTOMATION_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(pathId), automationChangeRequestSchema))
     .output(EffectSchema.flip(automationAnswerSchema)),
   remove: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: AUTOMATION_PATH }))
     .input(EffectSchema.Struct(pathId))
     .output(EffectSchema.flip(EffectSchema.Struct({}))),
   run: hostedProcedure
+    .meta(bodyCap(RUN_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,

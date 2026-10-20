@@ -95,7 +95,7 @@ import {
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted, sessionMiddleware } from "../orpc/base.js";
+import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
 import { GitHubApp, type GitHubWorkspaceReadFailure, ISSUE_ACCESS } from "./github-app.js";
@@ -113,9 +113,6 @@ const UNLINK_REFUSAL = {
   SESSION_NOT_FRESH: "SESSION_NOT_FRESH",
   LAST_ACCOUNT: "FAILED_TO_UNLINK_LAST_ACCOUNT",
 } as const;
-
-/** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
-const MAXIMUM_CLAIM_BODY_BYTES = 1_024;
 
 export interface GitHubProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -323,10 +320,7 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
       url.searchParams.set(GITHUB_CONNECT_PAGE.INTENT_PARAM, intent);
       return { url: url.toString() };
     }),
-    claim: inSession.use(bodyLimit(MAXIMUM_CLAIM_BODY_BYTES)).claim.effect(function* ({
-      context,
-      input,
-    }) {
+    claim: inSession.claim.effect(function* ({ context, input }) {
       const claim = yield* hostedStoreOrUnavailable(
         claimGitHubConnectIntent(input.intent, context.userId),
       );

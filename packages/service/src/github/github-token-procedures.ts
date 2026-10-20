@@ -57,17 +57,8 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
-import {
-  accountMiddleware,
-  bodyLimit,
-  type HostedCaller,
-  type HostedContext,
-  hosted,
-} from "../orpc/base.js";
+import { accountMiddleware, type HostedCaller, type HostedContext, hosted } from "../orpc/base.js";
 import { githubRead } from "./github-app.js";
-
-/** A save is one token bounded at 255 characters, so a body past this is not one. */
-const MAXIMUM_SAVE_BODY_BYTES = 1_024;
 
 const SAVE_BRAKE = {
   windowMs: Duration.toMillis(Duration.hours(1)),
@@ -255,7 +246,7 @@ export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
     }),
 
     /** A save: braked, checked with GitHub, and kept sealed only where GitHub accepts it as the member's own. */
-    save: held.use(bodyLimit(MAXIMUM_SAVE_BODY_BYTES)).save.effect(function* ({ context, input }) {
+    save: held.save.effect(function* ({ context, input }) {
       const { userId, ring } = context;
       const token = Redacted.make(input.token);
       if (!(yield* brake.check(userId))) {

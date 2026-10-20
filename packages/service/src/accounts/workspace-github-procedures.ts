@@ -29,10 +29,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
-
-/** A workspace's id is a few dozen characters, so a body past this is not one. */
-const MAXIMUM_BODY_BYTES = 1_024;
+import { accountMiddleware, hosted } from "../orpc/base.js";
 
 /** The query GitHub carries back to the Setup URL, which is the connect intent's state. */
 const INSTALL_STATE_PARAM = "state";
@@ -43,9 +40,7 @@ export interface WorkspaceGithubProcedureSeams {
 
 /** The workspace GitHub resource: connect to an owner or admin, and disconnect refused to everyone signed in. */
 export function workspaceGithubProcedures(seams: WorkspaceGithubProcedureSeams) {
-  const resource = hosted.workspaceGithub
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const resource = hosted.workspaceGithub.use(accountMiddleware(seams.resolveUserId));
   return {
     connect: resource.connect.effect(function* ({ input, context }) {
       const workspace = yield* hostedStoreOrUnavailable(

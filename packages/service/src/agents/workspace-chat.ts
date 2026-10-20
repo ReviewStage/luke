@@ -22,7 +22,6 @@ import { storeWriter } from "@luke/database/models/writer";
 import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
   CHAT_BLOCK,
-  CHAT_BOUNDS,
   CHAT_CURSOR_START,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
@@ -65,7 +64,6 @@ import {
   readsOf,
   workspaceChatPast,
 } from "./coder-host/chat-page.js";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "./coder-host/start.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
@@ -99,12 +97,6 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /** A cursor as the window hands it back: the next place in the workspace's sequence it has yet to read, in decimal. */
 const seqCursorSchema = chatCursorSchema.check(Schema.isPattern(/^(0|[1-9][0-9]{0,14})$/u));
-
-/** A write is at most a post's blocks at JSON's widest escape, its pictures as a message to an agent carries files, and room for the keys around them. */
-export const MAXIMUM_CHAT_WRITE_BODY_BYTES =
-  6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS +
-  MAXIMUM_ATTACHMENTS_BODY_BYTES +
-  4_096;
 
 export interface ChatSeams {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every post and answer as unavailable. */

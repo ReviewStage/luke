@@ -71,7 +71,6 @@ import { readTranscript } from "@luke/database/models/transcript-store";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { BOARD_BOUNDS } from "@luke/features/board-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -82,18 +81,13 @@ import {
   type TaskIssueLinkAnswer,
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
-import {
-  TASK_BOUNDS,
-  type Task,
-  type TaskAgentStart,
-  type TaskStartAnswer,
-} from "@luke/features/task-wire";
+import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
 import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
-import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
+import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
   eveFor,
@@ -117,7 +111,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
@@ -132,25 +126,6 @@ import {
   liveTaskIssues,
 } from "./task-issue-links.js";
 import { readTaskWork } from "./task-work-store.js";
-
-/** A change is a name and a repository's name at most, so a body past this is none. */
-const MAXIMUM_NAME_BODY_BYTES = 8_192;
-
-/** A brief at its bound with every character escaped. */
-const MAXIMUM_BRIEF_BYTES = TASK_BOUNDS.MAX_BRIEF_CHARS * 6;
-
-/** A link names one issue by a few short fields, and a relation one word. */
-const MAXIMUM_ISSUE_BODY_BYTES = 1_024;
-
-/** A start is a change's few fields, a brief where it names one, and an agent's Start beside them where it names one. */
-const MAXIMUM_TASK_START_BODY_BYTES =
-  MAXIMUM_NAME_BODY_BYTES + MAXIMUM_BRIEF_BYTES + MAXIMUM_START_BODY_BYTES;
-
-/** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
-const MAXIMUM_EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
-
-/** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
-const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 export interface TasksProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
@@ -459,10 +434,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * agent's key already started an agent in the workspace answers that
      * agent's plan and the agent (`startedBefore`).
      */
-    create: plans.create.use(bodyLimit(MAXIMUM_TASK_START_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
       const { agent } = input;
       if (agent !== undefined && (input.repository === undefined || input.repository === null)) {
@@ -536,10 +508,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * agent standing and the archive refused as not ready, so it is asked
      * again a moment later.
      */
-    update: plans.update.use(bodyLimit(MAXIMUM_NAME_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    update: plans.update.effect(function* ({ input, context }) {
       const { userId, request } = context;
       const taskId = yield* taskIdOf(input.params.id);
       const changes = input.body;
@@ -658,10 +627,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /** The Mac's scene written whole, the last write winning. */
-    saveBoard: plans.saveBoard.use(bodyLimit(MAXIMUM_BOARD_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const save = input.body;
       const written = yield* hostedStoreOrArchived(
@@ -678,7 +644,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * An archived plan is refused outright, as no plan is, since a desktop
      * that knows archiving draws no editor on one.
      */
-    edit: plans.edit.use(bodyLimit(MAXIMUM_EDIT_BODY_BYTES)).effect(function* ({ input, context }) {
+    edit: plans.edit.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
@@ -769,10 +735,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * the issue already or as many as it may. An archived plan takes none,
      * as it takes no rename.
      */
-    linkIssue: plans.linkIssue.use(bodyLimit(MAXIMUM_ISSUE_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    linkIssue: plans.linkIssue.effect(function* ({ input, context }) {
       const { userId } = context;
       const taskId = yield* taskIdOf(input.params.id);
       const stored = yield* liveTask(userId, taskId);
@@ -793,10 +756,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /** Which keyword the plan's pull requests write of one of its links. */
-    relateIssue: plans.relateIssue.use(bodyLimit(MAXIMUM_ISSUE_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    relateIssue: plans.relateIssue.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const linkId = yield* linkIdOf(input.params.link);
       const related = yield* hostedStoreOrArchived(

@@ -14,6 +14,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  PLAN_COMMENT_BOUNDS,
   planCommentActionRequestSchema,
   planCommentStartRequestSchema,
   planCommentsAnswerSchema,
@@ -21,7 +22,19 @@ import {
   planCommentThreadAnswerSchema,
 } from "../plan-comment-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { exactBodyInput, hostedProcedure } from "./base.js";
+import { TASK_BOUNDS } from "../task-wire.js";
+import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+
+/** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds. */
+const START_BODY_BYTES =
+  (TASK_BOUNDS.MAX_BODY_CHARS +
+    PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS +
+    PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) *
+    6 +
+  1_024;
+
+/** An action is a comment at its bound and an id or a key, every character escaped. */
+const ACTION_BODY_BYTES = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + 1_024;
 
 const COMMENTS_PATH = `${HOSTED_SERVICE_PATH.TASKS}/{id}/comments` as const;
 
@@ -53,6 +66,7 @@ export const planCommentsContract = {
     .output(EffectSchema.flip(planCommentsAnswerSchema)),
   /** A thread started with its first comment. */
   start: hostedProcedure
+    .meta(bodyCap(START_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -65,6 +79,7 @@ export const planCommentsContract = {
     .output(EffectSchema.flip(planCommentStartAnswerSchema)),
   /** One thing done to one thread of the plan. */
   act: hostedProcedure
+    .meta(bodyCap(ACTION_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,

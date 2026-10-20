@@ -52,16 +52,13 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
-import { accountMiddleware, bodyLimit, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import {
   checkFastAccess,
   checkProviderKey,
   PROVIDER_KEY_CHECK,
   providerKeyHint,
 } from "../providers/provider-key-check.js";
-
-/** A save is a provider and a key bounded at 512 characters, so a body past this is not one. */
-const MAXIMUM_SAVE_BODY_BYTES = 2_048;
 
 const SAVE_BRAKE = {
   windowMs: Duration.toMillis(Duration.hours(1)),
@@ -125,35 +122,32 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
     }),
 
     /** A save: braked, checked with the provider, and kept sealed only where the provider accepts it. */
-    saveProviderKey: keyed
-      .use(bodyLimit(MAXIMUM_SAVE_BODY_BYTES))
-      .saveProviderKey.effect(function* ({ context, input }) {
-        const { userId, ring } = context;
-        // Note that a refusal's wording is never logged or answered, because it may quote the key.
-        const { provider } = input;
-        const key = Redacted.make(input.key);
-        if (!(yield* brake.check(userId))) {
-          return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
-        }
-        // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none Luke runs.
-        const [checked, fastAccess] = yield* Effect.all(
-          [
-            checkProviderKey(provider, key),
-            provider === PROVIDER_KEY_PROVIDER.ANTHROPIC
-              ? checkFastAccess(key)
-              : Effect.succeed(undefined),
-          ],
-          { concurrency: "unbounded" },
-        );
-        if (checked !== PROVIDER_KEY_CHECK.ACCEPTED)
-          return yield* keysAnswer(userId, ring, checked);
-        const sealed = sealProviderKey(ring, { userId, provider }, key);
-        const now = yield* DateTime.nowAsDate;
-        yield* hostedStoreOrUnavailable(
-          saveProviderKey(userId, provider, sealed, providerKeyHint(key), fastAccess ?? null, now),
-        );
-        return yield* keysAnswer(userId, ring);
-      }),
+    saveProviderKey: keyed.saveProviderKey.effect(function* ({ context, input }) {
+      const { userId, ring } = context;
+      // Note that a refusal's wording is never logged or answered, because it may quote the key.
+      const { provider } = input;
+      const key = Redacted.make(input.key);
+      if (!(yield* brake.check(userId))) {
+        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
+      }
+      // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none Luke runs.
+      const [checked, fastAccess] = yield* Effect.all(
+        [
+          checkProviderKey(provider, key),
+          provider === PROVIDER_KEY_PROVIDER.ANTHROPIC
+            ? checkFastAccess(key)
+            : Effect.succeed(undefined),
+        ],
+        { concurrency: "unbounded" },
+      );
+      if (checked !== PROVIDER_KEY_CHECK.ACCEPTED) return yield* keysAnswer(userId, ring, checked);
+      const sealed = sealProviderKey(ring, { userId, provider }, key);
+      const now = yield* DateTime.nowAsDate;
+      yield* hostedStoreOrUnavailable(
+        saveProviderKey(userId, provider, sealed, providerKeyHint(key), fastAccess ?? null, now),
+      );
+      return yield* keysAnswer(userId, ring);
+    }),
 
     /** One provider's key removed, by the provider the query names. */
     removeProviderKey: keyed.removeProviderKey.effect(function* ({ context, input }) {

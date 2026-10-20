@@ -20,7 +20,6 @@ import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/wo
 import { wireUuidSchema } from "@luke/features";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
-  AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
@@ -57,7 +56,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { executeAutomationRun } from "./automation-runs.js";
 
@@ -84,16 +83,6 @@ import { executeAutomationRun } from "./automation-runs.js";
  * the request's own bearer; the same key again answers the run it made. A
  * run's agent is summarized with its status as the agent's tab reads it.
  */
-
-/**
- * A body past this is no automation: the prompt's bound at six bytes a
- * character, which is the most JSON spends on one (`\u0000`), and the rest of
- * the frame with room, so every prompt the schema takes fits.
- */
-const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
-
-/** A "Run now" body past this carries more than its key. */
-const MAXIMUM_RUN_BODY_BYTES = AUTOMATION_BOUNDS.MAX_KEY_CHARS * 4 + 64;
 
 /** How many runs a history read answers. */
 const RUNS_READ = 50;
@@ -445,9 +434,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * alone, bounded tighter once its key reads.
  */
 export function automationsProcedures(seams: AutomationsProcedureSeams) {
-  const automations = hosted.automations
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const automations = hosted.automations.use(accountMiddleware(seams.resolveUserId));
   return {
     /** The account's automations, or one task's, or one workspace's. */
     list: automations.list.effect(function* ({ input, context }) {
@@ -547,10 +534,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
     }),
 
     /** The automation run now, under the client's key: 201 with the run this call made, 200 with the one the key already made. */
-    run: automations.run.use(bodyLimit(MAXIMUM_RUN_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    run: automations.run.effect(function* ({ input, context }) {
       const { userId } = context;
       const id = yield* idOf(input.params.id);
       const key = input.body.idempotencyKey;

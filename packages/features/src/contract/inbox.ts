@@ -14,7 +14,9 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "../account-inbox-wire.js";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../coding-agent-wire.js";
 import {
+  INBOX_BOUNDS,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
@@ -27,7 +29,33 @@ import {
   inboxReadStateSchema,
 } from "../inbox-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+
+/** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
+const ANSWER_BODY_BYTES =
+  6 *
+    (INBOX_BOUNDS.MAX_NOTE_CHARS +
+      INBOX_BOUNDS.MAX_FIELDS *
+        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
+      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
+  2_048;
+
+/** A close is a revision and a key, so a few hundred bytes hold it. */
+const CLOSE_BODY_BYTES = 1_024;
+
+/** A message is its words, the files a message may carry, and the answer it may carry: the words' and the answer's picks and values at JSON's widest escape, the files, and room for the key, the ask, and the steps. */
+const MESSAGE_BODY_BYTES =
+  6 *
+    (INBOX_BOUNDS.MAX_MESSAGE_CHARS +
+      INBOX_BOUNDS.MAX_FIELDS *
+        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
+      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
+  2_048;
+
+/** A request to mark every item read names at most a workspace, so a few hundred bytes hold it. */
+const READ_ALL_BODY_BYTES = 1_024;
 
 /** The public paths that name a task, an agent, or an item by its id. */
 const INBOX_PROCEDURE_PATH = {
@@ -67,6 +95,7 @@ export const inboxContract = {
     .input(pastCursorSchema)
     .output(EffectSchema.flip(inboxAnswerSchema)),
   answer: hostedProcedure
+    .meta(bodyCap(ANSWER_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -77,6 +106,7 @@ export const inboxContract = {
     .input(exactBodyInput(pathIdSchema, inboxAnswerRequestSchema))
     .output(EffectSchema.flip(inboxAnsweredSchema)),
   close: hostedProcedure
+    .meta(bodyCap(CLOSE_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -87,6 +117,7 @@ export const inboxContract = {
     .input(exactBodyInput(pathIdSchema, inboxCloseRequestSchema))
     .output(EffectSchema.flip(inboxAnsweredSchema)),
   message: hostedProcedure
+    .meta(bodyCap(MESSAGE_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -105,6 +136,7 @@ export const inboxContract = {
     .input(pathIdSchema)
     .output(EffectSchema.flip(inboxReadStateSchema)),
   markAllRead: hostedProcedure
+    .meta(bodyCap(READ_ALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.INBOX_READ }))
     .input(exactInput(inboxReadAllRequestSchema))
     .output(EffectSchema.flip(inboxReadAllSchema)),

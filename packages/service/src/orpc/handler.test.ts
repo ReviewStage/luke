@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import "@orpc/experimental-effect/extensions/effect";
 import { it } from "@effect/vitest";
-import { HOSTED_ERRORS } from "@luke/features/contract";
+import { bodyCap, HOSTED_ERRORS } from "@luke/features/contract";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { HTTP_METHOD } from "@luke/wire";
 import { oc } from "@orpc/contract";
@@ -38,6 +38,10 @@ const WHEN_PATH = "/api/test/{id}/when";
 const REACH_PATH = "/api/test/reach";
 const ITEMS_PATH = "/api/test/items";
 const DEFECT_PATH = "/api/test/defect";
+const CAPPED_PATH = "/api/test/capped";
+
+/** A small cap of the capped procedure's own, in bytes, well under the handler's ceiling. */
+const CAP = 64;
 
 /** A wire answer whose `Type` is not its `Encoded`: a date carried as ISO text, and an id read folded to lower case. */
 const whenSchema = Schema.Struct({
@@ -73,6 +77,11 @@ const testContract = {
     .errors(HOSTED_ERRORS)
     .meta(openapi({ method: HTTP_METHOD.GET, path: DEFECT_PATH }))
     .output(Schema.flip(itemSchema)),
+  capped: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.POST, path: CAPPED_PATH }), bodyCap(CAP))
+    .input(itemSchema)
+    .output(Schema.flip(itemSchema)),
 };
 
 const test = implement(testContract).$context<HostedContext>();
@@ -86,6 +95,7 @@ const testRouter = test.router({
   defect: test.defect.effect(function* () {
     return yield* Effect.die(new Error("a defect"));
   }),
+  capped: test.capped.handler(({ input }) => ({ name: input.name })),
 });
 
 /** The route groups' way of answering the same values: `hostedJsonResponse`, `hostedRefusing`, and a defect left to the platform. */
@@ -221,5 +231,101 @@ it.effect(
         cacheControl: null,
         text: '{"error":"request-too-large"}',
       });
+    }),
+);
+
+/** A JSON body of exactly `bytes` bytes naming an item, its name padded to fit. */
+const itemBodyOf = (bytes: number): string => {
+  const frame = JSON.stringify({ name: "" }).length;
+  return JSON.stringify({ name: "x".repeat(bytes - frame) });
+};
+
+/** A body sent in chunks of at most `chunkBytes`, as a chunked upload arrives, with no length stated. */
+const chunkedBody = (text: string, chunkBytes: number): ReadableStream<Uint8Array> => {
+  const bytes = new TextEncoder().encode(text);
+  return new ReadableStream({
+    start(controller) {
+      for (let at = 0; at < bytes.length; at += chunkBytes) {
+        controller.enqueue(bytes.subarray(at, at + chunkBytes));
+      }
+      controller.close();
+    },
+  });
+};
+
+/** The capped procedure's answer to a POST of the body given, under the headers given beside its JSON type. */
+const cappedAnswer = (
+  body: string | ReadableStream<Uint8Array>,
+  headers: Record<string, string> = {},
+) =>
+  Effect.gen(function* () {
+    const init = {
+      method: HTTP_METHOD.POST,
+      headers: { "content-type": "application/json", ...headers },
+      body,
+      duplex: "half",
+    };
+    // SAFETY: Node's fetch takes a streamed body only half-duplex, which the DOM's RequestInit does not name.
+    const request = new Request(new URL(CAPPED_PATH, ORIGIN), init as RequestInit);
+    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+    const services = Context.empty() as Context.Context<WebServices>;
+    return yield* read(yield* Effect.promise(() => hostedFetch(testRouter)(request, services)));
+  });
+
+const TOO_LARGE: Bytes = {
+  status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+  contentType: "application/json",
+  cacheControl: null,
+  text: '{"error":"request-too-large"}',
+};
+
+it.effect(
+  "a chunked body that states no length is counted against its procedure's own cap as it is read, and refused once past it",
+  () =>
+    Effect.gen(function* () {
+      const past = itemBodyOf(CAP + 1);
+      assert.deepEqual(yield* cappedAnswer(chunkedBody(past, 8)), TOO_LARGE);
+      const within = itemBodyOf(CAP);
+      const answered = yield* cappedAnswer(chunkedBody(within, 8));
+      assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(answered.text, within);
+    }),
+);
+
+it.effect(
+  "a body whose content-length understates it is held to the bytes it carries, not the length it states",
+  () =>
+    Effect.gen(function* () {
+      const past = itemBodyOf(CAP * 4);
+      assert.deepEqual(yield* cappedAnswer(past, { "content-length": "16" }), TOO_LARGE);
+    }),
+);
+
+it.effect(
+  "a body at its procedure's cap is answered, and one byte past it is refused as too large, its length stated or not",
+  () =>
+    Effect.gen(function* () {
+      const at = itemBodyOf(CAP);
+      const past = itemBodyOf(CAP + 1);
+      const answered = yield* cappedAnswer(at, { "content-length": String(CAP) });
+      assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(answered.text, at);
+      assert.deepEqual(yield* cappedAnswer(past, { "content-length": String(CAP + 1) }), TOO_LARGE);
+      assert.deepEqual(yield* cappedAnswer(chunkedBody(past, CAP)), TOO_LARGE);
+    }),
+);
+
+it.effect(
+  "a body past its cap is refused as too large before it is parsed, however malformed, as the old groups refused one",
+  () =>
+    Effect.gen(function* () {
+      const malformed = "{".repeat(CAP + 1);
+      assert.deepEqual(
+        yield* cappedAnswer(malformed, { "content-length": String(CAP + 1) }),
+        TOO_LARGE,
+      );
+      assert.deepEqual(yield* cappedAnswer(chunkedBody(malformed, 8)), TOO_LARGE);
+      const within = yield* cappedAnswer("{".repeat(CAP));
+      assert.equal(within.text, '{"error":"invalid-request"}');
     }),
 );

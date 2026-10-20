@@ -35,9 +35,6 @@ import {
  * copied forward, and no property can hold free text.
  */
 
-/** Bigger than a full batch of allowlisted events can be, and refused before it is read. */
-export const EVENTS_MAXIMUM_BODY_BYTES = 16_384;
-
 /** The `$lib` tag every batch is stamped with: the desktop is the one app that posts them. */
 const PRODUCT_EVENT_LIB = "luke-desktop";
 

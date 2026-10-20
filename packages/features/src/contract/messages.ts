@@ -17,14 +17,31 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "../chat-wire.js";
 import {
+  CHAT_BOUNDS,
+  chatAnswerSchema,
+  chatWriteAnswerSchema,
+  chatWriteRequestSchema,
+} from "../chat-wire.js";
+import {
+  CODING_AGENT_BOUNDS,
   codingAgentAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../coding-agent-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+
+/** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
+const MESSAGE_BODY_BYTES =
+  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
+
+/** A chat write is at most a post's blocks at JSON's widest escape, its pictures as a message to an agent carries files, and room for the keys around them. */
+const CHAT_WRITE_BODY_BYTES =
+  6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
+  4_096;
 
 /** The status a message handed to an agent is answered with: taken, its turn yet to read it. */
 const ACCEPTED = 202;
@@ -54,6 +71,7 @@ export const messagesContract = {
     .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
   /** One message handed to an agent, answering the agent as it then stands. */
   send: hostedProcedure
+    .meta(bodyCap(MESSAGE_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -86,6 +104,7 @@ export const messagesContract = {
     .output(EffectSchema.flip(chatAnswerSchema)),
   /** One write to a workspace's chat: a post, an answer, a resolve, or a read. */
   chatWrite: hostedProcedure
+    .meta(bodyCap(CHAT_WRITE_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,

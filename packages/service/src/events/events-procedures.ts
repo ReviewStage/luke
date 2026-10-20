@@ -14,8 +14,8 @@ import { readAccountPerson } from "../accounts/account-person.js";
 import { text as trimmedText, type UnparsedWireValue } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, type HostedContext, hosted } from "../orpc/base.js";
-import { EVENTS_MAXIMUM_BODY_BYTES, type EventsOptions, recordEvents } from "./events.js";
+import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
+import { type EventsOptions, recordEvents } from "./events.js";
 
 /** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
 const DEPLOYMENT_VARIABLE = "VERCEL_ENV";
@@ -59,7 +59,6 @@ export function eventsProcedures(seams: EventsProcedureSeams) {
     record: hosted.events
       .use(recordingConfigured)
       .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(EVENTS_MAXIMUM_BODY_BYTES))
       .record.effect(function* ({ context, input }) {
         // SAFETY: the handler parsed the body from JSON text; the batch reader is the parser.
         const payload = input as UnparsedWireValue;

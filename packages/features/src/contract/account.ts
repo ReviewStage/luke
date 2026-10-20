@@ -24,6 +24,7 @@ import {
   accountPreferencesWriteSchema,
 } from "../account-wire.js";
 import {
+  PLAN_TEMPLATE_BOUNDS,
   planTemplateAnswerSchema,
   planTemplateRevisionAnswerSchema,
   planTemplateRevisionsAnswerSchema,
@@ -37,7 +38,13 @@ import {
 } from "../provider-key-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { planRevisionSeqSchema } from "../task-wire.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** A template write is the template at its bound with every character escaped, and the key around it. */
+const PLAN_TEMPLATE_BODY_BYTES = PLAN_TEMPLATE_BOUNDS.MAX_CHARS * 6 + 1_024;
+
+/** A key's save is a provider and a key bounded at 512 characters, so a body past this is not one. */
+const PROVIDER_KEY_BODY_BYTES = 2_048;
 
 /** A revision's number as a path or a query carries it: text, read as a whole number from one. */
 const revisionSeqText = EffectSchema.FiniteFromString.pipe(
@@ -63,6 +70,7 @@ export const accountContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }))
     .output(EffectSchema.flip(planTemplateAnswerSchema)),
   writePlanTemplate: hostedProcedure
+    .meta(bodyCap(PLAN_TEMPLATE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }))
     .input(exactInput(planTemplateWriteRequestSchema))
     .output(EffectSchema.flip(planTemplateAnswerSchema)),
@@ -92,6 +100,7 @@ export const accountContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
   saveProviderKey: hostedProcedure
+    .meta(bodyCap(PROVIDER_KEY_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
     .input(exactInput(providerKeySaveRequestSchema))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
