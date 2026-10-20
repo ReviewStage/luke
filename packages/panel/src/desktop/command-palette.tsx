@@ -605,10 +605,13 @@ function taskRows(
   const { standing: agents, archived: archivedAgents } = tasks.listedAgents;
   const here = [...tasks.tasks.filter(listed).map(taskRow), ...agents.map(agentRow)];
   const elsewhere = tasks.tasks.filter((task) => !listed(task)).map(taskRow);
+  // The archived of the listed workspace, its agents among its tasks, by their last activity as the sidebar's Archived lists them.
   const archived = [
-    ...tasks.archived.filter(listed).map(taskRow),
+    ...orderTaskRows(
+      [...tasks.archived.filter(listed).map(taskRow), ...archivedAgents.map(agentRow)],
+      TASK_ORDER.UPDATED,
+    ),
     ...tasks.archived.filter((task) => !listed(task)).map(taskRow),
-    ...archivedAgents.map(agentRow),
   ];
   return [
     ...pinnedFirst(here).map((row) => rowOf(row, false)),

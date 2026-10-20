@@ -411,7 +411,8 @@ export function DesktopAgentPage({
             <SkillFiles source={control.readSkills} onOpen={openSkill}>
               <AgentMentions value={mentions}>
                 <OpenHereProvider value={openHere}>
-                  {terminalDoors.terminals ? (
+                  {/* An archived agent's sandbox takes no shell, so ⌘J and New terminal stand only while it does not. */}
+                  {terminalDoors.terminals && agent.archivedAt === undefined ? (
                     <TerminalCommands
                       here={agentId}
                       agents={control}

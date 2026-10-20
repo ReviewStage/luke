@@ -19,7 +19,8 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * automation's run starts, is acted on as a task's is: Rename, which opens
  * its name's field where the surface draws its name, while nothing it
  * stands under is archived; Open terminal and Run, where the platform runs
- * them and the agent's repository is known; Copy link; its transcript's
+ * them and the agent's repository is known, and no terminal for an
+ * archived agent, whose sandbox takes no shell; Copy link; its transcript's
  * two copies, read whole from the service; and Archive agent, asked first
  * while it works (`agent-archive.tsx`), or Unarchive once it is archived.
  * The doors that open a terminal are the column's, from where it stands
@@ -122,7 +123,11 @@ export function useAgentActions(
     doors: {
       onCopy: copied(read),
       onRename: renamable ? rename.begin : undefined,
-      onOpenTerminal: onOpenTerminal === undefined ? undefined : () => onOpenTerminal(agent.id),
+      // Note that an archived agent's sandbox takes no shell, so it offers no terminal; Run reads only its pushed branch.
+      onOpenTerminal:
+        onOpenTerminal === undefined || agent.archivedAt !== undefined
+          ? undefined
+          : () => onOpenTerminal(agent.id),
       onOpenOnMac: onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       archive: agent.archivedAt === undefined ? archive.action : unarchive,
       copyLink,

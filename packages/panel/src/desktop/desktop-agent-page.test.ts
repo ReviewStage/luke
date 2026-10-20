@@ -1199,6 +1199,28 @@ test("Open terminal on the page's ⋯, and ⌘J, show the agent's own Terminal t
   assert.deepEqual(chosen, [{ terminal: AGENT_ID }, { terminal: AGENT_ID }]);
 });
 
+test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its sandbox taking no shell", async () => {
+  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  const { page, chosen } = mountHearingPanel();
+  await settle();
+  const more =
+    page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]') ??
+    assert.fail("the page's toolbar has a ⋯");
+  act(() => more.click());
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  let ran = true;
+  act(() => {
+    ran = runAppCommand(APP_COMMAND.SHOW_TERMINAL);
+  });
+  await settle();
+
+  assert.ok(!offered.includes("Open terminal⌘J"), `no Open terminal: ${offered.join(", ")}`);
+  assert.equal(ran, false, "⌘J is not offered");
+  assert.deepEqual(chosen, []);
+});
+
 test("Run on the page's ⋯ runs the agent's branch on this Mac in the side panel, from its own repository", async () => {
   const { page, chosen } = mountHearingPanel();
   await settle();
