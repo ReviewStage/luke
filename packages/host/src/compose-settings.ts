@@ -89,6 +89,7 @@ function keptFields(value: UnparsedWireValue): readonly AppSettingField[] | unde
   const fields = value.filter(isAppSettingField);
   return fields.length === value.length ? fields : undefined;
 }
+
 export interface SettingsComposer extends Composer {
   readonly store: SettingsStore;
   readonly recordProductEvent: RecordProductEvent;
