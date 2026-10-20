@@ -14,6 +14,7 @@ import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-a
 import type {
   EditorSpan,
   MentionDrawer,
+  PlacedWords,
   PlanEditorHandle,
   PlanEditorPictures,
   PlanEditorPlacement,
@@ -213,12 +214,50 @@ function caretSection(editor: Editor): number {
   return sectionStarts(editor.state.doc).filter((start) => start <= index).length - 1;
 }
 
+/** The top-level blocks a section holds, by index: from its first to the next section's first. */
+function sectionBlocks(doc: PmNode, section: number): { first: number; next: number } | undefined {
+  const starts = sectionStarts(doc);
+  const first = starts[section];
+  return first === undefined ? undefined : { first, next: starts[section + 1] ?? doc.childCount };
+}
+
+/**
+ * Where the words a click landed on stand in the editor: in the same
+ * section, the node of the same words as many such nodes in, at the same
+ * offset; none where the section holds no such node.
+ */
+function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
+  const { view } = editor;
+  const blocks = sectionBlocks(view.state.doc, words.section);
+  if (blocks === undefined) return undefined;
+  let seen = 0;
+  let found: number | undefined;
+  view.state.doc.forEach((_node: PmNode, offset: number, index: number) => {
+    const dom = view.nodeDOM(offset);
+    if (found !== undefined || index < blocks.first || index >= blocks.next || dom === null) return;
+    const walker = document.createTreeWalker(dom, NodeFilter.SHOW_TEXT);
+    for (
+      let text = walker.nextNode();
+      text !== null && found === undefined;
+      text = walker.nextNode()
+    ) {
+      if (text.textContent !== words.text) continue;
+      if (seen === words.occurrence)
+        found = view.posAtDOM(text, Math.min(words.offset, words.text.length));
+      seen += 1;
+    }
+  });
+  return found;
+}
+
 /** Where the caret goes as the editor opens. */
 function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Selection {
   const { doc } = editor.state;
   if (placement === undefined) return Selection.atStart(doc);
   if ("end" in placement) return Selection.atEnd(doc);
   if ("x" in placement) {
+    const at = placement.words === undefined ? undefined : wordsAt(editor, placement.words);
+    if (at !== undefined) return TextSelection.near(doc.resolve(at));
     const point = editor.view.posAtCoords({ left: placement.x, top: placement.y });
     return point === null ? Selection.atStart(doc) : TextSelection.near(doc.resolve(point.pos));
   }
@@ -341,6 +380,14 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     focusAt: (placement) => {
       editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
       editor.view.focus();
+    },
+    caretTop: () => {
+      try {
+        return editor.view.coordsAtPos(editor.state.selection.head).top;
+      } catch {
+        // Note that a view with no layout, as a test's page is, measures nothing.
+        return undefined;
+      }
     },
     insertPictures: (files) => {
       if (pictures !== undefined) laidInPictures(editor.view, files, pictures);

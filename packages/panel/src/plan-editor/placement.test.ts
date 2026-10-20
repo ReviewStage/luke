@@ -72,3 +72,20 @@ test("an empty text says the placeholder it was given, and the plan's own withou
   );
   assert.equal(plan.element.querySelector("p")?.getAttribute("data-placeholder"), "Write the plan");
 });
+
+test("an editor opened on the words a click landed on stands its caret in them, in their section, as many alike in, at the offset", () => {
+  const text = "## Goal\n\nShip it.\n\n## Risks\n\nShip it.\n\nShip it.\n";
+  const words = { section: 1, text: "Ship it.", occurrence: 1, offset: 5, top: 0 };
+  const { finished, element } = mount(text, { x: 0, y: 0, words });
+  const selection = window.getSelection();
+  const risks = [...element.querySelectorAll("p")];
+
+  assert.equal(
+    selection?.anchorNode,
+    risks[2]?.firstChild,
+    "the second alike in Risks, not one in Goal",
+  );
+  assert.equal(selection?.anchorOffset, 5);
+  pressEscape(element);
+  assert.deepEqual(finished, [1]);
+});

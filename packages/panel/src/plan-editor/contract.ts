@@ -12,9 +12,26 @@
  * parses none of them.
  */
 
-/** Where the caret goes as the editor opens: where a click landed, the end of a section, or the end of the text; the start of the text without any. */
+/**
+ * The words a click landed on in a section as drawn: the section, the text
+ * node's words, how many nodes of the same words came before it in the
+ * section, and the offset in them. Note that the editor is placed by these
+ * rather than by the click's point, because opening it can move what stands
+ * under the point: a picture, a table, or a diagram's preview is drawn at
+ * another height in the editor than in the text.
+ */
+export interface PlacedWords {
+  readonly section: number;
+  readonly text: string;
+  readonly occurrence: number;
+  readonly offset: number;
+  /** Where their line stood in the window as they were clicked, which the panel keeps them at as the editor opens. */
+  readonly top: number;
+}
+
+/** Where the caret goes as the editor opens: where a click landed, on the words it landed on where they are known, the end of a section, or the end of the text; the start of the text without any. */
 export type PlanEditorPlacement =
-  | { readonly x: number; readonly y: number }
+  | { readonly x: number; readonly y: number; readonly words?: PlacedWords | undefined }
   | { readonly section: number }
   | typeof PLACEMENT_END;
 
@@ -218,6 +235,8 @@ export interface PlanEditorHandle {
   readonly markdown: () => string;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
   readonly focusAt: (placement: PlanEditorPlacement) => void;
+  /** Where the caret's line stands in the window, down from its top; none where it cannot be measured. */
+  readonly caretTop: () => number | undefined;
   /** Image files laid in as pictures after the block the caret stands in, each handed to the panel to keep. */
   readonly insertPictures: (files: readonly File[]) => void;
   /** The picture waiting on `upload` given its address, kept at last, which the text now names. */

@@ -40,6 +40,9 @@ const mounted: {
   placed: PlanEditorPlacement[];
 }[] = [];
 
+/** Where the stand-in's caret line stands in the window, as a laid-out editor answers; none, as jsdom's layout would, unless a test lays it out. */
+let caretLine: number | undefined;
+
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: PlanEditorModule = {
   mount: (_host, props) => {
@@ -57,6 +60,7 @@ const STAND_IN: PlanEditorModule = {
       focusAt: (placement) => {
         placed.push(placement);
       },
+      caretTop: () => caretLine,
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -103,6 +107,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  caretLine = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -524,4 +529,67 @@ test("words typed in one plan are saved to that plan when another opens", async 
 
   assert.deepEqual(doors, [DOCUMENT_TASK.id]);
   assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+/** A browser's answer to where a point stands in the page's words: `offset` into `words`, its line `top` down the window. */
+function pointLandsOn(words: Text, offset: number, top: number): void {
+  const range = document.createRange();
+  range.setStart(words, offset);
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [DOMRect.fromRect({ x: 0, y: top, width: 0, height: 20 })],
+  });
+  Object.defineProperty(document, "caretRangeFromPoint", {
+    configurable: true,
+    value: () => range,
+  });
+}
+
+/** The text node of `words` drawn in `within`, the `nth` (from 0) where several are. */
+function wordsNode(within: HTMLElement, words: string, nth = 0): Text {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (at instanceof Text && at.data === words) found.push(at);
+  }
+  return found[nth] ?? assert.fail(`the words ${words}`);
+}
+
+test("a click hands the editor the words it landed on, so the caret finds them however the editor draws what stands above", () => {
+  const body = "## Goal\n\nShip it.\n\nShip it.\n";
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  const goal = block(container, "Goal");
+  pointLandsOn(wordsNode(goal, "Ship it.", 1), 5, 300);
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+
+  assert.deepEqual(open().placement, {
+    x: 60,
+    y: 310,
+    words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, top: 300 },
+  });
+});
+
+test("the words a click opened the editor on stay where they stood, the column scrolled by as much as the editor moved them", () => {
+  const { container } = mount();
+  const goal = block(container, "Goal");
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
+  // The editor draws a picture above the words taller than the text drew it, so they stand 59 lower.
+  caretLine = 359;
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+
+  assert.equal(scroller.scrollTop, 559);
 });
