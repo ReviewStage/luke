@@ -494,6 +494,12 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           ],
         );
         assert.equal((yield* answer(["sfo1"], key)).outcome, INBOX_ASK_ANSWER.REPEATED);
+        const changed = yield* answer(["fra1"], key);
+        assert.deepEqual(
+          [changed.outcome, changed.refusal, changed.item.answer?.choices],
+          [INBOX_ASK_ANSWER.REFUSED, "The key names another message of the thread.", ["sfo1"]],
+          "another answer under the key it was taken by is refused, and the answer stands",
+        );
 
         yield* later;
         const askedAgain = posted(

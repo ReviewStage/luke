@@ -913,14 +913,24 @@ export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">): stri
 /**
  * A member's message on an item's thread: the words in Markdown, trimmed and
  * bounded, the files they attached, bounded as a message's to an agent are,
- * words or files or both and never neither, and a key the client made, so
- * a message sent again after a lost reply is written once.
+ * and a key the client made, so a message sent again after a lost reply is
+ * written once. From version 5 it may carry the answer to the thread's open
+ * ask, which the reader pressed and attached to their reply: such a message
+ * is the one that answers the ask, and may be the answer alone, with no
+ * words or files; one without it is a plain reply, words or files or both
+ * and never neither, which never answers.
  */
 export const inboxMessageRequestSchema = EffectSchema.Struct({
   text: EffectSchema.Trim.check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
   attachments: codingAgentMessageRequestSchema.fields.attachments,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
-}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+  /** The answer to the thread's open ask, which names it; absent on a plain reply. */
+  answers: EffectSchema.optionalKey(inboxAnswersSchema),
+}).check(
+  EffectSchema.makeFilter(
+    ({ text, attachments, answers }) => answers !== undefined || hasWordsOrFiles(text, attachments),
+  ),
+);
 
 export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
@@ -1288,4 +1298,22 @@ export function inboxReplyAnswers(
     case INBOX_REPLY.ACKNOWLEDGED:
       return undefined;
   }
+}
+
+/**
+ * A member's answer to an ask, with the words of the message that carries
+ * it, as the agent hears an answer (`inboxAnswerMessage`) and as whether it
+ * hears it is read (`inboxAnswerHeard`): how they answered, the options
+ * picked, the values filled, and the words as the note, whole. Note that the
+ * steps ticked are left out, because a reply names no step; the thread the
+ * agent reads carries them.
+ */
+export function inboxAnswersReply(answers: InboxAnswers, words: string): InboxReply {
+  const note = words.trim();
+  return {
+    reply: answers.reply,
+    ...(answers.choices === undefined ? undefined : { choices: answers.choices }),
+    ...(answers.values === undefined ? undefined : { values: answers.values }),
+    ...(note === "" ? undefined : { note }),
+  };
 }
