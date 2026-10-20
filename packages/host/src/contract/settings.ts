@@ -63,7 +63,11 @@ export const settingsActsContract = {
   [SETTINGS_ACT_KIND.SETTINGS_RESET]: actProcedure("Could not reset those settings on this system.")
     .input(
       exactInput(
-        EffectSchema.Struct({ scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)) }),
+        EffectSchema.Struct({
+          scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
+          /** The group's fields the asking page does not draw, which the reset leaves as they stand. */
+          kept: EffectSchema.Array(EffectSchema.Literals(APP_SETTING_FIELDS)),
+        }),
       ),
     )
     .output(EffectSchema.flip(settingsUpdateResultSchema)),

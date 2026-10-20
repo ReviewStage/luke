@@ -351,7 +351,12 @@ export interface HostOperator {
     value: AppSettingValue<Field>,
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
-  resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
+  /** One group returned to its defaults, but for the fields `kept`, which the asking page does not draw. */
+  resetSettings(
+    scope: SettingsResetScope,
+    kept: readonly AppSettingField[],
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult>;
   /** One experiment turned on or off for the signed-in account, on the service. */
   setExperiment(
     experiment: Experiment,
@@ -969,10 +974,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...wireReporter(reporter),
         }),
       ),
-    resetSettings: (scope, reporter) =>
+    resetSettings: (scope, kept, reporter) =>
       settingsResult(
         GATEWAY_METHOD.SETTINGS_RESET,
-        client.call(GATEWAY_METHOD.SETTINGS_RESET, { scope, ...wireReporter(reporter) }),
+        client.call(GATEWAY_METHOD.SETTINGS_RESET, {
+          scope,
+          kept: [...kept],
+          ...wireReporter(reporter),
+        }),
       ),
     setExperiment: (experiment, on, reporter) =>
       settingsResult(

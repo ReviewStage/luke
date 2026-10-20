@@ -20,6 +20,7 @@ import {
   accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
+  SETTINGS_RESET_SCOPE,
   snapshotAccountPreferences,
   THEME,
 } from "@luke/settings";
@@ -294,6 +295,33 @@ test("every setting starts at its default, survives a reopen, and can be cleared
     }
   }
 });
+
+it.effect(
+  "a reset returns its group to the defaults but for the fields it keeps, which stand as the file holds them",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const opened = () =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: testCipher(),
+          overrides: overridesFor({}),
+          fileSystem: FILE_SYSTEM,
+          path: PATH,
+        });
+      const store = opened();
+      yield* store.set("theme", THEME.DARK);
+      yield* store.set("zoom", 125);
+
+      const reset = yield* store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE, ["zoom"]);
+
+      assert.equal(reset.reason, undefined);
+      const reopened = opened();
+      // The theme's choice is forgotten, so it reads as no choice at all.
+      assert.equal(yield* reopened.get("theme"), undefined);
+      assert.equal(yield* reopened.get("zoom"), 125);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
 // A call reads no choice as Atlas, which compose-live's "a call opens with the avatar asked for" holds.
 test("the Default avatar an earlier build stored reads as no choice", async (t) => {
