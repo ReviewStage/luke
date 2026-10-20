@@ -45,15 +45,21 @@ export const LiveWake = Context.Reference<LiveWakeShape>("@luke/service/LiveWake
   defaultValue: () => UNCONFIGURED,
 });
 
+/** One statement's subscription, the slice of Realtime's raw subscription a watch reads. */
+export interface LiveSubscription {
+  onUpdate(listener: () => void): () => void;
+  onStateChange(listener: (state: { readonly status: string }) => void): () => void;
+  getState(): { readonly status: string };
+  unsubscribe(): void;
+}
+
 /** The subscription calls a watch makes, the slice of Realtime's direct server it uses. */
 export interface LiveSubscriber {
   subscribe(
     query: RawSqlQuery<unknown>,
     options: { readonly materialize: false },
-  ): Promise<{
-    onUpdate(listener: () => void): () => void;
-    unsubscribe(): void;
-  }>;
+  ): Promise<LiveSubscription>;
+  close(): void;
 }
 
 /**
@@ -89,14 +95,91 @@ function changeSignal() {
 }
 
 /**
+ * The direct server every watch subscribes on, replaced once its connection
+ * failed: Neon's docs say a client whose connection failed cannot reconnect,
+ * so a new one is made before subscribing again. `failed` is the server a
+ * watch saw fail, so the first watch to see it replaces it and the rest
+ * subscribe on the replacement.
+ */
+export interface StandingServer {
+  readonly current: () => LiveSubscriber;
+  readonly replace: (failed: LiveSubscriber) => LiveSubscriber;
+  readonly close: () => void;
+}
+
+function standingServer(open: () => LiveSubscriber): StandingServer {
+  let server = open();
+  return {
+    current: () => server,
+    replace: (failed) => {
+      if (server !== failed) return server;
+      failed.close();
+      server = open();
+      return server;
+    },
+    close: () => server.close(),
+  };
+}
+
+/**
+ * One statement followed for a watch, as Neon's docs say a long-running
+ * worker follows one: an error is final, so the watch watches for it with
+ * `onStateChange` and subscribes again, and wakes the read, which may have
+ * missed a change while the subscription stood in error. A subscription
+ * that is in error the moment it is made is one on a connection that
+ * failed, so it is made again on a new server. Answers the way to let go
+ * once the first subscription stands; refused where the first is.
+ */
+async function followed(
+  servers: StandingServer,
+  statement: LiveStatement,
+  fire: () => void,
+): Promise<() => void> {
+  let stopped = false;
+  let current: LiveSubscription | undefined;
+  const subscribe = async (on: LiveSubscriber, mayReplace: boolean): Promise<void> => {
+    const subscription = await on.subscribe(rawSql(statement.sql, statement.params), {
+      materialize: false,
+    });
+    if (stopped) {
+      subscription.unsubscribe();
+      return;
+    }
+    if (subscription.getState().status === "error") {
+      subscription.unsubscribe();
+      if (mayReplace) await subscribe(servers.replace(on), false);
+      return;
+    }
+    current = subscription;
+    subscription.onUpdate(fire);
+    subscription.onStateChange((state) => {
+      if (state.status !== "error" || current !== subscription) return;
+      current = undefined;
+      subscription.unsubscribe();
+      fire();
+      void subscribe(servers.current(), true).catch(() => undefined);
+    });
+  };
+  await subscribe(servers.current(), true);
+  return () => {
+    stopped = true;
+    current?.unsubscribe();
+    current = undefined;
+  };
+}
+
+/**
  * The wake over a Realtime direct server: each watch subscribes to its
  * statements as raw updates, and every update of any of them is a change.
  * Note that the first update of each is its whole result, which reads as a
  * change too, so a change that landed between the subscription and the
  * read's first look is looked for once more rather than missed. A
- * subscription refused outright leaves the read on its safety beat.
+ * subscription that moves to `error` is made again (`followed`); one
+ * refused outright, or one that could not be made again, leaves the read on
+ * its safety beat (`LIVE_SAFETY_POLL` in `http/held-read.ts`), which is
+ * the backstop for every way a watch can go quiet, so that beat stays.
  */
-export function realtimeWake(subscriber: LiveSubscriber): LiveWakeShape {
+export function realtimeWake(servers: StandingServer): LiveWakeShape {
   return {
     watch: (statements) =>
       Effect.gen(function* () {
@@ -104,14 +187,8 @@ export function realtimeWake(subscriber: LiveSubscriber): LiveWakeShape {
         const signal = changeSignal();
         const subscribed = yield* Effect.forEach(statements, (statement) =>
           Effect.acquireRelease(
-            Effect.tryPromise(() =>
-              subscriber.subscribe(rawSql(statement.sql, statement.params), {
-                materialize: false,
-              }),
-            ),
-            (subscription) => Effect.sync(() => subscription.unsubscribe()),
-          ).pipe(
-            Effect.tap((subscription) => Effect.sync(() => subscription.onUpdate(signal.fire))),
+            Effect.tryPromise(() => followed(servers, statement, signal.fire)),
+            (letGo) => Effect.sync(letGo),
           ),
         ).pipe(Effect.option);
         if (Option.isNone(subscribed)) {
@@ -123,10 +200,19 @@ export function realtimeWake(subscriber: LiveSubscriber): LiveWakeShape {
   };
 }
 
+/** The servers a wake subscribes on, each one `open` makes, the standing one closed with the scope. */
+export const realtimeServers = (
+  open: () => LiveSubscriber,
+): Effect.Effect<StandingServer, unknown, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.try(() => standingServer(open)),
+    (servers) => Effect.sync(() => servers.close()),
+  );
+
 /**
  * The wake as the deployment's environment configures it: Realtime, over one
  * direct server and one socket the instance's every held read shares, closed
- * with the runtime. Where a variable or the database name is missing, or
+ * with the runtime and replaced where its connection failed. Where a variable or the database name is missing, or
  * Realtime refuses its configuration, it is said in the log and every watch
  * dies, since a held read has nothing else to wait on.
  */
@@ -145,16 +231,13 @@ export const liveWakeFromEnvironment = Layer.effect(
       yield* Effect.logError("live-wake: Neon Realtime is not configured; held reads fail");
       return UNCONFIGURED;
     }
-    const server = yield* Effect.acquireRelease(
-      Effect.try(() =>
-        createRealtime({ url, secret: Redacted.value(secret).trim(), db: database.value }),
-      ),
-      (standing) => Effect.sync(() => standing.close()),
+    const servers = yield* realtimeServers(() =>
+      createRealtime({ url, secret: Redacted.value(secret).trim(), db: database.value }),
     ).pipe(Effect.option);
-    if (Option.isNone(server)) {
+    if (Option.isNone(servers)) {
       yield* Effect.logError("live-wake: Realtime refused its configuration; held reads fail");
       return UNCONFIGURED;
     }
-    return realtimeWake(server.value);
+    return realtimeWake(servers.value);
   }),
 );

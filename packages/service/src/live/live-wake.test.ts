@@ -3,13 +3,21 @@ import { it } from "@effect/vitest";
 import { Effect, Exit, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { lookedUntil } from "../http/held-read.js";
-import { type LiveSubscriber, LiveWake, type LiveWatch, realtimeWake } from "./live-wake.js";
+import {
+  type LiveSubscriber,
+  LiveWake,
+  type LiveWatch,
+  realtimeServers,
+  realtimeWake,
+} from "./live-wake.js";
 
 /**
  * A wait on a row, woken by Neon Realtime: it looks again as soon as the
  * rows change, and on a safety beat beside; with no wake provided it fails
  * rather than polling; and the wake over Realtime's direct server subscribes
- * to each statement for the length of the wait and lets go after.
+ * to each statement for the length of the wait, subscribes again where one
+ * moves to error, on a new server where the connection failed, and lets go
+ * after.
  *
  * Statements and rows are synthetic; Realtime is a script.
  */
@@ -81,32 +89,59 @@ it.effect(
     }),
 );
 
-/** Realtime's direct server as a script: each subscription's listeners, and which are let go. */
-function scriptedSubscriber() {
-  const updates: (() => void)[] = [];
-  const subscribed: string[] = [];
+/** Realtime's direct servers as a script: each one opened, its subscriptions by name, and which are let go. */
+function scriptedRealtime() {
+  const subscriptions: {
+    readonly name: string;
+    readonly update: Set<() => void>;
+    readonly state: Set<(state: { readonly status: string }) => void>;
+  }[] = [];
   const unsubscribed: string[] = [];
+  const closed: number[] = [];
+  let opened = 0;
   let refuse = false;
-  const subscriber: LiveSubscriber = {
-    subscribe: () => {
-      if (refuse) return Promise.reject(new Error("refused"));
-      const name = `query-${subscribed.length}`;
-      subscribed.push(name);
-      return Promise.resolve({
-        onUpdate: (listener) => {
-          updates.push(listener);
-          return () => undefined;
-        },
-        unsubscribe: () => void unsubscribed.push(name),
-      });
-    },
+  /** Servers whose connection failed, on which a subscription is in error the moment it is made. */
+  const failed = new Set<number>();
+  const open = (): LiveSubscriber => {
+    const server = opened++;
+    return {
+      subscribe: () => {
+        if (refuse) return Promise.reject(new Error("refused"));
+        const name = `server-${server}/query-${subscriptions.length}`;
+        const update = new Set<() => void>();
+        const state = new Set<(state: { readonly status: string }) => void>();
+        subscriptions.push({ name, update, state });
+        const status = failed.has(server) ? "error" : "live";
+        return Promise.resolve({
+          onUpdate: (listener) => {
+            update.add(listener);
+            return () => void update.delete(listener);
+          },
+          onStateChange: (listener) => {
+            state.add(listener);
+            return () => void state.delete(listener);
+          },
+          getState: () => ({ status }),
+          unsubscribe: () => void unsubscribed.push(name),
+        });
+      },
+      close: () => void closed.push(server),
+    };
   };
+  const standing = () => subscriptions.filter(({ name }) => !unsubscribed.includes(name));
   return {
-    subscriber,
-    subscribed,
+    open,
+    closed,
     unsubscribed,
+    names: () => subscriptions.map(({ name }) => name),
     update: () => {
-      for (const listener of updates) listener();
+      for (const { update } of standing()) for (const listener of update) listener();
+    },
+    /** Every standing subscription moves to `error`, and with `connection`, its server can no longer subscribe. */
+    fail: (connection: boolean) => {
+      if (connection) failed.add(opened - 1);
+      for (const { state } of standing())
+        for (const listener of state) listener({ status: "error" });
     },
     refuse: () => {
       refuse = true;
@@ -118,12 +153,12 @@ it.effect(
   "the wake over Realtime subscribes to each statement for the length of a wait, wakes it on any update, and lets go after; a refused subscription leaves the wait on its safety beat",
   () =>
     Effect.gen(function* () {
-      const realtime = scriptedSubscriber();
-      const wake = realtimeWake(realtime.subscriber);
+      const realtime = scriptedRealtime();
+      const wake = realtimeWake(yield* realtimeServers(realtime.open));
       yield* Effect.scoped(
         Effect.gen(function* () {
           const watch = yield* wake.watch([STATEMENT, STATEMENT]);
-          assert.deepEqual(realtime.subscribed, ["query-0", "query-1"]);
+          assert.deepEqual(realtime.names(), ["server-0/query-0", "server-0/query-1"]);
           const changed = yield* Effect.forkChild(watch.changed);
           yield* settled;
           realtime.update();
@@ -133,7 +168,7 @@ it.effect(
           yield* watch.changed;
         }),
       );
-      assert.deepEqual(realtime.unsubscribed.toSorted(), ["query-0", "query-1"]);
+      assert.deepEqual(realtime.unsubscribed.toSorted(), ["server-0/query-0", "server-0/query-1"]);
 
       realtime.refuse();
       const script = scriptedLook();
@@ -148,4 +183,38 @@ it.effect(
       assert.equal(script.looks(), 2);
       yield* Fiber.interrupt(waiting);
     }),
+);
+
+it.effect(
+  "a subscription that moves to error is made again and wakes the wait; where the connection failed, it is made again on a new server and the old one closed",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const realtime = scriptedRealtime();
+        const wake = realtimeWake(yield* realtimeServers(realtime.open));
+        const watch = yield* wake.watch([STATEMENT]);
+        assert.deepEqual(realtime.names(), ["server-0/query-0"]);
+
+        realtime.fail(false);
+        yield* watch.changed;
+        yield* settled;
+        assert.deepEqual(realtime.names(), ["server-0/query-0", "server-0/query-1"]);
+        assert.deepEqual(realtime.closed, []);
+
+        realtime.fail(true);
+        yield* watch.changed;
+        yield* settled;
+        assert.deepEqual(realtime.names(), [
+          "server-0/query-0",
+          "server-0/query-1",
+          "server-0/query-2",
+          "server-1/query-3",
+        ]);
+        assert.deepEqual(realtime.closed, [0]);
+        const changed = yield* Effect.forkChild(watch.changed);
+        yield* settled;
+        realtime.update();
+        yield* Fiber.join(changed);
+      }),
+    ),
 );
