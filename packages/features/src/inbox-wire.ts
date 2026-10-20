@@ -74,7 +74,7 @@ import {
  * under the item's key, which changes what the item asks and not what was
  * said about it.
  *
- * The agent posts, closes, and reads its items through the tools named
+ * The agent posts, withdraws, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
  * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
@@ -167,24 +167,28 @@ export const INBOX_BOUNDS = {
   MAX_MESSAGE_CHARS: 8_000,
   /** The most messages an item read carries, the latest ones, oldest first among them: a thread read at a glance, never a log. */
   MAX_MESSAGES_READ: 50,
-  /** The most pictures the agent's message on a thread may carry, each held to the image bound. */
-  MAX_REPLY_IMAGES: 4,
+  /** The most pictures the agent's message on a thread may carry, each held to the image bound: as many as a post's image blocks once could be. */
+  MAX_MESSAGE_PICTURES: 8,
   /** The most steps a `do` ask may list: a to-do a person works through at a glance. */
   MAX_STEPS: 8,
   /** The most characters one step of a `do` ask may spell, in Markdown. */
   MAX_STEP_CHARS: 600,
 } as const;
 
-/** The tools an agent keeps its items with, by the names their tool parts carry in its transcript. */
+/**
+ * The tools an agent keeps its threads with, by the names their tool parts
+ * carry in its transcript. Note that `close_inbox_item` and `reply_inbox`,
+ * which a transcript before version 5 names, are retired
+ * (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks nothing is a reply,
+ * and a withdrawn ask is a close.
+ */
 export const INBOX_TOOL = {
-  /** Posts an item, or replaces the one under the same key. */
+  /** Adds the agent's message to the thread under its key, opening one under a new key, its ask replacing the open one. */
   POST: "post_to_inbox",
-  /** Takes an item back, with why. */
-  CLOSE: "close_inbox_item",
-  /** Reads the agent's items as they stand, answers and all. */
+  /** Withdraws the thread's open ask, with why. */
+  WITHDRAW: "withdraw_ask",
+  /** Reads the agent's threads as they stand, answers and all. */
   READ: "read_inbox",
-  /** Writes the agent's message on one of its items' threads, by key. */
-  REPLY: "reply_inbox",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -502,30 +506,6 @@ export const inboxPostInputSchema = EffectSchema.Struct({
 
 export type InboxPost = typeof inboxPostInputSchema.Type;
 
-/** What a close's tool part carries as its input: the item's key, and why the agent takes it back. */
-export const inboxCloseInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
-});
-
-/**
- * What a reply's tool part carries as its input: the key of one of the
- * agent's own items, its words in Markdown, and the pictures it shows, each
- * by the path of its file in the agent's sandbox, as an image block names
- * one; words or pictures or both, which the tool holds it to.
- */
-export const inboxReplyInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  text: boundedText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  images: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.Struct({ path: filledText(INBOX_BOUNDS.MAX_PATH_CHARS) }),
-    ).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_REPLY_IMAGES)),
-  ),
-});
-
-export type InboxReplyInput = typeof inboxReplyInputSchema.Type;
-
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
@@ -651,6 +631,48 @@ export const inboxAskSchema = EffectSchema.Union([
 ]);
 
 export type InboxAsk = typeof inboxAskSchema.Type;
+
+/** A form's field as an agent asks one: a field without a recommended value, which an ask's fields do not carry. */
+const { recommended: _recommended, ...AGENT_FIELD_FIELDS } = inboxFieldSchema.fields;
+
+/** What an agent's post may end with: an ask of the three, its fields recommending nothing. */
+const inboxAgentAskSchema = EffectSchema.Union([
+  EffectSchema.Struct(DECIDE_FIELDS),
+  EffectSchema.Struct(DO_FIELDS),
+  EffectSchema.Struct({
+    ...ANSWER_FIELDS,
+    fields: EffectSchema.optionalKey(
+      EffectSchema.Array(EffectSchema.Struct(AGENT_FIELD_FIELDS)).check(
+        EffectSchema.isMinLength(1),
+        EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
+      ),
+    ),
+  }),
+]);
+
+/**
+ * What a post's tool part carries as its input from version 5: the
+ * thread's key, its title, which a first post under the key names, the
+ * agent's message as one Markdown body, its pictures by their paths in the
+ * agent's sandbox, the ask it may end with, and whether the agent waits to
+ * hear the answer. The model is shown this schema and eve holds the call
+ * to it.
+ */
+export const inboxThreadPostInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
+  body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  ask: EffectSchema.optionalKey(inboxAgentAskSchema),
+  waits: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type InboxThreadPostInput = typeof inboxThreadPostInputSchema.Type;
+
+/** What a withdrawal's tool part carries as its input: the thread's key, and why the agent takes its open ask back. */
+export const inboxWithdrawInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
+});
 
 /** Where an ask stands as a read carries it, and why its agent withdrew it, on a withdrawn one. */
 const ASK_STANDING_FIELDS = {

@@ -30,7 +30,13 @@ import { getTestDB, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_CURSOR_START,
+  INBOX_STATUS,
+  INBOX_TOOL,
+} from "@luke/features/inbox-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -720,6 +726,120 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(look.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
         assert.deepEqual(look.output, { status: PICTURE_LOOK_STATUS.LOOKED });
         assert.equal(JSON.stringify(page).includes(answer.image), false);
+      }),
+  );
+
+  it.effect(
+    "an agent's inbox calls run under its session: a post opens a thread, withdraw_ask settles its ask, and read_inbox reads it back",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const post = {
+          key: "region",
+          title: "Which region?",
+          body: "Both cost the same.",
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "fra1" }] },
+        };
+
+        const posted = yield* host.inbox(admitted, {
+          tool: INBOX_TOOL.POST,
+          input: unparsedWire(post),
+          sandbox: noSandbox,
+        });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const withdrawn = yield* host.inbox(admitted, {
+          tool: INBOX_TOOL.WITHDRAW,
+          input: unparsedWire({ key: "region", reason: "Picked iad1." }),
+        });
+        assert.equal(withdrawn.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* host.inbox(admitted, {
+          tool: INBOX_TOOL.READ,
+          input: unparsedWire({}),
+        });
+
+        assert.deepEqual(read, {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          inbox: [
+            {
+              key: "region",
+              title: "Which region?",
+              status: INBOX_STATUS.CLOSED,
+              thread: [
+                {
+                  from: "you",
+                  text: "Both cost the same.",
+                  ask: {
+                    type: INBOX_ASK.DECIDE,
+                    status: INBOX_ASK_STATUS.WITHDRAWN,
+                    withdrawnReason: "Picked iad1.",
+                  },
+                },
+              ],
+            },
+          ],
+        });
+      }),
+  );
+
+  it.effect(
+    "a transcript written before the inbox moved to threads still reads its close_inbox_item and reply_inbox calls, which no agent is offered now",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const calls = [
+          { callId: "call-reply", toolName: "reply_inbox", input: { key: "k", text: "Done." } },
+          {
+            callId: "call-close",
+            toolName: "close_inbox_item",
+            input: { key: "k", reason: "Done." },
+          },
+        ];
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: calls.map((call) => ({ kind: "tool-call", ...call })) },
+          }),
+          ...calls.map((call) =>
+            stamped({
+              type: "action.result",
+              data: {
+                ...at,
+                status: "completed",
+                result: {
+                  kind: "tool-result",
+                  callId: call.callId,
+                  toolName: call.toolName,
+                  output: { status: ACTION_RESULT_STATUS.ACCEPTED, inbox: [] },
+                },
+              },
+            }),
+          ),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const parts = page.messages.flatMap((message) => message.parts).filter(isToolUIPart);
+        assert.deepEqual(
+          parts.map((part) => [part.type, part.state]),
+          [
+            ["tool-reply_inbox", TOOL_PART_STATE.OUTPUT_AVAILABLE],
+            ["tool-close_inbox_item", TOOL_PART_STATE.OUTPUT_AVAILABLE],
+          ],
+        );
       }),
   );
 
