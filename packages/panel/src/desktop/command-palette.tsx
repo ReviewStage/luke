@@ -614,12 +614,13 @@ function agentRows(
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
-  // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
-  const subagents = holdsTaskPanel(tasks)
+  // Note that the plan's workers open in its own panel alone, and its Changes
+  // too in the Inbox's beside an item of the plan, which draws its pull requests.
+  const subagents = opensTaskItems(tasks)
     ? panelEntries({
         panel: tasks.sidePanel,
         kinds: [],
-        workers,
+        workers: holdsTaskPanel(tasks) ? workers : [],
         files: [],
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
@@ -724,12 +725,12 @@ function holdsTaskPanel(tasks: TasksControl): boolean {
 }
 
 /**
- * Whether a file of the open plan opens in the side panel: wherever it holds
- * the plan's tabs, and over an Inbox item of the open plan, whose panel opens
- * that task's files. Over an Inbox with nothing chosen the panel has no task,
- * so a file opened there could not be shown.
+ * Whether a file or a pull request of the open plan opens in the side panel:
+ * wherever it holds the plan's tabs, and over an Inbox item of the open plan,
+ * whose panel opens that task's files and draws its pull requests. Over an
+ * Inbox with nothing chosen the panel has no task, so neither could be shown.
  */
-function opensTaskFiles(tasks: TasksControl): boolean {
+function opensTaskItems(tasks: TasksControl): boolean {
   if (holdsTaskPanel(tasks)) return true;
   if (tasks.agentView.agentId !== undefined || !tasks.inboxView.open) return false;
   const { chosen } = tasks.inboxView;
@@ -1200,7 +1201,7 @@ export function CommandPalette({
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = opensTaskFiles(tasks) && taskId !== undefined && repository !== null;
+  const filesOpen = opensTaskItems(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched

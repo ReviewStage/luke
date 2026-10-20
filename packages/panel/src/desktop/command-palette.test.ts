@@ -826,7 +826,18 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | undefined): Promise<{
   opened: string[];
   boards: string[];
+  pulls: string[];
 }> {
+  const agent = {
+    id: "agent-7",
+    planId: DOCUMENT_TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invoice export",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
@@ -844,6 +855,25 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
     inboxView: { ...base.inboxView, open: inbox !== undefined, chosen: inbox?.chosen },
     sidePanel: { ...base.sidePanel, onOpenFile: (ref) => opened.push(ref.path) },
+    agents: codingAgentsControl({
+      agents: [agent],
+      agentIds: [agent.id],
+      pullRequests: new Map([
+        [
+          agent.id,
+          {
+            number: 42,
+            title: "Export invoices as CSV",
+            url: "https://github.com/acme/billing/pull/42",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 120,
+            deletions: 8,
+            changedFiles: 4,
+          },
+        ],
+      ]),
+    }),
   });
   openPalette(tasks, () =>
     Promise.resolve({
@@ -856,31 +886,41 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
       },
     }),
   );
+  type("#42");
+  const pulls = rows().filter((row) => row.startsWith("#42"));
   type("Show board");
   const boards = rows().filter((row) => row.startsWith("Show board"));
   chooseFilter("Files");
   type("accept");
   await act(async () => undefined);
   if (rows().includes("accept.ts")) press("accept.ts");
-  return { opened, boards };
+  return { opened, boards, pulls };
 }
 
-test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file found opens, and its panel tabs are offered on the plan alone, since the Inbox's panel draws none", async () => {
+/** The Pull request row of the plan's agent, as `paletteOverPanel` finds it by its number. */
+const PULL = `#42 Export invoices as CSV · Invoice export · ${DOCUMENT_TASK.name}`;
+
+test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file or a pull request found opens, and its panel tabs are offered on the plan alone, since the Inbox's panel draws none", async () => {
   assert.deepEqual(await paletteOverPanel(undefined), {
     opened: ["accept.ts"],
     boards: ["Show board"],
+    pulls: [PULL],
   });
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   assert.deepEqual(
     await paletteOverPanel({ chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" } }),
-    { opened: ["accept.ts"], boards: [] },
+    { opened: ["accept.ts"], boards: [], pulls: [PULL] },
   );
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
-  assert.deepEqual(await paletteOverPanel({ chosen: undefined }), { opened: [], boards: [] });
+  assert.deepEqual(await paletteOverPanel({ chosen: undefined }), {
+    opened: [],
+    boards: [],
+    pulls: [],
+  });
 });
 
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
