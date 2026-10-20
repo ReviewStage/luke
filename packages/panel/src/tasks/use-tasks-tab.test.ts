@@ -1438,6 +1438,34 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
 });
 
+test("a render that hands the same plans keeps the lists the tab hands out, and a new list of plans hands out new ones", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const lists = () => {
+    const control = tab.control();
+    return [
+      control.tasks,
+      control.archived,
+      control.listed.tasks,
+      control.listed.archived,
+      control.taskSections,
+      control.newTask.tasks,
+    ];
+  };
+  const before = lists();
+
+  tab.stand({ unseenAgents: ["agent-1"] });
+  const after = lists();
+  tab.stand({ tasks: { ...TWO_WORKSPACES, tasks: [row("launch", 5), ...TWO_WORKSPACES.tasks] } });
+
+  for (const [index, list] of after.entries())
+    assert.equal(list, before[index], `list ${index} kept`);
+  assert.notEqual(tab.control().tasks, before[0]);
+  assert.deepEqual(
+    tab.control().listed.tasks.map((task) => task.id),
+    ["launch", "notes", "billing"],
+  );
+});
+
 test("the sidebar lists the first workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 

@@ -28,6 +28,7 @@ import {
   type Task,
   type TaskStanding,
   type TaskStatus,
+  type TaskSummary,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import {
@@ -1044,6 +1045,13 @@ const DELETE_REFUSED: ActionResult = {
  * not yet listed is in no workspace's share until it is.
  */
 
+/** The sidebar's lists of `tasks`: those standing, pinned first, and every one, the archived last. */
+function sidebarList(tasks: readonly TaskSummary[]) {
+  const { pinned, rest, archived } = sidebarTasks(tasks);
+  const standing = [...pinned, ...rest];
+  return { standing, archived, every: [...standing, ...archived] };
+}
+
 /** The entries of the tasks in `workspaceId`, or every entry while no workspace is listed. */
 function inWorkspace<Entry extends { readonly taskId: string }>(
   entries: readonly Entry[],
@@ -1301,18 +1309,26 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!accountSignedIn) setSectionWrites([]);
   }, [accountSignedIn]);
-  const taskSections = sectionWrites.reduce(
-    (held, pending) => applySectionWrite(held, pending.write, pending.at),
-    viewed.taskSections ?? NO_TASK_SECTIONS,
+  // Note that every list step below is memoized on what it reads, because
+  // this runs on every render of the window and each step walks every task
+  // of every workspace.
+  const viewedSections = viewed.taskSections ?? NO_TASK_SECTIONS;
+  const taskSections = useMemo(
+    () =>
+      sectionWrites.reduce(
+        (held, pending) => applySectionWrite(held, pending.write, pending.at),
+        viewedSections,
+      ),
+    [sectionWrites, viewedSections],
   );
   // A tab closed names a task of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
-  const tasks = positionedView(
-    markedView(renamedView(renamedView(viewed, renames), drafts), marks),
-    pinPositions,
-  );
+  const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
+  const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
+  const marked = useMemo(() => markedView(drafted, marks), [drafted, marks]);
+  const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
   // else that finds a task, the palette, the inbox, and the history, finds
   // it among them all; with no workspace listed yet, every task is listed.
@@ -1333,13 +1349,17 @@ export function useTasksTab(input: {
   if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
     setStandIn(undefined);
   }
-  const sidebar = sidebarTasks(tasks.tasks);
-  const listedSidebar = sidebarTasks(
-    listedWorkspace === undefined
-      ? tasks.tasks
-      : tasks.tasks.filter((task) => task.workspaceId === listedWorkspace.id),
-  );
   const listedWorkspaceId = listedWorkspace?.id;
+  const sidebar = useMemo(() => sidebarList(tasks.tasks), [tasks.tasks]);
+  const listedSidebar = useMemo(
+    () =>
+      sidebarList(
+        listedWorkspaceId === undefined
+          ? tasks.tasks
+          : tasks.tasks.filter((task) => task.workspaceId === listedWorkspaceId),
+      ),
+    [tasks.tasks, listedWorkspaceId],
+  );
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each pinned as given here until main's view carries it.
   const { tasklessAgents } = tasks;
@@ -3025,10 +3045,10 @@ export function useTasksTab(input: {
     shown,
     signedIn,
     me: fixture === undefined ? input.accountId : undefined,
-    tasks: [...sidebar.pinned, ...sidebar.rest],
+    tasks: sidebar.standing,
     archived: sidebar.archived,
     listed: {
-      tasks: [...listedSidebar.pinned, ...listedSidebar.rest],
+      tasks: listedSidebar.standing,
       archived: listedSidebar.archived,
       inbox: listedInbox.inbox,
       inboxTasks: listedInbox.inboxTasks,
@@ -3381,7 +3401,7 @@ export function useTasksTab(input: {
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),
-      tasks: [...sidebar.pinned, ...sidebar.rest, ...sidebar.archived],
+      tasks: sidebar.every,
       onShowMention: guard(showMention),
       linearIssuesIn,
       githubIssuesIn,

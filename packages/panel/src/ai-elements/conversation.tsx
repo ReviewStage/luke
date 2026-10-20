@@ -13,9 +13,11 @@ import {
   type ReactNode,
   type RefObject,
   type UIEvent,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -79,47 +81,63 @@ export function Conversation({ className, children, ...props }: ConversationProp
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const [isAtBottom, setAtBottom] = useState(true);
-  // A line can shrink without the list scrolling or this rendering, a card
-  // or a group closed, so one observer watches the log and its lines, and
-  // puts the log back at its bottom once nothing is left below to scroll to.
+  // What the last render left observed: the scroll box, and how many lines
+  // stood in it ending in which, so a render that changed none of them
+  // touches no layout.
+  const observed = useRef<{ box: HTMLDivElement; count: number; last: Element | null }>(undefined);
+  // A line can grow a word or shrink, a card or a group closed, without the
+  // list scrolling or this rendering, so one observer watches the log and
+  // its lines: it keeps a log that follows its newest line at its bottom,
+  // and puts one back there once nothing is left below to scroll to.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
         const element = list.current;
-        if (element === null || following.current || !followsNewest(element)) return;
+        if (element === null) return;
+        if (following.current) {
+          element.scrollTop = element.scrollHeight;
+          return;
+        }
+        if (!followsNewest(element)) return;
         following.current = true;
         setAtBottom(true);
       }),
   );
   useEffect(() => () => resized.disconnect(), [resized]);
-  // Note that this runs after every render, because a line growing a word
-  // changes the height as much as a new line does. Observing a box already
-  // observed leaves it as it was, so a render adds only its new lines.
+  // Note that this runs after every render but reads no layout unless the
+  // lines changed, because a re-render with the same lines (any app-state
+  // patch) has nothing new to scroll to, and a line that grew is the
+  // observer's. Observing a box already observed leaves it as it was.
   useLayoutEffect(() => {
     const element = list.current;
     if (element === null) return;
-    if (following.current) element.scrollTop = element.scrollHeight;
-    resized.observe(element);
     // The lines stand in the one block inside the area.
     const lines = element.firstElementChild;
+    const count = lines?.childElementCount ?? 0;
+    const last = lines?.lastElementChild ?? null;
+    const held = observed.current;
+    if (held?.box === element && held.count === count && held.last === last) return;
+    observed.current = { box: element, count, last };
+    if (following.current) element.scrollTop = element.scrollHeight;
+    resized.observe(element);
     if (lines === null) return;
     resized.observe(lines);
     for (const line of lines.children) resized.observe(line);
   });
-  const scroll: ConversationScroll = {
-    isAtBottom,
-    list,
-    scrollToBottom: () => {
-      following.current = true;
-      setAtBottom(true);
-      const element = list.current;
-      if (element !== null) element.scrollTop = element.scrollHeight;
-    },
-    onScroll: (event) => {
-      following.current = followsNewest(event.currentTarget);
-      setAtBottom(following.current);
-    },
-  };
+  const scrollToBottom = useCallback(() => {
+    following.current = true;
+    setAtBottom(true);
+    const element = list.current;
+    if (element !== null) element.scrollTop = element.scrollHeight;
+  }, []);
+  const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    following.current = followsNewest(event.currentTarget);
+    setAtBottom(following.current);
+  }, []);
+  const scroll = useMemo<ConversationScroll>(
+    () => ({ isAtBottom, list, scrollToBottom, onScroll }),
+    [isAtBottom, scrollToBottom, onScroll],
+  );
   return (
     <ConversationContext.Provider value={scroll}>
       <div className={cn("conversation", className)} {...props}>
