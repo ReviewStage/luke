@@ -1,6 +1,6 @@
 import { AGENT_TOOL, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
-import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
+import { isRecord, isWireString, type WireValue } from "@luke/wire";
 
 /**
  * native-tool-calls.ts -- a call a native harness made, as the transcript draws it: the tool of Luke's whose renderer draws its kind, and its input and answer in that tool's shapes.
@@ -55,11 +55,12 @@ function inputString(input: WireValue | undefined, key: string): string | undefi
   return isRecord(input) && isWireString(input[key]) ? input[key] : undefined;
 }
 
-/** Each line of some words behind a patch's mark for it, as a patch spells a removal or an addition. */
+/** Each line of some words behind a patch's mark for it, as a patch spells a removal or an addition; the newline that ends the words' last line opens no line of its own. */
 function patchLines(mark: string, words: string | undefined): readonly string[] {
-  return words === undefined || words === ""
-    ? []
-    : words.split("\n").map((line) => `${mark}${line}`);
+  if (words === undefined || words === "") return [];
+  const lines = words.split("\n");
+  if (words.endsWith("\n")) lines.pop();
+  return lines.map((line) => `${mark}${line}`);
 }
 
 /** A change to one file as `apply_patch` spells it, which the edit renderer reads its file and its coloured lines from. */
@@ -97,8 +98,8 @@ function watched(input: WireValue | undefined): string {
  * `write_file`, an edit or a notebook cell as an `apply_patch` of the lines
  * it changed, a search as `glob` or `grep`, a page and a web search as
  * `read_web_page` and `search_web`, the list as `write_todos`, a skill as
- * `load_skill`, a wakeup as the pause `sleep` takes, and a monitor as the
- * command it watches. A subagent's call keeps its name.
+ * `load_skill`, and a monitor as the command it watches. A subagent's
+ * call and a scheduled wakeup keep their names.
  */
 const CLAUDE_CODE_CALLS: Record<
   (typeof CLAUDE_CODE_TOOL)[keyof typeof CLAUDE_CODE_TOOL],
@@ -185,14 +186,8 @@ const CLAUDE_CODE_CALLS: Record<
     input: { skill: inputString(input, "skill") ?? "" },
     output,
   }),
-  [CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP]: ({ input, output }) => {
-    const seconds = isRecord(input) ? input.delaySeconds : undefined;
-    return {
-      tool: AGENT_TOOL.SLEEP,
-      input: isWireNumber(seconds) ? { seconds } : {},
-      output,
-    };
-  },
+  // Note that a wakeup keeps its name, because it schedules a prompt for later rather than pausing the turn as `sleep` does: it is drawn as a plain call, its reason and prompt in its body.
+  [CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP]: (call) => call,
   // Note that a subagent's call keeps its name, because no eve tool makes one as a single call: `tool-call-model.ts` draws it.
   [CLAUDE_CODE_TOOL.AGENT]: (call) => call,
 };

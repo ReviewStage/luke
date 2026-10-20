@@ -107,8 +107,8 @@ const CLI_CALLS: readonly {
     tool: "Edit",
     input: {
       file_path: `${CHECKOUT}/src/invoice.ts`,
-      old_string: "const invoice = 1;",
-      new_string: "const invoice = 2;",
+      old_string: "const invoice = 1;\n",
+      new_string: "const invoice = 2;\n\nexport {};\n",
     },
     output: "The file has been updated successfully.",
     line: ["Edited", `${CHECKOUT}/src/invoice.ts`],
@@ -183,8 +183,8 @@ const CLI_CALLS: readonly {
     tool: "ScheduleWakeup",
     input: { delaySeconds: 270, reason: "Wait for CI", prompt: "Check CI", noop: false },
     output: "Wakeup scheduled in 270 seconds.",
-    line: ["Waited", "4 minutes 30 seconds"],
-    body: ["Wakeup scheduled"],
+    line: ["ScheduleWakeup"],
+    body: ["Wait for CI", "Wakeup scheduled"],
   },
   {
     tool: "Monitor",
@@ -207,6 +207,22 @@ for (const call of CLI_CALLS) {
     assert.ok(!body.includes(ESCAPE), "a terminal's escapes are taken out");
   });
 }
+
+test("an Edit's patch marks the lines it changed, the newline ending its words opening none", () => {
+  const { container } = drawn(
+    storedPart(
+      "Edit",
+      { file_path: `${CHECKOUT}/src/a.ts`, old_string: "a;\n", new_string: "b;\n\nc;\n" },
+      "The file has been updated successfully.",
+    ),
+  );
+  const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
+  act(() => line.click());
+  const marked = (kind: string) =>
+    [...container.querySelectorAll(`[data-line="${kind}"]`)].map((each) => each.textContent);
+  assert.deepEqual(marked("removed"), ["-a;"]);
+  assert.deepEqual(marked("added"), ["+b;", "+", "+c;"]);
+});
 
 test("a call still running draws its row from its input alone", () => {
   const { line } = opened(storedPart("Read", { file_path: `${CHECKOUT}/src/invoice.ts` }));
