@@ -17,6 +17,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
+  RefusedRefusal,
 } from "@luke/gateway";
 import { type OpenSocket, VoiceCapabilityAssembler } from "@luke/voice";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
@@ -29,6 +30,11 @@ import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AccountSource, AppIdentity, Environment, ServiceOrigin } from "./effect/seams.js";
+
+/** What a refused account step says, worded by the step alone. */
+const SIGN_IN_REFUSED = "the sign-in did not finish";
+const SIGN_OUT_REFUSED = "the sign-out did not finish";
+const DELETE_REFUSED = "the account was not deleted";
 
 /**
  * What the account reaches in the other concerns. The capability gate is the
@@ -229,6 +235,39 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     Effect.asVoid(voiceCapabilities.apply()),
   );
 
+  /**
+   * A step the account source could not carry, answered as the protocol's
+   * refusal rather than a defect: a browser's cookie session fails on any
+   * network blip or 5xx, and the desktop's on a consent that did not finish,
+   * which are ordinary outcomes the panel says in its own words, never bugs
+   * for Sentry. The refusal carries `sentence` alone, so nothing an answer
+   * held crosses the Gateway; the source's own detail goes to the host's
+   * log.
+   */
+  const refusedAs =
+    (sentence: string) =>
+    <A>(step: Effect.Effect<A, Error>): Effect.Effect<A, RefusedRefusal> =>
+      step.pipe(
+        Effect.tapError((error) =>
+          Effect.sync(() => {
+            report(`${sentence}: ${error.message}`);
+          }),
+        ),
+        Effect.mapError(() => new RefusedRefusal({ message: sentence })),
+      );
+
+  /**
+   * The count of a sign-in's start, left before the step that may take the
+   * window away: a browser tab navigates to the provider, and a queued count
+   * would go with the page.
+   */
+  const recordSignInStart: Effect.Effect<void> = Effect.suspend(() => {
+    settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+      account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
+    });
+    return settings.flushProductEvents;
+  });
+
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
       Effect.succeed({ account: carried(session.snapshot()) }),
@@ -237,10 +276,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         const provider = params.provider;
         if (!isAccountProvider(provider))
           return yield* invalid("provider is not one this build knows");
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
-        });
-        const snapshot = yield* Effect.orDie(session.beginSignIn(provider));
+        yield* recordSignInStart;
+        const snapshot = yield* refusedAs(SIGN_IN_REFUSED)(session.beginSignIn(provider));
         return { account: carried(snapshot) };
       }),
     [GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN]: (params) =>
@@ -248,11 +285,9 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         const provider = params.provider;
         if (!isAccountProvider(provider))
           return yield* invalid("provider is not one this build knows");
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
-        });
+        yield* recordSignInStart;
         // Whether a session landed, and nothing of it: the account follows on its own event.
-        return { signedIn: yield* Effect.orDie(session.signInAgain(provider)) };
+        return { signedIn: yield* refusedAs(SIGN_IN_REFUSED)(session.signInAgain(provider)) };
       }),
     [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>
       Effect.sync(() => {
@@ -271,7 +306,9 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         // authenticated with; queued behind the sign-out it would wait for the
         // next sign-in.
         yield* settings.flushProductEvents;
-        const snapshot = yield* Effect.orDie(session.signOut({ revokeRemote: true }));
+        const snapshot = yield* refusedAs(SIGN_OUT_REFUSED)(
+          session.signOut({ revokeRemote: true }),
+        );
         return { account: carried(snapshot) };
       }),
     [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
@@ -280,7 +317,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
           account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
         });
         yield* settings.flushProductEvents;
-        const snapshot = yield* Effect.orDie(session.deleteEverywhere());
+        const snapshot = yield* refusedAs(DELETE_REFUSED)(session.deleteEverywhere());
         // Only a deletion that landed stands recording down for the run.
         sessionReplayEndedByDeletion = true;
         // Forked as a daemon rather than a plain fork: the handler's own
@@ -310,10 +347,16 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     // subscription: what a sign-in began is stopped by the capabilities it
     // started, and the subscription is forked into this same scope, so
     // closing it is the whole of the stop and there is nothing else to give
-    // back.
+    // back. It subscribes before the launch's read, so a change that lands
+    // while it reads (a refused call's re-read of a cookie session) is held
+    // for the subscriber rather than published to no one; the subscriber
+    // starts once the launch's account stands as the one it compares against.
+    // Note that a session a re-read settled on during the launch is then the
+    // launch's own account: the panel hears it, and, as for a launch that read
+    // it itself, no sign-in is counted.
     lifetime: Effect.gen(function* () {
-      previousAccount = yield* session.initialize;
       const changes = yield* session.changes;
+      previousAccount = yield* session.initialize;
       yield* Effect.forkScoped(Stream.runForEach(changes, onAccountChange));
     }),
   };

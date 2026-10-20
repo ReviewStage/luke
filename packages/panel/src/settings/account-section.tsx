@@ -38,11 +38,19 @@ export function AccountSection({
   // Note that the section is only drawn while its page is, so the page
   // leaving takes the question with it.
   const surroundings = { subject: true, surfaceOpen: true };
-  // The sign-out cannot be refused, so its answer is the accepted one every
-  // confirming action reports through.
-  const signOut = useConfirmDialog(surroundings, async () => {
-    await onSignOut();
-    return { status: ACTION_RESULT_STATUS.ACCEPTED } satisfies ActionResult;
+  // A sign-out the host refused, such as a browser's whose service could not
+  // end the session, keeps the dialog up saying so, rather than closing on an
+  // account still signed in, as the sidebar's Log out does.
+  const signOut = useConfirmDialog(surroundings, async (): Promise<ActionResult> => {
+    try {
+      await onSignOut();
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    } catch {
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "Luke could not sign out. Try again.",
+      };
+    }
   });
   const deletion = useConfirmDialog(surroundings, onDeleteAccount);
 

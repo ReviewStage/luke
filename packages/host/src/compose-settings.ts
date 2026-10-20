@@ -103,7 +103,11 @@ export interface SettingsComposer extends Composer {
   reconcileAccountPreferences: () => Effect.Effect<void>;
   /** The account behind the hydrated preferences changed; the next push hydrates again. */
   forgetAccountPreferenceHydration: () => void;
-  /** The count the account actions flush before they end the account they are authenticated with. */
+  /**
+   * Sends the queued counts now: the account actions flush before a sign-out
+   * or deletion ends the account they are authenticated with, and before a
+   * sign-in may take a browser tab away to the provider.
+   */
   flushProductEvents: Effect.Effect<void>;
   link: (links: SettingsLinks) => Effect.Effect<void>;
 }
