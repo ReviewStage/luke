@@ -276,6 +276,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAttachmentViewSchema: codingAgentView.codingAgentInboxAttachmentViewSchema,
     codingAgentChatParamsSchema: codingAgentView.codingAgentChatParamsSchema,
     codingAgentChatAnswerViewSchema: codingAgentView.codingAgentChatAnswerViewSchema,
+    codingAgentChatFollowParamsSchema: codingAgentView.codingAgentChatFollowParamsSchema,
+    codingAgentChatChangedSchema: codingAgentView.codingAgentChatChangedSchema,
     codingAgentChatPostParamsSchema: codingAgentView.codingAgentChatPostParamsSchema,
     codingAgentChatWriteAnswerViewSchema: codingAgentView.codingAgentChatWriteAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,

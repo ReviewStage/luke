@@ -29,6 +29,7 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
+  type CodingAgentChatChanged,
   type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
@@ -77,6 +78,7 @@ import {
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
+  codingAgentChatChangedSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
@@ -729,6 +731,12 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
   /** A workspace's chat past a cursor, held by the service while nothing moved; or why there is none. */
   codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
+  /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
+  codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
+  /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
+  codingAgentChatUnfollow(workspaceId: string): Effect.Effect<void>;
+  /** A followed workspace's chat, whole or why there is none, each time it changes. */
+  onChatChanged(listener: (changed: CodingAgentChatChanged) => void): () => void;
   /** A write to a workspace's chat as the account's own member; what it came to, or why there is no answer. */
   codingAgentChatPost(
     params: CodingAgentChatPostParams,
@@ -2055,6 +2063,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           after: params.after,
         }),
         codingAgentAnswer(codingAgentChatAnswerViewSchema),
+      ),
+    codingAgentChatFollow: (workspaceId) =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),
+    codingAgentChatUnfollow: (workspaceId) =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW, { workspaceId })),
+    onChatChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CHAT_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentChatChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     codingAgentChatPost: (params) =>
       Effect.map(

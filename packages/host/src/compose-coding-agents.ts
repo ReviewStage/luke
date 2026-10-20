@@ -29,6 +29,7 @@ import {
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
+  codingAgentChatFollowParamsSchema,
   codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChooseParamsSchema,
@@ -69,17 +70,25 @@ import {
   providerKeySaveParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
 } from "@luke/features/pull-request-chapters-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, RcMap, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -95,7 +104,9 @@ import {
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
- * Nothing is held here but the transcripts' subscriptions. The window holds
+ * Nothing is held here but the transcripts' subscriptions and each followed
+ * workspace chat's (`chat-follow.ts`), whose changes are heard as
+ * `CHAT_CHANGED` events. The window holds
  * the agents it draws and the cursor it reads from, asks when a task opens,
  * when it starts or stops an agent, and while an agent's tab shows its
  * running transcript, and every ask is one call of the service answered
@@ -170,11 +181,13 @@ export type CodingAgentClient = Pick<
   | "agentPicture"
   | "chat"
   | "chatPost"
+  | "chatJoin"
+  | "workspaceChatLive"
   | "chatAttachment"
 >;
 
 export interface CodingAgentsDependencies {
-  kernel: Pick<HostKernel, "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "now" | "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
   /** Realtime's client at an address, which a transcript is followed over; Realtime's own outside a test. */
@@ -203,7 +216,8 @@ export function composeCodingAgents(
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
-    return composed(dependencies, http, transcripts);
+    const chats = yield* FiberMap.make<string>();
+    return composed(dependencies, http, transcripts, chats);
   });
 }
 
@@ -221,10 +235,17 @@ function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   transcripts: TranscriptFollows,
+  chats: FiberMap.FiberMap<string>,
 ): CodingAgentsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
   const asked = askedOf(dependencies, http);
+
+  /** A workspace's chat sealed for the account a follow started for, as every renewal of it names; signed out where none was. */
+  const chatLiveFor = (workspaceId: string, userId: string | undefined) => (poll: boolean) =>
+    userId === undefined
+      ? Effect.succeed(LIVE_SIGNED_OUT)
+      : asked(client.workspaceChatLive(workspaceId, userId, poll));
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -707,6 +728,39 @@ function composed(
         const answer = yield* asked(client.chatPost(workspaceId, write));
         return carried<CodingAgentChatWriteAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* read(
+          codingAgentChatFollowParamsSchema,
+          params,
+          "following a workspace's chat names the workspace",
+        );
+        const tell = (chat: CodingAgentChatAnswerView) =>
+          Effect.sync(() =>
+            kernel.emit(GATEWAY_EVENT.CHAT_CHANGED, carried({ workspaceId, chat })),
+          );
+        const follow = gate()
+          ? followWorkspaceChat({
+              join: () => asked(client.chatJoin(workspaceId)),
+              live: chatLiveFor(workspaceId, dependencies.accountId()),
+              openLive: dependencies.openLive ?? openRealtimeClient,
+              now: kernel.now,
+              tell,
+            })
+          : tell(UNANSWERED);
+        yield* FiberMap.run(chats, workspaceId, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* read(
+          codingAgentChatFollowParamsSchema,
+          params,
+          "letting a workspace's chat go names the workspace",
+        );
+        yield* FiberMap.remove(chats, workspaceId);
+        return {};
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT]: (params) =>
       Effect.gen(function* () {
         const { workspaceId, messageId, attachmentId } = yield* read(
@@ -730,6 +784,7 @@ function composed(
   };
 
   const reset = Effect.gen(function* () {
+    yield* FiberMap.clear(chats);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
   });
 

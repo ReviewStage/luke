@@ -632,6 +632,22 @@ export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSch
 
 export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
 
+/** A workspace's chat as the window follows it: the workspace. */
+export const codingAgentChatFollowParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+/**
+ * A followed workspace's chat as it now stands, as the host tells it: whole,
+ * with no cursor, or why there is none.
+ */
+export const codingAgentChatChangedSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  chat: codingAgentChatAnswerViewSchema,
+});
+
+export type CodingAgentChatChanged = typeof codingAgentChatChangedSchema.Type;
+
 /** A write to a workspace's chat, as the window asks it: the workspace, and the write the service takes, its key the window's own where it carries one. */
 export const codingAgentChatPostParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,

@@ -241,6 +241,15 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  /**
+   * A workspace's chat followed from now until it is let go or the account
+   * signs out, over Neon Realtime: the account's person joins it once, and
+   * what it holds is heard as `CHAT_CHANGED` events, never answered;
+   * following again starts over.
+   */
+  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
+  /** A workspace's chat let go: no more `CHAT_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_CHAT_UNFOLLOW: "codingAgents.chatUnfollow",
   /** One picture a chat message carries, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   /** Where every one of the account's integrations stands, read from the service now. */
@@ -589,6 +598,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** One followed workspace's chat, whole or why there is none, each time it changes while it is followed. */
+  CHAT_CHANGED: "chat.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
