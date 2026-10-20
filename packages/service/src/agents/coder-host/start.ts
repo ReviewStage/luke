@@ -164,7 +164,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * is not the agent's developer.
  * A blank Start, on a task, hands the agent nothing, neither the plan nor
  * a prompt, and opens no session: its first words, typed or spoken, open
- * one as they reach it (`steer.ts`). It runs on the choice any Start does,
+ * one as they reach it (`steer.ts`), and leaves its task's status where it
+ * stands, since no work was handed. It runs on the choice any Start does,
  * and on a task with no repository it works in none and asks nothing of
  * GitHub, where any other Start on such a task is refused.
  * An eve that did not take the opening leaves no agent behind, so the retry
@@ -863,8 +864,9 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   if (continued) yield* stoppedSource(eve, from.source);
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
-  // further along stands; a move that fails is logged, never the Start's failure.
-  if (landing.task !== undefined) {
+  // further along stands; a move that fails is logged, never the Start's failure. A blank agent
+  // was handed no work, so its task stands where it is.
+  if (landing.task !== undefined && handed !== null) {
     yield* beginTaskWork(userId, landing.task.id).pipe(
       Effect.asVoid,
       Effect.catch(logStoreFailure),

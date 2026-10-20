@@ -2219,6 +2219,13 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
       Effect.gen(function* () {
         const bare = yield* openTask({ repository: null });
         const coded = yield* openTask();
+        const statusOf = (opened: typeof bare) =>
+          Effect.map(
+            readTask(opened.owner, opened.task.id),
+            (read) => Option.getOrThrow(read).task.status,
+          );
+        const before = yield* statusOf(coded);
+        assert.notEqual(before, TASK_STATUS.IN_PROGRESS);
 
         const blankOn = (opened: typeof bare) =>
           Effect.map(
@@ -2253,6 +2260,8 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           repository: RELAY_FULL_NAME,
         });
         assert.deepEqual([...bare.eve.opened, ...coded.eve.opened], []);
+        // No work was handed, so the task stands where it was.
+        assert.equal(yield* statusOf(coded), before);
 
         yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.minutes(1)));
         const listed = readAnswer(
