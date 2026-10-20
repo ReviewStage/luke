@@ -275,10 +275,8 @@ interface InboxViewControl {
   readonly single?: boolean;
   /** Says whether the Inbox shows one column. */
   readonly onSingle?: (single: boolean) => void;
-  /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
+  /** The pages of the chosen item's task as they move, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
-  /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
-  readonly onRereadPages: () => void;
   /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
   readonly onTaskAgents: (taskId: string, agentIds: readonly string[]) => void;
 }
@@ -3179,7 +3177,6 @@ export function useTasksTab(input: {
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
       pages: inboxPages.pages,
-      onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,
     },
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.

@@ -292,7 +292,6 @@ function mountWith(
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     ...overrides,

@@ -152,7 +152,6 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },

@@ -8,6 +8,7 @@ import { writeDrawing } from "@luke/database/models/board-store";
 import { ensureMember } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
+import { writePage } from "@luke/database/models/plan-pages";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
@@ -26,9 +27,12 @@ import {
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
   taskConversationLiveAnswerSchema,
+  taskPagesLiveAnswerSchema,
+  taskPagesLiveRowsSchema,
   taskRecordLiveAnswerSchema,
   workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
@@ -346,6 +350,77 @@ it.layer(getTestDB())("the task board's live read", (it) => {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
+      }),
+  );
+
+  it.effect(
+    "a task's pages are sealed for an account that reaches the task, not found for one that does not, and asked to poll answered with their rows inline",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            dana,
+            started.id,
+            { title: "Invite funnel", html: "<p>One</p>" },
+            { kind: PAGE_SHOWER.LUKE },
+          ),
+        );
+        const path = "/api/live/task-pages";
+
+        const sealed = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.ok(answer.queries.pages.capability.includes(`"${dana}"`), "read for the bearer");
+        assert.ok(answer.queries.pages.capability.includes(`"${started.id}"`), "read for the task");
+
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: dana,
+            forUser: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+          "a read started for another account is signed out",
+        );
+
+        const polled = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          poll: true,
+          sealing: Option.some(SCRIPTED),
+        });
+        const rows = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(polled.body);
+        assert.equal(rows.url, LIVE_POLL_URL);
+        assert.deepEqual(
+          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+            pages: rows.queries.pages.rows,
+          }).pages.map((page) => [page.id, page.version]),
+          [[shown.id, 1]],
+        );
       }),
   );
 

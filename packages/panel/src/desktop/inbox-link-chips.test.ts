@@ -198,7 +198,6 @@ async function inbox(options: {
           listed,
           onListed: setListed,
           pages: undefined,
-          onRereadPages: () => undefined,
           onTaskAgents: () => undefined,
         },
       }),

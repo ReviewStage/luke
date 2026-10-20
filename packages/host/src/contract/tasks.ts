@@ -13,6 +13,8 @@ import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-w
 import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent-view";
 import {
   codeLinesSchema,
+  type TasksPagesAnswer,
+  taskPagesFollowSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksBrowserTabsParamsSchema,
@@ -60,6 +62,7 @@ import {
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {
   COLOURED_CODE_MAX_CHARS,
@@ -226,6 +229,11 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PAGES]: actProcedure("Could not read that plan's pages on this system.")
     .input(exactInput(tasksPagesParamsSchema))
     .output(EffectSchema.flip(tasksPagesAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
+    "Could not follow that plan's pages on this system.",
+  )
+    .input(exactInput(taskPagesFollowSchema))
+    .output(eventIterator(type<TasksPagesAnswer>())),
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actProcedure("Could not read that picture on this system.")
     .input(exactInput(tasksPictureParamsSchema))
     .output(EffectSchema.flip(tasksPictureAnswerSchema)),

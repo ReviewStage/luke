@@ -199,7 +199,6 @@ function mount(
         listed: false,
         onListed: ignore,
         pages: undefined,
-        onRereadPages: () => undefined,
         onTaskAgents: () => undefined,
       },
       onNewTask: () => setAsked(true),

@@ -39,6 +39,7 @@ import {
   standingAsk,
 } from "./inbox-wire.js";
 import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
+import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -919,4 +920,42 @@ export function workspaceChatOfLiveRows(rows: WorkspaceChatLiveRows): ChatAnswer
       .map(chatMessageOfLiveRow),
     cursor: "",
   };
+}
+
+/**
+ * One task's pages sealed for following: the address, and one statement
+ * that delivers each page at its newest version, as the task's held list
+ * of pages reads it. The window's Inbox shows the pages of whichever task
+ * its item is of, so the desktop follows them while that panel reads them.
+ * The service answers `not-found` for a task the account does not reach;
+ * asked with `?poll=true`, the rows inline at the poll address.
+ */
+export const taskPagesLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ pages: sealedLiveQuerySchema }),
+});
+
+export type TaskPagesLiveAnswer = typeof taskPagesLiveAnswerSchema.Type;
+
+/** One page as its row delivers it: the page's line, with who showed it null where none was kept. */
+const taskPagesLiveRowSchema = EffectSchema.Struct({
+  id: pageLineSchema.fields.id,
+  title: pageLineSchema.fields.title,
+  version: pageLineSchema.fields.version,
+  at: pageLineSchema.fields.at,
+  shownBy: EffectSchema.NullOr(pageShowerSchema),
+});
+
+/** A task's pages as Realtime delivers them: none for a task the account no longer reaches. */
+export const taskPagesLiveRowsSchema = EffectSchema.Struct({
+  pages: EffectSchema.Array(taskPagesLiveRowSchema),
+});
+
+/** The pages as the held list answers them, from their rows: the most recently written first, then by id. */
+export function pagesOfLiveRows(rows: typeof taskPagesLiveRowsSchema.Type): readonly PageLine[] {
+  return rows.pages
+    .map(({ shownBy, ...line }): PageLine => (shownBy === null ? line : { ...line, shownBy }))
+    .toSorted((one, other) =>
+      one.at !== other.at ? other.at - one.at : one.id < other.id ? -1 : one.id > other.id ? 1 : 0,
+    );
 }

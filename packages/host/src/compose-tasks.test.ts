@@ -39,10 +39,11 @@ import {
   LIVE_POLL_URL,
   type TaskBoardLiveAnswer,
   type TaskConversationLiveAnswer,
+  type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
-import type { PageLine, PageVersion } from "@luke/features/page-wire";
+import { PAGE_SHOWER, type PageLine, type PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
   PLAN_COMMENT_ACTOR,
@@ -103,6 +104,7 @@ import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
+  type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
@@ -174,6 +176,8 @@ interface FakeService extends TasksClient {
   boardSeals: Record<string, TaskBoardLiveAnswer>;
   /** Each task's pages and calls sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
   recordSeals: Record<string, TaskRecordLiveAnswer>;
+  /** What the service seals for following each task's pages; none answers unanswered. */
+  pageSeals: Record<string, TaskPagesLiveAnswer>;
   /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
   readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
@@ -362,6 +366,7 @@ function fakeService(tasks: Task[]): FakeService {
     boards: {},
     boardSeals: {},
     recordSeals: {},
+    pageSeals: {},
     recordReads: [],
     images: {},
     transcripts: {},
@@ -780,6 +785,13 @@ function fakeService(tasks: Task[]): FakeService {
         const sealed = service.boardSeals[taskId];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
+          : { ok: true, answer: sealed };
+      }),
+    pagesLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.pageSeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
           : { ok: true, answer: sealed };
       }),
     recordLive: (taskId) =>
@@ -1254,6 +1266,8 @@ function subject(
   } = {},
 ) {
   return Effect.gen(function* () {
+    /** Every event the composer emitted besides the view, by its kind. */
+    const pushed: [GatewayEventKind, WireValue][] = [];
     const told: TasksView[] = [];
     const reported: string[] = [];
     let broken = false;
@@ -1272,7 +1286,10 @@ function subject(
         now: () => 0,
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
-          if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
+          if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
+            pushed.push([kind, payload]);
+            return;
+          }
           const read = readEither(tasksViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
           if (!broken && options.breaksOn?.(read.success) === true) {
@@ -1326,6 +1343,7 @@ function subject(
       call,
       told,
       pages,
+      pushed,
       reported,
       last,
       viewWhere,
@@ -4037,5 +4055,61 @@ it.effect(
       yield* Effect.repeat(Effect.yieldNow, { times: 100 });
 
       assert.deepEqual(conversations.workerSeals, ["user-dana", "user-eli"]);
+    }),
+);
+
+/** A task's pages sealed for following, named by the round it was sealed in. */
+function sealedPages(round: number): TaskPagesLiveAnswer {
+  return {
+    url: "wss://realtime.example/v1",
+    queries: {
+      pages: { capability: `pages-${round}`, queryFingerprint: "pages", expiresAt: 3_600_000 },
+    },
+  };
+}
+
+const FUNNEL = {
+  id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  title: "Invite funnel",
+  version: 1,
+  at: 1_500,
+};
+
+it.effect(
+  "a plan's pages followed for the Inbox are told as they move, never in the view, a seal the service did not answer is told as unanswered and sealed again, and let go they stop",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeBoardRealtime();
+      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const changed = (view: WireValue) => [
+        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
+        { taskId: INVITES, view },
+      ];
+
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+
+      service.pageSeals[INVITES] = sealedPages(1);
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      realtime.deliver("pages-1", [{ ...FUNNEL, shownBy: null }]);
+      const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.LUKE } };
+      realtime.deliver("pages-1", [shown]);
+      yield* boardSettled;
+      assert.deepEqual(pushed.slice(1), [
+        changed({ pages: [FUNNEL] }),
+        changed({ pages: [shown] }),
+      ]);
+      assert.equal(
+        told.length,
+        0,
+        "a plan's pages followed for the Inbox are never told in the view",
+      );
+
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(realtime.subscribed(), []);
     }),
 );
