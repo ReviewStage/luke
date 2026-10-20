@@ -1,6 +1,6 @@
 {
   "name": "@luke/panel",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "The panel every Luke client mounts: its surfaces, and the doors its shell installs the bridge and the platform into",
