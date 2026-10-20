@@ -78,6 +78,7 @@ import {
   expandable,
   fileNotice,
   filePatch,
+  gapLines,
   headerPatch,
   linesChanged,
   listPatch,
@@ -178,7 +179,9 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * tint of a line added or removed, the words a changed line changed, and
  * the count of unchanged lines between two hunks, which open twenty at a
  * time or all at once, read from the file at the pull request's head the
- * first time one of its gaps is opened (`useFileTexts`).
+ * first time one of its gaps is opened (`useFileTexts`). A review thread
+ * on a line between hunks moves onto its line as a gap opened over it draws
+ * it, and back above the diff as the gap closes again (`useOpenedLines`).
  *
  * Where the Pull request tab lets the member comment, lines picked with
  * the gutter's +, or code selected as text over them, open a comment under
@@ -515,6 +518,8 @@ function entryOf(
   hover: ThreadHover | undefined,
   /** The file drawn whole, where it is, whether it may be, and the door that draws it so or back to its changes. */
   whole: FileWhole,
+  /** The lines of its new side between its hunks it draws now, its gaps opened over them; none where it draws none. */
+  opened: ReadonlySet<number> | undefined,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -525,7 +530,7 @@ function entryOf(
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
   // A file drawn whole draws every one of its lines, so its threads are placed on them.
   const drawnWhole = pictured === undefined && !emptyWhole(whole.texts) ? whole.texts : undefined;
-  const { placed, above } = threadsOn(threads, drawnAs, drawnWhole);
+  const { placed, above } = threadsOn(threads, drawnAs, drawnWhole, opened);
   const notes: DiffNote[] =
     minimized === undefined
       ? placed.map((each) => ({
@@ -620,6 +625,11 @@ function entryOf(
     lead: lead !== undefined,
     expandable: lead === undefined && gaps.open,
     whole: lead === undefined ? whole.texts : undefined,
+    // The lines its threads wait on between its hunks, asked for only where a gap may open over them.
+    hidden:
+      lead === undefined && gaps.open && drawnWhole === undefined
+        ? gapLines(threads, file)
+        : undefined,
     header: (
       <FileHead
         file={file}
@@ -698,6 +708,7 @@ function useEntries(
   minimizedOf: (path: string) => FileMinimized | undefined,
   hover: ThreadHover | undefined,
   wholeOf: (file: CodingAgentChangedFile) => FileWhole,
+  openedOf: (path: string) => ReadonlySet<number> | undefined,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
   const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
@@ -707,6 +718,7 @@ function useEntries(
     const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
     const minimized = minimizedOf(file.path);
     const whole = wholeOf(file);
+    const opened = own.length === 0 ? undefined : openedOf(file.path);
     const inputs = [
       ...entryInputs(file, list, own, threads?.draw, images, comments),
       gaps.open,
@@ -716,12 +728,25 @@ function useEntries(
       whole.texts,
       whole.offered,
       whole.toggle,
+      opened,
     ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comments, gaps, minimized, hover, whole);
+        : entryOf(
+            file,
+            list,
+            own,
+            threads?.draw,
+            images,
+            comments,
+            gaps,
+            minimized,
+            hover,
+            whole,
+            opened,
+          );
     next.set(file.path, { inputs, entry });
     return entry;
   });
@@ -790,6 +815,39 @@ function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => File
       toggle: door,
     };
   };
+}
+
+/** The lines between each file's hunks the list draws now, as it last told them: by file. */
+type OpenedLines = ReadonlyMap<string, ReadonlySet<number>>;
+
+/** No line between hunks drawn. */
+const NONE_OPENED: OpenedLines = new Map();
+
+/** Which lines between each file's hunks the list draws, and the door the list tells them through. */
+interface ListOpened {
+  readonly openedOf: (path: string) => ReadonlySet<number> | undefined;
+  readonly onDrawn: (path: string, lines: readonly number[]) => void;
+}
+
+/**
+ * Which of the lines between each file's hunks that its threads wait on
+ * the list draws now, as the list tells them (`DiffListProps.onDrawn`):
+ * a gap opened over one draws it, and a gap closed again, its patch read
+ * anew, draws it no more. Each file's answer is the same set until the list
+ * tells otherwise, so the files whose gaps stood keep their entries; the
+ * door stays the same, as the list holds it.
+ */
+function useOpenedLines(): ListOpened {
+  const [opened, setOpened] = useState<OpenedLines>(NONE_OPENED);
+  const onDrawn = useCallback((path: string, lines: readonly number[]) => {
+    setOpened((was) => {
+      const next = new Map(was);
+      if (lines.length === 0) next.delete(path);
+      else next.set(path, new Set(lines));
+      return next;
+    });
+  }, []);
+  return { openedOf: (path) => opened.get(path), onDrawn };
 }
 
 /** The lines that show their threads while Minimize inline comments is on: by file, by side, by line. */
@@ -1009,16 +1067,18 @@ interface RevealedPlace {
   readonly chip: { readonly side: DiffSelection["side"]; readonly line: number };
 }
 
-/** Where `thread` stands in `file`'s entry, drawn as `lead` (its threads above all) or whole (`whole`), as `entryOf` places it. */
+/** Where `thread` stands in `file`'s entry, drawn as `lead` (its threads above all), whole (`whole`), or with gaps opened over lines (`opened`), as `entryOf` places it. */
 function revealedPlace(
   thread: ReviewThread,
   file: CodingAgentChangedFile,
   lead: boolean,
   whole: DiffFileTexts | undefined,
+  opened: ReadonlySet<number> | undefined,
 ): RevealedPlace {
   const fileWide = { side: DIFF_SELECTION_SIDE.ADDITIONS, line: FILE_NOTE_LINE };
   if (lead) return { at: undefined, chip: fileWide };
-  const { placed, above } = threadsOn([thread], file, emptyWhole(whole) ? undefined : whole);
+  const drawnWhole = emptyWhole(whole) ? undefined : whole;
+  const { placed, above } = threadsOn([thread], file, drawnWhole, opened);
   const [onLine] = placed;
   if (onLine !== undefined) {
     const at = { side: onLine.side, line: onLine.line };
@@ -1071,6 +1131,7 @@ function useListLanding(
   entries: readonly DiffListEntry[],
   minimizedOf: (path: string) => FileMinimized | undefined,
   wholeOf: (file: CodingAgentChangedFile) => FileWhole,
+  openedOf: (path: string) => ReadonlySet<number> | undefined,
   box: React.RefObject<HTMLElement | null>,
 ): ListLandingControl {
   const [landing, setLanding] = useState<ListLanding | undefined>(undefined);
@@ -1091,7 +1152,13 @@ function useListLanding(
   const place =
     landing === undefined || entry === undefined
       ? undefined
-      : revealedPlace(landing.thread, landing.file, entry.lead, wholeOf(landing.file).texts);
+      : revealedPlace(
+          landing.thread,
+          landing.file,
+          entry.lead,
+          wholeOf(landing.file).texts,
+          openedOf(landing.file.path),
+        );
   // A minimized line's chip is shown once the thread is placed, each ask once.
   const chipShown = useRef<number | undefined>(undefined);
   const latestPlace = useRef({ landing, place, minimizedOf });
@@ -1398,6 +1465,7 @@ function FilesList({
   const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
   const wholeOf = useWholeFiles(texts);
   const resting = useThreadHover();
+  const opened = useOpenedLines();
   const entries = useEntries(
     list,
     threads,
@@ -1407,8 +1475,9 @@ function FilesList({
     minimizedOf,
     resting.hover,
     wholeOf,
+    opened.openedOf,
   );
-  const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, box);
+  const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, opened.openedOf, box);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -1435,6 +1504,7 @@ function FilesList({
             selected={landing.lines ?? resting.lines ?? commenting?.lit}
             readTexts={texts.read}
             reveal={landing.reveal}
+            onDrawn={opened.onDrawn}
           />
         </ThreadLandingProvider>
       )}

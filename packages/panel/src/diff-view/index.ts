@@ -36,10 +36,12 @@ import {
   type DiffViewModule,
   type DiffViewProps,
   GAP_LINES,
+  sameLines,
   sameListSelection,
   sameLook,
   sameNotes,
 } from "./contract.js";
+import { drawnAmong } from "./drawn-lines.js";
 import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
@@ -93,7 +95,10 @@ import { wholeOf } from "./whole-diff.js";
  * around it. A list whose view reads its files whole (`readTexts`) offers
  * them as GitHub's diff does, twenty lines up or down or all at once, the
  * file read the first time one of its gaps is opened
- * (`expansionOptions`).
+ * (`expansionOptions`). The view is told which lines between a file's
+ * hunks it waits to put a note under the file draws, as a gap opens over
+ * them (`./drawn-lines.ts`): read as each file is drawn, since Pierre keeps
+ * what was opened on the file's drawing and tells of no press itself.
  *
  * Files changed draws its pull request's files as one list (`mountList`),
  * through Pierre's own `CodeView`: every file under a header that sticks to
@@ -471,6 +476,9 @@ function patchOf(file: DiffListFile): FileDiffMetadata {
   }
 }
 
+/** No lines. */
+const NO_LINES: readonly number[] = [];
+
 /** A file as the list last drew it: what it was handed, and the item Pierre was given for it. */
 interface DrawnFile {
   readonly file: DiffListFile;
@@ -562,6 +570,8 @@ function listOptions(
   drawn: DiffLook,
   latest: () => DiffListProps,
   dress: (element: HTMLElement, path: string) => void,
+  /** Told each file drawn, as Pierre draws it, to read which of its hidden lines it draws. */
+  drawnBy: (path: string, instance: PierreFileDiff<string, undefined>) => void,
   commentable: (path: string) => boolean,
   pathOf: (fileDiff: FileDiffMetadata) => string,
 ): CodeViewOptions<string, undefined> {
@@ -585,10 +595,15 @@ function listOptions(
       latest().renderAnnotation(context.item.id, note.metadata),
     onPostRender: (
       node: HTMLElement,
-      _instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
-      _phase: PostRenderPhase,
+      instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
+      phase: PostRenderPhase,
       context: { item: { id: string } },
-    ) => dress(node, context.item.id),
+    ) => {
+      dress(node, context.item.id);
+      if (phase !== "unmount" && instance instanceof PierreFileDiff) {
+        drawnBy(context.item.id, instance);
+      }
+    },
   };
 }
 
@@ -682,6 +697,17 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
     releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
   };
+  // The hidden lines each file was last told to draw, told again only as they change.
+  const toldDrawn = new Map<string, readonly number[]>();
+  const tellDrawn = (path: string, lines: readonly number[]) => {
+    if (sameLines(toldDrawn.get(path) ?? NO_LINES, lines)) return;
+    toldDrawn.set(path, lines);
+    latest.onDrawn?.(path, lines);
+  };
+  const drawnBy = (path: string, instance: PierreFileDiff<string, undefined>) =>
+    tellDrawn(path, drawnAmong(instance, drawnFiles.get(path)?.file.hidden ?? NO_LINES));
+  // The files whose hidden lines changed while their item stood, read again once the list is drawn.
+  const rehidden = new Set<string>();
   const itemsOf = (files: readonly DiffListFile[]) =>
     files.map((file) => {
       const held = drawnFiles.get(file.path);
@@ -694,6 +720,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         held.file.whole === file.whole &&
         sameNotes(held.file.annotations, file.annotations)
       ) {
+        if (!sameLines(held.file.hidden ?? NO_LINES, file.hidden ?? NO_LINES)) {
+          drawnFiles.set(file.path, { ...held, file });
+          rehidden.add(file.path);
+        }
         return held.item;
       }
       const read =
@@ -713,14 +743,32 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       };
       drawnFiles.set(file.path, { file, item, read });
       paths.set(item.fileDiff, file.path);
+      // Note that a patch drawn anew opens none of its gaps until Pierre draws it, so none of its hidden lines stands drawn.
+      if (item.fileDiff !== held?.item.fileDiff) tellDrawn(file.path, NO_LINES);
+      else rehidden.add(file.path);
       return item;
     });
+  // Each file whose hidden lines changed read again: as Pierre draws it, or, out of view, where it stood, since nothing opens a gap there.
+  const readRehidden = () => {
+    const rendered = new Map(view.getRenderedItems().map((each) => [each.id, each]));
+    for (const path of rehidden) {
+      const hidden = drawnFiles.get(path)?.file.hidden ?? NO_LINES;
+      const standing = rendered.get(path);
+      if (standing?.type === "diff") drawnBy(path, standing.instance);
+      else
+        tellDrawn(
+          path,
+          (toldDrawn.get(path) ?? NO_LINES).filter((line) => hidden.includes(line)),
+        );
+    }
+    rehidden.clear();
+  };
   typeset(host, props.look);
   const commentable = (path: string) => drawnFiles.get(path)?.file.lead === false;
   // Note that a file's read patch names its file by path for Pierre's reading of it whole, since Pierre hands back the patch alone.
   const pathOf = (fileDiff: FileDiffMetadata) => paths.get(fileDiff) ?? fileDiff.name;
   const optionsFor = (next: DiffListProps) =>
-    listOptions(next.look, () => latest, dress, commentable, pathOf);
+    listOptions(next.look, () => latest, dress, drawnBy, commentable, pathOf);
   const highlighting = listHighlighting(props.look);
   const { pool } = highlighting;
   const view = new CodeView<string, undefined>(optionsFor(props), pool);
@@ -781,6 +829,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         view.setOptions(optionsFor(next));
       view.setItems(itemsOf(next.files));
       view.render();
+      readRehidden();
       tellTop(host.scrollTop);
       if (!sameListSelection(next.selected, was.selected)) light(next.selected);
     },
