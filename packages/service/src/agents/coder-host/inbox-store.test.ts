@@ -685,7 +685,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "a member closes an open item without an answer only at the revision they saw, the item naming them and taking no answer since, a close withdrawn only under its own key, and the agent's post under the key opens it again",
+    "a member closes an open item without an answer only at the revision they saw, the item naming them and taking no answer since, a close withdrawn only under its own key, the agent withdrawing nothing a member's close withdrew already, and the agent's post under the key opens it again",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -717,11 +717,15 @@ it.layer(getTestDB())("the inbox store", (it) => {
 
         const later = randomUUID();
         assert.ok(Option.isSome(yield* closeInboxItemAsMember(teammate, id, 1, later)));
-        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
         assert.ok(
-          Option.isNone(yield* withdrawInboxClose(teammate, id, later)),
-          "taking the member's close back never opens the agent's own close since",
+          Option.isNone(yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.")),
+          "the agent withdraws no ask a member's close withdrew already",
         );
+        assert.equal(
+          Option.getOrUndefined(yield* withdrawInboxClose(teammate, id, later))?.status,
+          INBOX_STATUS.OPEN,
+        );
+        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
         const again = yield* postInboxItem(agent, { ...SETTINGS, title: "Require two reviews" });
         assert.ok(Result.isSuccess(again));
         assert.equal(again.success.status, INBOX_STATUS.OPEN);

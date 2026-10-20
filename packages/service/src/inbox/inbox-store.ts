@@ -46,7 +46,12 @@ import {
   type CodingAgentAttachment,
   type CodingAgentAttachmentType,
 } from "@luke/features/coding-agent-wire";
-import { type InboxItemPlace, inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
+import {
+  INBOX_PICTURE_IN_WORDS,
+  type InboxItemPlace,
+  inboxAttachmentAddress,
+  inboxPictureDestination,
+} from "@luke/features/inbox-attachment-link";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -191,6 +196,8 @@ export const INBOX_POST_REFUSAL = {
   TOO_MANY_OPEN: "too-many-open",
   /** The agent is no longer the account's. */
   NO_AGENT: "no-agent",
+  /** The post names no title and opens a thread under a key with no item, which needs one. */
+  NO_TITLE: "no-title",
 } as const;
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
@@ -973,7 +980,7 @@ const upsertItem = SqlSchema.findOne({
   },
 });
 
-/** The agent's item under the key closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no item under it. */
+/** The agent's open item under the key closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no open item under it. */
 const closeItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...AgentKeySchema.fields,
@@ -996,7 +1003,12 @@ const closeItem = SqlSchema.findOneOption({
           openAskMessageId: null,
         })
         .where(
-          and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId), eq(inboxItem.key, key)),
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
+            eq(inboxItem.key, key),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+          ),
         )
         .returning({ id: inboxItem.id }),
     ),
@@ -1723,22 +1735,9 @@ function bodyOfBlocks(blocks: readonly InboxBlock[], addressOf: PictureAddress):
   return blocks.map((block) => blockParagraph(block, addressOf)).join("\n\n");
 }
 
-/**
- * A picture in a message's words, `![alt](destination`, its opening
- * unescaped: the alt text the first group, the destination, bare or in
- * angle brackets, the second; each bounded, so the scan stays linear.
- */
-const PICTURE_IN_WORDS =
-  /(?<!\\)!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})/gu;
-
 /** A line that is one picture alone, its caption in quotes where it has one: alt text the first group, destination the second. */
 const PICTURE_LINE =
   /^[ \t]*!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})(?:[ \t]+"(?:\\.|[^"\\\n]){0,1000}")?[ \t]*\)[ \t]*$/u;
-
-/** A picture's destination as the path or address it names, out of its angle brackets. */
-function destinationOf(destination: string): string {
-  return destination.startsWith("<") ? destination.slice(1, -1) : destination;
-}
 
 /**
  * The agent's words with each picture's path written as the address of the
@@ -1751,9 +1750,11 @@ function withPictureAddresses(
   addressOf: PictureAddress,
 ): string {
   return body.replace(
-    PICTURE_IN_WORDS,
+    INBOX_PICTURE_IN_WORDS,
     (whole: string, _alt: string, destination: string, offset: number) => {
-      const id = insideCode(body, offset) ? undefined : pictureOfPath(destinationOf(destination));
+      const id = insideCode(body, offset)
+        ? undefined
+        : pictureOfPath(inboxPictureDestination(destination));
       if (id === undefined) return whole;
       return `${whole.slice(0, whole.length - destination.length)}${addressOf(id)}`;
     },
@@ -1766,7 +1767,7 @@ function pictureBlock(
   pictureOfPath: (path: string) => string | undefined,
 ): InboxBlock | undefined {
   const [, alt = "", destination = ""] = PICTURE_LINE.exec(line) ?? [];
-  const attachmentId = pictureOfPath(destinationOf(destination));
+  const attachmentId = pictureOfPath(inboxPictureDestination(destination));
   const words = alt.replace(/\\(.)/gu, "$1").replace(/\s+/gu, " ").trim();
   if (attachmentId === undefined || words === "" || words.length > INBOX_BOUNDS.MAX_ALT_CHARS) {
     return undefined;
@@ -1883,7 +1884,7 @@ interface PostPicture extends InboxNamedImage {
 }
 
 /** One picture the agent's words name by its path in the agent's sandbox, as the caller read it there: the path as written, its file's own name, its type, and its bytes. */
-interface InboxBodyPicture extends InboxNamedImage {
+export interface InboxBodyPicture extends InboxNamedImage {
   readonly path: string;
 }
 
@@ -2083,10 +2084,11 @@ export function postInboxItem(
   );
 }
 
-/** A post as the tool from version 5 writes one: the item's key and title, the agent's words in Markdown, the ask they end with, if any, and whether the agent is to hear the answer. */
+/** A post as the tool from version 5 writes one: the item's key, its title where the post names one, the agent's words in Markdown, the ask they end with, if any, and whether the agent is to hear the answer. */
 interface InboxThreadPost {
   readonly key: string;
-  readonly title: string;
+  /** The item's title; absent keeps the title of the item standing under the key, which a first post must name. */
+  readonly title?: string | undefined;
   readonly body: string;
   readonly ask?: InboxAsk | undefined;
   readonly needsReply?: boolean | undefined;
@@ -2130,8 +2132,10 @@ function followUp(
  * items than the bound. A post that asks nothing is a message on the
  * thread of the item standing under its key, as the agent's reply is,
  * which moves nothing of the item but its last change; under a key with
- * no item it opens a thread that waits on nobody. Refused where the agent
- * is no longer the account's.
+ * no item it opens a thread that waits on nobody. A post naming no title
+ * keeps the standing item's, read under the same lock; refused where no
+ * item stands under the key, which a first post opens and must name. Refused
+ * where the agent is no longer the account's.
  */
 export function postInboxThread(
   agent: InboxAgent,
@@ -2149,13 +2153,15 @@ export function postInboxThread(
             yield* followUp(agent, locked.value, standing.value.id, post, pictures),
           );
         }
+        const title = post.title ?? Option.getOrUndefined(standing)?.title;
+        if (title === undefined) return Result.fail(INBOX_POST_REFUSAL.NO_TITLE);
         if (post.ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
           return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
         }
         const now = yield* DateTime.nowAsDate;
         const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
-          title: post.title,
+          title,
           blocks: viewBlocks(post.body, post.ask, idOf),
           response:
             post.ask === undefined ? { type: INBOX_RESPONSE.NONE } : inboxAskResponse(post.ask),
@@ -2182,7 +2188,9 @@ export function readInboxAttachment(
 /**
  * The agent's item under the key closed with why, its revision moved on,
  * and the ask it held open withdrawn with the same why; nothing where it
- * has none under the key.
+ * has none under the key, or the item is not open, since an answered
+ * item's ask is no longer one to withdraw. Note that the status is checked
+ * in the write itself, so an answer that lands first is never closed over.
  */
 export function closeInboxItem(
   agent: Pick<InboxAgent, "userId" | "agentId">,
@@ -3033,11 +3041,11 @@ export function postInboxMessage(
 /** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
 const findAgentItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, title: Schema.String }),
   execute: ({ userId, agentId, key }) =>
     Database.use((db) =>
       db
-        .select({ id: inboxItem.id })
+        .select({ id: inboxItem.id, title: inboxItem.title })
         .from(inboxItem)
         .where(
           and(
