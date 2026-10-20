@@ -1019,11 +1019,15 @@ test("a planner page's journal of a turn longer than the bound says its older pa
 function liveMarkOf(reader: string, taskId: string) {
   return database.run(
     Effect.gen(function* () {
-      const statement = Option.getOrThrow(taskConversationLiveStatements(reader, taskId));
+      const statements = Option.getOrThrow(taskConversationLiveStatements(reader, taskId));
       const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql.unsafe(statement.mark.sql, [...statement.mark.params]);
-      return (yield* Schema.decodeUnknownEffect(taskConversationLiveRowsSchema)({ mark: rows }))
-        .mark;
+      const read = yield* Schema.decodeUnknownEffect(taskConversationLiveRowsSchema)({
+        mark: yield* sql.unsafe(statements.mark.sql, [...statements.mark.params]),
+        workers: yield* sql.unsafe(statements.workers.sql, [...statements.workers.params]),
+      });
+      // The workers are a part of their own, in no order, which the reader lists.
+      const workers = read.workers.map((worker) => worker.id).toSorted();
+      return read.mark.map(({ id: _plan, ...mark }) => ({ ...mark, workers }));
     }),
   );
 }

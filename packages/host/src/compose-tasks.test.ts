@@ -937,12 +937,17 @@ const SEALED_CONVERSATION: TaskConversationLiveAnswer = {
       queryFingerprint: "fingerprint-mark",
       expiresAt: NOW + 60_000,
     },
+    workers: {
+      capability: "capability-workers",
+      queryFingerprint: "fingerprint-workers",
+      expiresAt: NOW + 60_000,
+    },
   },
 };
 
 /** A conversation's mark as its row delivers it, at a sequence and with the newest turn's status. */
 function markRow(seq: number, turnStatus: string) {
-  return { seq, revision: seq, turnId: "turn-1", turnStatus, workers: [] };
+  return { id: INVITES, seq, revision: seq, turnId: "turn-1", turnStatus };
 }
 
 /** Realtime as a script: each subscription by its capability, and a way to deliver rows to one or stop it for good. */
@@ -963,23 +968,29 @@ function fakeRealtime() {
     }),
     close: () => void closed.push(url),
   });
-  /** The mark's subscription, once the host's follower has made it. */
-  const subscribed = Effect.gen(function* () {
-    for (let turn = 0; turn < 100; turn += 1) {
-      const listener = listeners.get("capability-mark");
-      if (listener !== undefined) return listener;
-      yield* Effect.yieldNow;
-    }
-    return assert.fail("the host never subscribed to the mark");
-  });
+  /** A part's subscription, once the host's follower has made it. */
+  const subscribed = (capability: string) =>
+    Effect.gen(function* () {
+      for (let turn = 0; turn < 100; turn += 1) {
+        const listener = listeners.get(capability);
+        if (listener !== undefined) return listener;
+        yield* Effect.yieldNow;
+      }
+      return assert.fail(`the host never subscribed to ${capability}`);
+    });
   return {
     open,
     closed,
-    /** The mark's rows delivered, as Realtime's snapshot carries them, once the host subscribed. */
-    deliver: (data: readonly unknown[]) =>
-      Effect.map(subscribed, (listener) => listener({ status: "live", data })),
+    /** The workers' rows and then the mark's delivered, as Realtime's snapshots carry them, once the host subscribed. */
+    deliver: (data: readonly unknown[], workers: readonly unknown[] = []) =>
+      Effect.gen(function* () {
+        (yield* subscribed("capability-workers"))({ status: "live", data: workers });
+        (yield* subscribed("capability-mark"))({ status: "live", data });
+      }),
     /** The mark's subscription stopped for good. */
-    fail: Effect.map(subscribed, (listener) => listener({ status: "error", data: [] })),
+    fail: Effect.map(subscribed("capability-mark"), (listener) =>
+      listener({ status: "error", data: [] }),
+    ),
   };
 }
 
@@ -1771,6 +1782,17 @@ it.effect(
       });
       yield* TestClock.adjust(Duration.minutes(5));
       assert.equal(conversations.asks.length, 2);
+
+      // A worker starting moves the mark though its row does not, and the same workers in another order do not.
+      yield* realtime.deliver([markRow(2, "running")], [{ id: "worker-b" }, { id: "worker-a" }]);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "2:2"]);
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([], "2:2", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* realtime.deliver([markRow(2, "running")], [{ id: "worker-a" }, { id: "worker-b" }]);
+      yield* TestClock.adjust(Duration.minutes(5));
+      assert.equal(conversations.asks.length, 3);
 
       yield* realtime.deliver([markRow(3, "settled")]);
       assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "2:2"]);

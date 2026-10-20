@@ -446,25 +446,26 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  */
 export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
-  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema }),
+  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema, workers: sealedLiveQuerySchema }),
 });
 
 export type TaskConversationLiveAnswer = typeof taskConversationLiveAnswerSchema.Type;
 
 /**
- * Where the conversation stands as its row delivers it: the highest message
- * sequence and the journal revision, the newest turn and its status (null
- * before the first), and the running workers' turns, by id.
+ * Where the conversation stands as its row delivers it, keyed by the plan:
+ * the highest message sequence and the journal revision, and the newest
+ * turn and its status (null before the first).
  */
 const taskConversationMarkSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
   seq: EffectSchema.Finite,
   revision: EffectSchema.Finite,
   turnId: EffectSchema.NullOr(EffectSchema.String),
   turnStatus: EffectSchema.NullOr(EffectSchema.String),
-  workers: EffectSchema.Array(EffectSchema.String),
 });
 
-/** The conversation's mark as Realtime delivers it: one row, or none for a plan the account no longer reaches. */
+/** The conversation's mark as Realtime delivers it, one row or none for a plan the account no longer reaches, and its running workers' turns, a row each by id, in no order. */
 export const taskConversationLiveRowsSchema = EffectSchema.Struct({
   mark: EffectSchema.Array(taskConversationMarkSchema),
+  workers: EffectSchema.Array(EffectSchema.Struct({ id: EffectSchema.String })),
 });

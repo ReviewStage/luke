@@ -6,6 +6,9 @@
       "items": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "seq": {
             "type": "number"
           },
@@ -31,27 +34,37 @@
                 "type": "null"
               }
             ]
-          },
-          "workers": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
+          "id",
           "seq",
           "revision",
           "turnId",
-          "turnStatus",
-          "workers"
+          "turnStatus"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "workers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
         ],
         "additionalProperties": false
       }
     }
   },
   "required": [
-    "mark"
+    "mark",
+    "workers"
   ],
   "additionalProperties": false
 }

@@ -160,9 +160,10 @@ const taskConversationLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskConversa
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
     const { seal, url } = sealing.value;
-    const queries = yield* Effect.all({ mark: seal(statements.value.mark) }).pipe(
-      Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-    );
+    const queries = yield* Effect.all({
+      mark: seal(statements.value.mark),
+      workers: seal(statements.value.workers),
+    }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
   },
 );

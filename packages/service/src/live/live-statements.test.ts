@@ -9,6 +9,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
 /**
@@ -31,6 +32,7 @@ function liveStatements() {
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
+  const conversation = Option.getOrThrow(taskConversationLiveStatements(USER_ID, randomUUID()));
   return {
     ...Object.fromEntries(
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
@@ -38,6 +40,9 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
+    ...Object.fromEntries(
+      Object.entries(conversation).map(([part, query]) => [`conversation.${part}`, query]),
+    ),
   };
 }
 

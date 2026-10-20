@@ -27,7 +27,7 @@ export type ConversationMark =
   | { readonly kind: "waiting" }
   | {
       readonly kind: "standing";
-      readonly rows: (typeof taskConversationLiveRowsSchema.Type)["mark"];
+      readonly rows: typeof taskConversationLiveRowsSchema.Type;
     }
   | { readonly kind: "broken" };
 
@@ -59,7 +59,17 @@ export function conversationMark(
       Stream.runForEach(rows, (read) =>
         Option.match(decode(read), {
           onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-          onSome: (decoded) => SubscriptionRef.set(mark, { kind: "standing", rows: decoded.mark }),
+          onSome: (decoded) =>
+            SubscriptionRef.set(mark, {
+              kind: "standing",
+              // Realtime keeps no order, so the workers are listed by id here.
+              rows: {
+                mark: decoded.mark,
+                workers: decoded.workers.toSorted((a, b) =>
+                  a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+                ),
+              },
+            }),
         }),
       ).pipe(Effect.catch(() => SubscriptionRef.set(mark, { kind: "broken" }))),
     );

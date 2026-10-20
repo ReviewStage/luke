@@ -366,9 +366,10 @@ export function brainPageNow(
   return Effect.flatMap(pagePast(target, after), (look) => pageOfLook(target, look));
 }
 
-/** The statement a plan's planning conversation is followed by live: its mark, one row. */
+/** The statements a plan's planning conversation is followed by live: its mark, one row, and its running workers' turns, a row each. */
 export interface TaskConversationLiveStatements {
   readonly mark: LiveStatement;
+  readonly workers: LiveStatement;
 }
 
 /** A conversation delegated from the one the mark is of: a worker's session. */
@@ -379,13 +380,16 @@ const workerConversation = alias(conversations, "worker_conversation");
  * one row that moves whenever `brainPagePast` would answer something it
  * had not, so a reader holding it asks the conversation only once it
  * moved, in one look (`brainPageNow`), rather than holding a read the
- * service looks again for every `BRAIN_POLL`. The row is the cursor
- * `messageCursorNow` reads (the highest sequence and the journal revision),
- * the newest turn and its status `brainStatusNow` reads, and the running
- * worker turns `runningChildTurns` reads, under the same account and rule
- * of who may read them; a plan the account no longer reaches is no row,
- * and one never planned on is the start, until its conversation opens.
- * None where the statement names a value Realtime cannot carry.
+ * service looks again for every `BRAIN_POLL`. The row, keyed by the plan,
+ * is the cursor `messageCursorNow` reads (the highest sequence and the
+ * journal revision) and the newest turn and its status `brainStatusNow`
+ * reads; beside it, `workers` is the running worker turns
+ * `runningChildTurns` reads, a row each keyed by the turn, which the reader
+ * lists, since Realtime takes no aggregate Postgres marks mutable. Both read
+ * under the same account and rule of who may read them; a plan the account
+ * no longer reaches is no row, and one never planned on is the start, until
+ * its conversation opens. None where a statement names a value Realtime
+ * cannot carry.
  */
 export function taskConversationLiveStatements(
   userId: string,
@@ -402,26 +406,14 @@ export function taskConversationLiveStatements(
       .where(and(eq(turns.conversationId, conversations.id), eq(turns.userId, userId)))
       .orderBy(desc(turns.queuedAt), desc(turns.id))
       .limit(1);
-  const runningWorkers = queryBuilder
-    .select({ ids: sql`jsonb_agg(${turns.id} order by ${turns.id})` })
-    .from(turns)
-    .innerJoin(workerConversation, eq(turns.conversationId, workerConversation.id))
-    .where(
-      and(
-        eq(workerConversation.parentConversationId, conversations.id),
-        eq(workerConversation.userId, userId),
-        isNull(workerConversation.deletedAt),
-        inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
-      ),
-    );
   const mark = queryBuilder
     .select(
       liveSelection({
+        id: task.id,
         seq: sql<number>`coalesce((${highestSeq}), 0)::float8`,
         revision: sql<number>`coalesce(${conversations.journalRevision}, 0)::float8`,
         turnId: sql<string | null>`(${newestTurn(turns.id)})::text`,
         turnStatus: sql<string | null>`(${newestTurn(turns.status)})`,
-        workers: sql`coalesce((${runningWorkers}), '[]'::jsonb)`,
       }),
     )
     .from(task)
@@ -434,7 +426,23 @@ export function taskConversationLiveStatements(
       ),
     )
     .where(reachableTask(userId, taskId));
-  return Option.map(liveStatementOf(mark), (statement) => ({ mark: statement }));
+  const workers = queryBuilder
+    .select(liveSelection({ id: turns.id }))
+    .from(turns)
+    .innerJoin(workerConversation, eq(turns.conversationId, workerConversation.id))
+    .innerJoin(conversations, eq(conversations.id, workerConversation.parentConversationId))
+    .innerJoin(task, eq(task.conversationId, conversations.id))
+    .where(
+      and(
+        reachableTask(userId, taskId),
+        eq(conversations.userId, userId),
+        isNull(conversations.deletedAt),
+        eq(workerConversation.userId, userId),
+        isNull(workerConversation.deletedAt),
+        inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+      ),
+    );
+  return Option.all({ mark: liveStatementOf(mark), workers: liveStatementOf(workers) });
 }
 
 /**

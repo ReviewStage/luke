@@ -27,10 +27,32 @@
             "expiresAt"
           ],
           "additionalProperties": false
+        },
+        "workers": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "mark"
+        "mark",
+        "workers"
       ],
       "additionalProperties": false
     }

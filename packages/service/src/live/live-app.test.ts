@@ -214,6 +214,14 @@ it.layer(getTestDB())("the live reads", (it) => {
         assert.equal(answer.url, REALTIME_URL);
         assert.ok(answer.queries.mark.capability.includes(`"${owner}"`), "read for the bearer");
         assert.ok(answer.queries.mark.capability.includes(`"${task.id}"`), "read of the plan");
+        assert.ok(
+          answer.queries.workers.capability.includes(`"${owner}"`),
+          "workers for the bearer",
+        );
+        assert.ok(
+          answer.queries.workers.capability.includes(`"${task.id}"`),
+          "workers of the plan",
+        );
         assert.deepEqual(yield* ask({ bearer: stranger, path, sealing: Option.some(SCRIPTED) }), {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
