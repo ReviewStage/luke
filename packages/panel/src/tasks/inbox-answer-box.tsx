@@ -372,11 +372,12 @@ function AnswerCard({
   const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
   const note =
     noted?.words ?? refusal ?? (AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined);
-  // Note that the note is let go once the agent is back, since what it said no longer stands.
+  // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) control.onDropNote(item.id);
-      else toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      } else if (kept !== undefined) control.onDropNote(item.id, kept);
     });
   const answer = () => {
     setRefusal(undefined);

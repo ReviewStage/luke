@@ -4455,6 +4455,57 @@ test("a message refused as naming no agent says the agent is archived where it i
   assert.equal(goneItem.querySelector(".agent-composer-note button"), null, "nothing to unarchive");
 });
 
+test("an Unarchive that lands after another send was refused lets only the archived note go, so the newer refusal still says why", async () => {
+  listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  let refusal:
+    | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
+    | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED = CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+  heldMessages(() => ({ failure: refusal }));
+  let land: () => void = () => undefined;
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      // Held until the test lands it, after the second send was refused.
+      return new Promise((resolve) => {
+        land = () => {
+          listedAgents = [back];
+          resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
+        };
+      });
+    },
+  });
+  const pane = itemPane(page);
+  const note = () => pane.querySelector('.agent-composer [role="alert"]')?.textContent;
+  const send = () =>
+    act(() => pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+
+  typeInComposer(pane, "Page on-call at night too.");
+  send();
+  await settle();
+  const unarchive = [
+    ...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button"),
+  ].find((button) => button.textContent === "Unarchive");
+  act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
+  refusal = CODING_AGENT_CALL_FAILURE.UNANSWERED;
+  send();
+  await settle();
+  const newer = note();
+  assert.notEqual(newer, undefined, "the second send says why it did not go");
+
+  act(() => land());
+  await settle();
+
+  assert.equal(note(), newer, "the newer refusal stands once the agent is back");
+});
+
 test("files alone make a message: sent from a settled item's box with no words, and drawn on the thread as the files alone", async () => {
   const { page } = mount();
   await settle();

@@ -145,8 +145,8 @@ export interface TaskInboxControl {
   readonly sending: ReadonlySet<string>;
   /** Why an answer did not go, or was not taken, by item, said on its card until the next send. */
   readonly notes: ReadonlyMap<string, InboxNote>;
-  /** Lets go of an item's note once what it said no longer stands, as an agent unarchived from it. */
-  readonly onDropNote: (itemId: string) => void;
+  /** Lets go of an item's note once what it said no longer stands, as an agent unarchived from it; nothing where a later send has said something else since. */
+  readonly onDropNote: (itemId: string, note: InboxNote) => void;
   /** What the developer has put on the item's card so far, at the revision it stands at; an empty card where nothing, or where the agent has changed the item since. */
   readonly draftOf: (item: InboxItem) => InboxDraft;
   /** Keeps what the developer has put on the item's card, at its revision. */
@@ -367,7 +367,14 @@ export function useTaskInbox(input: {
       return next;
     });
   }, []);
-  const onDropNote = useCallback((itemId: string) => note(itemId, undefined), [note]);
+  const onDropNote = useCallback((itemId: string, said: InboxNote) => {
+    setNotes((was) => {
+      if (was.get(itemId) !== said) return was;
+      const next = new Map(was);
+      next.delete(itemId);
+      return next;
+    });
+  }, []);
 
   // Note that a refusal naming no agent may be an archive the list has not read yet, so the agents are read again for the card to say which.
   const refused = useCallback(
