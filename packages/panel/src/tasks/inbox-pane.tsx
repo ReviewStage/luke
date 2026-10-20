@@ -2426,6 +2426,7 @@ export function InboxPane({
               keywords={answerKeywords(holder, item)}
               replyScope={board}
               onMissing={(missing) => focusMissing(pane.current, missing)}
+              onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
             />
           </AnswerMentions>
         )}

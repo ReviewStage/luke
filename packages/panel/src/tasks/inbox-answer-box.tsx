@@ -14,6 +14,7 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  ErrorState,
   IconButton,
   PlusIcon,
   SUBMIT_STATE,
@@ -21,6 +22,7 @@ import {
   Text,
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
 import {
@@ -35,6 +37,7 @@ import { imageFiles } from "../feedback-images.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
 import { Shortcut } from "../shortcut.js";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -48,6 +51,7 @@ import {
   type InboxMissing,
   inboxMessageOf,
   inboxMissing,
+  inboxNoteReading,
   inboxReply,
   inboxThreadSend,
   openAskOf,
@@ -101,7 +105,9 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * A card whose agent need not hear back says whether its answer will
  * message the agent: a bare answer does not, and a typed note or an attached
  * file does. Why an answer did not go, a file did not come, or a dictation
- * left nothing, is said under the card.
+ * left nothing, is said under the card. A send refused because the agent is
+ * archived says so, with Unarchive after it, which brings the agent back and
+ * lets the note go, so the words kept in the box are sent again by a press.
  *
  * Once the item is settled, answered or taken back, the same box writes a
  * message on its thread instead, "Message <agent>…": words, files, or
@@ -171,6 +177,9 @@ function messagePlaceholder(agentName: string): string {
 
 /** What the box says of files read for an item its agent changed before they landed. */
 const ITEM_CHANGED = "The agent changed this item while your files were read. Attach them again.";
+
+/** What the press after an archived agent's note says. */
+const UNARCHIVE = "Unarchive";
 
 /** What the box's + is called, which is its tooltip too. */
 const ATTACH = "Attach files";
@@ -288,6 +297,8 @@ interface AnswerBoxProps {
   replyScope: RefObject<HTMLElement | null>;
   /** Takes the keyboard to what a send found the answer lacking, in the item's question or in the box. */
   onMissing: (missing: InboxMissing) => void;
+  /** Brings the item's agent back from the archive, offered after a send it refused for being archived. */
+  onUnarchiveAgent: () => Promise<ActionResult>;
 }
 
 /** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
@@ -301,8 +312,10 @@ function AnswerCard({
   keywords,
   replyScope,
   onMissing,
+  onUnarchiveAgent,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
+  const toast = useToast();
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -355,10 +368,17 @@ function AnswerCard({
     onNote: setRefusal,
   });
   const { dictation, dictating } = pickers;
+  const kept = control.notes.get(item.id);
+  const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
   const note =
-    control.notes.get(item.id) ??
-    refusal ??
-    (AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined);
+    noted?.words ?? refusal ?? (AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined);
+  // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
+  const unarchive = () =>
+    void onUnarchiveAgent().then((result) => {
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      } else if (kept !== undefined) control.onDropNote(item.id, kept);
+    });
   const answer = () => {
     setRefusal(undefined);
     control.onAnswer(item, draft);
@@ -570,7 +590,11 @@ function AnswerCard({
       ) : (
         <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
       )}
-      {note === undefined ? null : (
+      {note === undefined ? null : noted?.unarchive === true ? (
+        <div className="agent-composer-note">
+          <ErrorState remedy={{ label: UNARCHIVE, onClick: unarchive }}>{note}</ErrorState>
+        </div>
+      ) : (
         <p className="error-message agent-composer-note" role="alert">
           {note}
         </p>

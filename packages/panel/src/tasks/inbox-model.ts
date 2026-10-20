@@ -1,5 +1,9 @@
 import type { FileChip } from "@luke/features/attachment-model";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
+} from "@luke/features/coding-agent-view";
+import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   inboxAttachmentOf,
@@ -93,6 +97,39 @@ export interface InboxDraft {
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
+
+/** Why a card's last send did not go, or was not taken: its words, and the refusal they say where the service refused it. */
+export interface InboxNote {
+  readonly words: string;
+  readonly failure?: CodingAgentCallFailure | undefined;
+}
+
+/** What a card says under its box: the note's words, and whether Unarchive follows them. */
+export interface InboxNoteReading {
+  readonly words: string;
+  readonly unarchive: boolean;
+}
+
+/** What a card says of a send refused because its agent is archived on its own. */
+const AGENT_ARCHIVED_NOTE = "This agent is archived.";
+
+/**
+ * What a card says of its last send, by its agent as the window lists it.
+ * Note that the service refuses a send to an agent archived on its own as
+ * one that names nothing, so a refusal naming no agent says the agent is
+ * archived, with Unarchive after it, where the list reads it archived, and
+ * that the agent no longer exists only where it does not.
+ */
+export function inboxNoteReading(
+  note: InboxNote,
+  agent: CodingAgentSummary | undefined,
+): InboxNoteReading {
+  const archived =
+    note.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
+  return archived
+    ? { words: AGENT_ARCHIVED_NOTE, unarchive: true }
+    : { words: note.words, unarchive: false };
+}
 
 /** One file an answer or a message on the thread carried, as an item read names it. */
 type InboxFile = NonNullable<InboxItem["answerFiles"]>[number];
