@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { AVATAR_FEED_KIND } from "@luke/voice/avatar";
-import type { UnparsedWireValue } from "@luke/wire";
 import { describe, it } from "vitest";
-import { channels } from "./bridge.js";
+import { PUSH } from "./contract/pushes.js";
 import { type AvatarPage, PanelAvatarRelay } from "./panel-avatar.js";
 
 const GRANT: AvatarGrant = {
@@ -14,13 +13,13 @@ const GRANT: AvatarGrant = {
 
 interface Sent {
   channel: string;
-  payload: UnparsedWireValue;
+  payload: unknown;
 }
 
 /** A page that records what it was sent, standing for one renderer's `webContents`. */
 function page(): AvatarPage & { sent: Sent[] } {
   const sent: Sent[] = [];
-  return { sent, send: (channel, payload) => sent.push({ channel, payload }) };
+  return { sent, push: (channel, payload) => sent.push({ channel, payload }) };
 }
 
 /** The windows main holds during a call: the panel's page, the floating call window's, and the voice window's. */
@@ -49,9 +48,9 @@ describe("the call's avatar relay", () => {
     w.relay.feedAvatar({ kind: AVATAR_FEED_KIND.TURN_END });
     w.relay.showAvatarSession(undefined);
     assert.deepEqual(w.panel.sent, [
-      { channel: channels.onAvatarSession, payload: GRANT },
-      { channel: channels.onAvatarFeed, payload: { kind: AVATAR_FEED_KIND.TURN_END } },
-      { channel: channels.onAvatarSession, payload: undefined },
+      { channel: PUSH.AVATAR_SESSION, payload: GRANT },
+      { channel: PUSH.AVATAR_FEED, payload: { kind: AVATAR_FEED_KIND.TURN_END } },
+      { channel: PUSH.AVATAR_SESSION, payload: undefined },
     ]);
     assert.deepEqual(w.call.sent, []);
     assert.deepEqual(w.voice.sent, []);
@@ -63,7 +62,7 @@ describe("the call's avatar relay", () => {
     w.relay.feedAvatar({ kind: AVATAR_FEED_KIND.INTERRUPT });
     w.draw(w.panel);
     w.relay.pageDrew();
-    assert.deepEqual(w.panel.sent, [{ channel: channels.onAvatarSession, payload: GRANT }]);
+    assert.deepEqual(w.panel.sent, [{ channel: PUSH.AVATAR_SESSION, payload: GRANT }]);
   });
 
   it("hands a page that reloads mid-call the grant standing again", () => {
@@ -72,8 +71,8 @@ describe("the call's avatar relay", () => {
     w.relay.showAvatarSession(GRANT);
     w.relay.pageDrew();
     assert.deepEqual(w.panel.sent, [
-      { channel: channels.onAvatarSession, payload: GRANT },
-      { channel: channels.onAvatarSession, payload: GRANT },
+      { channel: PUSH.AVATAR_SESSION, payload: GRANT },
+      { channel: PUSH.AVATAR_SESSION, payload: GRANT },
     ]);
   });
 

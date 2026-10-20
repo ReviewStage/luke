@@ -21,6 +21,7 @@ import {
   type PlatformActProcedures,
   type TaskIssueProceduresDependencies,
   type TasksProceduresDependencies,
+  WindowPushes,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -137,6 +138,7 @@ function windowPort(
       ...unreached,
       ...elsewhere,
       issues: NO_ISSUES,
+      pushes: new WindowPushes(),
       taskIssues: { host },
       tasks,
       workspaces: NO_WORKSPACES,

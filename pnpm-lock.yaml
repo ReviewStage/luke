@@ -34,6 +34,9 @@ catalogs:
     '@orpc/openapi':
       specifier: 2.0.0-beta.44
       version: 2.0.0-beta.44
+    '@orpc/publisher':
+      specifier: 2.0.0-beta.44
+      version: 2.0.0-beta.44
     '@orpc/server':
       specifier: 2.0.0-beta.44
       version: 2.0.0-beta.44
@@ -816,6 +819,9 @@ importers:
       '@orpc/experimental-effect':
         specifier: 'catalog:'
         version: 2.0.0-beta.44(crossws@0.4.12)(effect@4.0.4)
+      '@orpc/publisher':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44(redis@6.2.1)
       '@orpc/server':
         specifier: 'catalog:'
         version: 2.0.0-beta.44(crossws@0.4.12)
@@ -2707,6 +2713,17 @@ packages:
       '@types/swagger-ui':
         optional: true
       swagger-ui:
+        optional: true
+
+  '@orpc/publisher@2.0.0-beta.44':
+    resolution: {integrity: sha512-45BY3BTHAauUFFTekKfKnNkD8eHiJUQRMtwe7c+MeLswwjsqV586rCSXMBcLHXb9AhBqAXHxualwO82oNsrBoA==}
+    peerDependencies:
+      '@upstash/redis': '>=1.35.6'
+      redis: '>=6.0.0'
+    peerDependenciesMeta:
+      '@upstash/redis':
+        optional: true
+      redis:
         optional: true
 
   '@orpc/server@2.0.0-beta.44':
@@ -9329,6 +9346,14 @@ snapshots:
     transitivePeerDependencies:
       - crossws
       - fastify
+
+  '@orpc/publisher@2.0.0-beta.44(redis@6.2.1)':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.44
+      '@orpc/shared': 2.0.0-beta.44
+      '@standard-server/core': 0.10.3
+    optionalDependencies:
+      redis: 6.2.1(@opentelemetry/api@1.9.1)
 
   '@orpc/server@2.0.0-beta.44(crossws@0.4.12)':
     dependencies:

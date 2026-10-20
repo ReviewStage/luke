@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@luke/wire";
 import { test } from "vitest";
-import { BRIDGE } from "./bridge.js";
+import { PUSH, PUSH_GUARD } from "./contract/index.js";
 
 /** A chat message main tells the window is waiting, as `toastChatMessage` sends it. */
 const WAITING = {
@@ -13,7 +13,7 @@ const WAITING = {
 };
 
 test("a waiting chat message reaches the window under its task, or under none, and one naming neither is dropped", () => {
-  const passes = (value: UnparsedWireValue) => BRIDGE.onChatMessageWaiting.result?.(value);
+  const passes = (value: UnparsedWireValue) => PUSH_GUARD[PUSH.CHAT_MESSAGE_WAITING](value);
   assert.equal(passes(WAITING), true);
   assert.equal(passes({ ...WAITING, taskId: null }), true);
   const { taskId: _taskId, ...unplaced } = WAITING;
