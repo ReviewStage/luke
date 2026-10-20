@@ -67,7 +67,7 @@ import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-st
 import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
-import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
+import { EDITOR_PLACE, type PlanEditDoor, TAP_ROOM, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 
 /**
@@ -843,13 +843,21 @@ export function PlanBody({
   // A press on the document's empty room opens its text there, at its end
   // where it lands under the last line, or anywhere on a plan with no text
   // yet, which has no section to click into; the open editor's own room
-  // moves its caret (`PlanDocumentEditor`).
+  // moves its caret (`PlanDocumentEditor`). A finger opens it at a second
+  // tap on the room, as it does a block.
   useTextRoom({
     text: body,
     box: () => textBoxOf(body.current),
     room: scroller,
     open: false,
-    onPlace: editable && editing.editor === undefined ? editing.open : undefined,
+    onPlace:
+      editable && editing.editor === undefined
+        ? (placement, at) => {
+            // Note that a plan with no text yet opens at a finger's first tap, since it has nothing to read.
+            const empty = textBoxOf(body.current) === undefined;
+            if (empty || editing.tapped(TAP_ROOM, at)) editing.open(placement);
+          }
+        : undefined,
   });
   // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
   const [renaming, setRenaming] = useState(0);
