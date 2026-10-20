@@ -19,7 +19,6 @@ import type {
   CodingAgentChatAnswerView,
   CodingAgentChatAttachmentParams,
   CodingAgentChatChanged,
-  CodingAgentChatParams,
   CodingAgentChatPostParams,
   CodingAgentChatWriteAnswerView,
   CodingAgentInboxAnsweredView,
@@ -69,7 +68,6 @@ export interface AgentInboxProceduresDependencies {
     codingAgentPicture(
       params: CodingAgentPictureParams,
     ): Effect.Effect<CodingAgentInboxAttachmentView>;
-    codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
     codingAgentChatPost(
       params: CodingAgentChatPostParams,
     ): Effect.Effect<CodingAgentChatWriteAnswerView>;
@@ -236,12 +234,6 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.codingAgentPicture(input);
-    }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentChat(input);
     }),
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -77,7 +77,7 @@ const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
 const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
 
 /** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
-const CHAT = {
+const _CHAT = {
   self: MEMBER_ID,
   readSeq: 0,
   members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, name: "Ada", left: false }],
@@ -576,11 +576,6 @@ function fakeService() {
         asked.push(`account-inbox:${after}`);
         return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
-    chat: (workspaceId, after) =>
-      Effect.sync(() => {
-        asked.push(`chat:${workspaceId}:${after}`);
-        return CHAT;
-      }),
     chatPost: (workspaceId, write) =>
       Effect.sync(() => {
         asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
@@ -1007,13 +1002,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
-        workspaceId: WORKSPACE_ID,
-        after: CHAT_CURSOR_START,
-      }),
-      CHAT,
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
         workspaceId: WORKSPACE_ID,
         write: { readTo: 4 },
@@ -1073,7 +1061,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
       `account-inbox:${INBOX_CURSOR_START}`,
-      `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
       `chat-attachment:${WORKSPACE_ID}:message-1:${ATTACHMENT_ID}`,
     ]);

@@ -31,7 +31,6 @@ import {
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
-  codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -188,7 +187,6 @@ export type CodingAgentClient = Pick<
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
-  | "chat"
   | "chatPost"
   | "chatJoin"
   | "workspaceChatLive"
@@ -842,16 +840,6 @@ function composed(
         );
         const answer = yield* asked(client.markInboxRead(request));
         return carried<CodingAgentInboxReadAllView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CHAT]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, after } = yield* read(
-          codingAgentChatParamsSchema,
-          params,
-          "reading a workspace's chat names the workspace and a cursor",
-        );
-        const answer = yield* asked(client.chat(workspaceId, after));
-        return carried<CodingAgentChatAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>
       Effect.gen(function* () {

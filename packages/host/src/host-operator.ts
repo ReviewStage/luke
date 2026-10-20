@@ -35,10 +35,8 @@ import {
   type CodingAgentArchiveParams,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
   type CodingAgentChatChanged,
-  type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
@@ -89,7 +87,6 @@ import {
   codingAgentAgentAnswerSchema,
   codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
-  codingAgentChatAnswerViewSchema,
   codingAgentChatChangedSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
@@ -760,8 +757,6 @@ export interface HostOperator {
   codingAgentPicture(
     params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
-  /** A workspace's chat past a cursor, held by the service while nothing moved; or why there is none. */
-  codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
   /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
   codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
   /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
@@ -2154,14 +2149,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
-      ),
-    codingAgentChat: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
-          workspaceId: params.workspaceId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentChatAnswerViewSchema),
       ),
     codingAgentChatFollow: (workspaceId) =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),

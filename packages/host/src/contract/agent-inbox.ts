@@ -20,10 +20,8 @@
 import {
   type CodingAgentChatAnswerView,
   codingAgentAgentInboxParamsSchema,
-  codingAgentChatAnswerViewSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
-  codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentInboxAnsweredViewSchema,
@@ -92,11 +90,6 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentPictureParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT]: actProcedure(
-    "Could not read the workspace's chat on this system.",
-  )
-    .input(exactInput(codingAgentChatParamsSchema))
-    .output(EffectSchema.toType(codingAgentChatAnswerViewSchema)),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST]: actProcedure(
     "Could not write to the workspace's chat on this system.",
   )
