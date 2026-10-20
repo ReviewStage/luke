@@ -806,21 +806,6 @@ export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefin
   return { tone, words: PRESS_WORDS[answers.reply] };
 }
 
-/**
- * What a settled ask's line says its answerer did, after who they are:
- * "requested changes", "chose 7 days", "marked it done", or what any other
- * answer is called on an item (`REPLY_WORDS`).
- */
-export function answeredWords(answers: InboxAnswers, ask: InboxReadAsk | undefined): string {
-  const pick = buttonPick(answers, ask);
-  const done = pick === undefined ? undefined : DONE_WORDS.get(pick.label);
-  if (done !== undefined) return done.toLowerCase();
-  if (answers.reply === INBOX_REPLY.CHOSE) {
-    return `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answers.choices ?? []).join(", ")}`;
-  }
-  return REPLY_WORDS[answers.reply];
-}
-
 /** The message that answers an ask, where the thread read carries it. */
 export function answerOf(
   thread: readonly InboxMessage[],

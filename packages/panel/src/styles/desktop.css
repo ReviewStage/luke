@@ -3591,9 +3591,9 @@ ul.actor-stack {
 
 /* The ask closing the message that asks it: a bordered card, its head the
    ask's kind and where it stands, its controls under a hairline while it
-   waits, and once answered, under the same hairline, as the answer left
-   them. A replaced or withdrawn ask is its head alone, a replaced one
-   struck through. */
+   waits. Once answered, the card heads the reply that answered it, its
+   controls under the same hairline as the answer left them. A replaced or
+   withdrawn ask is its head alone, a replaced one struck through. */
 .inbox-ask {
   display: flex;
   min-width: 0;

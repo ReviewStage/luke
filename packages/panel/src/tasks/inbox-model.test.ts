@@ -21,7 +21,6 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   ANSWER_TONE,
-  answeredWords,
   attachedStamp,
   CODE_READ,
   codeNotice,
@@ -1388,7 +1387,6 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
     tone: ANSWER_TONE.BACK,
     words: "Request changes",
   });
-  assert.equal(answeredWords(chose("Request changes"), pair), "requested changes");
   assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
   assert.equal(attachedStamp(chose("7 days"), undefined).words, 'Choose "7 days"');
 

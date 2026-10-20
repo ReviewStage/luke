@@ -92,7 +92,6 @@ import {
   ANSWER_TONE,
   type AnswerTone,
   answeredDraft,
-  answeredWords,
   answerOf,
   archivedHolder,
   askNumberedPick,
@@ -186,14 +185,18 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * docked under the thread for the note, and every item is sent by its one
  * Send, a note's reading "Got it" until a word is written. A card whose
  * agent need not hear back says whether its answer will message the agent:
- * a bare answer does not, and a typed note does. Once the item is settled,
- * what it offered folds to one line saying who picked which, which opens
- * to the options, or the decisions it was answered by, with the developer's
- * pick marked and the rest stepped back; the developer's answer follows as
- * their comment, when and whether it reached the agent as a message or was
- * kept for it to read, then what they picked as a chip and what they
+ * a bare answer does not, and a typed note does. Once the item is
+ * answered, the developer's answer follows as their comment, when and
+ * whether it reached the agent as a message or was kept for it to read,
+ * then the question's own controls as the answer left them, read-only and
+ * at full strength (a choice's options with the pick checked, an
+ * approval's or a to-do's cards with the decision checked, a form's fields
+ * filled in, empty where left empty), or what they did as a chip where
+ * the question has none, then what they
  * wrote, their note drawn as the agent's tab draws a sent message, its
- * mentions chips; or the agent's comment says it took the item back, and
+ * mentions chips; or, the item taken back or its answer not read, what it
+ * offered folds to one line, which opens to the options; or the agent's
+ * comment says it took the item back, and
  * why. The thread's messages, a member's or the agent's, written at any
  * point, stand among these comments in the order they were written, each
  * by its writer's face and name, its files and its words drawn as an
@@ -222,13 +225,17 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * `inboxThreadOf`): under its title alone, every message, oldest first,
  * each a Markdown document by its writer's face and name, drawn with the
  * item's own pictures, pairs, and lone-link cards, and its files. A member's answer
- * leads with its stamp (`inbox-stamp.tsx`). An agent's message that asks
+ * leads with the ask's card it answered, its kind and how it was answered
+ * at its head and its controls under it as the answer left them,
+ * read-only; where the thread read no longer carries the ask, it leads
+ * with its stamp (`inbox-stamp.tsx`) and its values listed. An agent's message that asks
  * ends with the ask's box: its kind and where it stands at its head, and
  * while it waits its controls, a `decide`'s numbered options or two small
  * buttons, a `do`'s steps with Mark done and Couldn't do it, an `answer`'s
  * fields with Submit or its Answer; each attaches its answer to the box's
- * reply rather than sending it. Settled, it is one line saying who answered
- * and how; replaced, it is struck through; withdrawn, it says why, or who
+ * reply rather than sending it. Answered, it leaves the agent's message
+ * for the reply that answered it, or says "Answered" alone where that
+ * reply is no longer read; replaced, it is struck through; withdrawn, it says why, or who
  * closed the item.
  *
  * Words selected in what the agent wrote, its question's Markdown, its
@@ -814,16 +821,23 @@ function drawsAnswered(item: InboxItem): boolean {
 function heldStill(): void {}
 
 /**
- * What a settled item's question ends with: where it was answered and its
- * read carries the answer, its controls as they stood when it was sent,
- * read-only (`ResponseControls`); otherwise what it offered, folded
- * (`Offered`), as one taken back or one whose answer the read lacks.
+ * What a settled item's question ends with: nothing where it was answered
+ * and its read carries the answer, which the answer's comment draws in the
+ * question's controls (`AnsweredResponse`); otherwise what it offered,
+ * folded (`Offered`), as one taken back or one whose answer the read lacks.
  */
 function SettledResponse({ item }: { item: InboxItem }): React.JSX.Element | null {
-  if (!drawsAnswered(item) || item.answer === undefined) {
-    // Keyed by its item, so the fold opened on one item stands closed on the next.
-    return <Offered key={item.id} item={item} />;
-  }
+  // Keyed by its item, so the fold opened on one item stands closed on the next.
+  return drawsAnswered(item) ? null : <Offered key={item.id} item={item} />;
+}
+
+/**
+ * A settled item's answer as the question's own controls, read-only, as
+ * they stood when it was sent (`ResponseControls`), which leads the
+ * answerer's comment; nothing where its read lacks the answer.
+ */
+function AnsweredResponse({ item }: { item: InboxItem }): React.JSX.Element | null {
+  if (!drawsAnswered(item) || item.answer === undefined) return null;
   return (
     // Note that it is no `inbox-response`, which the pane stands over the box as the question an open item waits on.
     <div data-inbox-answered="">
@@ -1296,6 +1310,7 @@ function Answered({
         </>
       }
     >
+      <AnsweredResponse item={item} />
       {pick === undefined ? null : (
         <span className="inbox-pick" data-inbox-pick="">
           <CheckIcon aria-hidden="true" />
@@ -1968,30 +1983,38 @@ function AskAnswered({
   }
 }
 
-/** How a settled ask's one line reads: who answered and how, with the answer's glyph; or that it was answered where the thread no longer carries the answer. */
-function AnsweredLine({
+/**
+ * The ask a member's reply answered, at the head of that reply under their
+ * face and name: the ask's card, its kind and how it was answered at its
+ * head, "Chose 7 days" or "Couldn't do it 1/3" with the answer's glyph,
+ * and its controls under it as the answer left them (`AskAnswered`). It
+ * stands in the reply's stamp's place, marking the message as the answer.
+ */
+function AnsweredCard({
   ask,
-  answer,
+  title,
+  answers,
 }: {
-  ask: InboxReadAsk;
-  answer: InboxMessage | undefined;
+  ask: InboxKnownAsk;
+  title: string;
+  answers: InboxAnswers;
 }): React.JSX.Element {
-  const answerer = usePerson(answer?.member);
-  const answers = answer?.answers;
-  if (answers === undefined) return <span className="inbox-ask-standing">{ANSWERED}</span>;
-  const tone = sentStamp(answers, ask).tone;
+  const stamp = sentStamp(answers, ask);
   return (
-    <span className="inbox-ask-standing" data-tone={tone}>
-      {tone === ANSWER_TONE.AHEAD ? (
-        <CheckIcon aria-hidden="true" />
-      ) : (
-        <Undo2Icon aria-hidden="true" />
-      )}
-      <ActorLine>
-        <ActorRef actor={answerer} nameOnly />
-        {` ${answeredWords(answers, ask)}`}
-      </ActorLine>
-    </span>
+    <div className="inbox-ask" data-inbox-ask={INBOX_ASK_STATUS.ANSWERED}>
+      <div className="inbox-ask-head">
+        <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
+        <span className="inbox-ask-standing" data-tone={stamp.tone}>
+          {stamp.tone === ANSWER_TONE.AHEAD ? (
+            <CheckIcon aria-hidden="true" />
+          ) : (
+            <Undo2Icon aria-hidden="true" />
+          )}
+          {stamp.words}
+        </span>
+      </div>
+      <AskAnswered ask={ask} title={title} answers={answers} />
+    </div>
   );
 }
 
@@ -2029,9 +2052,9 @@ function WithdrawnLine({
 /**
  * The box closing a message that asks: a card whose head says what it asks
  * and where it stands, "Waiting on you" while it waits, its controls under
- * it; once answered, a line saying who answered and how over its controls
- * as the answer left them (`AskAnswered`), or that line alone where the
- * thread read no longer carries the answer; a replaced ask
+ * it; once answered, nothing, the card standing at the head of the reply
+ * that answered it (`AnsweredCard`), or "Answered" alone where the thread
+ * read no longer carries that reply; a replaced ask
  * struck through and marked so; a withdrawn one with why, or who closed the
  * item; and an ask this build does not know a line naming a newer Luke.
  */
@@ -2053,7 +2076,7 @@ function AskBox({
   /** What the open ask's controls press, where it is open; none for a settled one. */
   doors: AskDoors | undefined;
   pane: React.RefObject<HTMLElement | null>;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   if (!knownAsk(ask)) {
     return (
       <div className="inbox-ask" data-inbox-ask="newer">
@@ -2065,8 +2088,9 @@ function AskBox({
     );
   }
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
-  const answer =
-    ask.status === INBOX_ASK_STATUS.ANSWERED ? answerOf(thread, message.id) : undefined;
+  // The card goes with the reply that answered it, wherever the thread read still carries that reply.
+  const answered = ask.status === INBOX_ASK_STATUS.ANSWERED;
+  if (answered && answerOf(thread, message.id)?.answers !== undefined) return null;
   const drafted = open ? doors?.draft : undefined;
   const head = askHeadWords(ask, drafted === undefined ? undefined : (drafted.steps ?? []));
   const standing = (() => {
@@ -2074,7 +2098,7 @@ function AskBox({
       case INBOX_ASK_STATUS.OPEN:
         return <Waiting on={waitingOn} />;
       case INBOX_ASK_STATUS.ANSWERED:
-        return <AnsweredLine ask={ask} answer={answer} />;
+        return <span className="inbox-ask-standing">{ANSWERED}</span>;
       case INBOX_ASK_STATUS.REPLACED:
         return <span className="inbox-ask-standing">{REPLACED}</span>;
       case INBOX_ASK_STATUS.WITHDRAWN:
@@ -2093,9 +2117,6 @@ function AskBox({
           <AskControls ask={ask} title={cardTitle(item.title)} doors={doors} />
         </div>
       ) : null}
-      {answer?.answers === undefined ? null : (
-        <AskAnswered ask={ask} title={cardTitle(item.title)} answers={answer.answers} />
-      )}
     </div>
   );
 }
@@ -2114,11 +2135,12 @@ const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
 /**
  * One message of a thread from version 5, a Markdown document, as its
  * writer's comment: a member by their face and name, the agent by its tile
- * and name and a quiet "agent" after it, then when. An answer leads with its
- * stamp, a form's values under it only where the thread read no longer
- * carries the ask, whose box draws them filled in, then the files it carried and its words,
+ * and name and a quiet "agent" after it, then when. An answer leads with
+ * the card of the ask it answered, filled in as it was answered
+ * (`AnsweredCard`), or, where the thread read no longer carries that ask,
+ * its stamp and its values listed; then the files it carried and its words,
  * the agent's drawn as its question's are and a member's as a sent message's;
- * an agent's message that asks ends with its ask's box.
+ * an agent's message that asks ends with its ask's box, until it is answered.
  */
 function ThreadMessage({
   item,
@@ -2161,13 +2183,13 @@ function ThreadMessage({
         </>
       }
     >
-      {answers === undefined ? null : (
+      {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
+        <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
+      ) : (
         <>
+          {/* Where the thread read no longer carries the ask, or this build does not know it, the answer is its stamp and its values listed. */}
           <InboxStamp stamp={sentStamp(answers, answered)} />
-          {/* The values stand in the ask's own fields, filled in, wherever the thread read still carries it. */}
-          {answered === undefined ? (
-            <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
-          ) : null}
+          <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
       <CommentFiles
