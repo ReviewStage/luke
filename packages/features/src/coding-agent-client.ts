@@ -84,7 +84,7 @@ import {
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
-import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
+import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
@@ -526,10 +526,7 @@ export class HostedCodingAgentClient {
 
   /** The member's own GitHub token, as what tells it apart; never the token. */
   readGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN }),
-      (answer) => readAnswer(answer, githubTokenAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.githubToken.read, undefined), {});
   }
 
   /**
@@ -542,22 +539,12 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(githubTokenSaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.GITHUB_TOKEN,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, githubTokenAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.githubToken.save, admitted), {});
   }
 
   /** The member's GitHub token removed, answering none. */
   removeGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.DELETE, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN }),
-      (answer) => readAnswer(answer, githubTokenAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.githubToken.remove, undefined), {});
   }
 
   /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
