@@ -3434,11 +3434,11 @@ it.effect(
 );
 
 it.effect(
-  "a planning worker not yet recorded, whose page is empty and starting at once, is asked again only after a pause",
+  "a planning worker not yet recorded, whose page is empty and starting at once, is told again only after a pause",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, conversations } = yield* subject(service);
+      const { call, pages, conversations } = yield* subject(service);
       const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-7" };
       const starting = conversationPage(
         [],
@@ -3449,9 +3449,12 @@ it.effect(
       yield* conversations.answer(INVITES, starting);
       yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript);
       yield* Effect.repeat(Effect.yieldNow, { times: 100 });
-      assert.equal(conversations.asks.length, 1);
+      assert.deepEqual(pages, [{ transcript, page: starting }]);
       yield* TestClock.adjust(Duration.seconds(1));
       yield* Effect.repeat(Effect.yieldNow, { times: 100 });
-      assert.equal(conversations.asks.length, 2);
+      assert.deepEqual(pages, [
+        { transcript, page: starting },
+        { transcript, page: starting },
+      ]);
     }),
 );
