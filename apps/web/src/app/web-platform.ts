@@ -91,7 +91,7 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
 export function webPlatform(
   shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork">,
 ): AppPlatform {
-  return {
+  const platform: AppPlatform = {
     copyText: (words) => navigator.clipboard.writeText(words),
     saveFile: downloadText,
     focusPanel: () => window.focus(),
@@ -108,8 +108,10 @@ export function webPlatform(
     askNotificationsPermission: () => {
       void askNotificationsPermission();
     },
-    ...(shell.unsavedWork === undefined ? {} : { unsavedWork: shell.unsavedWork }),
   };
+  // A tab with no page leave to tell (a test's) holds nothing back.
+  if (shell.unsavedWork !== undefined) platform.unsavedWork = shell.unsavedWork;
+  return platform;
 }
 
 /** A call's avatar is the desktop's bundle, which the web does not ship. */
