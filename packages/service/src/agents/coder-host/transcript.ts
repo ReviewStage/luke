@@ -13,6 +13,7 @@ import {
   lineSendersOf,
   readCodingAgentContext,
   readCodingAgentOfConversation,
+  readCodingAgentRouting,
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
@@ -401,6 +402,14 @@ const subagentStandingsOf = (
     }));
   });
 
+/** Who pays for the agent whose own transcript a page is, as its row records it; nothing on a worker's, or for an agent from before payers were recorded. */
+const payerOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
+  own === undefined
+    ? Effect.succeed(null)
+    : Effect.map(readCodingAgentRouting(target.userId, own.id), (routing) =>
+        Option.isNone(routing) ? null : routing.value.payer,
+      );
+
 /**
  * The page with what the agent has cost: every settled turn of its
  * conversation and its workers', summed and priced at the catalog as the
@@ -409,7 +418,8 @@ const subagentStandingsOf = (
  * price the window draws means the whole run's. On the agent's own transcript, with what
  * its model's context holds, against the window the same catalog lists,
  * and every title its workers have so far, which land beside their starts
- * and so on no page of their own.
+ * and so on no page of their own. The usage names the agent's payer where its
+ * row records one, so a plan's is drawn as the plan's rather than in dollars.
  */
 const withUsage = (
   target: ConversationTarget,
@@ -422,7 +432,10 @@ const withUsage = (
     const rows = yield* turnUsagesOf(target.userId, target.conversationId);
     const catalog = yield* ModelCatalog;
     const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
-    const usage = usageOfTurns(rows, offered);
+    const priced = usageOfTurns(rows, offered);
+    // Note that the payer rides on the usage, because the one line that draws a price is the one that says who paid.
+    const payer = priced === undefined ? null : yield* payerOf(target, own);
+    const usage = priced === undefined || payer === null ? priced : { ...priced, payer };
     const context = own === undefined ? undefined : yield* contextOf(target, own, offered);
     const delegations =
       own !== undefined && WAITING_STATUSES.has(page.status)

@@ -5,6 +5,7 @@ import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/p
 import { Database } from "@luke/database/core/query";
 import {
   createCodingAgent,
+  readCodingAgent,
   readCodingAgentContext,
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
@@ -23,7 +24,9 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
@@ -299,6 +302,32 @@ it.layer(getTestDB())("the runner events route", (it) => {
       assert.deepEqual(overlapping.body, { applied: 0, sequence: 11 });
       assert.deepEqual(twice, once);
     }),
+  );
+
+  it.effect(
+    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        yield* post(agent.bearer, workflowTurn(agent.lineId));
+        const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+
+        const page = yield* transcriptPast(
+          agent.target,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          row,
+          row,
+        ).pipe(Effect.provide(modelCatalogOf([])));
+
+        assert.deepEqual(page.usage, {
+          inputTokens: 228,
+          outputTokens: 9,
+          cachedInputTokens: 200,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+      }),
   );
 
   it.effect("a wrong bearer, none, and one retired from the conversation are refused", () =>

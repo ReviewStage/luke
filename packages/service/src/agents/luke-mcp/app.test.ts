@@ -23,16 +23,34 @@ import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@l
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { Base64 } from "effect/encoding";
-import { HttpRouter } from "effect/http";
+import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import { runConnectionExecute, runConnectionSearch } from "../../integrations/connection-door.js";
+import type {
+  IntegrationConnect,
+  WorkspaceLinearConnect,
+} from "../../integrations/integration-connect.js";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+} from "../../integrations/integration-store.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import { NO_GITHUB } from "../../testing/github-app-fake.js";
-import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  firstIntegrationAccount,
+  integrationConnectOf,
+} from "../../testing/integration-connect.js";
+import {
+  LINEAR_AND_NOTION_CONNECT,
+  linearServer,
+  linearTokenOf,
+} from "../../testing/integration-mcp-fake.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import {
   type AgentDoorSeams,
@@ -95,6 +113,12 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
 };
 
+/** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
+const NO_INTEGRATIONS = integrationConnectOf(() => ({
+  ...CONNECTOR_ASKED_NOTHING,
+  configured: false,
+}));
+
 /** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
 const doorServices = Effect.gen(function* () {
   return Layer.mergeAll(
@@ -103,7 +127,7 @@ const doorServices = Effect.gen(function* () {
     Layer.succeed(Clock.Clock, yield* Clock.Clock),
     NO_GITHUB,
     modelCatalogOf([]),
-    NO_WORKSPACE_LINEAR,
+    NO_INTEGRATIONS,
     Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
   );
 });
@@ -137,10 +161,14 @@ const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox
 const NO_CHECKOUT: RepositorySandboxDoor = () =>
   Promise.reject(new Error("the checkout was opened"));
 
-/** The server's group over the test's database and the sandbox door given, as a fetch a client is handed. */
-const standingOver = (sandbox: InboxSandboxDoor = NO_SANDBOX) =>
+/** The server's group over the test's database, the sandbox door given, and any services that stand in for the ones given, as a fetch a client is handed. */
+const standingOver = (
+  sandbox: InboxSandboxDoor = NO_SANDBOX,
+  instead?: Layer.Layer<IntegrationConnect | WorkspaceLinearConnect | HttpClient.HttpClient>,
+) =>
   Effect.gen(function* () {
-    const services = yield* doorServices;
+    const base = yield* doorServices;
+    const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
       lukeMcpApp(() => ({ files: sandbox, repository: NO_CHECKOUT })).pipe(
         HttpRouter.provideRequest(services),
@@ -249,6 +277,8 @@ const SERVED_TOOLS = [
   "resolve_thread",
   "reopen_thread",
   "run_on_mac",
+  "connection_search",
+  "connection_execute",
 ] as const;
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
@@ -320,6 +350,8 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac">, DirectCall>> =
   reply_to_comment: commentTool("reply_to_comment"),
   resolve_thread: commentTool("resolve_thread"),
   reopen_thread: commentTool("reopen_thread"),
+  connection_search: (admitted, input) => runConnectionSearch(admitted, input),
+  connection_execute: (admitted, input) => runConnectionExecute(admitted, input),
 };
 
 /** The eve tools a harness has its own of, which the server never serves. */
@@ -588,57 +620,133 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
     }),
   );
 
-  it.effect("a picture of the agent's plan comes back as image content, never as text", () =>
-    Effect.gen(function* () {
-      const fetch = yield* standing;
-      const agent = yield* agentWithBearer;
-      const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, PICTURE);
-      if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the picture was not kept");
-      const address = planAttachmentAddress(
-        { taskId: agent.taskId, attachmentId: kept.id },
-        "acme",
-      );
-      const client = yield* connected(fetch, agent.bearer);
+  it.effect(
+    "a picture of the agent's plan comes back as its look's status and image content, never as text",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, PICTURE);
+        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT)
+          return assert.fail("the picture was not kept");
+        const address = planAttachmentAddress(
+          { taskId: agent.taskId, attachmentId: kept.id },
+          "acme",
+        );
+        const client = yield* connected(fetch, agent.bearer);
 
-      const called = yield* Effect.promise(() =>
-        client.callTool({ name: "look_at_picture", arguments: { address } }),
-      );
-      yield* Effect.promise(() => client.close());
+        const called = yield* Effect.promise(() =>
+          client.callTool({ name: "look_at_picture", arguments: { address } }),
+        );
+        yield* Effect.promise(() => client.close());
 
-      assert.equal(called.isError, false);
-      assert.deepEqual(called.content, [
-        { type: "text", text: "The picture you asked to see:" },
-        { type: "image", data: Base64.encode(PICTURE.bytes), mimeType: PICTURE_TYPE.PNG },
-      ]);
-    }),
+        assert.equal(called.isError, false);
+        assert.deepEqual(called.content, [
+          { type: "text", text: '{"status":"looked"}' },
+          { type: "image", data: Base64.encode(PICTURE.bytes), mimeType: PICTURE_TYPE.PNG },
+        ]);
+      }),
   );
 
-  it.effect("a look at the agent's whiteboard comes back as image content, never as text", () =>
-    Effect.gen(function* () {
-      const fetch = yield* standing;
-      const agent = yield* agentWithBearer;
-      yield* writeDrawing(agent.userId, agent.taskId, [
-        { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" },
-      ]);
-      yield* writeScene(
-        agent.userId,
-        agent.taskId,
-        [{ id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 }],
-        1,
-        "iVBORw0KGgo=",
-      );
-      const client = yield* connected(fetch, agent.bearer);
+  it.effect(
+    "a look at the agent's whiteboard comes back as its look's status and image content, never as text",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        yield* writeDrawing(agent.userId, agent.taskId, [
+          { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" },
+        ]);
+        yield* writeScene(
+          agent.userId,
+          agent.taskId,
+          [{ id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 }],
+          1,
+          "iVBORw0KGgo=",
+        );
+        const client = yield* connected(fetch, agent.bearer);
 
-      const called = yield* Effect.promise(() =>
-        client.callTool({ name: "look_at_board", arguments: {} }),
-      );
-      yield* Effect.promise(() => client.close());
+        const called = yield* Effect.promise(() =>
+          client.callTool({ name: "look_at_board", arguments: {} }),
+        );
+        yield* Effect.promise(() => client.close());
 
-      assert.equal(called.isError, false);
-      assert.deepEqual(called.content, [
-        { type: "text", text: "The task's whiteboard, as the developer sees it:" },
-        { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
-      ]);
-    }),
+        assert.equal(called.isError, false);
+        assert.deepEqual(called.content, [
+          { type: "text", text: '{"status":"looked"}' },
+          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a connection's tools are searched and called over the server on the member's own grant, a picture coming back as image content",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* agentWithBearer;
+        yield* beginIntegrationSignIn(
+          agent.userId,
+          firstIntegrationAccount(agent.userId, "linear"),
+          `state-${agent.userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(agent.userId, "linear", `state-${agent.userId}`);
+        const heard = { calls: [], bearers: [] };
+        const fetch = yield* standingOver(
+          NO_SANDBOX,
+          Layer.merge(LINEAR_AND_NOTION_CONNECT, linearServer(linearTokenOf(agent.userId), heard)),
+        );
+        const client = yield* connected(fetch, agent.bearer);
+
+        const searched = yield* Effect.promise(() =>
+          client.callTool({
+            name: "connection_search",
+            arguments: { query: "list issues", connection: "linear", limit: 1 },
+          }),
+        );
+        const drawn = yield* Effect.promise(() =>
+          client.callTool({
+            name: "connection_execute",
+            arguments: { connection: "linear", tool: "draw" },
+          }),
+        );
+        const attached = yield* Effect.promise(() =>
+          client.callTool({
+            name: "connection_execute",
+            arguments: { connection: "linear", tool: "attach" },
+          }),
+        );
+        const unsigned = yield* Effect.promise(() =>
+          client.callTool({
+            name: "connection_execute",
+            arguments: { connection: "notion", tool: "notion-search" },
+          }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        assert.equal(searched.isError, false);
+        assert.deepEqual(
+          firstJson(searched).tools.map((tool: { tool: string }) => tool.tool),
+          ["list_issues"],
+        );
+        assert.equal(drawn.isError, false);
+        assert.deepEqual(drawn.content, [
+          { type: "text", text: "A chart:" },
+          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+        ]);
+        assert.deepEqual(attached.content, [
+          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+          {
+            type: "text",
+            text: "Resource: file:///notes.pdf (application/pdf, binary, not shown)",
+          },
+          { type: "image", data: "R0lGODlh", mimeType: "image/gif" },
+        ]);
+        assert.equal(unsigned.isError, true);
+        assert.deepEqual(
+          [firstJson(unsigned).connection, firstJson(unsigned).requiresSignIn],
+          ["notion", true],
+        );
+      }),
   );
 });

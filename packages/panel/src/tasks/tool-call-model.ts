@@ -1,4 +1,10 @@
-import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import {
+  AGENT_TOOL,
+  type AgentTool,
+  CLAUDE_CODE_TOOL,
+  EVE_TOOL,
+  RETIRED_TOOL,
+} from "@luke/features/agent-tools";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_TODO_STATUS,
@@ -503,7 +509,33 @@ function sleepOutput(output: WireValue): ToolBlock {
   return waited === undefined ? jsonBlock(output) : textBlock(`Waited ${spanText(waited)}.`);
 }
 
-/** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
+/**
+ * A native harness's subagent, whose inner work its transcript folds under
+ * the one call that started it (`claude-code-moments.ts`): drawn as one call,
+ * named by the few words the agent gave it, or its task's first line, its
+ * task the call's input and the subagent's answer its output, as a copy of
+ * the transcript reads a delegation.
+ */
+function subagentCallView(
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const task = stringAt(input, "prompt") ?? "";
+  const named = stringAt(input, "description")?.trim();
+  return {
+    kind: CALL_KIND.WORKER,
+    subject: named === undefined || named === "" ? cardTitle(task) : named,
+    input: textBlock(task),
+    output:
+      output === undefined
+        ? undefined
+        : isWireString(output)
+          ? textBlock(output)
+          : jsonBlock(output),
+  };
+}
+
+/** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. A native harness's call reaches here as the eve call that does the same (`native-tool-calls.ts`), but for its subagent's. */
 function knownToolView(
   tool: string,
   input: WireValue | undefined,
@@ -632,6 +664,8 @@ function knownToolView(
     case AGENT_TOOL.READ_INBOX:
     case RETIRED_TOOL.REPLY_INBOX:
       return inboxToolView(tool, input, output);
+    case CLAUDE_CODE_TOOL.AGENT:
+      return subagentCallView(input, output);
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
       return {

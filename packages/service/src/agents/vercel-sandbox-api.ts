@@ -41,6 +41,9 @@ import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 /** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Luke opens itself carries it too. */
 export const SESSION_TAG = "sessionId";
 
+/** The status a sandbox is up in, which the list of running sandboxes filters on. */
+export const RUNNING_STATUS = "running";
+
 /** Vercel's answer for a sandbox or session already gone. */
 const NOT_FOUND_STATUS = 404;
 
@@ -170,11 +173,31 @@ interface SandboxFile {
   readonly mode: number;
 }
 
+/** The order a list runs in by when each sandbox was created. */
+export const LIST_ORDER = { OLDEST_FIRST: "asc", NEWEST_FIRST: "desc" } as const;
+
+export type ListOrder = (typeof LIST_ORDER)[keyof typeof LIST_ORDER];
+
+/** A page of the running sandboxes: the sandboxes, and the cursor of the next page where there is one. */
+export interface RunningPage {
+  readonly sandboxes: readonly ListedSandbox[];
+  readonly next: string | undefined;
+}
+
 export interface VercelSandboxApi {
   /** Every sandbox carrying the session's tag. */
   readonly listTagged: (
     sessionId: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
+  /**
+   * One page of the project's running sandboxes, every kind, by when they
+   * were created in the order given, from the cursor a page before answered;
+   * with the cursor of the next page where there is one.
+   */
+  readonly listRunning: (
+    cursor: string | undefined,
+    order: ListOrder,
+  ) => Effect.Effect<RunningPage, SandboxUnavailable>;
   /** The named sandbox, resumed from its snapshot first where it was stopped. */
   readonly resume: (name: string) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /** Stops the sandbox session named, keeping its filesystem; one already gone counts as stopped. */
@@ -293,6 +316,14 @@ const StdinSchema = Schema.Struct({ bytesWritten: Schema.optional(Schema.Number)
 /** A page of the sandboxes listed under a tag. */
 const ListedSandboxesSchema = Schema.Struct({ sandboxes: Schema.Array(ListedSandboxSchema) });
 
+/** A page of the running sandboxes, with the cursor of the next where there is one. */
+const RunningSandboxesSchema = Schema.Struct({
+  sandboxes: Schema.Array(ListedSandboxSchema),
+  pagination: Schema.optional(
+    Schema.Struct({ next: Schema.optional(Schema.NullOr(Schema.String)) }),
+  ),
+});
+
 /** A lookup's answer: the sandbox, and the session it runs now, which a resume opened. */
 const FoundSandboxSchema = Schema.Struct({
   sandbox: ListedSandboxSchema,
@@ -333,6 +364,7 @@ function isSandboxShellAddress(address: string): boolean {
 const readClaims = readEither(OidcClaimsSchema, { excess: EXCESS_KEYS.DROP });
 const readInteractive = readEither(InteractiveSchema, { excess: EXCESS_KEYS.DROP });
 const readListed = readEither(ListedSandboxesSchema, { excess: EXCESS_KEYS.DROP });
+const readRunning = readEither(RunningSandboxesSchema, { excess: EXCESS_KEYS.DROP });
 const readFound = readEither(FoundSandboxSchema, { excess: EXCESS_KEYS.DROP });
 const readCommandLine = readEither(CommandLineSchema, { excess: EXCESS_KEYS.DROP });
 const readCreated = readEither(CreatedSandboxSchema, { excess: EXCESS_KEYS.DROP });
@@ -545,6 +577,31 @@ export function vercelSandboxApi(
             return yield* new SandboxUnavailable({ status: listed.status });
           }
           return page.success.sandboxes;
+        }),
+      listRunning: (cursor, order) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl("", asked.teamId, {
+            project: asked.projectId,
+            limit: String(SANDBOX_API.PAGE),
+            // Note that the API takes a status filter only under a sort by creation.
+            sortBy: "createdAt",
+            sortOrder: order,
+            status: RUNNING_STATUS,
+            ...(cursor === undefined ? undefined : { cursor }),
+          });
+          const listed = yield* callApi(
+            client,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          const page = readRunning(jsonOf(listed.text));
+          if (!succeeded(listed.status) || Result.isFailure(page)) {
+            return yield* new SandboxUnavailable({ status: listed.status });
+          }
+          return {
+            sandboxes: page.success.sandboxes,
+            next: page.success.pagination?.next ?? undefined,
+          };
         }),
       resume: (name) =>
         Effect.gen(function* () {

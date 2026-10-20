@@ -57,7 +57,6 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
   PencilIcon,
-  PlusIcon,
   RotateCcwIcon,
 } from "lucide-react";
 import {
@@ -89,18 +88,14 @@ import {
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
-import {
-  ATTACH_FILES,
-  CommentFiles,
-  carriesFiles,
-  useCommentAttaching,
-} from "./plan-comment-files.js";
+import { CommentFiles, carriesFiles, useCommentAttaching } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { RelativeTime } from "./relative-time.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
@@ -680,7 +675,6 @@ function ReplyField({
   const [words, setWords] = useState("");
   const files = useCommentAttaching();
   const [dropping, setDropping] = useState(false);
-  const picker = useRef<HTMLInputElement>(null);
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
   const attempt = useRef<
@@ -767,37 +761,19 @@ function ReplyField({
         {dictating ? (
           <DictationStrip dictation={dictation} />
         ) : (
-          <span className="comment-field-tools">
-            <Tooltip label={ATTACH_FILES}>
+          <>
+            <AttachFilesButton disabled={sending} onFiles={files.attach} />
+            <span className="comment-field-tools">
+              {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
               <IconButton
-                size={BUTTON_SIZE.COMPACT}
-                icon={<PlusIcon />}
-                label={ATTACH_FILES}
-                disabled={sending}
-                onClick={() => picker.current?.click()}
+                submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+                variant={BUTTON_VARIANT.INK}
+                label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
+                disabled={words.trim() === "" || sending || files.reading > 0}
+                onClick={send}
               />
-            </Tooltip>
-            <input
-              ref={picker}
-              type="file"
-              multiple
-              hidden
-              onChange={(event) => {
-                const picked = Array.from(event.currentTarget.files ?? []);
-                // Cleared so the same file can be picked again after it was taken off.
-                event.currentTarget.value = "";
-                files.attach(picked);
-              }}
-            />
-            {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
-            <IconButton
-              submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-              variant={BUTTON_VARIANT.INK}
-              label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
-              disabled={words.trim() === "" || sending || files.reading > 0}
-              onClick={send}
-            />
-          </span>
+            </span>
+          </>
         )}
       </div>
     </div>
