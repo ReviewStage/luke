@@ -215,6 +215,30 @@ function patchOnly(): FileDiffMetadata {
   return parsePatchFiles(patch)[0]?.files[0] ?? assert.fail("the patch reads");
 }
 
+test("a long gap pressed from both ends by the keyboard keeps its two arrows, and the focus on the one pressed, until it opens whole", async () => {
+  const { view, root } = drawn(changedFile(LONG.length, LONG.changed));
+  const enter = (element: HTMLElement) =>
+    element.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+  enter(control(root, 1, "up"));
+  await settle();
+  const down = control(root, 1, "down");
+  down.focus();
+  enter(down);
+  await settle();
+  assert.deepEqual(drawnAmong(view, run(35, 85)), [...run(35, 54), ...run(66, 85)]);
+  assert.equal(control(root, 1, "words").textContent, "11 unmodified lines");
+  assert.equal(
+    root.activeElement,
+    control(root, 1, "down"),
+    "Pierre still draws the gap's two arrows",
+  );
+  enter(control(root, 1, "down"));
+  await settle();
+  assert.deepEqual(drawnAmong(view, run(35, 85)), run(35, 85));
+});
+
 test("the trailing gap's words read the file first, then open it to its end", async () => {
   const { before, after } = texts(LONG.length, LONG.changed);
   let reads = 0;
