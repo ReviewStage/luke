@@ -1,6 +1,5 @@
 import {
   type ComponentType,
-  createContext,
   type FocusEventHandler,
   type KeyboardEvent,
   type MouseEvent,
@@ -8,8 +7,9 @@ import {
   type ReactElement,
   type ReactNode,
   type RefCallback,
-  useContext,
+  useCallback,
   useEffect,
+  useState,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
@@ -201,8 +201,9 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/** The density the `List` around a row sets, which a row standing in no `List` takes from its own `density`. */
-const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
+/** A dense row, by its `List`'s density or its own, as the stylesheet matches one. */
+const DENSE_ROW =
+  '.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"]';
 
 /**
  * The words a slot is measured by, where they are a plain string: a box whose
@@ -237,11 +238,9 @@ export function List({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ListDensityContext.Provider value={density}>
-      <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
-        {children}
-      </ul>
-    </ListDensityContext.Provider>
+    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
+      {children}
+    </ul>
   );
 }
 
@@ -327,16 +326,25 @@ export function ListRow({
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
-  const listDensity = useContext(ListDensityContext);
-  const dense = (density ?? listDensity) === LIST_DENSITY.DENSE;
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
   }, [onTitleClipped, titleClipped]);
-  // Note that only a dense row's description fades, so a fuller row's prose
-  // is never measured.
-  const describedDense = dense && said(description);
   const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
+  // Note that only a dense row's description fades, so a fuller row's prose
+  // is never measured; whether the row is dense is read where it stands, its
+  // list's density or its own, as the stylesheet reads it.
+  const [describedDense, setDescribedDense] = useState(false);
+  const described = useCallback(
+    (element: HTMLElement | null) => {
+      if (element === null) return undefined;
+      const dense = element.closest(DENSE_ROW) !== null;
+      setDescribedDense(dense);
+      return dense ? descriptionMeasured(element) : undefined;
+    },
+    // Note that a row's own density is a dependency only so its change reads the row again.
+    [descriptionMeasured, density],
+  );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
   const heading = (
     <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
@@ -362,7 +370,7 @@ export function ListRow({
         )}
         {said(description) || lead !== undefined ? (
           <span
-            ref={describedDense ? descriptionMeasured : undefined}
+            ref={described}
             className="luke-list-row-description"
             data-overflow={describedDense ? String(descriptionClipped) : undefined}
           >
