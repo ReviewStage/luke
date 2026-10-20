@@ -8,6 +8,7 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
+import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -574,7 +575,7 @@ test("on a finger's device a tap on a mention in an editable plan opens what it 
     onOpen: (mention) => opened.push(mention),
     reveal: undefined,
   };
-  const onEdit = () => Promise.resolve({ saved: true } as const);
+  const onEdit = (): Promise<TasksEditAnswer> => Promise.resolve({ saved: true });
   act(() =>
     root.render(createElement(PlanBody, { task: TASK, live: false, sectionLinks, onEdit })),
   );

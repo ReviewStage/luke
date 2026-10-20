@@ -71,7 +71,7 @@ export type EditorHost = number | typeof EDITOR_PLACE.TITLE;
 export const TAP_ROOM = "room";
 
 /** Where a tap lands that may open the text: a block, or the room around it. */
-export type TapPlace = EditorHost | typeof TAP_ROOM;
+type TapPlace = EditorHost | typeof TAP_ROOM;
 
 /** The document's one editor, the block the keyboard stands on, and their doors. */
 export interface PlanEditing {
