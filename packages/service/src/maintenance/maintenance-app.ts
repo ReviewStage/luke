@@ -51,9 +51,9 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
  * sweeps no detached voice session, since it opened none; one with it ends
  * them on the same upstream the voice functions attach through. An
  * automation's run reaches eve as the deployment acting for the
- * automation's owner, under the same secret the cron calls with; a
- * deployment without it, or without an origin for eve, fails each run it
- * acts on as unavailable.
+ * automation's owner, under the deployment's own eve secret, never the
+ * bearer the cron called with; a deployment without it, or without an
+ * origin for eve, fails each run it acts on as unavailable.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
@@ -64,7 +64,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 > {
   const environment = yield* HostedEnvironment;
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const secret = environment.cronSecret;
+  const secret = environment.eveDeploymentSecret;
   const origin = deploymentEveOrigin();
   const eveFor: EveForAccount = (account) =>
     secret === undefined || origin === undefined

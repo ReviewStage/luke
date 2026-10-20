@@ -181,6 +181,13 @@ export const BRAIN_HOST_ENVIRONMENT = {
   MODEL_FIXTURE: "LUKE_BRAIN_MODEL_FIXTURE",
   /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/v1/*` rewrite. */
   EVE_ORIGIN: "LUKE_EVE_ORIGIN",
+  /**
+   * The secret the deployment acts for an account under at eve's door, read on
+   * both sides of it: the web functions and each eve service send it, and both
+   * eve services admit it. It is never the cron's `CRON_SECRET`, so the bearer
+   * Vercel's scheduler holds opens no eve session.
+   */
+  DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",
 } as const;
 
 /** The one fixture the model environment may name, and the model id its turns are recorded under. */

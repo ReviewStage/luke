@@ -110,7 +110,7 @@ export function eveFor<Turn extends BrainHostTurn = never>(
     // unavailable on purpose, as one whose environment names no secret does: the deployment acts
     // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
     const environment = yield* Effect.serviceOption(HostedEnvironment);
-    const secret = Option.getOrUndefined(environment)?.cronSecret;
+    const secret = Option.getOrUndefined(environment)?.eveDeploymentSecret;
     const origin = reach.eveOrigin();
     if (secret === undefined || origin === undefined) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);

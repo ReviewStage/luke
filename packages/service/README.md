@@ -352,8 +352,8 @@ its caller per request in one place (`src/agents/coder-host/stop.ts`'s
 `eveFor`): a request that carries an `Authorization` header reaches eve over
 that bearer as it came, as every desktop request does, and one that carries
 none, whose account the cookie named, reaches eve as the deployment acting
-for that account, under the deployment's own `CRON_SECRET` with the account
-in `x-luke-account`. The account is always the one the route resolved from
+for that account, under the deployment's own `EVE_DEPLOYMENT_SECRET` with the
+account in `x-luke-account`. The account is always the one the route resolved from
 that request, never one the request or a row names, and a deployment with
 no secret or no eve origin answers such a request unavailable, a delete
 included: a cookie's delete composes eve before it stops or erases anything
@@ -1605,8 +1605,9 @@ queued. Then it is a Start with a prompt, on the one path a Start takes
 (`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
 through the App, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and eve is reached
-as the deployment acting for the owner under `CRON_SECRET`, the opening the
-coder channel already admits for the voice brain. The prompt is the
+as the deployment acting for the owner under `EVE_DEPLOYMENT_SECRET`, never
+the bearer the cron called with, the opening the coder channel already admits
+for the voice brain. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -2570,7 +2571,7 @@ words no ask carried are handed to him as one last ask as the call ends.
 eve is reached as the deployment acting for the one account the session
 resolved at its handshake, since the function holds no bearer of the
 account's by the time a delegation arrives. It calls eve's session routes
-under the deployment's `CRON_SECRET` as its bearer with the account in
+under the deployment's `EVE_DEPLOYMENT_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
 account as its attribute — for a spoken message, which its table,
@@ -2606,6 +2607,12 @@ in production and the deployment's own host on any other deployment.
 Production names the custom domain rather than the generated `*.vercel.app`
 host because that host carries the project's Vercel Authentication, which
 answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
+Since a Preview's functions dial the Preview's own eve, both ends of a
+delegation read one environment's `EVE_DEPLOYMENT_SECRET`, so Production and
+Preview each hold a value of their own, and neither is `CRON_SECRET`'s.
+One set to the cron's value is read as unset (`environment.ts`), as a blank
+one is: the build logs that once, by the two names, and the admin
+dashboard's Reliability screen shows it as not configured.
 
 ### One connection is one invocation
 
@@ -2786,9 +2793,12 @@ the runs still queued from the last hour, at most twelve a sweep and four
 at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
-scheduled call once it is set in the project; the same secret is the one the
-voice function acts for an account under at eve's door ("The exchange on the
-sessions route"). Without it the route answers 503 and the schedule is
+scheduled call once it is set in the project. It guards the maintenance
+routes alone, this one and the provider-key rewrap asked by hand: the voice
+function, every other web function, and both eve services act for an account
+at eve's door under `EVE_DEPLOYMENT_SECRET` instead ("The exchange on the
+sessions route"), and neither door admits the cron's bearer, so the
+scheduler's secret opens no session. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 

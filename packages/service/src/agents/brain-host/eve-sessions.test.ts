@@ -21,9 +21,9 @@ import {
  */
 
 const ORIGIN = "https://luke.test";
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-1";
-const CALLER: EveCaller = { secret: Redacted.make(CRON_SECRET), account: ACCOUNT };
+const CALLER: EveCaller = { secret: Redacted.make(DEPLOYMENT_SECRET), account: ACCOUNT };
 const CONVERSATION = "2b000000-0000-4000-8000-000000000001";
 const SESSION = "wrun_01M0000000000000000000001";
 
@@ -111,7 +111,7 @@ it.effect(
       assert.ok(request);
       assert.equal(request.url, `${ORIGIN}/eve/v1/session`);
       assert.equal(request.method, "POST");
-      assert.equal(request.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+      assert.equal(request.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
       assert.equal(request.headers.get("content-type"), "application/json");
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
@@ -214,7 +214,7 @@ it.effect(
         {
           url: `${ORIGIN}/eve/v1/session/${SESSION}/stream?startIndex=-1`,
           method: "GET",
-          authorization: `Bearer ${CRON_SECRET}`,
+          authorization: `Bearer ${DEPLOYMENT_SECRET}`,
         },
       ]);
     }),

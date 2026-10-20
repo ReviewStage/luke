@@ -44,7 +44,10 @@ import { commentAskMessage, handCommentAskOver } from "./comment-ask.js";
  */
 
 const ORIGIN = "https://luke.test";
-const SECRET = "cron-secret-1";
+/** The deployment's own secret at eve's door, the one the brain's door admits. */
+const SECRET = "eve-deployment-secret-1";
+/** The cron's bearer, which the deployment holds beside it and the door never admits. */
+const CRON_SECRET = "cron-secret-1";
 /** The one session eve opens for the plan's conversation. */
 const SESSION = "wrun_01SESSIONOFTHEPLAN00000000";
 
@@ -58,13 +61,15 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
 
 const WITH_SECRET = Layer.succeed(HostedEnvironment, {
   ...NO_KEYS,
-  cronSecret: Redacted.make(SECRET),
+  cronSecret: Redacted.make(CRON_SECRET),
+  eveDeploymentSecret: Redacted.make(SECRET),
 });
 
 const THREAD: PlanCommentThread = {

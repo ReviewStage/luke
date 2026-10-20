@@ -32,7 +32,7 @@ import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 /** The link of the task an agent on one works on, as its instructions are handed it. */
 const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
 
-const SECRET = "cron-secret-1";
+const SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-a";
 const CONVERSATION = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 const OWN_SESSION = "wrun_01SESSIONOFACCOUNTA0000000";
