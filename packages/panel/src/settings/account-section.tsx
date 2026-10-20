@@ -45,16 +45,13 @@ function GitHubTokenRow(): React.JSX.Element {
   useEffect(() => {
     let live = true;
     setReadFailed(false);
-    act(ACT_KIND.GITHUB_TOKEN_READ).then(
-      (answer) => {
+    act(ACT_KIND.GITHUB_TOKEN_READ)
+      .catch(() => undefined)
+      .then((answer) => {
         if (!live) return;
-        if ("failure" in answer) setReadFailed(true);
+        if (answer === undefined || "failure" in answer) setReadFailed(true);
         else setToken(answer.token);
-      },
-      () => {
-        if (live) setReadFailed(true);
-      },
-    );
+      });
     return () => {
       live = false;
     };
