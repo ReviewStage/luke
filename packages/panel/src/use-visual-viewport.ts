@@ -39,6 +39,8 @@
  * keeps it above the keyboard. Where an engine keeps its pan anyway, the
  * stage still follows it, as before. A pinch's pan is the developer's own and
  * is never undone, and a window that shrinks for the keyboard pans nothing.
+ * The stage is let down again as the focus leaves the field, ahead of the
+ * keyboard's slide away, which WebKit measures only once it has ended.
  */
 
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -86,6 +88,15 @@ function caretBox(field: Element): DOMRect {
     : box;
 }
 
+/** What a keyboard is raised for: a field words are typed into, not a box, a switch, or a slider. */
+const TYPED_FIELD =
+  'textarea, [contenteditable]:not([contenteditable="false"]), input:not([type="checkbox"], [type="radio"], [type="range"])';
+
+/** Whether `target` is a field a keyboard is raised for. */
+function typedField(target: EventTarget | null): target is HTMLElement {
+  return target instanceof HTMLElement && (target.isContentEditable || target.matches(TYPED_FIELD));
+}
+
 /**
  * The focused field's caret scrolled up into view within its own column,
  * above `bottom`, where the keyboard now covers it; nothing while no field
@@ -93,9 +104,7 @@ function caretBox(field: Element): DOMRect {
  */
 function caretAboveKeyboard(bottom: number): void {
   const field = document.activeElement;
-  if (!(field instanceof HTMLElement)) return;
-  const typed = field.isContentEditable || field.matches("textarea, input");
-  const column = typed ? scrollerOf(field) : undefined;
+  const column = typedField(field) ? scrollerOf(field) : undefined;
   if (column === undefined) return;
   const below =
     caretBox(field).bottom + CARET_MARGIN - Math.min(bottom, column.getBoundingClientRect().bottom);
@@ -117,6 +126,15 @@ export function useVisualViewport(): void {
     let top = 0;
     /** How much of the window the keyboard covered as last measured. */
     let covered = 0;
+    /**
+     * Whether the keyboard is going: the focus left every field it was up
+     * for, while the viewport still measures it. Note that the stage is let
+     * down at once, because WebKit measures the keyboard gone only once it
+     * has slid away (WebKit bug 265578, with Safari's address bar at the
+     * bottom), and the stage held short until then trailed it by its whole
+     * slide, the room it left standing empty.
+     */
+    let going = false;
     const write = () => {
       let layout: number;
       let bottom: number;
@@ -135,6 +153,9 @@ export function useVisualViewport(): void {
         // Note that rounding keeps a pinch's fractions from moving the stage by a pixel.
         bottom = Math.min(layout, top + Math.round(viewport.height * viewport.scale));
       }
+      // The keyboard measured gone, or let go of ahead of it.
+      if (going && bottom >= layout) going = false;
+      if (going) bottom = layout;
       const inset = Math.max(0, layout - bottom);
       root.setProperty(VIEWPORT_TOP, `${top}px`);
       root.setProperty(STAGE_HEIGHT, `${bottom - top}px`);
@@ -143,12 +164,27 @@ export function useVisualViewport(): void {
       if (inset > covered) caretAboveKeyboard(bottom);
       covered = inset;
     };
+    // Focus leaving every typed field lets the keyboard go at once; a field taking it measures the keyboard again.
+    const left = (event: FocusEvent) => {
+      if (covered === 0 || typedField(event.relatedTarget)) return;
+      going = true;
+      write();
+    };
+    const entered = (event: FocusEvent) => {
+      if (!typedField(event.target)) return;
+      going = false;
+      write();
+    };
     write();
     viewport.addEventListener("resize", write);
     viewport.addEventListener("scroll", write);
+    document.addEventListener("focusout", left);
+    document.addEventListener("focusin", entered);
     return () => {
       viewport.removeEventListener("resize", write);
       viewport.removeEventListener("scroll", write);
+      document.removeEventListener("focusout", left);
+      document.removeEventListener("focusin", entered);
       root.removeProperty(VIEWPORT_TOP);
       root.removeProperty(STAGE_HEIGHT);
       root.removeProperty(KEYBOARD_INSET);

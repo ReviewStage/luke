@@ -274,3 +274,37 @@ test("a keyboard rising over a focused field scrolls its caret into view within 
   // The caret's foot at 620 stands under the keyboard's top at 480, kept 24 above it.
   assert.equal(column.scrollTop, 620 + 24 - 480);
 });
+
+test("the focus leaving the field lets the stage down at once, ahead of WebKit measuring the keyboard gone, and a field taking it measures the keyboard again", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  undoesPan(viewport);
+  const field = document.body.appendChild(document.createElement("textarea"));
+  const other = document.body.appendChild(document.createElement("input"));
+  const button = document.body.appendChild(document.createElement("button"));
+  mount();
+  field.focus();
+  act(() => viewport.change({ height: 480 }, "resize"));
+  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+
+  // The focus moving to another field keeps the keyboard up.
+  act(() => other.focus());
+  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+
+  // Done: the keyboard slides away while WebKit still measures it, until it has gone.
+  act(() => button.focus());
+  assert.equal(readOverBody("--luke-stage-height"), "800px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  act(() => viewport.change({ height: 480 }, "scroll"));
+  assert.equal(
+    readOverBody("--luke-keyboard-inset"),
+    "0px",
+    "a late event of the keyboard going holds the stage down",
+  );
+  act(() => viewport.change({ height: 800 }, "resize"));
+  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+
+  act(() => field.focus());
+  act(() => viewport.change({ height: 480 }, "resize"));
+  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+});
