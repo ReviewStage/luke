@@ -681,7 +681,8 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                 )}
               </div>
             </PageFind>
-            {drawing.panel ? (
+            {/* Note that the panel stands only for a task or an agent the Inbox chose. */}
+            {drawing.panel && panelFor !== undefined ? (
               <InboxSidePanel
                 tasks={tasks}
                 drawing={{ ...drawing, panel: drawing.panel }}
@@ -754,7 +755,8 @@ function InboxSidePanel({
   focused: boolean;
   /** The chosen item's task, none for an item of an agent with no task. */
   taskId: string | undefined;
-  panelFor: string | undefined;
+  /** The chosen item's task, or its agent where it has none. */
+  panelFor: string;
   repository: string | null;
   pages: TasksControl["inboxView"]["pages"];
   agents: CodingAgentsControl;
@@ -782,7 +784,7 @@ function InboxSidePanel({
       {...drawing}
       unread={NO_UNREAD}
       holder={SIDE_PANEL_HOLDER.INBOX}
-      taskId={panelFor ?? ""}
+      taskId={panelFor}
       repository={repository}
       board={undefined}
       shownCode={undefined}
