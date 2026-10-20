@@ -2141,19 +2141,20 @@ function PullRequestTabBody({
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
   const published = pullRequestOfTab(control, { changes: agentId, number });
   const held = headerPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
-  // The toolbar's ⋯ opens the pull request on GitHub and reads it again while it is held, Refresh dimmed while a read is out.
+  const none = [parts.pullRequest, parts.checks, parts.conversation].some(
+    (part) => part.kind === PART.NONE,
+  );
+  // The toolbar's ⋯ opens the pull request on GitHub and reads it again while the header draws it,
+  // Refresh dimmed while a read is out; a read saying there is none takes them away with the header.
   const refreshNow = useRef(refresh);
   refreshNow.current = refresh;
-  const url = held?.url;
+  const url = none ? undefined : held?.url;
   const handed = useMemo(
     () =>
       url === undefined ? undefined : pullRequestActions(url, reading, () => refreshNow.current()),
     [url, reading],
   );
   useHandedTabActions(onActions, handed);
-  const none = [parts.pullRequest, parts.checks, parts.conversation].some(
-    (part) => part.kind === PART.NONE,
-  );
   // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
   // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(

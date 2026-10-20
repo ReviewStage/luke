@@ -1862,7 +1862,7 @@ test("a box scrolled inside the view, a comment's field or its preview, folds no
   assert.equal(folded(), true);
 });
 
-test("an agent with no pull request yet says so", async () => {
+test("an agent with no pull request yet says so, and the toolbar's ⋯ offers nothing for one, though what it published is still held", async () => {
   const none = await draw(
     controlAnswering({
       pullRequest: () => Promise.resolve({ pullRequest: null }),
@@ -1872,6 +1872,7 @@ test("an agent with no pull request yet says so", async () => {
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
   assert.equal(none.querySelector("section[aria-label='Pull request conversation']"), null);
+  assert.deepEqual(toolbarItems(none), []);
 });
 
 test("the pill, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
