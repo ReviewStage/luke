@@ -17,13 +17,16 @@ import {
 } from "@luke/service/http/http-effect";
 import { ANY_METHOD } from "@luke/service/route";
 import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
-import type { WireBoundaryInput } from "@luke/wire";
+import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, vi } from "vitest";
+import { hostedProcedureRoutes } from "../server/api-callers.js";
+import { ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
 import { orpcRoute } from "../server/orpc-route.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
+import { dispatched } from "./support/platform-landing.js";
 
 /**
  * A browser's session cookie on the hosted routes, through the adaptor every
@@ -34,10 +37,29 @@ import { disposeWebRuntime } from "../server/runtime.js";
  * verify names nobody. The Mac's commands route takes the Mac's bearer
  * alone, so a cookie every account route takes is refused there.
  *
+ * The deployed oRPC route holds its writes to the same guard, reached as the
+ * platform reaches it: the committed fallback rewrite lands a client's path
+ * on the default function, whose dispatcher hands it to the route under its
+ * key. A write a foreign page's cookie carried is refused whichever procedure
+ * it names, and one from the deployment's own page goes on to its procedure.
+ *
  * The cookie is Better Auth's over a PGlite of its own; the userinfo
  * endpoint, which no request here satisfies, refuses every bearer.
  * Synthetic accounts and sessions throughout.
  */
+
+/**
+ * The deployment's own origin, which the guard reads from the address
+ * production registers. It is named before any module is imported, because
+ * the deployed oRPC route reads the deployment's origins as `orpc-route.ts`
+ * loads, and each test names it again below for the routes it builds itself.
+ */
+const { OWN_ORIGIN } = vi.hoisted(() => {
+  const own = "https://luke.test";
+  vi.stubEnv("VERCEL_ENV", "production");
+  vi.stubEnv("BETTER_AUTH_URL", own);
+  return { OWN_ORIGIN: own };
+});
 
 /**
  * The web runtime's layer names a database, so building it needs a
@@ -45,10 +67,17 @@ import { disposeWebRuntime } from "../server/runtime.js";
  */
 const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke";
 
-/** The deployment's own origin, which the guard reads from the address production registers. */
-const OWN_ORIGIN = "https://luke.test";
 const FOREIGN_ORIGIN = "https://evil.example";
 const ACCOUNT_PATH = "/api/account-under-test";
+
+/** The deployed oRPC route as the default function holds it, under the key the fallback rewrite lands every path no route file takes on. */
+const ORPC_ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
+
+/** A browser's session cookie, spelled as production names it, naming no session the deployment holds. */
+const UNHELD_COOKIE = "__Secure-better-auth.session_token=fixture";
+
+/** The id every path parameter of a write is written as: the guard answers before the router reads the path. */
+const PATH_PARAMETER_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
@@ -110,6 +139,9 @@ const answered = (route: ReturnType<typeof routeFromHttpRouter>, request: Reques
 function sent(method: string, headers: Record<string, string>): Request {
   return new Request(new URL(ACCOUNT_PATH, OWN_ORIGIN), { method, headers });
 }
+
+/** The deployed oRPC route as the platform reaches it: a client's request landed by the committed fallback rewrite and handed on by the default function's dispatcher. */
+const deployedOrpc = { fetch: (request: Request) => dispatched(request, ORPC_ROUTES) };
 
 it.effect(
   "a session cookie names its account on a read from any page, and on a write from the deployment's own",
@@ -202,4 +234,74 @@ it.effect("the Mac's commands route refuses a session cookie every account route
       body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
     });
   }),
+);
+
+it.effect(
+  "the deployed oRPC route refuses a write a foreign page's cookie carried before any procedure reads it, whichever procedure it names",
+  () =>
+    Effect.gen(function* () {
+      const refused = {
+        status: HOSTED_HTTP_STATUS.FORBIDDEN,
+        body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+      };
+      const writes = hostedProcedureRoutes().filter(
+        (procedure) => procedure.method !== HTTP_METHOD.GET,
+      );
+      assert.ok(writes.length > 0);
+      for (const procedure of writes) {
+        const path = procedure.path.replaceAll(/\{\+?[^{}]+\}/gu, PATH_PARAMETER_ID);
+        const request = new Request(new URL(path, OWN_ORIGIN), {
+          method: procedure.method,
+          headers: { cookie: UNHELD_COOKIE, origin: FOREIGN_ORIGIN },
+        });
+        assert.deepEqual(yield* answered(deployedOrpc, request), refused, procedure.key.join("."));
+      }
+    }),
+);
+
+it.effect(
+  "a write to the deployed oRPC route from the deployment's own page, or from a desktop, goes on to its procedure, which answers for its caller itself; a cookie's from any other page is refused",
+  () =>
+    Effect.gen(function* () {
+      const deleteAccount = (headers: Record<string, string>) =>
+        answered(
+          deployedOrpc,
+          new Request(new URL(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, OWN_ORIGIN), {
+            method: HTTP_METHOD.POST,
+            headers,
+          }),
+        );
+      // The procedure's own caller check, which finds no session the deployment holds behind the cookie.
+      const unauthenticated = {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      };
+      const refused = {
+        status: HOSTED_HTTP_STATUS.FORBIDDEN,
+        body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+      };
+
+      assert.deepEqual(
+        yield* deleteAccount({ cookie: UNHELD_COOKIE, origin: OWN_ORIGIN }),
+        unauthenticated,
+      );
+      assert.deepEqual(
+        yield* deleteAccount({ cookie: UNHELD_COOKIE, "sec-fetch-site": "same-origin" }),
+        unauthenticated,
+      );
+      assert.deepEqual(
+        yield* deleteAccount({ authorization: "Bearer not-a-token" }),
+        unauthenticated,
+      );
+      assert.deepEqual(yield* deleteAccount({ cookie: UNHELD_COOKIE }), refused);
+      assert.deepEqual(
+        yield* deleteAccount({
+          cookie: UNHELD_COOKIE,
+          origin: FOREIGN_ORIGIN,
+          authorization: "Bearer not-a-token",
+        }),
+        refused,
+        "an Authorization beside the cookie buys nothing",
+      );
+    }),
 );

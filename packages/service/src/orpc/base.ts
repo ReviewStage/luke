@@ -29,6 +29,7 @@ import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
 import { Effect, Option } from "effect";
+import { sessionCredential } from "../auth/session-credential.js";
 import {
   HOSTED_REFUSAL,
   hostedCarriesBearer,
@@ -82,19 +83,25 @@ export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
 }
 
 /**
- * The caller by a Better Auth session, with the headers that carry it on;
- * an auth service that could not answer is an outage the caller may retry,
- * and a session it does not take is refused as unauthenticated.
+ * The caller by a Better Auth session, read from the request's one
+ * credential (`auth/session-credential.ts`) and carried on to the plugin in
+ * it alone, so the plugin acts as the session read here and no other. A
+ * request that carries no credential is refused as unauthenticated without
+ * asking the auth service; an auth service that could not answer is an
+ * outage the caller may retry, and a session it does not take is refused as
+ * unauthenticated.
  */
 export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
   return middlewareGen<HostedContext, HostedSessionCaller>(function* ({ context, next }) {
-    const account = yield* resolveSessionUserId(context.request).pipe(
+    const sessionHeaders = sessionCredential(context.request.headers);
+    if (sessionHeaders === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    // The resolver reads a request's headers alone, so it is handed one carrying the credential and nothing else.
+    const credentialed = new Request(context.request.url, { headers: sessionHeaders });
+    const account = yield* resolveSessionUserId(credentialed).pipe(
       Effect.tapError((failure) => Effect.logWarning("the auth service read no session", failure)),
       Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
     );
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({
-      context: { userId: account.value, sessionHeaders: context.request.headers },
-    });
+    return yield* next({ context: { userId: account.value, sessionHeaders } });
   });
 }

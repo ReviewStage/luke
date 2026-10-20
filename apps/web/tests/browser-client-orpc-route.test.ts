@@ -33,6 +33,9 @@ const ADA = "user-ada";
 const GRACE = "user-grace";
 const INVITED = "ada@example.com";
 
+/** The deployment's session cookie the page's browser holds, which a request sent on the page's cookies carries. */
+const PAGE_COOKIE = "better-auth.session_token=page";
+
 /** A Better Auth call this test never makes, refused if it were. */
 const unmade = () => Effect.die(new Error("this test makes no Better Auth call"));
 
@@ -54,12 +57,16 @@ interface Sent {
 
 /**
  * The browser's network: every request the client sends handed to the
- * GitHub and workspace routes on the test's database, under the session
- * given, and kept in `sent`.
+ * GitHub and workspace routes on the test's database, carrying the page's
+ * cookie where the client sent it on the page's cookies, as a browser does,
+ * and kept in `sent`. The page's cookie names the session given.
  */
 const serve = (session: string | null, sent: Sent[] = []) =>
   Effect.gen(function* () {
-    const resolveSessionUserId = () => Effect.succeed(Option.fromNullishOr(session));
+    const resolveSessionUserId = (request: Request) =>
+      Effect.succeed(
+        Option.fromNullishOr(request.headers.get("cookie") === PAGE_COOKIE ? session : null),
+      );
     const route = hostedFetch({
       github: githubProcedures({
         resolveUserId: () => Effect.succeed(Option.none()),
@@ -81,12 +88,10 @@ const serve = (session: string | null, sent: Sent[] = []) =>
         line: `${init?.method} ${url.pathname}${url.search} ${init?.credentials} ${new Headers(init?.headers).get("content-type")}`,
         body,
       });
+      const headers = new Headers(init?.headers);
+      if (init?.credentials === "include") headers.set("cookie", PAGE_COOKIE);
       return route(
-        new Request(url, {
-          method: init?.method ?? "GET",
-          headers: init?.headers ?? {},
-          body: body ?? null,
-        }),
+        new Request(url, { method: init?.method ?? "GET", headers, body: body ?? null }),
         services,
       );
     });

@@ -8,6 +8,7 @@ import {
   GITHUB_APP_ENVIRONMENT,
   socialClientConfigured,
 } from "../auth/auth-deployment.js";
+import { sessionCredential } from "../auth/session-credential.js";
 import { WORKSPACE_LINEAR_CONNECTOR_VARIABLE } from "../integrations/integration-connect.js";
 import { INTEGRATION, type IntegrationDefinition } from "../integrations/integrations.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
@@ -73,18 +74,23 @@ function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], bo
 /**
  * The browser session an admin request rides in on — the maintainer's own
  * sign-in on this site, carrying that account's `role`, never the desktop's
- * bearer token. Better Auth's `getSession` is a promise of somebody else's,
- * so it is wrapped once here, where the seam is built, and the gate yields
- * the effect on the request's own fiber. A getSession failure must propagate:
- * the gate turns a refused viewer seam into a 503, where swallowing it here
- * would misreport an auth outage as a signed-out 401 and offer a sign-in that
- * cannot succeed.
+ * bearer token — read from the request's one credential
+ * (`auth/session-credential.ts`), so a junk `Authorization` beside the
+ * cookie is signed out rather than read past, and a request carrying neither
+ * is signed out without asking the auth service. Better Auth's `getSession`
+ * is a promise of somebody else's, so it is wrapped once here, where the seam
+ * is built, and the gate yields the effect on the request's own fiber. A
+ * getSession failure must propagate: the gate turns a refused viewer seam
+ * into a 503, where swallowing it here would misreport an auth outage as a
+ * signed-out 401 and offer a sign-in that cannot succeed.
  */
 function resolveSessionViewer(
   request: Request,
 ): Effect.Effect<AdminViewer | undefined, Cause.UnknownError> {
+  const credential = sessionCredential(request.headers);
+  if (credential === undefined) return Effect.succeed(undefined);
   return Effect.tryPromise(async () => {
-    const authenticated = await auth.api.getSession({ headers: request.headers });
+    const authenticated = await auth.api.getSession({ headers: credential });
     const account = authenticated?.user;
     if (!account) return undefined;
     return { userId: account.id, role: account.role };

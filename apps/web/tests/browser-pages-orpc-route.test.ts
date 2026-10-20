@@ -33,6 +33,9 @@ const SESSION_PATH = "/api/auth/get-session";
 const USER_ID = "user-ada";
 const INVITED = "ada@example.com";
 
+/** The deployment's session cookie the page's browser holds, which a request sent on the page's cookies carries. */
+const PAGE_COOKIE = "better-auth.session_token=page";
+
 const SIGNED_IN = {
   session: { id: "session-1", userId: USER_ID, expiresAt: "2099-01-01T00:00:00.000Z" },
   user: { id: USER_ID, email: INVITED, name: "Ada", emailVerified: true },
@@ -57,12 +60,16 @@ const MEMBERS: MemberSeams = {
 /**
  * The page's network: Better Auth's session read answered signed in, the
  * GitHub and workspace routes answered by the hosted oRPC handler on the
- * test's database under the session given, and anything else left hanging.
- * Every path the page asked is kept in `asked`.
+ * test's database under the session given, which the page's cookie names and
+ * which a request the page sent on its cookies carries, as a browser does,
+ * and anything else left hanging. Every path the page asked is kept in `asked`.
  */
 const serve = (session: Session, asked: string[]) =>
   Effect.gen(function* () {
-    const resolveSessionUserId = () => Effect.succeed(Option.fromNullishOr(session));
+    const resolveSessionUserId = (request: Request) =>
+      Effect.succeed(
+        Option.fromNullishOr(request.headers.get("cookie") === PAGE_COOKIE ? session : null),
+      );
     const route = hostedFetch({
       github: githubProcedures({
         resolveUserId: () => Effect.succeed(Option.none()),
@@ -91,12 +98,10 @@ const serve = (session: Session, asked: string[]) =>
         return new Promise<Response>(() => undefined);
       }
       // Note that the page's own abort signal is jsdom's, which Node's `Request` refuses, so the route is handed the rest.
+      const headers = new Headers(init?.headers);
+      if (init?.credentials === "include") headers.set("cookie", PAGE_COOKIE);
       return route(
-        new Request(url, {
-          method: init?.method ?? "GET",
-          headers: init?.headers ?? {},
-          body: init?.body ?? null,
-        }),
+        new Request(url, { method: init?.method ?? "GET", headers, body: init?.body ?? null }),
         services,
       );
     });
