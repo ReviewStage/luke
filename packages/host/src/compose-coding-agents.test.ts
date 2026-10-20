@@ -624,6 +624,7 @@ function fakeRealtime() {
           renewed.push(next.capability);
           return Promise.resolve();
         },
+        awaitTxId: () => Promise.resolve(),
         unsubscribe: () => void listeners.delete(query.capability),
       }),
       close: () => void closed.push(url),

@@ -11,6 +11,7 @@ import {
   openRealtimeClient,
   type SealedRead,
   shareLiveClients,
+  type TxWait,
 } from "./live-follow.js";
 
 /**
@@ -51,7 +52,9 @@ function read(round: number, expiresAt: number): SealedRead<Part> {
  * subscribed with, the seals it was renewed with, a way to deliver rows to
  * one or stop it for good, and whether the client was closed.
  */
-function fakeRealtime(options: { readonly refuseRenewal?: boolean } = {}) {
+function fakeRealtime(
+  options: { readonly refuseRenewal?: boolean; readonly arrivesOn?: string } = {},
+) {
   const listeners = new Map<
     string,
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
@@ -70,6 +73,11 @@ function fakeRealtime(options: { readonly refuseRenewal?: boolean } = {}) {
           ? Promise.reject(new Error("refused"))
           : Promise.resolve();
       },
+      // A transaction arrives on the one part named, as a write reaches only the parts whose rows it changes.
+      awaitTxId: () =>
+        query.capability === (options.arrivesOn ?? query.capability)
+          ? Promise.resolve()
+          : Promise.reject(new Error("timed out")),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => {
@@ -266,6 +274,7 @@ function scriptedClients() {
             return () => undefined;
           },
           renew: () => Promise.resolve(),
+          awaitTxId: () => Promise.resolve(),
           unsubscribe: () => undefined,
         };
       },
@@ -356,4 +365,32 @@ it.effect("a read whose session the service refuses as signed out ends, and is a
     ).pipe(Stream.runDrain, Effect.exit);
     assert.ok(Exit.isFailure(exit));
   }),
+);
+
+it.effect(
+  "hands out a wait for a write's transaction once subscribed, settled by the part it reaches, and none once let go",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime({ arrivesOn: "right-0" });
+      let wait: TxWait | undefined;
+      const following = yield* Effect.forkChild(
+        liveRows<Part>(
+          {
+            openLive: () => realtime.client,
+            reseal: () => Effect.succeed(read(1, 3_600_000)),
+            poll: () => Effect.succeed({ failure: "unavailable" }),
+            now: () => 0,
+            onTxWait: (next) => {
+              wait = next;
+            },
+          },
+          read(0, 3_600_000),
+        ).pipe(Stream.runDrain),
+      );
+      yield* settled;
+      assert.ok(wait, "a wait once subscribed");
+      yield* wait("42", Duration.seconds(5));
+      yield* Fiber.interrupt(following);
+      assert.equal(wait, undefined, "none once let go");
+    }),
 );
