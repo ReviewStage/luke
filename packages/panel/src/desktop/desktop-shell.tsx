@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -41,7 +41,7 @@ import {
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -288,9 +288,11 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // The page lists an installed app's chords, and stands nowhere else (`pages.tsx`).
+  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
-    pastGate
+    pastGate && desktopApp
       ? () => {
           // Arriving at Settings lands on Account, so the page is turned
           // after.

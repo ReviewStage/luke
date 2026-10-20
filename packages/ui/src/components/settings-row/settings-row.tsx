@@ -46,6 +46,13 @@ import { type ReactNode, useId } from "react";
  * row above it, an account under its provider, is indented
  * (`SETTINGS_ROW_INDENT.MARK`) to its parent's words, its rule starting
  * there too, so the card reads as one subject with its parts under it.
+ *
+ * A row whose one control is set by a press, a switch, says so
+ * (`labelsControl`): its label is then that control's `<label>`, so a press
+ * on the words sets it as a press on the control does, and under a finger
+ * a press anywhere on the row does; and the control, as narrow as a word,
+ * stays beside the words at any width rather than dropping under them. The
+ * control wears the id the row hands it (`controlId`).
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -69,6 +76,8 @@ export type SettingsRowIndent = (typeof SETTINGS_ROW_INDENT)[keyof typeof SETTIN
 export interface SettingsRowControl {
   /** The label's id, for a control named by `aria-labelledby`. */
   readonly labelId: string;
+  /** The id the row's one control wears, which its label names where the row `labelsControl`. */
+  readonly controlId: string;
   readonly "aria-describedby": string | undefined;
   readonly "aria-invalid": true | undefined;
 }
@@ -76,6 +85,30 @@ export interface SettingsRowControl {
 /** Whether a row's words say anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
+}
+
+/** The row's name: the `<label>` of the control it sets where it labels one, words beside its controls otherwise. */
+function RowLabel({
+  id,
+  control,
+  children,
+}: {
+  id: string;
+  control: string | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  if (control === undefined) {
+    return (
+      <span className="luke-settings-row-label" id={id}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <label className="luke-settings-row-label" id={id} htmlFor={control}>
+      {children}
+    </label>
+  );
 }
 
 /** A setting named `label`, described by `description`, set by `children`, and failed by `error` while it says something. */
@@ -87,6 +120,7 @@ export function SettingsRow({
   adornment,
   density = SETTINGS_ROW_DENSITY.CARD,
   indent = SETTINGS_ROW_INDENT.NONE,
+  labelsControl = false,
   children,
   below,
 }: {
@@ -102,6 +136,8 @@ export function SettingsRow({
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
   indent?: SettingsRowIndent | undefined;
+  /** Whether the row's words label its one control, a switch, wearing `controlId`: a press on them sets it, and it stays beside them. */
+  labelsControl?: boolean | undefined;
   /** The row's controls at its end, handed the row's ids to name and describe them by. */
   children?: ((control: SettingsRowControl) => ReactNode) | undefined;
   /** What the row grows under its words and owns alone, handed the same ids; never a page's layout. */
@@ -111,6 +147,7 @@ export function SettingsRow({
   const labelId = `${id}label`;
   const descriptionId = `${id}description`;
   const errorId = `${id}error`;
+  const controlId = `${id}control`;
   const failed = said(error);
   const described = said(description);
   const led = said(leading);
@@ -119,6 +156,7 @@ export function SettingsRow({
     .join(" ");
   const control: SettingsRowControl = {
     labelId,
+    controlId,
     "aria-describedby": describedBy === "" ? undefined : describedBy,
     "aria-invalid": failed ? true : undefined,
   };
@@ -128,6 +166,7 @@ export function SettingsRow({
       data-invalid={failed}
       data-density={density}
       data-indent={indent}
+      data-labels-control={labelsControl}
     >
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">
@@ -136,15 +175,15 @@ export function SettingsRow({
             <div className="luke-settings-row-copy">
               {said(adornment) ? (
                 <div className="luke-settings-row-title">
-                  <span className="luke-settings-row-label" id={labelId}>
+                  <RowLabel id={labelId} control={labelsControl ? controlId : undefined}>
                     {label}
-                  </span>
+                  </RowLabel>
                   {adornment}
                 </div>
               ) : (
-                <span className="luke-settings-row-label" id={labelId}>
+                <RowLabel id={labelId} control={labelsControl ? controlId : undefined}>
                   {label}
-                </span>
+                </RowLabel>
               )}
               {described ? (
                 <p className="luke-settings-row-description" id={descriptionId}>

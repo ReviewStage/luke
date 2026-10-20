@@ -297,6 +297,12 @@ body,
   border-right: 0;
 }
 
+/* Settings' list standing alone leads with its one way back, Back to the
+   tasks; the history's Back and Forward beside it would be a second. */
+.desktop-shell[data-room="narrow"] .settings-pages > .title-bar-controls {
+  display: none;
+}
+
 /* A place standing alone in a narrow room leads its head with the way back,
    so its name keeps the room left and what is said beside it gives way; a
    topic's menu stays at the head's end, the only way to edit or archive it. */
@@ -7121,6 +7127,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   --shortcut-ink: var(--luke-color-text-muted);
 }
 
+/* Under a finger the foot's keys are none to press, so it is not drawn. */
+@media (hover: none) and (pointer: coarse) {
+  .command-palette-footer {
+    display: none;
+  }
+}
+
 .command-palette-empty {
   display: flex;
   min-height: 40px;
@@ -7139,6 +7152,41 @@ polygon.factory-campus-edge[data-edge="selected"] {
 @keyframes command-palette-rise {
   from {
     transform: translateX(-50%) scale(0.96);
+  }
+}
+
+/* In a narrow room, a phone's, the palette is a sheet hung from the top of
+   what is seen rather than a card floating in it: the screen's whole width,
+   its corners rounded only where it ends, and its filters one line that
+   scrolls sideways under the finger. It is drawn at the body, outside the
+   shell, so the room is asked of the document. */
+:root:has(.desktop-shell[data-room="narrow"]) .command-palette {
+  top: var(--luke-viewport-top);
+  left: 0;
+  width: 100%;
+  max-height: calc(var(--luke-stage-height) * 0.8);
+  border-width: 0 0 1px;
+  border-radius: 0 0 var(--luke-dialog-radius) var(--luke-dialog-radius);
+  transform: none;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    command-palette-drop var(--duration-fast) var(--spring-fast) backwards;
+}
+
+/* The filters run to the sheet's edges, so one cut off at the edge reads as
+   more to scroll to, the band's inset standing at the ends of the scroll. */
+:root:has(.desktop-shell[data-room="narrow"]) .command-palette-filters {
+  padding-inline: 0;
+}
+
+:root:has(.desktop-shell[data-room="narrow"]) .command-palette-filters [role="radiogroup"] {
+  padding-inline: var(--luke-space-12);
+  overscroll-behavior-x: contain;
+}
+
+@keyframes command-palette-drop {
+  from {
+    transform: translateY(-16px);
   }
 }
 

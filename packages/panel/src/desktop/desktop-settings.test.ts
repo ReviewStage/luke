@@ -404,6 +404,42 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   }
 });
 
+test("a browser, which is no installed app, draws Appearance without Zoom or Open Luke at login, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
+  const drawnOn = (capabilities: readonly HostCapability[]) => {
+    const page = mount(createElement(SettingsHarness, { capabilities }));
+    const groups = pageGroups(page);
+    const appearance = openPage(page, "Appearance").textContent ?? "";
+    const found = ["Zoom", "Open Luke at login", "Keyboard shortcuts"].flatMap((words) =>
+      foundUnder(page, words),
+    );
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return {
+      last: groups.at(-1),
+      zoom: appearance.includes("Zoom"),
+      login: appearance.includes("Open Luke at login"),
+      found,
+    };
+  };
+
+  const desktop = drawnOn(DESKTOP_CAPABILITIES);
+  const browser = drawnOn(
+    DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP),
+  );
+
+  assert.equal(desktop.last?.heading, "This Mac");
+  assert.ok(desktop.last?.rows.includes("Keyboard shortcuts"));
+  assert.equal(desktop.zoom, true);
+  assert.equal(desktop.login, true);
+  assert.notDeepEqual(desktop.found, []);
+  assert.equal(browser.last?.heading, "This device");
+  assert.equal(browser.last?.rows.includes("Keyboard shortcuts"), false);
+  assert.equal(browser.zoom, false);
+  assert.equal(browser.login, false);
+  assert.deepEqual(browser.found, []);
+});
+
 test("a platform with voice but without its own microphone route draws Voice without the Microphone permission row or Prefer the Mac's microphone, and its search finds neither", () => {
   const voicePage = (capabilities: readonly HostCapability[]) => {
     const page = mount(createElement(SettingsHarness, { capabilities }));

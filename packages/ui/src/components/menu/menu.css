@@ -193,6 +193,14 @@
     white-space: nowrap;
   }
 
+  /* Under a finger a hint that is a chord alone is not drawn, so the
+     row's words keep its room; a hint of words still is. */
+  @media (hover: none) and (pointer: coarse) {
+    .luke-menu-item-hint:has(> kbd:only-child) {
+      display: none;
+    }
+  }
+
   /* The end slot is one glyph wide, so a name ends where every other does;
      the check is the text's own colour, a choice rather than a state, and
      a chevron is quieter. */

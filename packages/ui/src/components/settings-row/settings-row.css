@@ -171,14 +171,37 @@
      width is written here (`tokens/profiles.css`); a range rather than a
      379px maximum, so a fractional width under 380px stacks too. */
   @container luke-settings-row (width < 380px) {
-    .luke-settings-row:not([data-density="compact"]) .luke-settings-row-line {
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-line {
       flex-direction: column;
       align-items: stretch;
       gap: var(--luke-space-8);
     }
 
-    .luke-settings-row:not([data-density="compact"]) .luke-settings-row-subject {
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-subject {
       flex-basis: auto;
+    }
+  }
+
+  /* A row whose words label its switch is pressed whole under a finger: the
+     label's press reaches across the row, and the switch and a link in the
+     description stand above it, answering their own presses. */
+  @media (pointer: coarse) {
+    .luke-settings-row[data-labels-control="true"] > .luke-settings-row-body {
+      position: relative;
+    }
+
+    .luke-settings-row[data-labels-control="true"] .luke-settings-row-label::after {
+      position: absolute;
+      inset: 0;
+      content: "";
+    }
+
+    .luke-settings-row[data-labels-control="true"]
+      :is(.luke-settings-row-controls, .luke-settings-row-description a) {
+      position: relative;
+      z-index: 1;
     }
   }
 }

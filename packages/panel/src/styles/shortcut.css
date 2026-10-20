@@ -24,6 +24,18 @@
   white-space: nowrap;
 }
 
+/* Under a finger there is no keyboard to press a chord on, so a chord shown
+   as a hint is not drawn, nor words that only point at one
+   (`shortcut-hint`); a chord that is a row's whole value (`shortcut-value`)
+   still is. Both features are asked, so a tablet worked with a trackpad
+   keeps its hints. */
+@media (hover: none) and (pointer: coarse) {
+  .shortcut:not(.shortcut-value),
+  .shortcut-hint {
+    display: none;
+  }
+}
+
 /* One key's glyph, its box cut to the capitals' height, so a row that centres
    its children centres the chord's capitals on its own words, whatever size
    either is set in, and every glyph stands on one baseline. */

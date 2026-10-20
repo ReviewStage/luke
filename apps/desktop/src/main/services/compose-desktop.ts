@@ -88,6 +88,7 @@ const DESKTOP_CLIENT_CAPABILITIES: readonly ClientCapability[] = [
   HOST_CAPABILITY.MICROPHONE,
   HOST_CAPABILITY.NOTIFICATIONS,
   HOST_CAPABILITY.BROWSER,
+  HOST_CAPABILITY.DESKTOP_APP,
 ];
 
 /** The desktop client as it stands once every step of the launch has run. */
