@@ -4,6 +4,7 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
+  type VoiceCallTranscript,
   type VoiceSpeakers,
   type VoiceView,
 } from "@luke/voice/voice-view";
@@ -91,6 +92,8 @@ export function voiceNoticeToShow(input: {
 interface VoiceViewState {
   /** The live conversation as the voice window last reported it. */
   view: VoiceView;
+  /** What was said on the standing call so far, as the document holds it beside the view; none for no call. */
+  callTranscript: VoiceCallTranscript | undefined;
   /** Whether Luke is speaking — his reply under way — as of the last report. */
   speaking: boolean;
   /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
@@ -126,6 +129,7 @@ export function useVoiceView(): VoiceViewState {
   }, []);
   return {
     view,
+    callTranscript: state?.voice.callTranscript,
     speaking: view.lukeSpeaking,
     listening: view.listening,
     stopSpeaking,

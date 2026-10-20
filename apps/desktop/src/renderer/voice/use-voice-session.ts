@@ -97,10 +97,14 @@ export function useVoiceSession(
   const bridge: LiveVoiceBridge = {
     // Every exchange is a spoken one: a call is only ever opened by a press.
     // The speaker toggle is the view's, so it is played as reported.
-    reportView: (view, exchangeOpened) => {
+    reportView: (view, exchangeOpened, transcript) => {
       speakerMuted.current = view.speakerMuted;
       playRemoteAudio();
-      appBridge().reportVoiceView(view, exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined);
+      appBridge().reportVoiceView(
+        view,
+        exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined,
+        transcript,
+      );
     },
     requestMicrophone: () =>
       Effect.promise(
