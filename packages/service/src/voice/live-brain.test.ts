@@ -591,7 +591,7 @@ it.live(
     }),
 );
 
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 
 /** What eve's door saw of one request the host's client made: its route, its bearer, the account it named, and its body. */
 interface DoorSeen {
@@ -617,7 +617,7 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
   const auth: AuthFn<Request> = ownedAuth(
     [
       deploymentActor({
-        secret: Redacted.make(CRON_SECRET),
+        secret: Redacted.make(DEPLOYMENT_SECRET),
         admits: DEPLOYMENT_TURNS,
         presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
       }),
@@ -648,7 +648,7 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
     Effect.provide(
       eveSessions({
         origin: "https://luke.test",
-        caller: { secret: Redacted.make(CRON_SECRET), account: target.userId },
+        caller: { secret: Redacted.make(DEPLOYMENT_SECRET), account: target.userId },
         mount: EVE_MOUNT.TASKS,
       }),
       door,
@@ -693,7 +693,7 @@ it.live(
       const cancel = behind.seen.at(-1);
       assert.deepEqual(cancel, {
         pathname: `/eve/v1/session/${sessionId}/cancel`,
-        authorization: `Bearer ${CRON_SECRET}`,
+        authorization: `Bearer ${DEPLOYMENT_SECRET}`,
         account: target.userId,
         body: { turnId: FIRST_EVE_TURN },
       });
