@@ -274,6 +274,9 @@ beforeAll(async () => {
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
+// The view is a chunk of its own the tab loads the first time it is shown; loaded once here, so each test's first draw finds it.
+beforeAll(() => import("./agent-chapters-tab.js"));
+
 beforeEach(() => {
   window.localStorage.clear();
   lists = [];

@@ -86,8 +86,10 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  lazy,
   type MouseEvent,
   type ReactNode,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -101,6 +103,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { SpinnerRegion } from "../spinner.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import {
@@ -113,13 +116,8 @@ import {
   useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
-import {
-  AgentChaptersTab,
-  type ChaptersRead,
-  chaptersCount,
-  useChaptersRead,
-} from "./agent-chapters-tab.js";
 import { threadPreview } from "./changes-model.js";
+import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
 import { centreWithin, scrollerOf } from "./code-pane.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
@@ -254,12 +252,24 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * (`ph-no-capture`).
  */
 
+/**
+ * The Chapters view, loaded as a chunk of its own the first time it is
+ * shown rather than with the window, as Settings is, because the renderer
+ * bundle is parsed at every window open and the view, its rail, and the
+ * chapter logic are opened seldom (`bundle-budget.json`). What stands while
+ * the chunk loads is the view's own wait, for a frame.
+ */
+const AgentChaptersTab = lazy(() =>
+  import("./agent-chapters-tab.js").then((loaded) => ({ default: loaded.AgentChaptersTab })),
+);
+
 /** The tab's own words. */
 const PULL_REQUEST_WORDS = {
   READING: "Reading pull request",
   READING_CHECKS: "Reading checks",
   READING_DESCRIPTION: "Reading description",
   READING_CONVERSATION: "Reading conversation",
+  READING_CHAPTERS: "Reading chapters",
   FAILED: "The pull request could not be read.",
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
@@ -2164,6 +2174,9 @@ function PullRequestTabBody({
     control,
     shown && !none && (view === PULL_REQUEST_VIEW.FILES || view === PULL_REQUEST_VIEW.CHAPTERS),
   );
+  // The Chapters view's chunk is asked for only once the view is first shown.
+  const [chaptersSeen, setChaptersSeen] = useState(false);
+  if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
   // The chapters, read as their view is first shown, which its tab counts once they are ready.
   const chapters = useChaptersRead(
     agentId,
@@ -2339,17 +2352,23 @@ function PullRequestTabBody({
                   aria-labelledby={ids(PULL_REQUEST_VIEW.CHAPTERS).tab}
                   hidden={view !== PULL_REQUEST_VIEW.CHAPTERS}
                 >
-                  <AgentChaptersTab
-                    agentId={agentId}
-                    control={control}
-                    shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
-                    repository={repository}
-                    tree={tree}
-                    chapters={chapters}
-                    changes={changes}
-                    threads={changesThreads}
-                    lineComments={{ pending: pendingReview, onWritten: written }}
-                  />
+                  {chaptersSeen ? (
+                    <Suspense
+                      fallback={<SpinnerRegion label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
+                    >
+                      <AgentChaptersTab
+                        agentId={agentId}
+                        control={control}
+                        shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
+                        repository={repository}
+                        tree={tree}
+                        chapters={chapters}
+                        changes={changes}
+                        threads={changesThreads}
+                        lineComments={{ pending: pendingReview, onWritten: written }}
+                      />
+                    </Suspense>
+                  ) : null}
                 </div>
               </>
             )}
