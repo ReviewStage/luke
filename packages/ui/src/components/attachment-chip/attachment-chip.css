@@ -76,10 +76,11 @@
     filter: brightness(1.12);
   }
 
+  /* A name cut short fades out over its last few pixels (`one-line.css`),
+     as a browser's tab ends a long title. */
   .luke-attachment-chip-name {
     overflow: hidden;
     color: var(--luke-color-text);
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 

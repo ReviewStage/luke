@@ -48,6 +48,7 @@ import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
+import { FadingWords } from "../fading-words.js";
 import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
@@ -832,11 +833,11 @@ function OriginSubject({
   const words =
     subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
   const { url } = subject;
-  if (url === undefined) return <span className="agent-origin-subject">{words}</span>;
+  if (url === undefined) return <FadingWords className="agent-origin-subject" words={words} />;
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <span className="agent-origin-subject">
+    <FadingWords className="agent-origin-subject" words={words}>
       <TextLink
         href={url}
         look={TEXT_LINK_LOOK.UNDERLINED}
@@ -847,7 +848,7 @@ function OriginSubject({
       >
         {words}
       </TextLink>
-    </span>
+    </FadingWords>
   );
 }
 

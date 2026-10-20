@@ -196,11 +196,12 @@
     height: 14px;
   }
 
+  /* A row's words cut short fade out over their last few pixels
+     (`one-line.css`), as the card's one-line name and note do. */
   .luke-hover-card-row-label {
     min-width: 0;
     flex: 1;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 

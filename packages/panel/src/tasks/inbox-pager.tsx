@@ -4,6 +4,7 @@ import { IconButton, LIST_VARIANT, List, ListRow, type ListRowHint } from "@luke
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cloneElement } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { FadingWords } from "../fading-words.js";
 import { Shortcut } from "../shortcut.js";
 import { Tooltip } from "../tooltip.js";
 import { type InboxListed, type InboxListView, inboxSteps, nextNeedingYou } from "./inbox-model.js";
@@ -85,7 +86,7 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
           title={
             <span className="inbox-next-words">
               <span className="inbox-next-lead">Next</span>
-              <span>{next.title}</span>
+              <FadingWords className="inbox-next-title" words={next.title} />
             </span>
           }
           meta={next.byKey ? <Shortcut chord={NEXT_CHORD} /> : null}

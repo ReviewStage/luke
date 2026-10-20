@@ -9,16 +9,21 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Clock, Effect, Option } from "effect";
 import {
   connectWorkspaceGitHub,
+  GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  GITHUB_FIXTURE_MEMBER,
   type GitHubAccountRow,
   githubReaching,
   type InstallationFixture,
+  memberRepositoryJson,
   openGithubUser,
+  openTokenMember,
   type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import { openPullRequest } from "./pull-request.js";
@@ -27,7 +32,8 @@ import { openPullRequest } from "./pull-request.js";
  * A coding agent's pull request, opened by the service: as the developer it
  * writes as, on their own token, in one call on the agent's repository; as
  * the App where it writes as the App; and as the App in the developer's
- * place where GitHub refuses their token, the agent's row recording why. A
+ * place where GitHub refuses their token, the agent's row recording why;
+ * and on its starter's own token alone where that is its credential. A
  * refusal of the pull request itself opens nothing and moves nothing.
  * GitHub is a script and the store PGlite; synthetic accounts and tokens
  * throughout.
@@ -116,7 +122,75 @@ const open = (
     return { result, openings: github.openings, author: row.author, branch: row.branch };
   });
 
+/** An agent of a member who saved their own token, on the repository no installation of the plan's workspace reaches, writing on that token. */
+const openTokenAgent = Effect.gen(function* () {
+  const userId = yield* openTokenMember();
+  const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
+  const started = yield* createCodingAgent(userId, {
+    taskId: task.id,
+    idempotencyKey: "start-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    planSnapshot: "# Invitations\n",
+    prompt: null,
+    repository: RELAY_FULL_NAME,
+    githubAccess: GITHUB_ACCESS.TOKEN,
+  });
+  const { agent } = Option.getOrThrow(started);
+  yield* settleCodingAgentAuthor(userId, agent.id, CODING_AGENT_AUTHOR.TOKEN);
+  return {
+    agent: Option.getOrThrow(yield* readCodingAgent(userId, agent.id)),
+    target: { userId, conversationId: agent.conversationId },
+  };
+});
+
+/** Opens a token agent's pull request against a GitHub where the member's token may push to the repository and no installation reaches it. */
+const openOnToken = (
+  opened: {
+    readonly agent: CodingAgent;
+    readonly target: { userId: string; conversationId: string };
+  },
+  answer: Opening,
+) =>
+  Effect.gen(function* () {
+    const github = repository(answer);
+    const script = (sent: SentToGitHub): Response | undefined => {
+      const onToken = sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`;
+      if (onToken && new URL(sent.url).pathname === `/repos/${RELAY_FULL_NAME}`) {
+        return Response.json(memberRepositoryJson(RELAY, true));
+      }
+      return github.script(sent);
+    };
+    const result = yield* openPullRequest(opened.target, opened.agent, unparsedWire(INPUT)).pipe(
+      Effect.provide(githubReaching([], GITHUB_APP_WITH_TOKENS, {}, script).layer),
+    );
+    const row = Option.getOrThrow(yield* readCodingAgent(opened.target.userId, opened.agent.id));
+    return { result, openings: github.openings, author: row.author };
+  });
+
 it.layer(getTestDB())("a coding agent's pull request", (it) => {
+  it.effect(
+    "an agent on its starter's own token opens on that token alone, as them, and a refusal of the token opens nothing in its place",
+    () =>
+      Effect.gen(function* () {
+        const accepted = yield* openOnToken(yield* openTokenAgent, opened);
+        const refused = yield* openOnToken(yield* openTokenAgent, () =>
+          Response.json({ message: "Bad credentials" }, { status: 401 }),
+        );
+
+        assert.ok(accepted.result.status === ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(accepted.result.openedAs, "developer");
+        assert.equal(refused.result.status, ACTION_RESULT_STATUS.REJECTED);
+        for (const { openings, author } of [accepted, refused]) {
+          assert.deepEqual(
+            openings.map((sent) => sent.headers.get("authorization")),
+            [`Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`],
+          );
+          assert.equal(author, CODING_AGENT_AUTHOR.TOKEN, "the row is left as it stood");
+        }
+      }),
+  );
+
   it.effect(
     "an agent writing as its developer has its pull request opened on their token, once, against the default branch, ending on Luke's line, its branch recorded on the agent as it opens",
     () =>

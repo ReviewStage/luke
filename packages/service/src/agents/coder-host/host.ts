@@ -14,13 +14,14 @@ import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
+import { Effect, Option, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -98,6 +99,7 @@ import {
 import type { RepositorySandbox } from "../repository-shell.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
+import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -277,15 +279,15 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
-  /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
+  /** The agent's repository checked out into the sandbox; answers the credential for the caller to set at the firewall (`credentialPolicy`). */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
-  /** A fresh write token for the agent's repository, for the firewall once the standing one is old. */
-  repositoryToken(
+  ): Effect.Effect<RepositoryCredential, CheckoutFailure, CheckoutServices>;
+  /** A fresh credential for the agent's repository, for the firewall once the standing one is old or was taken off. */
+  repositoryCredential(
     admitted: AdmittedConversation,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
+  ): Effect.Effect<RepositoryCredential, CheckoutFailure, CheckoutServices>;
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
@@ -630,6 +632,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       coAuthor,
       chatOn,
       agent.startBranch,
+      agent.githubAccess === GITHUB_ACCESS.TOKEN,
     );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
   };
@@ -785,9 +788,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         checkOutAgentRepository(admitted.target, agent, sandbox),
       ),
 
-    repositoryToken: (admitted) =>
+    repositoryCredential: (admitted) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
+        agentRepositoryToken(admitted.target, agent),
       ),
 
     recordBranch: (admitted, sandbox) =>

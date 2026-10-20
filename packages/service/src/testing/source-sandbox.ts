@@ -146,7 +146,8 @@ export function sourceSandbox(source: SourceCheckout, status: string | undefined
       return refused ?? Response.json({});
     }
     if (parsed.pathname.endsWith("/network-policy")) {
-      policies.push({ session, hosts: Object.keys(JSON.parse(body).allow) });
+      // An open policy carries a credential on no host.
+      policies.push({ session, hosts: Object.keys(JSON.parse(body).allow ?? {}) });
       return Response.json({});
     }
     if (parsed.searchParams.get("resume") === "true") {

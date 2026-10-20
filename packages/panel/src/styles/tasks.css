@@ -6379,64 +6379,41 @@ ol.transcript-list {
   color: var(--luke-color-text-subtle);
 }
 
-/* A task's Linked issues box under its name (`task-issue-links.tsx`): a
-   hairline box whose head, on the well's ground, says what it holds and ends
-   in Link issue, over one row per issue: its mark, its key in the code face,
-   its title taking the room left, its state in words, its Closes / Part of
-   switch, and its ×. */
-.task-issue-links {
-  margin: var(--luke-space-8) 0 var(--luke-space-20);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  overflow: hidden;
-}
-
-.task-issue-links-head {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-4) var(--luke-space-8) var(--luke-space-4) var(--luke-space-12);
-  background: var(--luke-color-well);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-weight: var(--luke-weight-medium);
-}
-
-.task-issue-links-none {
-  color: var(--luke-color-text-subtle);
-  font-weight: var(--luke-weight-regular);
-}
-
-.task-issue-links-head > .issue-picker-chip,
-.task-issue-links-retry {
-  margin-left: auto;
-}
-
+/* A task's linked issues under its status and priority
+   (`task-issue-links.tsx`): a row of chips in the status chip's own look,
+   wrapping where the page is narrow, each its issue's mark, its key in the
+   code face, and its title cut short at a chip's widest, and Link issue,
+   quiet, at the row's end. What did not land is said under the row. */
 .task-issue-links-rows {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.task-issue-link {
+.task-issue-link,
+.task-issue-links-add {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
+  max-width: 100%;
 }
 
-.task-issue-link-mark {
-  display: flex;
-  flex: none;
-  align-items: center;
+.task-issue-link {
+  max-width: min(100%, 360px); /* off-scale: a title's readable start, past which it is cut */
 }
 
+.task-issue-link .issue-mark,
 .task-issue-link-unread {
   width: 13px;
   height: 13px;
+}
+
+.task-issue-link-unread {
+  flex: none;
   color: var(--luke-color-text-subtle);
 }
 
@@ -6445,81 +6422,32 @@ ol.transcript-list {
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-regular);
 }
 
-.task-issue-link-title {
+/* A chip's menu is headed by its issue's whole title over where it
+   stands, since the chip cuts the title short. */
+.task-issue-link-heading {
   display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
+  max-width: 280px; /* off-scale: the menu's width at most */
+  flex-direction: column;
+  gap: var(--luke-space-2);
 }
 
-.task-issue-link-state {
-  flex: none;
+.task-issue-link-heading-title {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.task-issue-link-heading-state {
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  white-space: nowrap;
-}
-
-.task-issue-link-relation,
-.task-issue-link-unlink {
-  display: flex;
-  flex: none;
-}
-
-/* A row's state and controls stand in its line as its other parts do. */
-.task-issue-link-controls {
-  display: contents;
-}
-
-/* On a phone a row's controls, its state, its Closes / Part of switch, and
-   its ×, are wider together than the box beside its key, so the row takes
-   two lines: its mark, key, and title, cut short, over its state and its
-   controls at the row's end, under the key and the title. The state gives
-   way before a control does, so nothing is pushed past the box's edge. */
-.desktop-shell[data-room="narrow"] .task-issue-link {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  grid-template-areas:
-    "mark key title"
-    ". controls controls";
-  gap: var(--luke-space-4) var(--luke-space-8);
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-mark {
-  grid-area: mark;
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-key {
-  grid-area: key;
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-title {
-  grid-area: title;
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-controls {
-  display: flex;
-  min-width: 0;
-  grid-area: controls;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-space-8);
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-state {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin-right: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .task-issue-links-note {
-  margin: 0;
-  padding: var(--luke-space-6) var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
+  margin: var(--luke-space-6) 0 0;
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);

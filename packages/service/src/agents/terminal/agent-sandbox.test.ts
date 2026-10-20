@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
@@ -16,7 +17,9 @@ import { TMUX_EXIT } from "./tmux.js";
  * read from tmux in its running session, a shell starts under the id given
  * and is read back, one tmux does not hold is not found, a list tmux could
  * not give is an outage, and only a resume wakes a stopped sandbox, by its
- * name. The token is a synthetic one the
+ * name. A GitHub credential is set at the firewall in its shape: an
+ * installation's on GitHub's two hosts, a member's own on its repository's
+ * paths alone. The token is a synthetic one the
  * environment carries, unexpired, so nothing refreshes it.
  */
 
@@ -24,6 +27,8 @@ const SESSION = "wrun_fixture";
 const SANDBOX = "eve-sbx-vercel-fixture";
 const RUNNING_SESSION = "sbs_running";
 const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
+const REPOSITORY = "Acme/Relay";
+const MEMBER_TOKEN = "member-token-fixture";
 
 /** An unsigned token naming a fixture project and team, a year from expiring. */
 function fixtureToken(): string {
@@ -312,20 +317,76 @@ it.effect("a tmux that could not be asked is an outage the tab may retry, never 
 );
 
 it.effect(
-  "a GitHub token is set at the firewall on GitHub's two hosts alone, every other host left open",
+  "an installation's token is set at the firewall on GitHub's two hosts alone, every other host left open",
   () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel("running");
 
       yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-        sandbox.setGitHubToken(RUNNING_SESSION, Redacted.make("ghs_fixture")),
+        sandbox.setCredential(RUNNING_SESSION, {
+          token: Redacted.make("ghs_fixture"),
+          fullName: REPOSITORY,
+          access: { kind: GITHUB_ACCESS.APP },
+        }),
       ).pipe(Effect.provide(api.layer));
 
       const authorization = `Basic ${Buffer.from("x-access-token:ghs_fixture").toString("base64")}`;
       const injected = [{ transform: [{ headers: { authorization } }] }];
       assert.deepEqual(api.policies, [
         { allow: { "*": [], "github.com": injected, "api.github.com": injected } },
+      ]);
+    }),
+);
+
+it.effect(
+  "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else, then taken off whole",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel("running");
+
+      yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+        Effect.andThen(
+          sandbox.setCredential(RUNNING_SESSION, {
+            token: Redacted.make(MEMBER_TOKEN),
+            fullName: REPOSITORY,
+            access: {
+              kind: GITHUB_ACCESS.TOKEN,
+              githubLogin: "octo-member",
+              githubUserId: "4242",
+              markInvalid: Effect.void,
+            },
+          }),
+          sandbox.withdrawCredential(RUNNING_SESSION),
+        ),
+      ).pipe(Effect.provide(api.layer));
+
+      const basic = `Basic ${Buffer.from(`octo-member:${MEMBER_TOKEN}`).toString("base64")}`;
+      const bearer = `Bearer ${MEMBER_TOKEN}`;
+      assert.deepEqual(api.policies, [
+        {
+          allow: {
+            "*": [],
+            "github.com": [
+              {
+                match: { path: { startsWith: `/${REPOSITORY}.git/` } },
+                transform: [{ headers: { authorization: basic } }],
+              },
+            ],
+            "api.github.com": [
+              {
+                match: { path: { exact: `/repos/${REPOSITORY}` } },
+                transform: [{ headers: { authorization: bearer } }],
+              },
+              {
+                match: { path: { startsWith: `/repos/${REPOSITORY}/` } },
+                transform: [{ headers: { authorization: bearer } }],
+              },
+            ],
+          },
+        },
+        { mode: "allow-all" },
       ]);
     }),
 );

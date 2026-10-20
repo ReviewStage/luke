@@ -12,6 +12,7 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -304,7 +305,11 @@ export function DesktopAgentPage({
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
         {agent === undefined ? null : (
-          <h1 className="desktop-toolbar-title">{agentTabLabel(agent, control.models)}</h1>
+          <FadingWords
+            as={FADING_ELEMENT.H1}
+            className="desktop-toolbar-title"
+            words={agentTabLabel(agent, control.models)}
+          />
         )}
       </div>
       {agent === undefined ? null : (
