@@ -1770,7 +1770,7 @@ function ConversationView({
     if (asked !== undefined && !conversationOpen) change({ conversationOpen: true });
   }, [asked, conversationOpen, change]);
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: the view scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by.
+    // Note that it is in the tab order, because it scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by.
     <ScrollArea
       role="region"
       aria-label="Pull request conversation"
