@@ -34,6 +34,8 @@ import {
   type HostActDependencies,
   type PlatformActRows,
   refusedRows,
+  type TranscriptFollowActKind,
+  transcriptFollowActRows,
 } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
@@ -250,6 +252,7 @@ const noticeDoors = (
 function platformRows(
   http: HttpClient.HttpClient,
   doors: WebNoticeDoors,
+  follows: Pick<PlatformActRows<WebSender>, TranscriptFollowActKind>,
 ): PlatformActRows<WebSender> {
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
   return {
@@ -263,9 +266,7 @@ function platformRows(
     [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
       Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
-    // A tab follows no transcript: it is pushed nothing and reads each page once.
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW]: () => undefined,
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: () => undefined,
+    ...follows,
   };
 }
 
@@ -434,7 +435,21 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
         routerFor: () =>
-          createHostActRouter(hostRowDependencies(operator), platformRows(http, doors)),
+          createHostActRouter(
+            hostRowDependencies(operator),
+            platformRows(
+              http,
+              doors,
+              // The tab's transcripts are followed at the host and each page said to the page, which is
+              // the tab's one panel and is gone only with the host.
+              transcriptFollowActRows<WebSender>({
+                host: operator.host,
+                deliver: (_page, changed) => events?.onTranscript(changed),
+                whenGone: () => undefined,
+                run,
+              }),
+            ),
+          ),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),

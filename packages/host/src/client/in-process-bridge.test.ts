@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import {
+  type CodingAgentTranscriptChanged,
+  type CodingAgentTranscriptKey,
+  TRANSCRIPT_KIND,
+} from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Context, Effect } from "effect";
 import { hostActRows } from "../act-router/host-act-rows.js";
@@ -9,6 +15,7 @@ import {
   type HostActDependencies,
   type PlatformActRows,
   refusedRows,
+  transcriptFollowActRows,
 } from "../act-router/index.js";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind } from "../acts.js";
 import type { AppStateSnapshot } from "../app-state.js";
@@ -178,4 +185,59 @@ it.effect("a closed bridge tells its page nothing more, nor takes a new subscrip
     events.onShowAgent(AGENT_PLACE);
     assert.deepEqual(shown, []);
   }),
+);
+
+it.effect(
+  "a page follows a transcript through the shell's follow rows and hears each page the host tells pushed to it",
+  () =>
+    Effect.gen(function* () {
+      const services = yield* Effect.context<never>();
+      const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
+      const followed: CodingAgentTranscriptKey[] = [];
+      let told: ((changed: CodingAgentTranscriptChanged) => void) | undefined;
+      let events: Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined;
+      const follows = transcriptFollowActRows<symbol>({
+        host: {
+          transcriptFollow: (transcript) => Effect.sync(() => void followed.push(transcript)),
+          transcriptUnfollow: () => Effect.void,
+          onTranscriptChanged: (listener) => {
+            told = listener;
+            return () => undefined;
+          },
+        },
+        deliver: (_page, changed) => events?.onTranscript(changed),
+        whenGone: () => undefined,
+        run: (effect) => Effect.runPromiseWith(services)(effect),
+      });
+      const made = yield* createInProcessBridge({
+        sender: Symbol("page"),
+        routerFor: (reporterOf): ActRouter<symbol> =>
+          createHostActRouter(UNREACHED, { ...platformRows(reporterOf, []), ...follows }),
+        run: (effect) => Effect.runPromiseWith(services)(effect),
+        state,
+        windowFacts: () => ({ fullScreen: false }),
+        createId: () => REPORTER,
+        reports: { notifyReady: () => {}, recordSurfaceEvent: () => {} },
+        report: () => undefined,
+      });
+      events = made.events;
+      const heard: CodingAgentTranscriptChanged[] = [];
+      made.bridge.onTranscript((changed) => heard.push(changed));
+      const transcript: CodingAgentTranscriptKey = {
+        kind: TRANSCRIPT_KIND.AGENT,
+        agentId: AGENT_PLACE.agentId,
+      };
+
+      const outcome = yield* Effect.promise(() =>
+        made.bridge.act({ kind: ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW, payload: transcript }),
+      );
+      assert.ok(outcome.status === ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(followed, [transcript]);
+      const page: CodingAgentTranscriptChanged = {
+        transcript,
+        page: { messages: [], cursor: "1:0", status: CODING_AGENT_STATUS.RUNNING, title: null },
+      };
+      told?.(page);
+      assert.deepEqual(heard, [page]);
+    }).pipe(Effect.scoped),
 );

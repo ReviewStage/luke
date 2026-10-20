@@ -7,7 +7,11 @@ import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
-import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
+import {
+  createHostActRouter,
+  type PlatformActRows,
+  transcriptFollowActRows,
+} from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { channels } from "@luke/host/bridge";
@@ -33,7 +37,6 @@ import { browserActRows } from "./browser-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { clientSettingSideEffects } from "./settings-side-effects";
 import { terminalProcedures, whenPageGone } from "./terminal-acts";
-import { transcriptFollowActRows } from "./transcript-follow-acts";
 import { voiceRuntimeProcedures, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 
@@ -118,7 +121,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       experimentOn: () =>
         experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
     }),
-    ...transcriptFollowActRows({
+    ...transcriptFollowActRows<WebContents>({
       host: operator.host,
       deliver: (sender, changed) => {
         if (!sender.isDestroyed()) sender.send(channels.onTranscript, changed);

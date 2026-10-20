@@ -10,7 +10,8 @@ import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js
 /**
  * The one-shot events a shell or its notice presenter feeds the page: a
  * notification's click, or a notice the focused window says in its toast.
- * Each is said once and never bootstrapped from.
+ * Each is said once and never bootstrapped from; a followed transcript's
+ * page as well, which the shell's follow rows say to the page that follows it.
  */
 type InProcessEventMethod = Extract<
   BridgeMethod,
@@ -24,6 +25,7 @@ type InProcessEventMethod = Extract<
   | "onRunFailed"
   | "onChatMessageWaiting"
   | "onShowLink"
+  | "onTranscript"
 >;
 
 /** Where the shell says each one-shot event, to every subscription standing in the page. */
@@ -150,6 +152,7 @@ export function createInProcessBridge<Sender = unknown>(
       onRunFailed: listeners(report),
       onChatMessageWaiting: listeners(report),
       onShowLink: listeners(report),
+      onTranscript: listeners(report),
     };
     // A page whose bridge is closed hears nothing more, whoever still holds `events`.
     yield* Effect.addFinalizer(() =>
@@ -174,6 +177,7 @@ export function createInProcessBridge<Sender = unknown>(
       onRunFailed: said.onRunFailed.subscribe,
       onChatMessageWaiting: said.onChatMessageWaiting.subscribe,
       onShowLink: said.onShowLink.subscribe,
+      onTranscript: said.onTranscript.subscribe,
       reportVoiceView: dropped,
       setShortcutCapturing: dropped,
       recordAgentTrace: dropped,
@@ -195,8 +199,6 @@ export function createInProcessBridge<Sender = unknown>(
       onBrowserState: neverDelivered,
       onBrowserKey: neverDelivered,
       onBrowserFocus: neverDelivered,
-      // A tab is pushed no transcript; it reads each one once rather than following it.
-      onTranscript: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,
@@ -209,6 +211,7 @@ export function createInProcessBridge<Sender = unknown>(
       onRunFailed: said.onRunFailed.emit,
       onChatMessageWaiting: said.onChatMessageWaiting.emit,
       onShowLink: said.onShowLink.emit,
+      onTranscript: said.onTranscript.emit,
     };
     return { bridge, events };
   });

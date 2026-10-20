@@ -11,6 +11,10 @@ export {
   type ActSender,
   createActRouter,
 } from "./router.js";
+export {
+  type TranscriptFollowActKind,
+  transcriptFollowActRows,
+} from "./transcript-follow-acts.js";
 
 /**
  * The rows a platform answers itself: every kind the host's rows leave, and

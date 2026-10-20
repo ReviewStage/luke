@@ -6,17 +6,19 @@ import {
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "../acts.js";
+import { type ActRows, type ActSender, createActRouter } from "./router.js";
 import {
   type TranscriptFollowActsDependencies,
   transcriptFollowActRows,
-} from "./transcript-follow-acts";
+} from "./transcript-follow-acts.js";
+
+/** A window, by identity alone, as each platform's own handle on its page is. */
+type Panel = object;
 
 /**
- * A followed transcript as main carries it, over a host that answers from a
+ * A followed transcript as a platform carries it, over a host that answers from a
  * script: each follow asks the host to follow from the start, each page it
  * tells reaches the panels following that transcript and no other, the
  * transcript is let go at the host once no panel holds a follow of it, a
@@ -35,9 +37,9 @@ const TASK_WORKER: CodingAgentTranscriptKey = {
 };
 
 /** One window, by identity alone. */
-function panelOf(): ActSender<WebContents> {
-  // SAFETY: the rows read a sender by identity alone; one inert object is one window.
-  return { sender: {} as WebContents, panel: true, voice: false, call: false };
+function panelOf(): ActSender<Panel> {
+  // The rows read a sender by identity alone, so one fresh object is one window.
+  return { sender: {}, panel: true, voice: false, call: false };
 }
 
 /** A transcript as the test names it in what the host was asked. */
@@ -49,11 +51,11 @@ function named(transcript: CodingAgentTranscriptKey): string {
 
 function fixture() {
   const asked: string[] = [];
-  const sent: { sender: WebContents; changed: CodingAgentTranscriptChanged }[] = [];
-  const gone = new Map<WebContents, () => void>();
+  const sent: { sender: Panel; changed: CodingAgentTranscriptChanged }[] = [];
+  const gone = new Map<Panel, () => void>();
   const pending: Effect.Effect<void>[] = [];
   let told: ((changed: CodingAgentTranscriptChanged) => void) | undefined;
-  const host: TranscriptFollowActsDependencies["host"] = {
+  const host: TranscriptFollowActsDependencies<Panel>["host"] = {
     transcriptFollow: (transcript) =>
       Effect.sync(() => void asked.push(`follow:${named(transcript)}`)),
     transcriptUnfollow: (transcript) =>
@@ -63,7 +65,7 @@ function fixture() {
       return () => undefined;
     },
   };
-  const rows = transcriptFollowActRows({
+  const rows = transcriptFollowActRows<Panel>({
     host,
     deliver: (sender, changed) => void sent.push({ sender, changed }),
     whenGone: (sender, then) => void gone.set(sender, then),
@@ -73,13 +75,13 @@ function fixture() {
     },
   });
   // SAFETY: the router dispatches only the follow kinds these tests send.
-  const router = createActRouter(rows as ActRows<WebContents>);
-  const follow = (transcript: CodingAgentTranscriptKey, sender: ActSender<WebContents>) =>
+  const router = createActRouter(rows as ActRows<Panel>);
+  const follow = (transcript: CodingAgentTranscriptKey, sender: ActSender<Panel>) =>
     router.performAct(
       { kind: ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW, payload: transcript },
       sender,
     );
-  const unfollow = (transcript: CodingAgentTranscriptKey, sender: ActSender<WebContents>) =>
+  const unfollow = (transcript: CodingAgentTranscriptKey, sender: ActSender<Panel>) =>
     router.performAct(
       { kind: ACT_KIND.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, payload: transcript },
       sender,
@@ -89,11 +91,11 @@ function fixture() {
     unfollow,
     asked,
     /** What each window was sent, as the test reads it. */
-    sentTo: (sender: ActSender<WebContents>) =>
+    sentTo: (sender: ActSender<Panel>) =>
       sent.flatMap((each) => (each.sender === sender.sender ? [each.changed] : [])),
     /** The host telling a followed transcript's page, as the operator would hand it up. */
     hostSays: (changed: CodingAgentTranscriptChanged) => told?.(changed),
-    pageGone: (sender: ActSender<WebContents>) => gone.get(sender.sender)?.(),
+    pageGone: (sender: ActSender<Panel>) => gone.get(sender.sender)?.(),
     /** What the pages' callbacks handed to the runtime, run now. */
     drain: Effect.suspend(() => Effect.all(pending.splice(0), { discard: true })),
   };
@@ -176,7 +178,7 @@ it.effect(
 it.effect("only a panel is answered", () =>
   Effect.gen(function* () {
     const { follow, asked } = fixture();
-    const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
+    const voice: ActSender<Panel> = { ...panelOf(), panel: false, voice: true };
 
     assert.deepEqual(yield* follow(AGENT, voice), {
       status: ACT_OUTCOME_STATUS.REFUSED,
