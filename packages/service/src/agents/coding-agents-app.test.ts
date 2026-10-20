@@ -10907,10 +10907,11 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const asked = yield* chat.agentAsks("Ship it?");
         const { channelId, seq } = asked.message;
 
-        assert.deepEqual(yield* chat.wrote({ readTo: seq, channelId }), {
-          readSeq: floor,
-          reads: [{ channelId, readSeq: seq }],
-        });
+        const { txid, ...moved } = yield* chat.wrote({ readTo: seq, channelId });
+        assert.deepEqual(moved, { readSeq: floor, reads: [{ channelId, readSeq: seq }] });
+        assert.match(String(txid), /^\d+$/u, "the move answers the transaction it committed in");
+        // Read to where it already stands, nothing is written, so no transaction is answered.
+        assert.ok(!("txid" in (yield* chat.wrote({ readTo: seq, channelId }))));
         const read = yield* chat.read;
         assert.equal(read.readSeq, floor, "the cursor everywhere stays where it was");
         assert.deepEqual(read.reads, [{ channelId, readSeq: seq }]);
