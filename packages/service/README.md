@@ -1988,8 +1988,8 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: Luke's brain, its worker, the coding agent, and its worker.
 What each is offered is derived from it: the brain's hosted resolver
 offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
-(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` and
-its worker's are held to their roles by `coder-agent.test.ts`; each role's
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` are held to its set by
+`coder-tool-files.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
 every module may import it. eve's own injected tools (`task_wait`,

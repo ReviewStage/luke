@@ -10,6 +10,7 @@ import { taskWorkspace } from "../github/workspace-repository.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 
 /**
  * repository-shell.ts -- the brain's one source read: a shell command run in the brain session's sandbox, on a checkout of the task's GitHub repository.
@@ -85,41 +86,6 @@ const REPOSITORY_SHELL_BOUNDS = {
   CHECKOUT_TIMEOUT: Duration.minutes(5),
   /** How many characters of the checkout's own error the model is told. */
   CHECKOUT_ERROR_MAX_CHARS: 500,
-} as const;
-
-/**
- * What the shell hands the sandbox, which is the whole of what a sandbox
- * sees of it: where the checkout stands and the file beside it naming
- * which repository it is of, and the variables each script reads, so
- * nothing of the repository's name or the model's command is spliced into
- * shell text. A test's sandbox double answers from this contract.
- */
-export const REPOSITORY_SANDBOX_CONTRACT = {
-  PATH: {
-    WORKSPACE: "/workspace",
-    CHECKOUT: "/workspace/repository",
-    CHECKOUT_RECORD: ".luke/repository",
-  },
-  VARIABLE: {
-    /** The repository the call is about, `owner/name`, read by the probe and the checkout. */
-    REPOSITORY: "LUKE_REPOSITORY",
-    /** The branch the checkout is of: the default branch, or the one a coding agent was started on. */
-    BRANCH: "LUKE_BRANCH",
-    /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
-    URL: "LUKE_CLONE_URL",
-    /** How deep the clone is; unset, the whole history, which a coding agent's branch and pull request need. */
-    DEPTH: "LUKE_CLONE_DEPTH",
-    /** The model's command, which bash reads from the variable and never from shell text. */
-    COMMAND: "LUKE_COMMAND",
-    /** The file `show_code` reads, relative to the checkout root, which its scripts read from the variable alone. */
-    FILE: "LUKE_FILE",
-    /** The first and last line of the window `show_code` reads, counted from one. */
-    FIRST_LINE: "LUKE_FIRST_LINE",
-    LAST_LINE: "LUKE_LAST_LINE",
-    /** Who a coding agent's commits are by: the Luke GitHub App's bot and its noreply address, set in the checkout's own config. */
-    GIT_NAME: "LUKE_GIT_NAME",
-    GIT_EMAIL: "LUKE_GIT_EMAIL",
-  },
 } as const;
 
 const { PATH: SANDBOX_PATH, VARIABLE: SANDBOX_VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;

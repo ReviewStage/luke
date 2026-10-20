@@ -13,10 +13,10 @@ import {
 import { describeWire } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import {
   checkedOutSandbox,
   REPOSITORY_REFUSAL,
-  REPOSITORY_SANDBOX_CONTRACT,
   type RepositoryCall,
   type RepositoryRefusal,
   type RepositoryShellServices,

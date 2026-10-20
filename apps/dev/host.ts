@@ -404,27 +404,41 @@ export function integrationConnectionsFor(
 }
 
 /**
- * `run_on_mac` as the agent and its worker are offered it, each admitted on
- * its own terms (the worker's on ownership, as its resolvers are), and run
+ * One `run_on_mac` call of the agent's or a worker's, each admitted on its
+ * own terms (the worker's on ownership, as its resolvers are), and run
  * through the one door every agent's call goes through
  * (`packages/service/src/agents/mac-command.ts`). A session the host does not admit runs
  * nothing.
  */
+export function runMacCommand(
+  admit: CoderHost["admit"],
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+): Promise<MacCommandAnswer> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* admit(auth, sessionId);
+      if (Result.isFailure(admitted)) {
+        return { status: MAC_COMMAND_STATUS.NOT_RUN, reason: admitted.failure };
+      }
+      return yield* runOnMacTool(admitted.success.target.userId, input);
+    }),
+  );
+}
+
+/** `run_on_mac` as a worker is offered it, as a tool file of its own (`runMacCommand`). */
 export function runOnMacFor(admit: CoderHost["admit"]) {
   return defineTool({
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
     execute: (input, ctx): Promise<MacCommandAnswer> =>
-      runAgent(
-        Effect.gen(function* () {
-          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
-          if (Result.isFailure(admitted)) {
-            return { status: MAC_COMMAND_STATUS.NOT_RUN, reason: admitted.failure };
-          }
-          // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
-          const call = unparsedWire(input as WireBoundaryInput);
-          return yield* runOnMacTool(admitted.success.target.userId, call);
-        }),
+      // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
+      runMacCommand(
+        admit,
+        ctx.session.auth,
+        ctx.session.id,
+        unparsedWire(input as WireBoundaryInput),
       ),
   });
 }

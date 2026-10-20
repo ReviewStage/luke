@@ -8,7 +8,8 @@ import { runAgent } from "./runtime.js";
 
 /**
  * Luke's coding agent, as an eve agent. eve's default tools are off and the
- * tools it runs are authored one file each under `tools/`, so the set is
+ * tools it runs are authored under `tools/`, a file each where eve needs one
+ * and a few maps by family for the rest, so the set is
  * exactly the one the store writer registers (`packages/service/src/agents/coder-host/tool-set.ts`):
  * its shell and file tools, the code extension's patch and search, the
  * provider-run web reads, the delegation to its own declared worker, and

@@ -12,11 +12,8 @@
  */
 
 import type { SandboxCommandResult, SandboxNetworkPolicy, SandboxRunOptions } from "eve/sandbox";
-import {
-  REPOSITORY_SANDBOX_CONTRACT,
-  type RepositorySandbox,
-  type RepositorySandboxDoor,
-} from "../agents/repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
+import type { RepositorySandbox, RepositorySandboxDoor } from "../agents/repository-shell.js";
 
 /** One run as the sandbox saw it. */
 interface SandboxRun {

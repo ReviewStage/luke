@@ -15,8 +15,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
  *
- * The coding agent runs eve's own tools, authored one file each under
- * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
+ * The coding agent runs eve's own tools, authored under `apps/dev/tools/`,
+ * a file each or a few to a map, so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, the hosted public search and page read the brain has
  * too (`../public-research.ts`), the delegation of a slice of its
@@ -40,8 +40,9 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 /**
  * The tools the coding agent is offered, by the name eve mounts each under:
  * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
- * the callers that pick one out. Its test holds this to the registry's role
- * and the files under `apps/dev/tools/` to this.
+ * the callers that pick one out. Its test holds this to the registry's role,
+ * and `../agent-runtime/coder-tool-files.test.ts` the files under
+ * `apps/dev/tools/` to this.
  */
 export const CODER_TOOL = {
   BASH: AGENT_TOOL.BASH,

@@ -28,7 +28,7 @@ import {
   type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { agentCoAuthor, checkOutAgentRepository } from "./checkout.js";
 
 /**
