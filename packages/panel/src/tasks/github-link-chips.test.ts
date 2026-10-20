@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -10,13 +10,14 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { PublishedRow } from "./agent-published.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -33,7 +34,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * says. A card names who opened it by their face, a pull request's by
  * its avatar, with how long ago it moved, its size, branches, labels, and
  * counts. A pull request's link standing alone in words drawn as a document
- * is a row that hangs the same card. Synthetic workspace, plan, pull
+ * is a row that hangs the same card, as is an agent's own pull request's
+ * row pinned over its box. Synthetic workspace, plan, pull
  * requests, and issues.
  */
 
@@ -186,7 +188,12 @@ afterEach(() => {
 });
 
 /** The words drawn on the plan's page in a window holding `workspace`, as a document where asked, and every act the window asked. */
-async function drawn(text: string, workspace: Workspace, asDocument = false) {
+function drawn(text: string, workspace: Workspace, asDocument = false) {
+  return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace);
+}
+
+/** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
+async function drawnOnPage(children: ReactNode, workspace: Workspace) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -220,7 +227,7 @@ async function drawn(text: string, workspace: Workspace, asDocument = false) {
         AtomRegistry.make(),
         createElement(TaskMentions, {
           value: PAGE,
-          children: createElement(TranscriptWords, { text, asDocument }),
+          children,
         }),
       ),
     ),
@@ -455,4 +462,35 @@ test("a pull request's link standing alone in words drawn as a document is a row
     "main ← invite-expiry",
     "7 comments · 1 commit",
   ]);
+});
+
+test("an agent's pull request's row pinned over its box hangs the card its chip hangs", async () => {
+  const chip = await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  const chipNotes = cardNotes(chip.container.querySelector("[data-mention-ref]") ?? undefined);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawnOnPage(
+    createElement(PublishedRow, {
+      pullRequest: {
+        number: 42,
+        title: "Expire old invitations",
+        url: MERGED,
+        state: PULL_REQUEST_STATE.MERGED,
+        checks: CHECK_SUMMARY.PASSING,
+        additions: 120,
+        deletions: 30,
+        changedFiles: 4,
+      },
+      branch: "invite-expiry",
+      doors: { openGitHub: () => undefined, copy: () => undefined },
+    }),
+    ACME_WITH_GITHUB,
+  );
+
+  assert.deepEqual(
+    cardNotes(container.querySelector(".agent-published button") ?? undefined),
+    chipNotes,
+  );
 });
