@@ -21,11 +21,11 @@ import {
   agentWorkspace as workspaceOfAgent,
 } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   type CheckoutIdentity,
   cloneRepository,
   REPOSITORY_REFUSAL,
-  REPOSITORY_SANDBOX_CONTRACT,
   type RepositorySandbox,
   runInSandbox,
   setCheckoutIdentity,
