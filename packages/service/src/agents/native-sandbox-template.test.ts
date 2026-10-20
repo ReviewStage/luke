@@ -90,6 +90,8 @@ function vercel() {
   const uploads: Map<string, string>[] = [];
   const snapshots: string[] = [];
   const clock = { now: 0 };
+  /** What the test does once, the next time a sandbox is read by name, before the read is answered. */
+  const hooks: { onceOnRead?: (() => Promise<void>) | undefined } = {};
   let next = 0;
   const id = (prefix: string) => {
     next += 1;
@@ -144,7 +146,11 @@ function vercel() {
         sandbox.deleted = true;
         return Response.json({});
       }
-      return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
+      const answer = { sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } };
+      const hook = hooks.onceOnRead;
+      hooks.onceOnRead = undefined;
+      await hook?.();
+      return Response.json(answer);
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(path);
     assert.ok(session !== null, `an unexpected call: ${method} ${path}`);
@@ -202,6 +208,7 @@ function vercel() {
     uploads,
     snapshots,
     clock,
+    hooks,
     /** The build of the template named ends with the exit code given. */
     finishBuild: (exitCode: number) => {
       for (const command of commands) command.exitCode = command.exitCode ?? exitCode;
@@ -382,6 +389,32 @@ it.effect(
       yield* TestClock.adjust(NATIVE_TEMPLATE.RETRY_AFTER);
       assert.equal((yield* advanceTemplate(api, build)).state, TEMPLATE_STATE.PREPARING);
       assert.equal(fake.commands.length, 2);
+    }),
+);
+
+it.effect(
+  "a reader retrying a failed build on a stale read leaves the replacement another built",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
+      yield* advanceTemplate(api, build);
+      fake.finishBuild(1);
+      yield* advanceTemplate(api, build);
+      yield* TestClock.adjust(NATIVE_TEMPLATE.RETRY_AFTER);
+      // Another reader retries the build whole between this reader's read and its own retry.
+      fake.hooks.onceOnRead = async () => {
+        // Its clock is the real one, long past the failure the fake's clock marked at zero.
+        await Effect.runPromise(advanceTemplate(api, build));
+      };
+
+      const retried = yield* advanceTemplate(api, build);
+
+      assert.equal(retried.state, TEMPLATE_STATE.PREPARING);
+      const standing = fake.sandboxes.filter((each) => !each.deleted);
+      assert.equal(standing.length, 1);
+      assert.equal(fake.commands.length, 2);
+      assert.equal(fake.commands[1]?.session, standing[0]?.currentSessionId);
     }),
 );
 

@@ -174,6 +174,8 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   for (const write of writes)
     digest.update(write.path).update("\0").update(write.content).update("\0");
   for (const command of commands) digest.update(command).update("\0");
+  // The entry is how they are replayed, so a change to the replay moves the key too.
+  digest.update(entry).update("\0");
   const key = digest.digest("hex").slice(0, 16);
   const entryFile = { path: `${BUILD_DIRECTORY}/build.sh`, contents: Buffer.from(entry, "utf8") };
   return {
@@ -228,9 +230,21 @@ const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
 /** Vercel's refusal of a name already taken. */
 const CONFLICT_STATUS = 409;
 
-/** The template deleted, and built again from nothing. */
-const rebuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
-  Effect.andThen(api.deleteSandbox(build.name), startBuild(api, build));
+/**
+ * The template deleted, and built again from nothing: only the one read as
+ * left behind, read again just before, so a reader that read it too finds
+ * the one another reader built in its place and leaves it be.
+ */
+const rebuild = (api: VercelSandboxApi, build: ImageBuild, stale: ListedSandbox): TemplateRead =>
+  Effect.gen(function* () {
+    const now = yield* api.getNamed(build.name);
+    if (now === undefined) return yield* startBuild(api, build);
+    if (now.createdAt !== stale.createdAt || now.currentSessionId !== stale.currentSessionId) {
+      return PREPARING;
+    }
+    yield* api.deleteSandbox(build.name);
+    return yield* startBuild(api, build);
+  });
 
 /** Whether the instant the tag holds is longer ago than the bound. */
 function olderThan(now: number, at: number | undefined, bound: Duration.Duration): boolean {
@@ -257,7 +271,7 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
     const failedAt = tags[TEMPLATE_TAG.FAILED_AT];
     if (failedAt !== undefined) {
       return olderThan(now, Number(failedAt), NATIVE_TEMPLATE.RETRY_AFTER)
-        ? yield* rebuild(api, build)
+        ? yield* rebuild(api, build, found)
         : FAILED;
     }
     const session = tags[TEMPLATE_TAG.SESSION];
@@ -268,13 +282,13 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
       return found.status === "running" &&
         !olderThan(now, found.createdAt, NATIVE_TEMPLATE.START_GRACE)
         ? PREPARING
-        : yield* rebuild(api, build);
+        : yield* rebuild(api, build, found);
     }
     if (!running) {
       // A snapshot under way stops the session; anything else stopped unready was left behind.
       return found.status === "snapshotting" || found.status === "stopping"
         ? PREPARING
-        : yield* rebuild(api, build);
+        : yield* rebuild(api, build, found);
     }
     const exit = yield* api.commandExit(session, commandId);
     if (exit === null) return PREPARING;
