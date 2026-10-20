@@ -352,6 +352,9 @@ export function useTaskInbox(input: {
   // Note that an agent with no plan is the planId its inbox is read by.
   const readAgent = input.reader === undefined ? undefined : taskId;
   const drafts = useInboxDrafts(draftsOn);
+  // The drafts as last drawn, which a refusal landing later reads.
+  const draftsNow = useRef(drafts);
+  draftsNow.current = drafts;
   const writer = useDraftWriter();
   const settler = useInboxSettler();
   const attempts = useRef(new Map<string, Attempt>());
@@ -421,6 +424,28 @@ export function useTaskInbox(input: {
     [note],
   );
 
+  // A send that settled its item at once, refused, brings the item back open, where a message
+  // written on it meanwhile would read as no draft of it and be let go; so its words and files are
+  // carried into the open box, over the ones that went, beside the picks the open box holds.
+  const reopen = useCallback(
+    (item: InboxItem) => {
+      if (item.status !== INBOX_STATUS.OPEN) return;
+      const open = draftPlace(item, draftsOn);
+      const settled: InboxPlace = { ...open, thread: true };
+      const written = draftsNow.current.find((kept) => Equal.equals(kept.place, settled));
+      if (written === undefined) return;
+      if (written.text !== "" || written.attachments.length > 0) {
+        writer.update(open, (was) => ({
+          ...was,
+          text: written.text,
+          attachments: written.attachments,
+        }));
+      }
+      writer.drop((place) => Equal.equals(place, settled));
+    },
+    [writer, draftsOn],
+  );
+
   const onAnswer = useCallback(
     (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => {
       const reply = inboxReply(item, draft, press);
@@ -454,6 +479,7 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             settler.refuse(sent);
+            reopen(item);
             refused(item.id, answer.failure);
             return;
           }
@@ -478,7 +504,7 @@ export function useTaskInbox(input: {
           if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
         });
     },
-    [note, refused, taskId, writer, settler],
+    [note, refused, taskId, writer, settler, reopen],
   );
 
   const onMessage = useCallback(
@@ -525,6 +551,7 @@ export function useTaskInbox(input: {
           if ("failure" in answer) {
             if (sent !== undefined) settler.refuse(sent);
             writer.update(place, (now) => (holdsNothing(now) ? unsent : now));
+            if (sent !== undefined) reopen(item);
             refused(item.id, answer.failure);
             return;
           }
@@ -542,7 +569,7 @@ export function useTaskInbox(input: {
           latest.current.onRetryList();
         });
     },
-    [note, refused, taskId, writer, settler, draftsOn],
+    [note, refused, taskId, writer, settler, draftsOn, reopen],
   );
 
   // An item of an agent the list has not read yet, one started from another
@@ -597,23 +624,26 @@ export function useTaskInbox(input: {
     });
   }, []);
 
+  // The board draws the window's own answers and messages over the read until it holds them.
+  const settled = useSettledItems(held.items);
   // A read lets go of the drafts of the items it covers that it no longer holds as they were
   // written for: a plan's, or, for an agent with no plan, that agent's alone. Note that a settled
   // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
+  // Note that a draft of the item as the board draws it is kept too, so a message written on an
+  // item the window's own send settled stands while the read still holds the item open.
   const { drop } = writer;
   useEffect(() => {
     if (!held.read || (ownTask === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
       (kept) =>
         (ownTask !== undefined || kept.place.agentId === readAgent) &&
-        !held.items.some((item) => draftOfItem(kept.place, item)),
+        !held.items.some((item) => draftOfItem(kept.place, item)) &&
+        !settled.some((item) => draftOfItem(kept.place, item)),
     );
     if (stale.length === 0) return;
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, ownTask, readAgent, drafts, drop]);
+  }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop]);
 
-  // The board draws the window's own answers and messages over the read until it holds them.
-  const settled = useSettledItems(held.items);
   const board = useMemo(() => inboxBoard(settled), [settled]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {

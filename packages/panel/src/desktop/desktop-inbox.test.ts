@@ -5818,6 +5818,42 @@ test("words written in a reply's box while the reply is out stay there, whether 
   );
 });
 
+test("words written on a reply's settled box while the reply carrying the ask's answer is out stay in the box, beside the answer, once the reply is refused and the ask stands open again", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const refuse: (() => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      return new Promise((resolve) =>
+        refuse.push(() =>
+          resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED },
+          }),
+        ),
+      );
+    },
+  });
+
+  act(() => openOptions(pane)[1]?.click());
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  typeInComposer(pane, "One more detail");
+  await settle();
+  await act(async () => refuse[0]?.());
+  await settle();
+
+  assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on you"]]);
+  assert.equal(composerEditor(pane).textContent, "One more detail");
+  assert.equal(attachedOf(pane), 'Choose "7 days"Sending answers the ask');
+});
+
 test("picking an option attaches it over the box as a stamp, renaming the send, and × takes it off; sent, the reply carries the answer, leads with its stamp, and the ask says who chose what", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
