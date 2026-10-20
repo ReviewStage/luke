@@ -23,7 +23,6 @@ import { useCallback, useLayoutEffect, useState } from "react";
 import { COARSE_POINTER, coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { keyboardInsetNow } from "./use-visual-viewport.js";
 
 /** Which of the stage's lines its width stands past. */
 interface StageLines {
@@ -50,8 +49,8 @@ export interface StageRoom {
 }
 
 /**
- * The room the stage's size gives, measured as it resizes: its width, and on
- * a finger's device its height (`shell-room.ts`). Each line keeps
+ * The room the stage gives, measured as it resizes: its width, and on a
+ * finger's device whether the screen is a phone's (`shell-room.ts`). Each line keeps
  * its own band, so the way it is crossed decides where it flips. A resize
  * that crosses no line hands back the lines it had, so nothing reading them
  * is drawn again, and a stage that measures nothing, as one not yet laid
@@ -64,15 +63,12 @@ export function useStageRoom(): StageRoom {
   const ref = useCallback((element: HTMLElement | null) => {
     if (element === null) return undefined;
     const measure = () => {
-      const { width, height: seen } = element.getBoundingClientRect();
+      const { width } = element.getBoundingClientRect();
       if (width <= 0) return;
-      // The stage stops where the keyboard begins, but a keyboard coming up
-      // makes no stage short: a tablet would flip to a phone's layout on every
-      // focus, and the field it focused could go with it.
-      const height = seen + keyboardInsetNow();
+      const screenSide = Math.min(window.screen.width, window.screen.height);
       const coarse = coarsePointerNow();
       setLines((was) => {
-        const narrow = narrowStage({ width, height, coarse }, was.narrow);
+        const narrow = narrowStage({ width, screenSide, coarse }, was.narrow);
         const compact = compactStage(width, was.compact);
         return narrow === was.narrow && compact === was.compact ? was : { narrow, compact };
       });

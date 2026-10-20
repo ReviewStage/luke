@@ -12,7 +12,8 @@ import { relayout } from "./testing/resize-observer.js";
  * measured a width: wide and pinned before it is laid out, and the last
  * reading once a laid-out stage measures nothing; and a phone turned on its
  * side, wide but short under a finger, stands as one pane where the same
- * stage under a mouse stays wide. The width's lines themselves are
+ * stage under a mouse stays wide, while a tablet's stays wide however its
+ * keyboard shortens it. The width's lines themselves are
  * walked through the drawn shell (`desktop/shell-room.test.ts`,
  * `desktop/sidebar-collapse.test.ts`).
  */
@@ -32,7 +33,6 @@ afterEach(() => {
   reading = undefined;
   vi.restoreAllMocks();
   document.body.innerHTML = "";
-  document.documentElement.removeAttribute("style");
 });
 
 /** A root that reads its stage as the panel's does, and draws what it read. */
@@ -93,30 +93,34 @@ function onTouchScreen(): void {
   );
 }
 
-/** A phone on its side: as wide as a small laptop's tab, a strip tall. */
+/** Answers the device's screen as one of a size, as the browser reports it whichever way it is turned. */
+function onScreen(screen: { width: number; height: number }): void {
+  vi.spyOn(window.screen, "width", "get").mockReturnValue(screen.width);
+  vi.spyOn(window.screen, "height", "get").mockReturnValue(screen.height);
+}
+
+/** A phone's screen, and a phone on its side: as wide as a small laptop's tab, a strip tall. */
+const PHONE_SCREEN = { width: 390, height: 844 };
 const LANDSCAPE_PHONE = { width: 750, height: 340 };
 
-test("a phone on its side, a short stage under a finger, stands as one pane", () => {
+/** A tablet's screen, on its side. */
+const TABLET_SCREEN = { width: 1180, height: 820 };
+
+test("a phone on its side, a phone's screen under a finger, stands as one pane", () => {
   onTouchScreen();
+  onScreen(PHONE_SCREEN);
   mount(LANDSCAPE_PHONE.width, LANDSCAPE_PHONE.height);
   assert.equal(reading?.room, "narrow");
 });
 
-test("a stage as short under a mouse keeps its panes side by side", () => {
+test("the same stage under a mouse keeps its panes side by side", () => {
+  onScreen(PHONE_SCREEN);
   mount(LANDSCAPE_PHONE.width, LANDSCAPE_PHONE.height);
   assert.equal(reading?.room, "wide");
 });
 
-test("a short stage under a finger is wide again only at 532 tall, and narrow again only below 500", () => {
-  onTouchScreen();
-  mount(LANDSCAPE_PHONE.width, LANDSCAPE_PHONE.height);
-  assert.equal(resizeTo(750, 520)?.room, "narrow", "a stage grown within the band stays narrow");
-  assert.equal(resizeTo(750, 532)?.room, "wide");
-  assert.equal(resizeTo(750, 510)?.room, "wide", "a stage shrunk within the band stays wide");
-  assert.equal(resizeTo(750, 499)?.room, "narrow");
-});
-
-test("a short stage turns narrow when its main pointer becomes a finger, with no resize", () => {
+test("a phone's screen turns narrow when its main pointer becomes a finger, with no resize", () => {
+  onScreen(PHONE_SCREEN);
   let coarse = false;
   const heard = new Set<() => void>();
   vi.spyOn(window, "matchMedia").mockImplementation(
@@ -141,14 +145,13 @@ test("a short stage turns narrow when its main pointer becomes a finger, with no
   assert.equal(reading?.room, "narrow");
 });
 
-test("a tall stage under a finger that the on-screen keyboard shortens stays wide, as a tablet's does on every focus", () => {
+test("a tablet's stage that the on-screen keyboard shortens stays wide, however the keyboard shortens it", () => {
   onTouchScreen();
+  onScreen(TABLET_SCREEN);
   mount(1180, 740);
   assert.equal(reading?.room, "wide");
 
-  document.documentElement.style.setProperty("--luke-keyboard-inset", "420px");
-  assert.equal(resizeTo(1180, 320)?.room, "wide", "the keyboard makes no stage short");
-
-  document.documentElement.style.setProperty("--luke-keyboard-inset", "0px");
+  // iOS covers the stage with the keyboard; Android shrinks the window to what it leaves.
+  assert.equal(resizeTo(1180, 320)?.room, "wide", "the keyboard makes no tablet a phone");
   assert.equal(resizeTo(1180, 740)?.room, "wide");
 });

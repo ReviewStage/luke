@@ -9,11 +9,18 @@ const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .desk
 
 /**
  * A chat's composer at its foot, never a thread's reply box, which scrolls
- * with the messages. It docks only where it spans under what floats: in a
- * narrow room, or in the side panel filling the window. Beside the work on
- * the Chat page the card stands over the rail, never over the composer.
+ * with the messages. It docks wherever it spans under what floats: in a
+ * narrow room and in the side panel filling the window always, and beside
+ * the work on the Chat page only where it reaches under the floating card,
+ * as it does past a rail drawn narrower than the card. Over a rail as wide,
+ * the card stands over the rail's rows and rises for nothing.
  */
 const CHAT_DOCKED = '.chat-composer[data-compact="false"]';
+
+/** Where the floating card stands across the window, or a span nothing meets where no card floats. */
+function cardSpan(card: Element | null): DOMRect {
+  return card === null ? DOMRect.fromRect({ x: -1, width: 0 }) : card.getBoundingClientRect();
+}
 
 /** The length the dock's height is written in. */
 const COLUMN_DOCK = "--column-dock";
@@ -22,13 +29,16 @@ const COLUMN_DOCK = "--column-dock";
 const FLOATING_CARD = '.call-card[data-surface="floating"]';
 
 /** From the column's foot to the top of its highest docked part, or nothing where none stands. */
-function dockHeight(column: Element, docked: string): number {
+function dockHeight(column: Element, docked: string, card: DOMRect | undefined): number {
   const foot = column.getBoundingClientRect().bottom;
   let top = foot;
   for (const part of column.querySelectorAll(docked)) {
     const box = part.getBoundingClientRect();
     // A part in a pane a narrow room hides draws no box, and docks nothing.
     if (box.width === 0 && box.height === 0) continue;
+    // Where only the card reads the dock, a chat's composer beside it docks nothing.
+    const beside = card !== undefined && (box.left >= card.right || box.right <= card.left);
+    if (beside && part.matches(CHAT_DOCKED)) continue;
     top = Math.min(top, box.top);
   }
   return Math.max(0, foot - top);
@@ -63,15 +73,18 @@ export function useColumnDock(
     // loading draws its column only once its document lands.
     const columnSelector = panelFull
       ? ".side-panel"
-      : `.desktop-task-main, .agent-page${narrow ? ", .chat-view" : ""}`;
-    const docked = panelFull || narrow ? `${DOCKED}, ${CHAT_DOCKED}` : DOCKED;
+      : ".desktop-task-main, .agent-page, .chat-view";
+    const docked = `${DOCKED}, ${CHAT_DOCKED}`;
+    // Beside the work only the card reads the dock, so a chat's composer docks only under it.
+    const besideCard = !panelFull && !narrow;
     let column = host.querySelector(columnSelector);
     const sized = new ResizeObserver(() => write());
     function write(): void {
       if (host === null) return;
-      if (column === null) root.style.removeProperty(COLUMN_DOCK);
-      else root.style.setProperty(COLUMN_DOCK, `${dockHeight(column, docked)}px`);
       const card = host.querySelector(FLOATING_CARD);
+      const under = besideCard ? cardSpan(card) : undefined;
+      if (column === null) root.style.removeProperty(COLUMN_DOCK);
+      else root.style.setProperty(COLUMN_DOCK, `${dockHeight(column, docked, under)}px`);
       if (card === null) host.style.removeProperty("--floating-card");
       else host.style.setProperty("--floating-card", `${card.getBoundingClientRect().height}px`);
     }
