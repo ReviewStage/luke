@@ -14,6 +14,7 @@ import {
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
+  LIVE_USER_QUERY,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
 } from "@luke/features/live-wire";
@@ -55,9 +56,18 @@ const SCRIPTED: LiveSealer = {
     }),
 };
 
+/** A live read's address, naming the account it is for where one is named (`LIVE_USER_QUERY`). */
+function readOf(path: string, forUser: string | undefined): URL {
+  const url = new URL(path, ORIGIN);
+  if (forUser !== undefined) url.searchParams.set(LIVE_USER_QUERY, forUser);
+  return url;
+}
+
 /** The procedures answering one request as `bearer`, over the deployment's Realtime where it has one. */
 const ask = (options: {
   readonly bearer?: string;
+  /** The account the read names; the bearer's own where left out. */
+  readonly forUser?: string;
   readonly method?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
@@ -73,7 +83,7 @@ const ask = (options: {
     const response = yield* hostedAnswer(
       { live: procedures },
       Layer.succeed(LiveSealing, options.sealing),
-      new Request(new URL(LIVE_INBOX, ORIGIN), {
+      new Request(readOf(LIVE_INBOX, options.forUser ?? options.bearer), {
         method: options.method ?? "GET",
         headers: options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
       }),
@@ -145,6 +155,8 @@ const openUser = Effect.gen(function* () {
 /** The procedures answering a task board's live read as `bearer`, over the store and the deployment's Realtime. */
 const askBoard = (options: {
   readonly bearer: string;
+  /** The account the read names; the bearer's own where left out. */
+  readonly forUser?: string;
   readonly taskId?: string;
   readonly poll?: boolean;
   readonly sealing: Option.Option<LiveSealer>;
@@ -158,7 +170,10 @@ const askBoard = (options: {
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = new URL(options.taskId === undefined ? LIVE_INBOX : "/api/live/task-board", ORIGIN);
+    const url = readOf(
+      options.taskId === undefined ? LIVE_INBOX : "/api/live/task-board",
+      options.forUser ?? options.bearer,
+    );
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
     if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     const response = yield* hostedAnswer(
@@ -204,6 +219,34 @@ it.layer(getTestDB())("the task board's live read", (it) => {
           yield* askBoard({ bearer: dana, taskId: "not-a-task", sealing: Option.some(SCRIPTED) }),
           notFound,
         );
+      }),
+  );
+
+  it.effect(
+    "a read naming another account than the caller's, or none, is answered as signed out, as no session is",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const signedOut = {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        };
+        for (const forUser of ["user-eli", ""]) {
+          assert.deepEqual(
+            yield* askBoard({
+              bearer: dana,
+              forUser,
+              taskId: started.id,
+              sealing: Option.some(SCRIPTED),
+            }),
+            signedOut,
+          );
+          assert.deepEqual(
+            yield* askBoard({ bearer: dana, forUser, sealing: Option.some(SCRIPTED) }),
+            signedOut,
+          );
+        }
       }),
   );
 
@@ -276,7 +319,7 @@ const askTranscript = (options: {
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = new URL("/api/live/agent-transcript", ORIGIN);
+    const url = readOf("/api/live/agent-transcript", options.bearer);
     url.searchParams.set("id", options.agentId);
     if (options.call !== undefined) url.searchParams.set("call", options.call);
     const response = yield* hostedAnswer(

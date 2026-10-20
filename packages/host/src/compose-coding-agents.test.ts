@@ -289,7 +289,7 @@ function fakeService() {
         cursor = "2:1";
         return page ?? { ...SAID, cursor, holds: false };
       }),
-    agentTranscriptLive: (agentId, callId, poll) =>
+    agentTranscriptLive: (agentId, _userId, callId, poll) =>
       Effect.sync(() => {
         asked.push(
           `${poll === true ? "transcript-poll" : "transcript-live"}:${agentId}${callId === undefined ? "" : `:${callId}`}`,
@@ -657,6 +657,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
         now: () => NOW,
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
+      accountId: () => "user-dana",
       client: service.client,
       openLive: realtime.open,
     }).pipe(Effect.provide(noNetwork));

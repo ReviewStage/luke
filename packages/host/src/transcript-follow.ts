@@ -6,6 +6,7 @@ import { CODING_AGENT_CURSOR_START } from "@luke/features/coding-agent-wire";
 import {
   type AgentTranscriptLiveAnswer,
   agentTranscriptLiveRowsSchema,
+  LIVE_SIGNED_OUT,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
 import {
@@ -83,11 +84,14 @@ interface Failed {
 }
 
 export interface TranscriptFollowDependencies {
-  /** The transcript sealed for following, or with `poll` its rows inline; not found, or a failure where the service sealed none. */
+  /** The transcript sealed for following for the account named, or with `poll` its rows inline; not found, signed out, or a failure where the service sealed none. */
   readonly seal: (
     key: TranscriptKey,
     poll: boolean,
+    userId: string,
   ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>;
+  /** The account signed in now, which a follow is sealed for from its first seal on; none where nobody is. */
+  readonly accountId: () => string | undefined;
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
 }
@@ -111,14 +115,18 @@ function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
 
 /** The transcript sealed, asked again every `RESEAL` until the service seals it; none where the account does not reach it. */
 function sealedOf(
-  dependencies: TranscriptFollowDependencies,
-  key: TranscriptKey,
+  seal: (poll: boolean) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
 ): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>> {
   return Effect.gen(function* () {
     while (true) {
-      const answer = yield* dependencies.seal(key, false);
+      const answer = yield* seal(false);
       if (!("failure" in answer)) return Option.some(answer);
-      if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return Option.none();
+      if (
+        answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND ||
+        answer.failure === LIVE_SIGNED_OUT.failure
+      ) {
+        return Option.none();
+      }
       yield* Effect.sleep(RESEAL);
     }
   });
@@ -133,7 +141,13 @@ export function transcriptFollows(
     idleTimeToLive: IDLE,
     lookup: (key: TranscriptKey) =>
       Effect.gen(function* () {
-        const first = yield* sealedOf(dependencies, key);
+        // The account the follow starts for, which every renewal names, so one under another's session is refused as signed out.
+        const userId = dependencies.accountId();
+        const seal = (poll: boolean) =>
+          userId === undefined
+            ? Effect.succeed(LIVE_SIGNED_OUT)
+            : dependencies.seal(key, poll, userId);
+        const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: "refused" } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
         /** One seal followed until its subscription stops, which marks the state broken. */
@@ -142,8 +156,8 @@ export function transcriptFollows(
             liveRows(
               {
                 openLive: dependencies.openLive,
-                reseal: () => dependencies.seal(key, false),
-                poll: () => dependencies.seal(key, true),
+                reseal: () => seal(false),
+                poll: () => seal(true),
                 now: dependencies.now,
               },
               sealed,
@@ -161,7 +175,7 @@ export function transcriptFollows(
             while (true) {
               yield* follow(sealed);
               yield* Effect.sleep(RESEAL);
-              const again = yield* sealedOf(dependencies, key);
+              const again = yield* sealedOf(seal);
               if (Option.isNone(again)) return;
               sealed = again.value;
             }

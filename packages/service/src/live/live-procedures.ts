@@ -36,7 +36,7 @@ import { boardLiveStatement } from "@luke/database/models/board-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
-import { LIVE_POLL } from "@luke/features/live-wire";
+import { LIVE_POLL, LIVE_USER_QUERY } from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -122,11 +122,21 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** The live reads, each to a signed-in caller. */
+/**
+ * The caller, where they are the account the read names; refused as signed
+ * out otherwise, with the same 401 as no session, as Neon's guide says
+ * ("When the session changes"), so a renewal from a page left open under
+ * another account's session reads nothing of theirs.
+ */
+const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string) =>
+  input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+
+/** The live reads, each to a signed-in caller who is the account it names. */
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const statements = Option.zipWith(
         accountInboxLiveStatements(context.userId),
         ownFailedRunsLiveStatement(context.userId),
@@ -136,6 +146,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       return yield* sealedParts(statements.value, input[LIVE_POLL.QUERY] === LIVE_POLL.ON);
     }),
     taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const taskId = yield* rowIdOf(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -147,6 +158,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       );
     }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
       const { target } = yield* reachedAgentById(context.userId, input.id);
       const read =

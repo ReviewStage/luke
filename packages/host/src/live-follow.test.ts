@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
@@ -342,3 +342,18 @@ test("a client that failed to load is opened afresh by the next read", async () 
   await open("wss://realtime.example/v1");
   assert.deepEqual(clients.opened, ["wss://realtime.example/v1"]);
 });
+
+it.effect("a read whose session the service refuses as signed out ends, and is asked no more", () =>
+  Effect.gen(function* () {
+    const exit = yield* liveRows<Part>(
+      {
+        openLive: () => fakeRealtime().client,
+        reseal: () => Effect.succeed(LIVE_SIGNED_OUT),
+        poll: () => Effect.succeed(LIVE_SIGNED_OUT),
+        now: () => 0,
+      },
+      { ...read(0, 0), url: LIVE_POLL_URL },
+    ).pipe(Stream.runDrain, Effect.exit);
+    assert.ok(Exit.isFailure(exit));
+  }),
+);

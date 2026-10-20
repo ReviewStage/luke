@@ -1,4 +1,4 @@
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "effect";
 
 /**
@@ -31,7 +31,16 @@ const RENEW_RETRY = Duration.seconds(1);
 const LIVE_POLL_EVERY = Duration.seconds(3);
 /** How often Realtime is subscribed to again while a read is polled. */
 const RESUBSCRIBE_EVERY = Duration.seconds(15);
-/** Why a read stopped for good: it names nothing the account reaches any more. */
+/**
+ * Whether a failed seal ends the read for good: it names nothing the account
+ * reaches any more, or the service refused the session as signed out, which
+ * Neon's guide says is never asked again ("When the session changes").
+ */
+function ended(failed: { readonly failure: string; readonly gone?: boolean }): boolean {
+  return failed.gone === true || failed.failure === LIVE_SIGNED_OUT.failure;
+}
+
+/** Why a read stopped for good: it names nothing the account reaches any more, or its session signed out. */
 const GONE = "the read is gone";
 
 /** A subscription that stopped for good: Realtime's client did not load, Realtime said so, a renewal was refused, or a row did not decode. */
@@ -222,7 +231,7 @@ function realtimeRows<Part extends string>(
         yield* Effect.sleep(Duration.millis(Math.max(0, wait)));
         let next = yield* dependencies.reseal();
         while ("failure" in next) {
-          if (next.gone === true) {
+          if (ended(next)) {
             return yield* Effect.fail(new LiveBroken({ reason: GONE }));
           }
           yield* Effect.sleep(RENEW_RETRY);
@@ -291,7 +300,7 @@ export function liveRows<Part extends string>(
       const pollOnce = Effect.gen(function* () {
         const read = yield* dependencies.poll();
         if ("failure" in read) {
-          if (read.gone === true) gone();
+          if (ended(read)) gone();
           return;
         }
         const rows = rowsOf(parts, read);
@@ -322,7 +331,7 @@ export function liveRows<Part extends string>(
       /** One go at Realtime: followed until it breaks, polled from then on; false where the read is gone. */
       const attempt = Effect.gen(function* () {
         if ("failure" in sealed) {
-          if (sealed.gone === true) return false;
+          if (ended(sealed)) return false;
         } else if (sealed.url === LIVE_POLL_URL) {
           yield* startPolling(new LiveBroken({ reason: "Realtime could not seal the read" }));
         } else {
