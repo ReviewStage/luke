@@ -165,6 +165,11 @@ test("a write the browser refuses, as Safari does past a hundred in ten seconds,
   });
 
   assert.doesNotThrow(() => history.push({ address: "/acme/settings", state: "settings" }));
+  assert.deepEqual(
+    history.current(),
+    { entries: [{ address: "/acme/settings", state: "settings" }], at: 0 },
+    "the panel's own step stands, with nothing held behind it the browser may not hold",
+  );
   history.push({ address: "/acme/chat", state: "chat" });
   assert.equal(addressBar(), "/acme/chat");
 

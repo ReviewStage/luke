@@ -726,7 +726,6 @@ test("the plan template's version history keeps a call's card at the foot of its
 test("the mouse's Back button from the plan template's version history goes back to the template page and cancels the browser's own, so a browser tab takes no second step", async () => {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   fakeActPort({
     [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
