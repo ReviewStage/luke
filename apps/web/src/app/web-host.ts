@@ -84,6 +84,7 @@ import {
   type WebNoticeDoors,
   webNoticeDoors,
 } from "./web-notices";
+import { type PageLeave, tabLeave } from "./page-leave";
 import { downloadText, openTab, webPlatform } from "./web-platform";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
@@ -141,11 +142,11 @@ const refusedVoiceSocket: OpenSocket = () => Effect.succeed({ fault: SOCKET_OPEN
 
 /**
  * What the cookie session needs of the tab: where it stands, a way to leave
- * for the provider, and each return to it, shown again or focused, on which
- * the session is read again, because another tab may have signed in as
- * someone else.
+ * for the provider, asking first while a page holds unsaved work, and each
+ * return to it, shown again or focused, on which the session is read again,
+ * because another tab may have signed in as someone else.
  */
-function cookieDoor(): CookieSessionDoor {
+function cookieDoor(tab: PageLeave): CookieSessionDoor {
   const shown = Stream.filter(
     Stream.fromEventListener(document, "visibilitychange"),
     () => document.visibilityState === "visible",
@@ -153,7 +154,7 @@ function cookieDoor(): CookieSessionDoor {
   const focused = Stream.fromEventListener(window, "focus");
   return {
     currentAddress: () => `${location.pathname}${location.search}${location.hash}`,
-    navigate: (url) => Effect.sync(() => location.assign(url)),
+    navigate: (url) => Effect.sync(() => tab.leave(() => location.assign(url))),
     revisits: Stream.as(Stream.merge(shown, focused), undefined),
   };
 }
@@ -355,7 +356,7 @@ const servedActPort = (
   ).pipe(Effect.map((channel) => channel.port1));
 
 /** The host standing in the tab, its document, its bridge, and the platform beside it. */
-const composedWeb = (run: WebHostOptions["run"]) =>
+const composedWeb = (run: WebHostOptions["run"], tab: PageLeave) =>
   Layer.effect(
     ComposedWebTag,
     Effect.gen(function* () {
@@ -385,7 +386,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         state.update({ notifications: { status: notificationsStatusNow() } });
       }
       // An address the host opens goes to a connect's waiting tab, or opens as a link.
-      const tabs = connectTabs(tabBrowser(openTab));
+      const tabs = connectTabs(tabBrowser(openTab, tab.leave));
       yield* Effect.acquireRelease(Effect.sync(tabs.listen), (stop) => Effect.sync(stop));
       const operator = yield* createOperatorClient({
         report,
@@ -440,7 +441,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         bridge: made.bridge,
         actPort,
         actPortClient: tabs.portClient,
-        platform: webPlatform({ recordSurfaceEvent: count }),
+        platform: webPlatform({ recordSurfaceEvent: count, unsavedWork: tab.unsavedWork }),
         operator,
       };
     }),
@@ -457,6 +458,8 @@ export function composeWeb(
   options: WebHostOptions,
 ): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
   const { httpClient, run } = options;
+  // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
+  const tab = tabLeave();
   const assembly = Layer.provide(
     hostAssemblyLayer([]),
     Layer.mergeAll(
@@ -464,7 +467,7 @@ export function composeWeb(
       localStorageFileSystem(),
       Path.layer,
       httpClient,
-      Layer.provide(cookieAccountSourceLayer(cookieDoor()), httpClient),
+      Layer.provide(cookieAccountSourceLayer(cookieDoor(tab)), httpClient),
     ),
   );
   const launched = Layer.unwrap(
@@ -481,7 +484,7 @@ export function composeWeb(
     ),
   );
   return launched.pipe(
-    Layer.provideMerge(composedWeb(run)),
+    Layer.provideMerge(composedWeb(run, tab)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),
   );

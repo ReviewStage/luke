@@ -78,7 +78,7 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
+import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
 import { useAppState, useExperiment } from "./use-app-state.js";
@@ -101,6 +101,11 @@ const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
 const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
+
+/** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
+const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
+  appPlatform().unsavedWork?.(ask);
+};
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -164,7 +169,8 @@ export function App(): React.JSX.Element {
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  const leaveGuard = useLeaveGuard();
+  // The shell hears the ask too, so its own ways out of the page ask first.
+  const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>

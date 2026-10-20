@@ -83,10 +83,13 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
  * answer nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
  * tab, as every other event is; notifications are the browser's to grant,
- * for the site; and session replay is the desktop's own masked recording
+ * for the site; unsaved work is held by the tab's ways out
+ * (`page-leave.ts`); and session replay is the desktop's own masked recording
  * (`web-session-replay.ts`).
  */
-export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): AppPlatform {
+export function webPlatform(
+  shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork">,
+): AppPlatform {
   return {
     copyText: (words) => navigator.clipboard.writeText(words),
     saveFile: downloadText,
@@ -95,12 +98,13 @@ export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): 
     assetBase: () => new URL(ASSET_BASE, location.origin).href,
     onMenuCommand: () => ignore,
     setShortcutCapturing: ignore,
-    recordSurfaceEvent: counting.recordSurfaceEvent,
+    recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openTab,
     openWeb: openTab,
     applySessionReplay: lazySessionReplay(),
     macAppLink,
     notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
+    unsavedWork: shell.unsavedWork,
   };
 }
 

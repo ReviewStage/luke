@@ -38,7 +38,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
-import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type LeaveAsk,
+  useLeaveGuard,
+} from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
   type AnyActOutcome,
@@ -665,6 +670,9 @@ let openFactory: () => void = () => undefined;
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
+/** The ask the window's guard last told the shell of, as a browser tab's ways out hear it; nothing while no page holds unsaved work. */
+let shellAsk: LeaveAsk | undefined;
+
 /** Sends the window to a place among the automations, as a link opened there does. */
 let sendTo: (place: AutomationsPlace) => void = () => undefined;
 /** Lists another workspace under the mounted pages, as the switcher would. */
@@ -677,13 +685,16 @@ let moveTo: (workspace: Workspace) => void = () => undefined;
  */
 function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): HTMLElement {
   places = [start];
+  shellAsk = undefined;
   function Pages() {
     const [place, setPlace] = useState(start);
     sendTo = setPlace;
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
     // The window's own guard, over doors guarded as the Plans tab guards its own.
-    const leaveGuard = useLeaveGuard();
+    const leaveGuard = useLeaveGuard((ask) => {
+      shellAsk = ask;
+    });
     const tasks = tasksControl({
       leaveGuard,
       agentView: {
@@ -1056,6 +1067,25 @@ test("a new automation with something written asks before any way out leaves it,
   act(() => button("Leave").click());
   await settle();
   assert.deepEqual(factoryOpens, [1]);
+});
+
+test("the shell hears the page's ask only while an edit is unsaved, and asking through it waits on the page's question", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(shellAsk, undefined, "a page with nothing unsaved holds nothing back");
+
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the two flakiest tests.");
+  const left: string[] = [];
+  act(() => shellAsk?.(() => left.push("sign-in")));
+  assert.ok(leaveAsked(), "the shell's way out asks the page's question");
+  assert.deepEqual(left, []);
+  act(() => button("Leave").click());
+  await settle();
+  assert.deepEqual(left, ["sign-in"]);
+
+  act(() => button("Save").click());
+  await settle();
+  assert.equal(shellAsk, undefined, "once saved, the shell holds nothing back");
 });
 
 test("a new automation with nothing written leaves at once, and one just created stands as its own page without asking", async () => {
