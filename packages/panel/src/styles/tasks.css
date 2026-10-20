@@ -2873,42 +2873,96 @@
   clip-path: none;
 }
 
-/* The Conversation's filters, Hide resolved and Hide bots, at the end of a
-   row that stays put over the conversation as it scrolls, each its word,
-   the quiet count of what it leaves out, and its switch; the word and the
-   count press it too. */
-.pull-request-filters {
+/* The Conversation's scroller (agent-pull-request-tab.tsx's
+   `ConversationView`): its words at the measure, as far in from the sides
+   as a `DetailPage` at a column's inset stands them, so the Conversation
+   and the Checks read alike, opening a section's gap under the tabs and
+   ending a page's inset short of the foot. */
+.pull-request-page {
+  padding: var(--luke-section-gap)
+    max(var(--luke-space-12), (100cqi - var(--luke-page-measure)) / 2) var(--luke-page-inset);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  overflow-wrap: anywhere;
+}
+
+/* A section's heading that folds it, and the comment box's, stuck to the
+   scroller's top while its section is in view, on the panel's own ground so
+   nothing shows through; the next section's heading pushes it off, since a
+   sticky box stands only inside its own section. It is held at the
+   scroller's band (`SCROLL_FADE_INSET.BAND`), as a call's checkpoint is
+   (`.checkpoint-log`), because the fade begins beneath that band: taller,
+   it would slice what passes under its foot, and shorter, it would fade
+   its own. The whole row presses, the chevron leading at the content inset
+   and what it holds at its end keeping their own presses. */
+.pull-request-section-head,
+.pull-request-page .pull-request-comment-box > .pull-request-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  height: var(--luke-scroll-band);
+  background: var(--luke-color-well);
+}
+
+.pull-request-page .pull-request-comment-box > .pull-request-heading {
+  align-items: center;
+  margin: 0;
+}
+
+.pull-request-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  min-width: 0;
+  padding-inline: var(--row-inset);
+  color: var(--luke-color-text-muted);
+  white-space: nowrap;
+}
+
+.pull-request-section-head > .pull-request-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  text-overflow: ellipsis;
+  transition: color var(--luke-duration-hover) ease;
+}
+
+.pull-request-section-head:hover > .pull-request-heading {
+  color: var(--luke-color-text);
+}
+
+/* The chevron at the heading's glyph size, its turn the disclosure's. */
+.pull-request-section-head > .luke-disclosure-turn > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* What the heading holds at its end, Hide resolved and Hide bots on the
+   Conversation's: compact chips, each its word and the quiet count of what
+   it leaves out, pressed while on. */
+.pull-request-section-end {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--luke-space-6) var(--luke-space-16);
-  padding: var(--luke-space-8) var(--column-inset) 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.side-panel-content .pull-request-filters {
-  padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
-/* On a phone the switches stand in as far as the words under them, clear of
-   the screen's edge, where a thumb gripping the phone rests. */
-.desktop-shell[data-room="narrow"] .pull-request-filters {
-  padding-inline: var(--content-inset);
+  align-items: center;
+  gap: var(--luke-space-6);
 }
 
 .pull-request-filter {
   display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  user-select: none;
 }
 
-.pull-request-filter > label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--luke-space-4);
+.pull-request-filter-count {
+  color: var(--luke-color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What a section holds opens a step under its band. */
+.pull-request-section-body {
+  padding-top: var(--luke-space-4);
 }
 
 /* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under

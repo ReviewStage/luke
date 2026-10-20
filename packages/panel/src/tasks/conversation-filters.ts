@@ -1,5 +1,5 @@
 /**
- * conversation-filters.ts -- the Pull request tab's Conversation filters, Hide bots and Hide resolved: what each leaves out, how many it would, and the choice kept across launches.
+ * conversation-filters.ts -- the Pull request tab's Conversation filters, Hide bots and Hide resolved: what each leaves out, how many it would, and the choice kept across launches, with which of the view's two sections stand folded.
  *
  * They are stage-cli's: Hide bots leaves out every comment and review an
  * App's bot wrote, a review's threads with it; Hide resolved leaves out
@@ -17,6 +17,11 @@
  * both off until changed, and a change in one tab is drawn at once in every
  * other. Each is read on its own, so one that no longer reads leaves the
  * other as it was kept.
+ *
+ * Whether the Description and the Conversation stand open is kept beside
+ * them on the same terms: one choice for each section, never one for each
+ * pull request, both open until folded, as the sidebar keeps a group's
+ * fold for every task in it.
  */
 
 import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
@@ -37,17 +42,28 @@ function keptOr<S extends Schema.Codec<unknown, unknown>>(
   );
 }
 
-/** Both filters off, as the conversation draws until told otherwise. */
-const DEFAULT_FILTERS = { hideBots: false, hideResolved: false } as const;
+/** Both filters off and both sections open, as the conversation draws until told otherwise. */
+const DEFAULT_CHOICES = {
+  hideBots: false,
+  hideResolved: false,
+  descriptionOpen: true,
+  conversationOpen: true,
+} as const;
 
-const conversationFiltersSchema = Schema.Struct({
-  hideBots: keptOr(Schema.Boolean, DEFAULT_FILTERS.hideBots),
-  hideResolved: keptOr(Schema.Boolean, DEFAULT_FILTERS.hideResolved),
+const conversationChoicesSchema = Schema.Struct({
+  hideBots: keptOr(Schema.Boolean, DEFAULT_CHOICES.hideBots),
+  hideResolved: keptOr(Schema.Boolean, DEFAULT_CHOICES.hideResolved),
+  descriptionOpen: keptOr(Schema.Boolean, DEFAULT_CHOICES.descriptionOpen),
+  conversationOpen: keptOr(Schema.Boolean, DEFAULT_CHOICES.conversationOpen),
 });
 
-export type ConversationFilters = typeof conversationFiltersSchema.Type;
+/** The Conversation view's kept choices: its two filters, and whether each of its sections stands open. */
+export type ConversationChoices = typeof conversationChoicesSchema.Type;
 
-const decodeFilters = Schema.decodeUnknownOption(Schema.fromJsonString(conversationFiltersSchema));
+/** What the filters leave out of a conversation. */
+export type ConversationFilters = Pick<ConversationChoices, "hideBots" | "hideResolved">;
+
+const decodeChoices = Schema.decodeUnknownOption(Schema.fromJsonString(conversationChoicesSchema));
 
 /** How many entries each filter would leave out of a conversation, each counted on its own. */
 export interface ConversationHidden {
@@ -67,7 +83,7 @@ function readKept(): string | null {
 }
 
 /** The choice last read, with the text it was read from, so a snapshot is the same object until what is kept changes. */
-let read: { readonly kept: string | null; readonly filters: ConversationFilters } | undefined;
+let read: { readonly kept: string | null; readonly filters: ConversationChoices } | undefined;
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void): () => void {
@@ -75,17 +91,17 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-/** The kept choice, each filter as kept where it reads and off otherwise. */
-function snapshot(): ConversationFilters {
+/** The kept choice, each filter as kept where it reads and off otherwise, each section as kept and open otherwise. */
+function snapshot(): ConversationChoices {
   const kept = readKept();
   if (read?.kept !== kept) {
-    read = { kept, filters: Option.getOrElse(decodeFilters(kept), () => DEFAULT_FILTERS) };
+    read = { kept, filters: Option.getOrElse(decodeChoices(kept), () => DEFAULT_CHOICES) };
   }
   return read.filters;
 }
 
-/** Changes one filter for every conversation, kept where storage takes it. */
-function changeFilters(change: Partial<ConversationFilters>): void {
+/** Changes one filter or section's fold for every conversation, kept where storage takes it. */
+function changeFilters(change: Partial<ConversationChoices>): void {
   const filters = { ...snapshot(), ...change };
   const kept = JSON.stringify(filters);
   try {
@@ -142,10 +158,10 @@ export function filteredConversation(
   });
 }
 
-/** The Conversation's filters, and the door that changes them for every conversation. */
+/** The Conversation's filters and sections' folds, and the door that changes them for every conversation. */
 export interface ConversationFiltersControl {
-  readonly filters: ConversationFilters;
-  readonly change: (change: Partial<ConversationFilters>) => void;
+  readonly filters: ConversationChoices;
+  readonly change: (change: Partial<ConversationChoices>) => void;
 }
 
 export function useConversationFilters(): ConversationFiltersControl {
