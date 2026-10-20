@@ -227,8 +227,8 @@ export function DesktopSettings({
   const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
-  const reset = pageResetControl(settings.view, settings.settings, writes);
   const rows = settingsRowsInput(settings);
+  const reset = pageResetControl(settings.view, settings.settings, writes, rows);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;

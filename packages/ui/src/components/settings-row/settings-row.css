@@ -199,7 +199,10 @@
     }
 
     .luke-settings-row[data-labels-control="true"]
-      :is(.luke-settings-row-controls, .luke-settings-row-description a) {
+      :is(
+        .luke-settings-row-controls,
+        .luke-settings-row-description :is(a, button, input, select, textarea)
+      ) {
       position: relative;
       z-index: 1;
     }

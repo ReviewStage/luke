@@ -1,4 +1,9 @@
-import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@luke/settings";
+import {
+  APP_SETTING_FIELDS,
+  APP_SETTING_SCHEMA,
+  type SettingsRowsInput,
+  settingsScopeChanged,
+} from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type {
   AppSettingField,
@@ -148,11 +153,13 @@ export function pageResetControl(
   view: SettingsView,
   settings: AppSettingsView | undefined,
   writes: SettingsWrites,
+  /** Which rows the page draws, so a change only to a row it leaves out, Zoom in a browser, offers no reset. */
+  rows: SettingsRowsInput | undefined,
 ): React.JSX.Element | undefined {
   if (!(view in PAGE_RESET)) return undefined;
   // SAFETY: `in` narrows the view to the pages the table names.
   const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
-  if (!settings || !settingsScopeChanged(settings, scope)) return undefined;
+  if (!settings || !rows || !settingsScopeChanged(settings, scope, rows)) return undefined;
   // Keyed to the page, so a press out on one page does not rest the next one's.
   return <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} />;
 }
