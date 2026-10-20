@@ -11,7 +11,7 @@ import {
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "@luke/runtime/testing";
-import { type TestContext, test } from "vitest";
+import { type TestContext, test, vi } from "vitest";
 
 const SCRIPT = fileURLToPath(new URL("../../../scripts/eve-source-maps.sh", import.meta.url));
 
@@ -183,4 +183,44 @@ test("a build with the token but no maps fails rather than shipping traces Sentr
   });
   assert.notEqual(run.status, 0);
   assert.equal(run.uploadArguments, undefined);
+});
+
+/** Each eve root's Nitro config, which decides whether `eve build` writes the maps this step uploads. */
+const NITRO_CONFIGS = ["luke", "dev"].map((root) =>
+  fileURLToPath(new URL(`../../${root}/nitro.config.ts`, import.meta.url)),
+);
+
+/** The production overrides one Nitro config answers under `environment`. */
+async function nitroProductionConfig(
+  path: string,
+  environment: Record<string, string>,
+): Promise<Record<string, unknown>> {
+  vi.resetModules();
+  vi.stubEnv("SENTRY_AUTH_TOKEN", environment.SENTRY_AUTH_TOKEN ?? "");
+  vi.stubEnv("VERCEL_ENV", environment.VERCEL_ENV ?? "");
+  try {
+    const loaded: { default: { $production: Record<string, unknown> } } = await import(
+      /* @vite-ignore */ path
+    );
+    return loaded.default.$production;
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
+test("each eve root's Nitro config writes hidden maps only for a production build holding the token", async () => {
+  for (const path of NITRO_CONFIGS) {
+    const production = await nitroProductionConfig(path, {
+      SENTRY_AUTH_TOKEN: "test-token",
+      VERCEL_ENV: "production",
+    });
+    assert.equal(production.sourcemap, "hidden", path);
+    for (const environment of [
+      { SENTRY_AUTH_TOKEN: "test-token", VERCEL_ENV: "preview" },
+      { SENTRY_AUTH_TOKEN: "test-token" },
+      { VERCEL_ENV: "production" },
+    ]) {
+      assert.deepEqual(await nitroProductionConfig(path, environment), {}, path);
+    }
+  }
 });
