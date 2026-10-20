@@ -24,7 +24,7 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import type { SidePanelTab } from "./tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -82,6 +82,8 @@ interface Standing {
     readonly open: boolean;
     readonly chosen: InboxChoice | undefined;
     readonly listed: boolean;
+    /** Whether the Inbox shows one column by its own width, as one narrower than its split does in a room still wide. */
+    readonly single?: boolean;
   };
   readonly chat: { readonly open: boolean; readonly place: ChatPlace; readonly listed: boolean };
   readonly versions: {
@@ -217,6 +219,7 @@ function tasksTab(
       open: at.inbox.open,
       chosen: at.inbox.chosen,
       listed: at.inbox.listed,
+      single: at.inbox.single ?? false,
       onOpen: () => inbox({ open: true }),
       onClose: () => inbox({ open: false }),
       onChoose: (chosen) => inbox({ chosen }),
@@ -441,6 +444,33 @@ test("on a narrow stage a side panel the window opened with, as a link loaded on
   assert.equal(window.history().canGoForward, false);
 });
 
+test("on a narrow stage a task opened from a list on its plan is one step, whose Close shows the task's column in that step, so Back returns to the list at once", () => {
+  const window = mount(SHELL_ROOM.NARROW, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, listed: true },
+  });
+  // A task opened from a list lands on its plan, the side panel over it, in one move (`use-tasks-tab.ts`'s `onSelect`).
+  window.move((held) => ({
+    ...held,
+    inbox: { ...held.inbox, open: false },
+    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+  }));
+  assert.equal(window.addresses().length, 2, "landing on the plan is one step after the list");
+
+  window.press(() => window.shown().sidePanel.onToggle());
+  assert.deepEqual(
+    window.at().panel,
+    { open: false, tab: SIDE_PANEL_TAB.PLAN },
+    "Close shuts the panel",
+  );
+  assert.equal(window.at().inbox.open, false, "and leaves the task standing");
+  assert.equal(window.addresses().length, 2, "in the plan's own step");
+  assert.equal(window.standingAddress(), TASK_PATH);
+
+  act(() => window.history().onBack());
+  assert.equal(window.at().inbox.open, true, "Back returns to the list in one step");
+});
+
 test("on a narrow stage a side panel shut over a page other than its plan's is no step: it neither steps back to the plan behind nor takes the step of the plan opened after it", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   // A coding agent's page draws the task's side panel, which a narrow room holds full screen over it.
@@ -479,6 +509,42 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
   assert.equal(shownItem(window.at()), undefined, "the way back stands the list");
   assert.equal(window.history().canGoForward, true, "as a step back, the item ahead");
   assert.equal(window.standingAddress(), "/acme/inbox");
+});
+
+test("in a room still wide, as a 700px stage is, an Inbox showing one column by its own width holds its item as a step after its list, and its way back steps back to the list", () => {
+  const window = mount(SHELL_ROOM.WIDE, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, listed: true, single: true },
+  });
+  window.press(() => {
+    window.shown().inboxView.onChoose(ITEM);
+    window.shown().inboxView.onListed(false);
+  });
+
+  assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
+  const shownItem = (at: Standing) => (at.inbox.listed ? undefined : at.inbox.chosen);
+  backAndForth(window, shownItem, undefined, ITEM);
+
+  window.press(() => window.shown().inboxView.onListed(true));
+  assert.equal(shownItem(window.at()), undefined, "the way back stands the list");
+  assert.equal(window.history().canGoForward, true, "as a step back, the item ahead");
+  assert.equal(window.standingAddress(), "/acme/inbox");
+});
+
+test("on the desktop's width the step's link names the Inbox's item standing alone where the Inbox shows one column by its own width, as Copy link does, and the Inbox where it splits", () => {
+  for (const single of [true, false]) {
+    const window = mount(SHELL_ROOM.WIDE, {
+      ...ON_TASK,
+      inbox: { open: true, chosen: undefined, listed: true, single },
+    });
+    window.press(() => {
+      window.shown().inboxView.onChoose(ITEM);
+      window.shown().inboxView.onListed(false);
+    });
+    assert.equal(window.standingAddress(), single ? `${TASK_PATH}/inbox/item-1` : "/acme/inbox");
+    assert.equal(copiedHere(), `${TASK_PATH}/inbox/item-1`, "Copy link names the item at hand");
+    unmountAll();
+  }
 });
 
 test("on a narrow stage a Settings page chosen from its list is a step, whose list stands at /settings", () => {

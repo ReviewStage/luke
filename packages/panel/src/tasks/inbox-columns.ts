@@ -17,7 +17,10 @@
  * and one that splits again forgets that the list was asked for, so it
  * narrows onto its item again. Whether the list was asked for is the
  * Inbox's own, unless its holder keeps it (`InboxListing`), as the window
- * keeps its Inbox's, so its history can go back to the list.
+ * keeps its Inbox's, so its history can go back to the list; such a holder
+ * hears whether the Inbox shows one column too, so its history holds the
+ * list and the item as steps of their own by this line rather than by the
+ * window's room, which is narrower.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -120,6 +123,8 @@ export function listHeadControl(list: ParentNode | null): HTMLElement | null {
 export interface InboxListing {
   readonly asked: boolean;
   readonly onAsk: (asked: boolean) => void;
+  /** Hears whether the Inbox shows one column, by its own width, so a holder's history steps between the list and the item exactly while they stand apart. */
+  readonly onSingle?: ((single: boolean) => void) | undefined;
 }
 
 /** Whether the list was asked for, held by the Inbox itself where its holder keeps none. */
@@ -190,6 +195,10 @@ export function useInboxColumns(
     if (split && listAsked) setListAsked(false);
   }, [split, listAsked, setListAsked]);
   const shown = shownColumns(single, chosen, listAsked, backable);
+  const onSingle = kept?.onSingle;
+  useLayoutEffect(() => {
+    onSingle?.(single);
+  }, [single, onSingle]);
 
   useLayoutEffect(() => {
     const held = view.current;

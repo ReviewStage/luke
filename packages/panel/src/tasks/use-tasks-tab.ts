@@ -276,6 +276,10 @@ interface InboxViewControl {
   readonly listed: boolean;
   /** Stands the list alone, or the item chosen. */
   readonly onListed: (listed: boolean) => void;
+  /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
+  readonly single?: boolean;
+  /** Says whether the Inbox shows one column. */
+  readonly onSingle?: (single: boolean) => void;
   /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
@@ -634,7 +638,10 @@ export interface TasksControl {
   agents: CodingAgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
+  /** Opens a task from a list, the drawer, or Home: in a narrow room on its plan. */
   onSelect: (taskId: string) => void;
+  /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
+  onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a notification's click asks. */
   onShowAgent: (taskId: string, agentId: string) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab, its call in the Transcript, or its turn in Work. */
@@ -1177,6 +1184,8 @@ export function useTasksTab(input: {
       : undefined,
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
+  // Whether the window's Inbox shows one column, as it measures itself.
+  const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
   const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
@@ -3122,8 +3131,17 @@ export function useTasksTab(input: {
     },
     // Note that the pin's own task opened by its row is the task the
     // sidebar marks again rather than the pin; another task's lets the pin
-    // go only once it opens.
+    // go only once it opens. A narrow room shows one pane, so a task opened
+    // there from a list lands on its plan, the side panel standing full
+    // screen on the plan's tab, rather than on whatever tab it last showed;
+    // a link names its own place (`openLink`), and the history opens a task
+    // through `onRestoreTask` instead, standing the pane its step held.
     onSelect: guard((taskId: string) => {
+      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+      select(taskId);
+      if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
+    }),
+    onRestoreTask: guard((taskId: string) => {
       setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);
     }),
@@ -3162,6 +3180,8 @@ export function useTasksTab(input: {
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
+      single: inboxView !== undefined && inboxSingle,
+      onSingle: setInboxSingle,
       pages: inboxPages.pages,
       onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,

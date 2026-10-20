@@ -718,7 +718,7 @@ export function useWindowHistory(input: {
     | "tasks"
     | "archived"
     | "listFailed"
-    | "onSelect"
+    | "onRestoreTask"
     | "onLeaveTask"
     | "history"
     | "inboxView"
@@ -740,9 +740,10 @@ export function useWindowHistory(input: {
   const historyOpen = tasks.history.open;
   const { spot } = tasks.history;
   const inboxOpen = tasks.inboxView.open;
-  // A narrow room stands the Inbox's item alone unless its list was asked for.
-  const inboxAlone = narrow && !tasks.inboxView.listed ? tasks.inboxView.chosen : undefined;
-  const inboxListed = narrow ? inboxAlone === undefined : undefined;
+  // An Inbox showing one column, by its own width or a narrow room's, stands its item alone unless its list was asked for.
+  const inboxSingle = narrow || tasks.inboxView.single === true;
+  const inboxAlone = inboxSingle && !tasks.inboxView.listed ? tasks.inboxView.chosen : undefined;
+  const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
   const chatListed = narrow ? tasks.chatView.listed : undefined;
   // The place Chat shows, alone in a narrow room or beside its rail in a wide one; none while a narrow room's rail stands.
@@ -962,7 +963,7 @@ export function useWindowHistory(input: {
       return;
     }
     if (historyOpen) tasks.history.onClose();
-    if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onSelect(to.taskId);
+    if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onRestoreTask(to.taskId);
     if (to.kind === PLACE_KIND.TASK && to.panel !== undefined) standPanel(to.taskId, to.panel);
     if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) tasks.onLeaveTask();
   };
@@ -1012,10 +1013,16 @@ export function useWindowHistory(input: {
           },
           () => tasks.automationsView.onRuns(false),
         ),
-      inbox: (listed) =>
-        listed
-          ? up({ kind: PLACE_KIND.INBOX, listed: true }, () => tasks.inboxView.onListed(true))
-          : tasks.inboxView.onListed(false),
+      // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
+      inbox: (listed) => {
+        if (!listed) {
+          tasks.inboxView.onListed(false);
+          return;
+        }
+        const stand = () => tasks.inboxView.onListed(true);
+        if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
+        else stand();
+      },
       panel: () => {
         const shut = () => tasks.sidePanel.onSetOpen(false);
         if (boundFor === undefined) {

@@ -914,7 +914,7 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
 type InboxMember = NonNullable<InboxItem["answeredBy"]>;
 
 /** What an item a member closed without an answer says of it, after who closed it. */
-export const CLOSED_WORDS = "Closed without answering";
+export const CLOSED_WORDS = "Resolved without an answer";
 
 /** What parts a preview's words, as a menu's detail parts them. */
 const PREVIEW_PART = " · ";

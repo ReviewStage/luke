@@ -1983,6 +1983,13 @@ ul.actor-stack {
   }
 }
 
+/* A narrow room's bar has its tabs on a row of their own, and a phone has
+   no hover to name a glyph, so Start keeps its word there however narrow
+   the bar (`SplitButton`). */
+.desktop-shell[data-room="narrow"] .desktop-task-main .desktop-toolbar .start-agent {
+  --luke-fold: worded;
+}
+
 .desktop-toolbar-actions {
   position: relative;
   display: flex;
@@ -2301,6 +2308,28 @@ ul.actor-stack {
   justify-content: flex-end;
   gap: var(--luke-space-2);
   max-width: 100%;
+}
+
+/* A phone's column is too narrow for a long sender beside the buttons and
+   the time, and a line ending at the bubble's right edge would push its
+   buttons off the column's left one, so there who sent it gives way, cut
+   short with an ellipsis (`@luke/ui`'s inline ref), and the buttons and the
+   time keep their whole width inside the column. */
+.desktop-shell[data-room="narrow"] .message-meta > .message-sender {
+  min-width: 0;
+}
+
+/* A sender the window cannot place is named in plain words, cut short there
+   as an inline ref's name is. */
+.desktop-shell[data-room="narrow"] .message-sender-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-shell[data-room="narrow"] .message-meta > :is(.message-actions, .message-sent-at) {
+  flex: none;
 }
 
 /* When it was sent, in the sender's own muted meta voice, its digits even. */
@@ -4032,6 +4061,20 @@ ul.actor-stack {
     order: 1;
     flex-basis: 100%;
   }
+}
+
+/* A narrow room's item bar has no room for its crumbs beside the way back
+   and the Resolve, which squeezed them to a glyph and a letter, so they take
+   a line of their own under them, the whole bar wide, each cut short by its
+   share as anywhere. */
+.desktop-shell[data-room="narrow"] .inbox-view-items > .desktop-toolbar {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-4);
+}
+
+.desktop-shell[data-room="narrow"] .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
+  order: 1;
+  flex-basis: 100%;
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -6619,13 +6662,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
    glyph alone, centred: its label, its detail, its end mark, and its × give
    way, and its hint says its name. Note that under the pointer it wears no
    fade at its end, because the fade makes room for a × it no longer has,
-   and is wider than the glyph's whole side of the pill. */
+   and is wider than the glyph's whole side of the pill. A narrow room's
+   tabs keep their labels (below), since a phone has no hint to name a
+   glyph and two agents' glyphs look alike. */
 @container tab (width < 72px) {
-  .tab-strip .tab:not([data-selected="true"]) :is(.tab-label, .tab-end-mark, .tab-close) {
+  .desktop-shell:not([data-room="narrow"])
+    .tab-strip
+    .tab:not([data-selected="true"])
+    :is(.tab-label, .tab-end-mark, .tab-close) {
     display: none;
   }
 
-  .tab-strip .tab:not([data-selected="true"]) .tab-button {
+  .desktop-shell:not([data-room="narrow"]) .tab-strip .tab:not([data-selected="true"]) .tab-button {
     justify-content: center;
     padding: 0;
   }
@@ -6638,6 +6686,30 @@ polygon.factory-campus-edge[data-edge="selected"] {
     .tab-strip .tab[data-closable="true"][data-selected="false"][data-marked="false"] .tab-button {
       mask-image: none;
     }
+  }
+}
+
+/* A narrow room's tabs each keep a short label rather than turning to
+   glyphs: every tab stands at least a glyph and a few letters wide, its
+   label cut short with the fade, and the strip scrolls along past the ones
+   that do not fit, as a phone's browser scrolls its tabs. A tab other than
+   the chosen one gives its ×'s place to its label there, its Close standing
+   in its menu, and on it once chosen. */
+.desktop-shell[data-room="narrow"] .tab-strip .tab {
+  --tab-widest: 160px;
+  min-width: 96px;
+}
+
+@media (hover: none) {
+  .desktop-shell[data-room="narrow"] .tab-strip .tab[data-selected="false"] .tab-close {
+    visibility: hidden;
+  }
+
+  .desktop-shell[data-room="narrow"]
+    .tab-strip
+    .tab[data-closable="true"][data-selected="false"]
+    .tab-button {
+    mask-image: none;
   }
 }
 

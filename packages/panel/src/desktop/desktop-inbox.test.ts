@@ -899,7 +899,7 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
 });
 
-test("an open item's Close asks first, then settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Close", async () => {
+test("an open item's Resolve, never called Close beside the panel's own Close, asks first, then settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Resolve", async () => {
   onlyAsking({ type: INBOX_RESPONSE.APPROVAL }, { needsReply: true });
   const { page } = mount();
   await settle();
@@ -927,19 +927,20 @@ test("an open item's Close asks first, then settles it without an answer at the 
   });
   const closeButton = () =>
     [...itemPane(page).querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
-      (button) => (button.getAttribute("aria-label") ?? button.textContent) === "Close",
+      (button) => (button.getAttribute("aria-label") ?? button.textContent) === "Resolve",
     );
 
-  await act(async () => (closeButton() ?? assert.fail("an open item offers Close")).click());
+  await act(async () => (closeButton() ?? assert.fail("an open item offers Resolve")).click());
   await settle();
-  assert.deepEqual(sent, [], "Close asks first");
+  assert.deepEqual(sent, [], "Resolve asks first");
   const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Close asks first");
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Resolve asks first");
   assert.equal(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
   const confirmClose = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Close",
+    (button) => button.textContent === "Resolve",
   );
-  await act(async () => (confirmClose ?? assert.fail("the question offers Close")).click());
+  await act(async () => (confirmClose ?? assert.fail("the question offers Resolve")).click());
   await settle();
 
   assert.deepEqual(
@@ -950,8 +951,11 @@ test("an open item's Close asks first, then settles it without an answer at the 
     itemPane(page).querySelector('[data-inbox-comment="closed"]') ??
     assert.fail("the close is a comment of the closer's");
   assert.match(wordsOf(closed.querySelector(".inbox-comment-head")) ?? "", /Sent to/u);
-  assert.equal(closed.querySelector("[data-inbox-pick]")?.textContent, "Closed without answering");
-  assert.equal(closeButton(), undefined, "a settled item offers no Close");
+  assert.equal(
+    closed.querySelector("[data-inbox-pick]")?.textContent,
+    "Resolved without an answer",
+  );
+  assert.equal(closeButton(), undefined, "a settled item offers no Resolve");
 });
 
 test("a teammate's open item leads with its title alone, and its box still takes your answer", async () => {
@@ -1565,8 +1569,8 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
-    ["Close"],
-    "beside the crumbs the bar holds the open item's Close alone",
+    ["Resolve"],
+    "beside the crumbs the bar holds the open item's Resolve alone",
   );
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());
@@ -5216,6 +5220,77 @@ async function mountThread(shown: InboxItem): Promise<HTMLElement> {
   return itemPane(page);
 }
 
+/** Where the thread's question stands under the board, 400px tall at the window's top, as the test lays it. */
+let questionAt = { y: 900, height: 300 };
+
+/** Opens `shown` in an Inbox standing in a shell of the room given, its thread taller than its board and its question at `questionAt`, answering the board. */
+async function openInRoom(room: string, shown: InboxItem, question: string): Promise<HTMLElement> {
+  inboxes = new Map([
+    [BILLING.id, [RETRY, shown]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  // The shell the Inbox stands in says its room, as the window's does.
+  document.body.className = "desktop-shell";
+  document.body.dataset.room = room;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.querySelector(":scope > .inbox-board") !== null) {
+      return DOMRect.fromRect({ y: 0, height: 400 });
+    }
+    if (this.matches(question)) return DOMRect.fromRect(questionAt);
+    return DOMRect.fromRect();
+  });
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, shown.title).click());
+  await settle();
+  return (
+    itemPane(page).querySelector<HTMLElement>(".inbox-board")?.parentElement ??
+    assert.fail("the thread")
+  );
+}
+
+/** Takes down the Inbox and the shell `openInRoom` stood it in. */
+function leaveRoom(): void {
+  vi.restoreAllMocks();
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  document.body.removeAttribute("class");
+  delete document.body.dataset.room;
+  questionAt = { y: 900, height: 300 };
+}
+
+test("in a narrow room an item waiting on an answer opens on its ask, standing just over the box, and on the desktop's width at its thread's top", async () => {
+  for (const room of ["narrow", "wide"]) {
+    const board = await openInRoom(room, threadItem([askingMessage(EXPIRY_ASK)]), ".inbox-ask");
+    assert.equal(board.scrollTop, room === "narrow" ? 800 : 0, room);
+    leaveRoom();
+  }
+});
+
+test("in a narrow room an older item waiting on an answer opens on its answer's controls, as a thread's ask does", async () => {
+  const board = await openInRoom(
+    "narrow",
+    { ...THRESHOLD, title: "Alert at 90%?" },
+    ".inbox-response",
+  );
+  assert.equal(board.scrollTop, 800);
+  leaveRoom();
+});
+
+test("in a narrow room a picture landing above the ask stands it over the box again, until the reader moves the thread", async () => {
+  const board = await openInRoom("narrow", threadItem([askingMessage(EXPIRY_ASK)]), ".inbox-ask");
+  assert.equal(board.scrollTop, 800);
+  // A picture read late pushes the ask 200px further down.
+  questionAt = { y: 300, height: 300 };
+  act(() => relayout());
+  assert.equal(board.scrollTop, 1000, "the ask stands over the box again");
+
+  board.dispatchEvent(new Event("touchstart"));
+  act(() => relayout());
+  assert.equal(board.scrollTop, 1000, "once the reader moves the thread it is theirs");
+  leaveRoom();
+});
+
 /** The thread's line under its title, a part a span. */
 function subjectLine(pane: HTMLElement): (string | null)[] {
   const line = pane.querySelector("[data-inbox-subject-line]") ?? assert.fail("the line is drawn");
@@ -5493,7 +5568,7 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   assert.deepEqual(askBoxes(pane), [
     ["replaced", "Pick oneReplaced"],
     ["withdrawn", "Pick oneWithdrawn: Product picked 14 days."],
-    ["withdrawn", "Pick oneCharles Pan · Closed without answering"],
+    ["withdrawn", "Pick oneCharles Pan · Resolved without an answer"],
   ]);
   assert.equal(
     pane.querySelector(".inbox-ask [role='radio']"),

@@ -61,7 +61,9 @@ import { MAIN_TAB } from "./use-main-tabs.js";
  * its plan. The plan's own tab is used on every task, so it stands on each
  * until closed there. The Inbox stands only once it has something to show:
  * it is closed on a task until an item the developer has not seen waits
- * there, and then opens and is chosen as an arrival is; an item has not
+ * there, and then opens and is chosen as an arrival is (in a narrow room it
+opens without being chosen, since the panel there would stand over the
+plan); an item has not
  * been seen where it did not wait at the task's last read, and a task with
  * no agent has no Inbox, since only an agent posts, unless main's read of
  * what waits across the account says an item waits on it. So a new task
@@ -938,13 +940,16 @@ const NO_ITEMS: readonly string[] = [];
  * did not wait at its last read; an Inbox already open only sees them. Note
  * that an item answered leaves what is kept as it settles, so posted again
  * it is new, and that a task that has read nothing has seen no item, so its
- * first opens its Inbox.
+ * first opens its Inbox. Where `shows` is false, as in a narrow room, whose
+ * panel would stand full screen over the plan, the Inbox's tab opens at the
+ * strip's end without being chosen, and the panel stays as it stood.
  */
 function withInboxRead(
   held: HeldState,
   on: string,
   waiting: readonly string[],
   drawn: DrawnTabs,
+  shows: boolean,
 ): HeldState {
   const was = taskTabs(held, on);
   const seen = was.inboxSeen ?? NO_ITEMS;
@@ -953,6 +958,11 @@ function withInboxRead(
   const read = withTaskTabs(held, on, (choices) => ({ ...choices, inboxSeen: waiting }));
   const tab = SIDE_PANEL_TAB.INBOX;
   if (!fresh || was.opened.includes(tab)) return read;
+  if (!shows) {
+    const placed =
+      on === drawn.task.id ? withTabLast(read, tab, drawn) : withTabLastOn(read, on, tab);
+    return withChoice(placed, on, tab, true);
+  }
   const here =
     on === drawn.task.id
       ? withTabLast(withChosenViewed(read, tab, drawn), tab, drawn)
@@ -1764,10 +1774,11 @@ export function useSidePanel(
     setNewTabAsked(true);
   }, [update, taskId]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
+  // Note that a narrow room holds the panel only full screen, so an item arriving there adds its tab without taking the plan's place.
   const onInboxRead = useCallback(
     (on: string, waiting: readonly string[]) =>
-      update((held) => withInboxRead(held, on, waiting, drawn)),
-    [update, drawn],
+      update((held) => withInboxRead(held, on, waiting, drawn, !narrow)),
+    [update, drawn, narrow],
   );
   const onChoose = useCallback(
     (tab: SidePanelTab) => {

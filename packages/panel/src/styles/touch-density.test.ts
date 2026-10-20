@@ -409,3 +409,30 @@ test("with a mouse those presses still wait for the pointer", () => {
     assert.equal(getComputedStyle(press).opacity, "0", `${name} waits`);
   }
 });
+
+/** A transcript's rows that open something, each in the markup its component draws: a call's line, the docked to-do list's head, and the agent's pull request's row. */
+function transcriptRows(): [string, HTMLElement][] {
+  const host = document.body.appendChild(document.createElement("div"));
+  host.innerHTML = `
+    <div class="tool"><details><summary class="tool-line" data-row="a call's line"></summary></details></div>
+    <details class="todos-dock"><summary class="todos-dock-head" data-row="the to-do list's head"></summary></details>
+    <div class="agent-published-dock"><ul class="luke-list"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
+  return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
+    row.dataset.row ?? "",
+    row,
+  ]);
+}
+
+test("on a touch screen a transcript's rows that open something stand a finger's height tall", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, row] of transcriptRows()) {
+    assert.ok((leastPixels(getComputedStyle(row).minHeight) ?? 0) >= FINGER, name);
+  }
+});
+
+test("with a mouse a transcript's rows keep their compact heights", () => {
+  layFor(false, { "data-luke-profile": "desktop" });
+  for (const [name, row] of transcriptRows()) {
+    assert.ok((leastPixels(getComputedStyle(row).minHeight) ?? 0) < FINGER, name);
+  }
+});

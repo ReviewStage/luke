@@ -420,13 +420,22 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 });
 
 /** Mounts the panel over a task holding its plan and, where `inbox` says, an Inbox it may draw, answering the control. */
-function inboxPanel(inbox: { task: string; held: boolean }) {
+function inboxPanel(inbox: { task: string; held: boolean }, room: ShellRoom = SHELL_ROOM.WIDE) {
   let control: SidePanelControl | undefined;
   function Probe({ held }: { held: { task: string; held: boolean } }) {
-    control = useSidePanel(undefined, {
-      id: held.task,
-      holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
-    });
+    control = useSidePanel(
+      undefined,
+      {
+        id: held.task,
+        holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
+      },
+      undefined,
+      [],
+      [],
+      [],
+      undefined,
+      room,
+    );
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -459,6 +468,23 @@ test("a task's Inbox stands only once an item the developer has not seen waits, 
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN], "an item seen opens nothing");
   act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.INBOX, "a newer item opens it again");
+});
+
+test("in a narrow room an Inbox item not seen opens the Inbox's tab at the strip's end without choosing it, so the plan the panel stood on, or the column it stood shut over, stays", () => {
+  const panel = inboxPanel({ task: TASK, held: true }, SHELL_ROOM.NARROW);
+  assert.deepEqual(
+    { open: panel.control().open, tab: panel.control().tab },
+    { open: true, tab: SIDE_PANEL_TAB.PLAN },
+  );
+  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN, "the plan stays chosen");
+
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel.control().onSetOpen(false));
+  act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
+  assert.equal(panel.control().open, false, "a newer item leaves the panel shut");
 });
 
 test("a task that may draw no Inbox, holding no agent and nothing waiting, draws none, though an item read on it was not seen", () => {

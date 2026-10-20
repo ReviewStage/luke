@@ -67,6 +67,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import { TextLink } from "../text-link.js";
 import { Tooltip } from "../tooltip.js";
 import {
@@ -1467,6 +1468,64 @@ function useScrollToOwnMessage(
   }, [board, item.id, last, own]);
 }
 
+/** The question an open item waits on in its thread: a thread's open ask's box, or an older item's answer controls. */
+function openQuestion(scroller: HTMLElement): Element | null {
+  return (
+    scroller.querySelector(".inbox-ask-body")?.closest(".inbox-ask") ??
+    scroller.querySelector(".inbox-response")
+  );
+}
+
+/** Scrolls `scroller` so `question` stands just over its foot, the box docked under it, or its top in view where it is taller than the room. */
+function standOverFoot(scroller: HTMLElement, question: Element): void {
+  const room = scroller.getBoundingClientRect();
+  const box = question.getBoundingClientRect();
+  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
+  const under = box.bottom - (room.bottom - padding);
+  if (under !== 0) scroller.scrollTop += Math.min(under, box.top - room.top);
+}
+
+/** The reader's own ways of moving a thread, after any of which the pane leaves where it stands to them. */
+const READER_MOVES = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+
+/**
+ * Opens each item at its thread's top, rather than where the last item was
+ * scrolled, as the pane stands for every item in turn. A narrow room leaves
+ * the thread little room over the box docked under it, so there an item
+ * waiting on an answer opens on its question instead, standing just over the
+ * box, where its options would otherwise wait out of sight under it; and
+ * while what stands above the question still lands, a picture read late, it
+ * is stood there again, until the reader moves the thread themselves.
+ */
+function useOpenOnAsk(
+  board: React.RefObject<HTMLDivElement | null>,
+  pane: React.RefObject<HTMLElement | null>,
+  itemId: string,
+): void {
+  useLayoutEffect(() => {
+    const scroller = board.current;
+    if (scroller === null) return undefined;
+    scroller.scrollTop = 0;
+    const narrow =
+      pane.current?.closest(".desktop-shell")?.getAttribute("data-room") === SHELL_ROOM.NARROW;
+    if (!narrow || openQuestion(scroller) === null) return undefined;
+    const stand = () => {
+      const question = openQuestion(scroller);
+      if (question !== null) standOverFoot(scroller, question);
+    };
+    stand();
+    const content = scroller.querySelector(".inbox-board");
+    const observer = new ResizeObserver(stand);
+    if (content !== null) observer.observe(content);
+    const letGo = () => {
+      observer.disconnect();
+      for (const move of READER_MOVES) scroller.removeEventListener(move, letGo);
+    };
+    for (const move of READER_MOVES) scroller.addEventListener(move, letGo, { passive: true });
+    return letGo;
+  }, [board, pane, itemId]);
+}
+
 /** What an ask's box says where its type is one this build does not know. */
 const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
 
@@ -1929,31 +1988,36 @@ function ThreadMessage({
   );
 }
 
-/** The pane's Close, which settles an open item without an answer: its words, and what its tooltip says it does. */
+/**
+ * The pane's Resolve, which settles an open item without an answer: its
+ * words, and what its tooltip says it does. Note that it is not called
+ * Close, because the bar of a side panel or a window standing it full
+ * screen already holds a Close that only puts the panel away.
+ */
 const CLOSE_ITEM = {
-  LABEL: "Close",
-  HINT: "Close without answering",
+  LABEL: "Resolve",
+  HINT: "Resolve without answering",
 } as const;
 
-/** The Close's tooltip, which says what it does whether its word is folded away or not, as the way back's does. */
+/** The Resolve's tooltip, which says what it does whether its word is folded away or not, as the way back's does. */
 const CloseHint: FoldingButtonHint = ({ children }) => (
   <Tooltip label={CLOSE_ITEM.HINT}>{children}</Tooltip>
 );
 
-/** What the Close asks first: which item, and whether its agent is told now or reads it later. */
+/** What the Resolve asks first: which item, and whether its agent is told now or reads it later. */
 function closeQuestion(item: InboxItem): DialogQuestion {
   return {
-    title: `Close “${cardTitle(item.title)}” without answering?`,
+    title: `Resolve “${cardTitle(item.title)}” without answering?`,
     body: item.needsReply
-      ? "The agent is told you closed it. Only the agent can open it again."
-      : "The agent reads that you closed it the next time it reads its inbox. Only the agent can open it again.",
+      ? "The agent is told you resolved it. Only the agent can open it again."
+      : "The agent reads that you resolved it the next time it reads its inbox. Only the agent can open it again.",
     verb: CLOSE_ITEM.LABEL,
-    running: "Closing…",
+    running: "Resolving…",
   };
 }
 
 /**
- * An open item's Close in the pane's bar, which asks first, since only the
+ * An open item's Resolve in the pane's bar, which asks first, since only the
  * agent can open an item again (`packages/panel/AGENTS.md`'s Confirms). It
  * is keyed by its item, so a question asked on one item never closes the
  * next, and the question goes with the pane once it is hidden. Note that
@@ -2172,10 +2236,7 @@ export function InboxPane({
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
-  // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
-  useLayoutEffect(() => {
-    if (board.current !== null) board.current.scrollTop = 0;
-  }, [item.id]);
+  useOpenOnAsk(board, pane, item.id);
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;
   useScrollToOwnMessage(board, item, readerId);
