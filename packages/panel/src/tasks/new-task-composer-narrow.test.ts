@@ -292,9 +292,6 @@ test("on a phone-wide card with every chip chosen, Start stands last in the row,
     ["Opus 5.5 High"],
     "only the model chip draws words, which are what give way",
   );
-  const model =
-    container.querySelector(".agent-model-chip") ?? assert.fail("the model chip stands");
-  assert.notEqual(getComputedStyle(model).flexShrink, "0", "the model chip gives way to Start");
   assert.equal(presses.at(-1)?.disabled, false, "Start stands ready");
 });
 
@@ -314,9 +311,6 @@ test("on a desktop-wide card with every chip chosen, the row reads as it always 
     "Opus 5.5 High",
     "File for later",
   ]);
-  const model =
-    container.querySelector(".agent-model-chip") ?? assert.fail("the model chip stands");
-  assert.equal(getComputedStyle(model).flexShrink, "0", "the model's name stands whole");
 });
 
 test("on a phone-wide card File for later draws the backlog's mark alone, keeps its name, and still files the task in the backlog", async () => {

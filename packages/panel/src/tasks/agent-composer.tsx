@@ -204,12 +204,12 @@ const BUTTON = {
 } as const;
 
 /**
- * The card widths below which a chip draws its mark alone: the branch's
- * chip first, then the owner's presses where they carry words (New task's
- * Plan toggle and File for later, at the step the ⋯ stands), then the model chip. Note that
- * they are steps of the same order as the stylesheet's (tasks.css's
- * `composer` queries, at 400 and 240), because the room each leaves is
- * counted on the steps before it.
+ * The card widths below which a press draws its mark alone: the branch's
+ * chip first, then the owner's presses that carry words (New task's Plan
+ * toggle and File for later, at the step the ⋯ stands), then the model
+ * chip. Note that they are steps of the same order as the stylesheet's
+ * `composer` queries (tasks.css's, and New task's in desktop.css, at 400
+ * and 240), because the room each leaves is counted on the steps before it.
  */
 const FOLD_WIDTH = {
   PUBLISHED: 520,

@@ -601,7 +601,7 @@ export function NewTaskComposer({
         beforeSend={(narrow) =>
           // Note that a card too narrow for the words draws the backlog's mark in their place, still named, so Start keeps its room.
           narrow ? (
-            <Tooltip label={COMPOSER_WORDS.FILE}>
+            <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
               <IconButton
                 icon={<TaskStatusMark status={TASK_STATUS.BACKLOG} />}
                 label={COMPOSER_WORDS.FILE}

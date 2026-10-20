@@ -210,6 +210,7 @@ afterEach(() => {
   window.localStorage.clear();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  document.documentElement.removeAttribute("data-luke-profile");
 });
 
 /** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
@@ -470,7 +471,6 @@ test("on a touch screen each Recent row on Home stands a finger's 44px tall at l
     (await recentPresses(false)).every((height) => height === undefined),
     "with a mouse nothing holds a row up past its own height",
   );
-  document.documentElement.removeAttribute("data-luke-profile");
 });
 
 test("a waiting item's row opens the Inbox on its item, and a recent plan opens the plan", async () => {
