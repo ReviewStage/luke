@@ -1007,6 +1007,45 @@ Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
 launches. Every permission a page asks for, such as the camera, microphone, or
 location, is refused, and downloads are cancelled.
 
+With "Let agents run commands on this Mac" on, the same per-Mac switch that
+lets an agent run commands there, an agent on a task can open, read, click, and
+type in that task's Browser tabs on your Mac, and so **can act as you on any
+site you are signed in to in a Browser tab**, `localhost` included, with no
+approval for each action. Only the Mac running Luke's window answers, and only
+for the tab's own task. What an agent reads from a tab is its address, its
+title, a downscaled screenshot, and a text snapshot of the page. They reach that
+agent and its workers, our service, and the model that runs the agent. The
+text, address, and title are kept in the agent's transcript with the rest of
+the conversation; a screenshot goes to the model and is left out of the stored
+conversation, as a picture an agent looks at is. They still reach no trace, no
+counted event, and no voice call, and the screen recording still leaves them
+out. Turn the switch off, in Settings, and an agent can no longer reach a
+Browser tab; the tab then reaches only its panel, as before.
+
+A Browser tab can also be a cloud browser, which an agent drives and you
+watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
+your Mac, so it reaches that sandbox's own `localhost` and holds none of your
+Mac's cookies or signed-in sites. What the agent does with it reaches the model:
+each page's address and title, a screenshot, and a text snapshot of the page. A
+screenshot goes to the model alone and is left out of the agent's stored
+transcript, as a picture Luke looks at is; the rest is kept in the transcript,
+under its terms. Our service keeps the task's list of cloud tabs, each one's
+address and title, with the agent whose browser holds it, until the task's
+conversation is removed. The page, its live-view frames, and a tab's
+screenshots and text are not kept by us: the frames pass through our service
+to the panel of each member who opens the task, and every such member can
+watch the tab and take it over by clicking and typing in it, and the agent's
+actions on it wait while you do. Nothing of it reaches a trace, a counted event,
+a fixture, or the voice window, and the screen recording masks the live view.
+The browser's profile, with the cookies and logins you type into it, lives on
+the sandbox's disk, so it stays in that sandbox while it runs and in the
+snapshot Vercel keeps when the sandbox stops, until thirty days after the
+snapshot's last use, as the checkout does under "How Luke reads your
+repository"; the pages open at a stop are not kept, and the browser reopens
+each tab at its last address on resume. No other agent reaches that profile;
+an agent's workers share its sandbox, so they share it. Deleting the task, or
+your account, deletes the sandbox and its snapshot as described there.
+
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording
 that begins before you sign in is attached to your account if you sign in
@@ -1436,8 +1475,8 @@ and error, performance, and agent reports by Sentry.
 
 - Sign out of your Luke account to turn voice off.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
-  Luke and coding agents running commands on that Mac; it is set on each Mac
-  apart, and signing out stops it too.
+  Luke and coding agents running commands on that Mac and driving its Browser
+  tabs; it is set on each Mac apart, and signing out stops it too.
 - Switch an integration off for one coding agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.
 - Delete any workspace file an earlier version of Luke left on your Mac;

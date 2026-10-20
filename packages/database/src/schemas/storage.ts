@@ -113,6 +113,11 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
+    // Luke's MCP server finds the conversation a runner's bearer stands for by the bearer's digest,
+    // on every tool call; one digest names one conversation.
+    uniqueIndex("conversations_runner_token_hash")
+      .on(table.runnerTokenHash)
+      .where(sql`${table.runnerTokenHash} is not null`),
   ],
 );
 

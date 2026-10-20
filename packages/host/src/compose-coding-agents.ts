@@ -98,7 +98,7 @@ import {
   type TranscriptFollows,
   TranscriptKey,
   transcriptFollows,
-  transcriptPast,
+  windowsPage,
 } from "./transcript-follow.js";
 
 /**
@@ -407,12 +407,9 @@ function composed(
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
-        const answer = gate()
-          ? yield* transcriptPast(transcripts, new TranscriptKey({ agentId, callId }), {
-              now: asked(client.messagesNow(agentId, after, callId)),
-            })
-          : UNANSWERED;
-        return carried<CodingAgentMessagesAnswerView>(answer);
+        // Note that the page is read at once, since Copy transcript waits on no hold.
+        const answer = yield* asked(client.messagesNow(agentId, after, callId));
+        return carried<CodingAgentMessagesAnswerView>(windowsPage(answer));
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
       Effect.gen(function* () {

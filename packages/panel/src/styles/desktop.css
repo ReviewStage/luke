@@ -486,15 +486,17 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
-/* View options wears a dot while the view leaves tasks out, so a filtered
-   list never passes for the whole of it: drawn by the box around the
-   button, over its corner. */
-.sidebar-view-options {
+/* The sidebar's View options and the Tasks page's Filter wear a dot while
+   the view leaves tasks out, so a filtered list never passes for the whole
+   of it: drawn by the box around the button, over its corner. */
+.sidebar-view-options,
+.tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after,
+.tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
@@ -3178,6 +3180,132 @@ ul.actor-stack {
   display: inline-flex;
 }
 
+/* A task's card leads with where it stands (`task-card.tsx`): its key, its
+   status, and its priority, each a small chip of its mark and its words,
+   as the task page's head chips say them. */
+.task-card-standing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+}
+
+.task-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+}
+
+.task-card-chip > .luke-task-mark {
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+}
+
+.task-card-key {
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An Inbox row's card, the thread's (`inbox-list.tsx`): where the item
+   stands in a caption, the attention ink while it waits on the reader; a
+   choice's options as quiet boxes, the recommended one tagged; a to-do's
+   steps, the ticked struck through. */
+.inbox-card-standing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-card-standing[data-needs-you="true"] {
+  color: var(--luke-color-attention);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.inbox-card-options,
+.inbox-card-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-card-options > li {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text);
+}
+
+.inbox-card-option {
+  min-width: 0;
+  flex: 1;
+}
+
+.inbox-card-recommended {
+  flex: none;
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-attention-tint);
+  color: var(--luke-color-attention);
+}
+
+.inbox-card-steps > li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-text);
+}
+
+.inbox-card-steps > li > svg {
+  flex: none;
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+  margin-top: 0.15em;
+  color: var(--luke-color-text-subtle);
+}
+
+.inbox-card-steps > li[data-done="true"] {
+  color: var(--luke-color-text-subtle);
+  text-decoration: line-through;
+}
+
+.inbox-card-steps > li[data-done="true"] > svg {
+  color: var(--luke-color-complete);
+}
+
+/* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
+   glyph in the attention ink, or how it ended, led by a tick in the done
+   ink; words alone lead with nothing. The glyph sits on the words' line at
+   the caption's size, so a row with one and a row without line up. */
+.inbox-row-line > svg {
+  width: var(--luke-type-caption-size);
+  height: var(--luke-type-caption-size);
+  margin-inline-end: var(--luke-space-4);
+  vertical-align: -0.125em;
+  color: var(--luke-color-attention);
+}
+
+.inbox-row-line[data-line="settled"] > svg {
+  color: var(--luke-color-complete);
+}
+
 .inbox-row-attention .attention-mark {
   width: 12px;
   height: 12px;
@@ -3583,10 +3711,10 @@ ul.actor-stack {
 }
 
 /* The ask closing the message that asks it, once it no longer waits: a
-   bordered card, its head the ask's kind and where it stands. Answered,
-   the card heads the reply that answered it with no head of its own, its
-   controls as the answer left them. A replaced or withdrawn ask is its
-   head alone, a replaced one struck through. */
+   bordered card, its head the ask's kind and where it stands. Once
+   answered, its controls alone head the reply that answered it, as the
+   answer left them, with no card around them. A withdrawn ask is its head
+   alone. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3615,12 +3743,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
 }
 
-.inbox-ask[data-inbox-ask="replaced"] .inbox-ask-kind {
-  color: var(--luke-color-text-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--luke-color-text-subtle);
-}
-
 .inbox-ask-standing {
   display: inline-flex;
   min-width: 0;
@@ -3628,21 +3750,21 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
+/* An answered ask's controls stand in the reply itself, at its words' left
+   edge, a step further from the words under them than the reply's own gap
+   so the two do not run together. */
 .inbox-ask-answered {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-}
-
-.inbox-ask-body {
-  border-top: 1px solid var(--luke-color-border);
+  margin-bottom: var(--luke-space-4);
 }
 
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
-   complete ink. */
+   complete ink; a replaced ask with the same pill saying so, in the muted
+   ink alone. */
 .inbox-ask-settled {
   display: inline-flex;
   max-width: 100%;
@@ -3763,10 +3885,18 @@ ul.actor-stack {
   flex: 0 1 auto;
 }
 
+/* Once the item's title joins the path, its last words (`inbox-pane.tsx`'s
+   `Crumbs`), the agent's crumb before it keeps its size, so a narrow bar cuts
+   the task's crumb short first and then the title. */
+.inbox-crumbs .luke-breadcrumbs li:has(+ li[data-words="true"]:last-child) {
+  flex-shrink: 0;
+}
+
 /* A settled item's foot, over its box: the next item that needs the
    developer as a card of one row (`inbox-pager.tsx`), led by its agent's
-   tile, then Next in the meta voice and its title in the unread weight, cut
-   short at the row's end, and J where J reaches it. */
+   tile, then Next in the meta voice, an arrow up where it lies above, and
+   its title in the unread weight, cut short at the row's end, and K or J
+   where that key reaches it. */
 .inbox-next-dock {
   padding-bottom: var(--luke-space-12);
 }
@@ -8382,7 +8512,7 @@ button.tasks-board-card-press:focus-visible::after {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+/* The Tasks page (`tasks-page.tsx`): its
    List | Board switch stands beside its title, and the List runs its groups
    down the page, each headed as a Board's column is, its rows the page's
    own `ListRow`s led by the task's priority, key, and status. */

@@ -80,9 +80,16 @@ function fakeLuke(answers: readonly Answer[] = [], watchFor?: string) {
   });
 }
 
-/** The `type`, and `subtype` where it has one, of each message applied, in order. */
+/** The events applied, less each ACCEPTED, which its own test follows, so a turn's shape reads alone. */
+function withoutAccepted(events: readonly RunnerEvent[]): RunnerEvent[] {
+  return events.filter(
+    ({ message }) => !("type" in message && message.type === RUNNER_EVENT.ACCEPTED),
+  );
+}
+
+/** The `type`, and `subtype` where it has one, of each message applied but an ACCEPTED, in order. */
 function kinds(events: readonly RunnerEvent[]): string[] {
-  return events.map(({ message }) => {
+  return withoutAccepted(events).map(({ message }) => {
     if (!("type" in message)) return message.method;
     const subtype = "subtype" in message ? message.subtype : undefined;
     return subtype === undefined ? message.type : `${message.type}/${subtype}`;
@@ -148,11 +155,12 @@ it.effect("posts a waiting turn in order and ends the launch only once nothing i
       luke.applied.map(({ sequence }) => sequence),
       luke.applied.map((_, index) => FIRST_SEQUENCE + index),
     );
-    const waiting = luke.applied[8]?.message;
+    const posted = withoutAccepted(luke.applied);
+    const waiting = posted[8]?.message;
     assert.ok(waiting !== undefined && "type" in waiting && waiting.type === RUNNER_EVENT.WAITING);
     assert.equal(waiting.background_tasks.length, 1);
     assert.equal(waiting.session_crons.length, 1);
-    assert.ok(JSON.stringify(luke.applied[11]?.message).includes(TURN_DONE.FIRST));
+    assert.ok(JSON.stringify(posted[11]?.message).includes(TURN_DONE.FIRST));
     assert.deepEqual(luke.applied.at(-1)?.message, {
       type: RUNNER_EVENT.END,
       reason: RUNNER_END.TURN_ENDED,
@@ -277,7 +285,7 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);
 
-    assert.deepEqual(luke.applied[0]?.message, {
+    assert.deepEqual(withoutAccepted(luke.applied)[0]?.message, {
       type: "assistant",
       message: {
         content: [
@@ -291,6 +299,30 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
     for (const secret of [CLAUDE_TOKEN, BEARER]) {
       assert.ok(!posted.includes(JSON.stringify(secret).slice(1, -1)));
     }
+  }),
+);
+
+it.effect("takes a test-mode launch's API key out of every event, as it does a plan's token", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const apiKey = "sk-ant-api03-test-mode-key-for-tests";
+    const leak: Step = {
+      emit: {
+        type: "assistant",
+        message: { content: [{ type: "text", text: `the key is ${apiKey}` }] },
+        parent_tool_use_id: null,
+      },
+    };
+    const { write, run } = yield* launch([leak, ...SHORT_TURN], luke, {
+      [RUNNER_ENV.BEARER]: BEARER,
+      [RUNNER_ENV.API_KEY]: apiKey,
+    });
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.ok(JSON.stringify(luke.applied).includes("the key is [redacted]"));
+    assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
   }),
 );
 
@@ -312,7 +344,7 @@ it.effect("leaves an escape that only looks like a secret's spelling as it was",
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);
 
-    assert.deepEqual(luke.applied[0]?.message, said.emit);
+    assert.deepEqual(withoutAccepted(luke.applied)[0]?.message, said.emit);
   }),
 );
 
@@ -349,8 +381,54 @@ it.effect("posts each event once and in order through posts Luke failed or never
     ]);
     assert.deepEqual(
       luke.applied.map(({ sequence }) => sequence),
-      [FIRST_SEQUENCE, FIRST_SEQUENCE + 1, FIRST_SEQUENCE + 2, FIRST_SEQUENCE + 3],
+      luke.applied.map((_, index) => FIRST_SEQUENCE + index),
     );
+    assert.equal(luke.applied.length, 5);
+  }),
+);
+
+it.effect(
+  "posts each message's uuid as accepted ahead of handing it to the CLI, which takes it as the prompt's own",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], "Working on the first message.");
+      const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+      const first = "6f1c2a4e-3b7d-4c8e-9a0b-1d2e3f405162";
+      yield* write(CONFIG);
+      yield* write({ ...FIRST_MESSAGE, uuid: first });
+      yield* luke.seen;
+      // A line that names no uuid is still accepted, under one the runner minted.
+      yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
+      yield* Queue.take(prompted);
+      yield* Queue.take(prompted);
+      yield* release;
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      const accepted = luke.applied.filter(
+        ({ message }) => "type" in message && message.type === RUNNER_EVENT.ACCEPTED,
+      );
+      assert.deepEqual(
+        accepted.map(({ message }) => message),
+        cli.prompts.map((prompt) => ({ type: RUNNER_EVENT.ACCEPTED, uuid: prompt.uuid })),
+      );
+      assert.equal(cli.prompts[0]?.uuid, first);
+      assert.notEqual(cli.prompts[1]?.uuid, undefined);
+      assert.deepEqual(luke.applied[0]?.message, accepted[0]?.message);
+    }),
+);
+
+it.effect("skips a message line whose uuid is not a UUID, handing the CLI nothing", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const { cli, writeText, write, run } = yield* launch(SHORT_TURN, luke);
+    yield* write(CONFIG);
+    yield* writeText(JSON.stringify({ type: INPUT_LINE.MESSAGE, uuid: "not-a-uuid", content: [] }));
+    yield* write({ type: INPUT_LINE.STOP });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+    assert.deepEqual(cli.prompts, []);
+    assert.deepEqual(kinds(luke.applied), [RUNNER_EVENT.END]);
+    assert.equal(luke.applied.length, 1);
   }),
 );
 

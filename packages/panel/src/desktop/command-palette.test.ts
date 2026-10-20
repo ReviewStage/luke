@@ -540,7 +540,11 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
-  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Working…");
+  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, undefined);
+  assert.ok(
+    card?.querySelector('.actor-card-head .state-glyph[data-state="working"]'),
+    "the card's tile wears the working mark in its harness's place",
+  );
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });
@@ -1526,6 +1530,54 @@ test("Tasks says a refused list with a Retry that reads it again", () => {
   );
   act(() => retry?.click());
   assert.deepEqual(retried, [1]);
+});
+
+test("⌘K's Tasks lists the agents with no task among the tasks by their last activity, as the sidebar does, the archived after among the archived tasks, and opens one on its own page", () => {
+  const opened: string[] = [];
+  const oneOff = (id: string, title: string, activityAt: number) => ({
+    id,
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt,
+  });
+  const task = (id: string, name: string, updatedAt: number) => ({
+    id,
+    workspaceId: "workspace-1",
+    name,
+    createdAt: 1,
+    updatedAt,
+    repository: null,
+  });
+  openPalette(
+    tasksControl({
+      tasks: [task("t-1", "Rate limits", 30), task("t-2", "Retry budget", 10)],
+      listedAgents: {
+        standing: [oneOff("a-1", "Triage overnight issues", 20)],
+        archived: [{ ...oneOff("a-2", "Remove stale copy", 40), archivedAt: 41 }],
+      },
+      archived: [{ ...task("t-3", "Old sweep", 5), archivedAt: 6 }],
+      agentView: { agentId: undefined, onOpen: (id) => opened.push(id), onClose: () => undefined },
+    }),
+  );
+  chooseFilter("Tasks");
+
+  assert.deepEqual(rows(), [
+    "Rate limits",
+    "Triage overnight issues · acme/relay",
+    "Retry budget",
+    "Remove stale copy · acme/relay · Archived",
+    "Old sweep · Archived",
+  ]);
+  press("Triage overnight issues · acme/relay");
+  assert.deepEqual(opened, ["a-1"]);
 });
 
 test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it is pinned, and nothing for an archived agent", () => {

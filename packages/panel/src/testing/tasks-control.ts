@@ -1,4 +1,8 @@
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentMessagesAnswerView,
+  type CodingAgentTranscriptKey,
+} from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
@@ -9,6 +13,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../desktop/task-summary.js";
+import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
@@ -22,6 +27,31 @@ import {
 const ignore = () => undefined;
 
 /** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
+/**
+ * A follower that answers each follow as the host would: the pages `pagesOf`
+ * names for the transcript, pushed to the window in turn, at once; or, where
+ * `held` names one of them, that page and those after it once its release
+ * lands.
+ */
+export function pushedTranscripts(
+  pagesOf: (transcript: CodingAgentTranscriptKey) => readonly CodingAgentMessagesAnswerView[],
+  held?: { readonly page: number; readonly release: Promise<void> },
+): TranscriptFollower {
+  return (transcript, hear) => {
+    let stopped = false;
+    const pages = pagesOf(transcript);
+    const cut = held?.page ?? pages.length;
+    for (const page of pages.slice(0, cut)) hear(page);
+    void held?.release.then(() => {
+      if (stopped) return;
+      for (const page of pages.slice(cut)) hear(page);
+    });
+    return () => {
+      stopped = true;
+    };
+  };
+}
+
 export function waitingOf(item: InboxItem): AppInboxWaitingItem {
   return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
@@ -123,6 +153,7 @@ export function codingAgentsControl(
     onStatus: ignore,
     onTitle: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    transcripts: pushedTranscripts(() => []),
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     numberedPullRequests: new Map(),
