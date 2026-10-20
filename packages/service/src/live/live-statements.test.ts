@@ -44,7 +44,7 @@ function liveStatements() {
       agentFollowedBy(USER_ID, parent, USER_ID),
     ),
   );
-  const planWorker = Option.getOrThrow(
+  const taskWorker = Option.getOrThrow(
     transcriptLiveStatements(
       { userId: USER_ID, conversationId: randomUUID() },
       parent,
@@ -62,7 +62,7 @@ function liveStatements() {
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),
     ...Object.fromEntries(
-      Object.entries(planWorker).map(([part, query]) => [`planWorker.${part}`, query]),
+      Object.entries(taskWorker).map(([part, query]) => [`taskWorker.${part}`, query]),
     ),
   };
 }
