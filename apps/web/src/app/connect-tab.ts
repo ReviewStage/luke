@@ -11,10 +11,14 @@
  * the connect ends on (`connect-return.ts`), which offers the way back to
  * it. A press whose act opened nothing closes its empty tab. The tab is
  * cut from this one before it is sent anywhere, so no provider page can
- * reach or navigate this tab; the landing page says it came back on a
- * broadcast channel of this origin's instead, which this tab answers for
- * each connect it handed off. Every other address opens as a link, as
- * before.
+ * reach or navigate this tab, and marked as the connect's own hand-off;
+ * the landing page says it came back, and that hand-off, on a broadcast
+ * channel of this origin's instead, which this tab answers only for a
+ * hand-off it made, and only until that connect is abandoned. Every other
+ * address opens as a link, as before. An address of either kind opens only
+ * where it is an http or https one, as the desktop's `web.open` takes it,
+ * because any other would run as script on this origin or hand the address
+ * to another app.
  *
  * Note that the presses' tabs are taken in the order pressed, not by which
  * act answered, because an address reaches here with nothing of the act it
@@ -23,6 +27,7 @@
  * took.
  */
 
+import { isWebAddress } from "@luke/host/acts";
 import {
   type ActPortClient,
   actContract,
@@ -31,18 +36,21 @@ import {
   WORKSPACE_ACT_KIND,
 } from "@luke/host/contract";
 import {
+  CONNECT_BOUND_MS,
   CONNECT_CHANNEL,
   CONNECT_SAID,
   forgetReturn,
-  landingSaying,
+  markHandoff,
   rememberReturn,
+  saying,
 } from "../connect-return";
 
-/** What a connect reaches of a tab it opened: whether it is still open, its close, and its address replaced. */
+/** What a connect reaches of a tab it opened: whether it is still open, its close, its address replaced, and its own session storage, which it keeps through the provider and back. */
 export interface ConnectTab {
   readonly closed: boolean;
   readonly close: () => void;
   readonly location: { readonly replace: (url: string) => void };
+  readonly sessionStorage: Pick<Storage, "setItem">;
 }
 
 /** What a connect needs of the browser: a tab of its own, this tab sent on, and where this tab stands. */
@@ -59,9 +67,10 @@ export interface ConnectBrowser {
   readonly openLink: (url: string) => void;
 }
 
-/** A connect's press as the browser answered it: the empty tab it opened, or nothing where it was refused. */
+/** A connect's press as the browser answered it: the empty tab it opened, or nothing where it was refused, and the hand-off that tab is marked as. */
 interface Press {
   readonly tab: ConnectTab | null;
+  readonly handoff: string;
 }
 
 export interface ConnectTabs {
@@ -76,12 +85,14 @@ export interface ConnectTabs {
 export function connectTabs(browser: ConnectBrowser): ConnectTabs {
   // Note that presses wait in order, because two connects may be out at once and each answer takes the oldest tab.
   const waiting: Press[] = [];
-  // How many connects this tab handed to a tab of their own whose landing has not yet said so.
-  let handedOff = 0;
+  // When each connect this tab handed to a tab of its own was handed off, by the hand-off its tab is marked as, until its landing says so.
+  const handedOff = new Map<string, number>();
 
   /** A connect pressed: its empty tab opened at once, and closed where its act opened nothing. */
   const press = <A>(go: () => Promise<A>): Promise<A> => {
-    const pressed: Press = { tab: browser.openEmptyTab() };
+    const pressed: Press = { tab: browser.openEmptyTab(), handoff: crypto.randomUUID() };
+    // Note that the tab is marked now, while it is still this origin's empty page and its storage this tab's to write.
+    if (pressed.tab !== null) markHandoff(pressed.tab, pressed.handoff);
     waiting.push(pressed);
     return go().finally(() => {
       const left = waiting.indexOf(pressed);
@@ -116,6 +127,11 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
   };
 
   const open = (url: string): void => {
+    // Note that an address off the web opens nowhere and takes no press, so a press it answered closes its tab as its act ends.
+    if (!isWebAddress(url)) {
+      console.warn("An address that is not an http or https one was not opened.");
+      return;
+    }
     const press = waiting.shift();
     if (press === undefined) {
       browser.openLink(url);
@@ -131,21 +147,35 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
     // Note that a tab the developer closed before the address came opens nothing, because closing it said no.
     if (press.tab.closed) return;
     press.tab.location.replace(url);
-    handedOff += 1;
+    handedOff.set(press.handoff, Date.now());
+  };
+
+  /** Takes the hand-off a landing names, answering whether this tab made it and its connect is not yet abandoned. */
+  const claim = (handoff: string): boolean => {
+    const at = handedOff.get(handoff);
+    handedOff.delete(handoff);
+    return at !== undefined && Date.now() - at <= CONNECT_BOUND_MS;
   };
 
   const listen = (): (() => void) => {
     // The app standing in this tab again ends any same-tab connect that left from it.
     forgetReturn();
+    // So does the browser bringing the page back from its cache, which runs nothing here again.
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) forgetReturn();
+    };
+    window.addEventListener("pageshow", restored);
     const channel = new BroadcastChannel(CONNECT_CHANNEL);
     channel.onmessage = (event) => {
-      const landing = landingSaying(event, CONNECT_SAID.LANDED);
-      if (landing === undefined || handedOff === 0) return;
-      handedOff -= 1;
-      channel.postMessage({ kind: CONNECT_SAID.MINE, landing });
+      const landed = saying(event, CONNECT_SAID.LANDED);
+      if (landed?.handoff === undefined || !claim(landed.handoff)) return;
+      channel.postMessage({ kind: CONNECT_SAID.MINE, landing: landed.landing });
       window.focus();
     };
-    return () => channel.close();
+    return () => {
+      channel.close();
+      window.removeEventListener("pageshow", restored);
+    };
   };
 
   return { portClient, open, listen };

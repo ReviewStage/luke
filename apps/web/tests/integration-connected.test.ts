@@ -10,17 +10,18 @@ import {
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";
-import { appTab } from "./support/connect-app-tab";
+import { appTab, closeAppTabs } from "./support/connect-app-tab";
 
 /**
  * integration-connected.test.ts -- an integration's landing says how its
  * sign-in settled and how to go on: a connection sends the developer back to
  * Luke, every other ending sends them back to try again, and the provider's
  * name is said only where the address named one. A sign-in the web app's tab
- * handed off is answered by that tab, and the page closes where it
- * connected and stays to say why where it did not; a same-tab sign-in is
- * offered the address it left from, unless it was abandoned. The page runs
- * as it does in the browser, mounted on its own `#root`.
+ * handed off is answered by that tab, and by no other, and the page closes
+ * where it connected and stays to say why where it did not, unless the
+ * sign-in was abandoned; a same-tab sign-in is offered the address it left
+ * from, unless it was abandoned. The page runs as it does in the browser,
+ * mounted on its own `#root`.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -62,6 +63,7 @@ function wayBack(page: HTMLElement): { readonly words: string; readonly href: st
 }
 
 afterEach(() => {
+  closeAppTabs();
   document.body.replaceChildren();
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -114,40 +116,91 @@ async function answered(page: HTMLElement): Promise<void> {
   });
 }
 
+/** Gives the channel turns enough for any app tab to answer a landing, as one that answers would by then. */
+async function channelTurns(): Promise<void> {
+  for (let turn = 0; turn < 10; turn += 1) {
+    await act(() => new Promise((resolve) => setImmediate(resolve)));
+  }
+}
+
 test("a sign-in the app's tab handed off is answered by that tab, and its landing closes", async () => {
   const closed = vi.spyOn(window, "close").mockImplementation(() => undefined);
   const app = await appTab(1);
+  app.landIn(0);
 
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
 
   await answered(page);
   expect(said(page)).toEqual(["Linear connected"]);
   expect(closed).toHaveBeenCalled();
-  app.close();
 });
 
 test("a sign-in that did not connect stays to say so, offering the way back", async () => {
   const closed = vi.spyOn(window, "close").mockImplementation(() => undefined);
   const app = await appTab(1);
+  app.landIn(0);
 
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
 
   await answered(page);
   expect(said(page)).toEqual(["Notion not connected"]);
   expect(closed).not.toHaveBeenCalled();
-  app.close();
 });
 
-test("a landing no app tab handed off, as the Mac's, says to return to Luke", async () => {
-  const app = await appTab(0);
+test("a landing no app tab handed off, as the Mac's, says to return to Luke, though an app tab waits on a sign-in of its own", async () => {
+  await appTab(1);
 
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
-  // The channel is given a turn to answer, which no tab does.
-  await act(() => new Promise((resolve) => setImmediate(resolve)));
+  // The channel is given turns to answer, which no tab takes.
+  await channelTurns();
 
   expect(said(page)).toEqual(["Linear connected", "Return to Luke. You can close this tab."]);
   expect(wayBack(page)).toEqual([]);
-  app.close();
+});
+
+test("of two app tabs, only the one that handed a sign-in off answers its landing, and the other still answers its own", async () => {
+  vi.spyOn(window, "close").mockImplementation(() => undefined);
+  const first = await appTab(1);
+  const second = await appTab(1);
+
+  second.landIn(0);
+  const secondLanding = await landing(
+    INTEGRATION_PROVIDER.LINEAR,
+    INTEGRATION_LANDING_STATUS.CONNECTED,
+  );
+  await answered(secondLanding);
+
+  first.landIn(0);
+  const firstLanding = await landing(
+    INTEGRATION_PROVIDER.NOTION,
+    INTEGRATION_LANDING_STATUS.CONNECTED,
+  );
+  await answered(firstLanding);
+});
+
+test("an app tab with two sign-ins out answers each one's landing, whichever lands first", async () => {
+  vi.spyOn(window, "close").mockImplementation(() => undefined);
+  const app = await appTab(2);
+
+  app.landIn(1);
+  await answered(await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED));
+  app.landIn(0);
+  await answered(
+    await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED),
+  );
+});
+
+test("a sign-in whose landing comes back half an hour after it was handed off and more was abandoned, and no tab answers it", async () => {
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_760_000_000_000);
+  const app = await appTab(1);
+  now.mockReturnValue(1_760_000_000_000 + 31 * 60 * 1000);
+  app.landIn(0);
+
+  const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
+  await channelTurns();
+
+  expect(said(page)).toEqual(["Linear connected", "Return to Luke. You can close this tab."]);
+  expect(wayBack(page)).toEqual([]);
 });
 
 test("a sign-in that left this tab offers the way back to where it stood", async () => {

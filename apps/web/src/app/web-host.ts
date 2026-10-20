@@ -23,6 +23,7 @@
  */
 
 import { feedbackDelivery } from "@luke/features/feedback";
+import type { LinkPlatform } from "@luke/features/link-open";
 import { highlightSnippet, runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,
@@ -121,6 +122,8 @@ export interface WebHostOptions {
   readonly httpClient: Layer.Layer<HttpClient.HttpClient>;
   /** Every act's Effect, run on the tab's one runtime. */
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /** The platform the tab runs on, which is offered the Mac app only where it is a Mac; the browser's own word where none is given. */
+  readonly linkPlatform?: LinkPlatform;
 }
 
 /** The web host as built, with the operator its launch starts beside it. */
@@ -369,7 +372,11 @@ const servedActPort = (
   ).pipe(Effect.map((channel) => channel.port1));
 
 /** The host standing in the tab, its document, its bridge, and the platform beside it. */
-const composedWeb = (run: WebHostOptions["run"], tab: PageLeave) =>
+const composedWeb = (
+  run: WebHostOptions["run"],
+  tab: PageLeave,
+  linkPlatform: LinkPlatform | undefined,
+) =>
   Layer.effect(
     ComposedWebTag,
     Effect.gen(function* () {
@@ -449,7 +456,10 @@ const composedWeb = (run: WebHostOptions["run"], tab: PageLeave) =>
         bridge: made.bridge,
         actPort,
         actPortClient: tabs.portClient,
-        platform: webPlatform({ recordSurfaceEvent: count, unsavedWork: tab.unsavedWork }),
+        platform: webPlatform(
+          { recordSurfaceEvent: count, unsavedWork: tab.unsavedWork },
+          linkPlatform,
+        ),
         operator,
       };
     }),
@@ -465,7 +475,7 @@ const composedWeb = (run: WebHostOptions["run"], tab: PageLeave) =>
 export function composeWeb(
   options: WebHostOptions,
 ): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
-  const { httpClient, run } = options;
+  const { httpClient, run, linkPlatform } = options;
   // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
   const tab = tabLeave();
   const assembly = Layer.provide(
@@ -492,7 +502,7 @@ export function composeWeb(
     ),
   );
   return launched.pipe(
-    Layer.provideMerge(composedWeb(run, tab)),
+    Layer.provideMerge(composedWeb(run, tab, linkPlatform)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),
   );
