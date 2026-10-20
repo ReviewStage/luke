@@ -122,7 +122,10 @@ function ResetPageButton({
         toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
         return result;
       }
-      const held = changedBy(before, appSettingsView(result.settings), asked);
+      // Note that a kept row never enters the Undo, because another window may have changed it since this page read it.
+      const held = changedBy(before, appSettingsView(result.settings), asked).filter(
+        ([field]) => !unseen.includes(field),
+      );
       const undo = () =>
         writeBack(writes, held).then((taken) => {
           if (taken) return;

@@ -116,10 +116,7 @@ interface PromisedSettingsStore {
     value: AppSettingValue<Field>,
   ): Promise<SettingsUpdateResult>;
   snapshot(): Promise<AppSettings>;
-  resetSettings(
-    scope: SettingsResetScope,
-    kept?: readonly AppSettingField[],
-  ): Promise<SettingsUpdateResult>;
+  resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   readAccount(): Promise<StoredAccount | undefined>;
   accountSnapshot(): Promise<AccountSnapshot>;
   setAccount(account: StoredAccount): Promise<AccountSnapshot>;
@@ -156,7 +153,7 @@ function awaitedStoreOf(
     get: (field) => awaited(store.get(field)),
     set: (field, value) => awaited(store.set(field, value)),
     snapshot: () => awaited(store.snapshot()),
-    resetSettings: (scope, kept) => awaited(store.resetSettings(scope, kept)),
+    resetSettings: (scope) => awaited(store.resetSettings(scope)),
     readAccount: () => awaited(store.readAccount()),
     accountSnapshot: () => awaited(store.accountSnapshot()),
     setAccount: (account) => awaited(store.setAccount(account)),
@@ -299,19 +296,32 @@ test("every setting starts at its default, survives a reopen, and can be cleared
   }
 });
 
-test("a reset returns its group to the defaults but for the fields it keeps, which stand as the file holds them", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.set("theme", THEME.DARK);
-  await store.set("zoom", 125);
+it.effect(
+  "a reset returns its group to the defaults but for the fields it keeps, which stand as the file holds them",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const opened = () =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: testCipher(),
+          overrides: overridesFor({}),
+          fileSystem: FILE_SYSTEM,
+          path: PATH,
+        });
+      const store = opened();
+      yield* store.set("theme", THEME.DARK);
+      yield* store.set("zoom", 125);
 
-  const reset = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE, ["zoom"]);
+      const reset = yield* store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE, ["zoom"]);
 
-  assert.equal(reset.reason, undefined);
-  // The theme's choice is forgotten, so it reads as no choice at all.
-  assert.equal(await storeIn(directory).get("theme"), undefined);
-  assert.deepEqual(await storeIn(directory).get("zoom"), 125);
-});
+      assert.equal(reset.reason, undefined);
+      const reopened = opened();
+      // The theme's choice is forgotten, so it reads as no choice at all.
+      assert.equal(yield* reopened.get("theme"), undefined);
+      assert.equal(yield* reopened.get("zoom"), 125);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
 // A call reads no choice as Atlas, which compose-live's "a call opens with the avatar asked for" holds.
 test("the Default avatar an earlier build stored reads as no choice", async (t) => {

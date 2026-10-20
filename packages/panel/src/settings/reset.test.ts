@@ -183,3 +183,41 @@ test("a browser's Appearance reset returns the theme it draws to its default and
   assert.equal(store.now().theme, APP_SETTING_DEFAULTS.theme);
   assert.equal(store.now().zoom, 125);
 });
+
+test("Undo after a browser's reset puts back the theme it reset and leaves the zoom another window changed meanwhile", async () => {
+  const start = settingsView({ theme: THEME.DARK, zoom: 125 });
+  const store = appearanceStore(start);
+  const browser = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP);
+  // Another window saves a zoom just before the reset reaches the store.
+  const reset = store.writes.reset;
+  store.writes.reset = (scope, kept) =>
+    store.writes.setting("zoom", 150).then(() => reset(scope, kept));
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        "div",
+        null,
+        pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
+        createElement(ToastHost),
+      ),
+    ),
+  );
+  const press = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Reset to defaults",
+  );
+  assert.ok(press, "the page offers its reset");
+  await act(async () => press.click());
+  // The newest toast's Undo: an earlier test's toast may still stand in the shared host.
+  const undo = [...document.querySelectorAll("button")]
+    .filter((button) => button.textContent === "Undo")
+    .at(-1);
+  assert.ok(undo, "the reset offers its Undo");
+
+  await act(async () => undo.click());
+
+  assert.equal(store.now().theme, THEME.DARK);
+  assert.equal(store.now().zoom, 150);
+});
