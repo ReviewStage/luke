@@ -2046,7 +2046,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
 });
 
-/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
   const standing = document.querySelector(`.luke-tooltip-card ${card}`);
@@ -2099,7 +2099,7 @@ test("the thread names its agent as one button wherever it does, its question's 
     "the agent's tile leads its comment",
   );
   reach(comment);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
@@ -2113,7 +2113,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.equal(sent.textContent, "Alerts");
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
