@@ -553,7 +553,10 @@ export const editChannelInputSchema = EffectSchema.Struct({
 export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
-  handle: EffectSchema.String,
+  /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
+  handle: EffectSchema.optionalKey(EffectSchema.String),
+  /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a Luke, always Luke, and for a member whose account or agent is gone. */
+  name: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** The plan a planner is Luke on, or the plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
@@ -744,9 +747,13 @@ function picturesFit(post: WindowPost): boolean {
   );
 }
 
-/** Whether a window's post names one place: a `to`, or the message it replies to, never both. */
-function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): boolean {
-  return post.to === undefined || post.replyTo === undefined;
+/** Whether a window's post names one place at most: a `to`, the channel shown, or the message it replies to. */
+function placedOnce(post: {
+  readonly to?: string;
+  readonly channelId?: string;
+  readonly replyTo?: number;
+}): boolean {
+  return [post.to, post.channelId, post.replyTo].filter((place) => place !== undefined).length <= 1;
 }
 
 /**
@@ -754,11 +761,11 @@ function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): 
  * blocks, a link or lines of code among them; the pictures under them, in
  * the coding agent's file shape, PNG, JPEG, or WebP alone, which the
  * service keeps and the message names as image blocks after the words, a
- * post of pictures alone carrying no words; where it goes, a channel by
- * `#name` or a member's DM by `@handle`, `#general` where unsaid, or the
- * message it replies to by its place; and the window's own key for the
- * post, which a retry carries again. An `@handle` in the words tells that
- * member.
+ * post of pictures alone carrying no words; where it goes, the channel the
+ * window shows by its id, a channel by `#name`, `#general` where unsaid, or
+ * the message it replies to by its place; and the window's own key for the
+ * post, which a retry carries again. A member's mention link in the words
+ * tells that member.
  */
 export const chatPostRequestSchema = EffectSchema.Struct({
   text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
@@ -770,6 +777,8 @@ export const chatPostRequestSchema = EffectSchema.Struct({
   ),
   attachments: codingAgentMessageRequestSchema.fields.attachments,
   to: EffectSchema.optionalKey(chatTargetSchema),
+  /** The channel the window shows, a direct message among them, which names its place by what it is rather than by any member's name. */
+  channelId: EffectSchema.optionalKey(wireUuidSchema),
   replyTo: EffectSchema.optionalKey(countedNumber),
   clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
 }).check(

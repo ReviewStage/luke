@@ -113,7 +113,9 @@ export function ChatNoticeCard({
             {who?.member === undefined ? null : (
               <ActorMark actor={actorOf(who.member.id)} size={ACTOR_SIZE.INLINE} />
             )}
-            <span className="chat-notice-from">@{notice.from}</span>
+            <span className="chat-notice-from">
+              {who?.member === undefined ? `@${notice.from}` : who.name}
+            </span>
           </>
         )}
         <span className="chat-notice-place">

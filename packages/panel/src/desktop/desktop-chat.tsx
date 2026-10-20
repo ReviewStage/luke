@@ -66,8 +66,8 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * messages, each group under its heading as Settings' page list's are
  * (`.section-heading`), each row counting what in it the developer has not read and
  * in the unread weight while anything is (`chat-model.ts`). A direct
- * message's row leads with the other member's mark and names their agent's
- * title or plan after their handle. A press on a row shows its place in
+ * message's row leads with the other member's mark and is named by who it
+ * is with. A press on a row shows its place in
  * the pane beside the rail (`chat-pane.tsx`). The agents are named from
  * the plans' summaries, the way the sidebar names them, and from the lines
  * the chat read carries where those name more. With nothing read, it says
@@ -255,11 +255,8 @@ function RailRow({
 }): React.JSX.Element {
   const other = row.other?.member;
   const { latest } = row;
-  // A direct message of the reader's is named by who it is with, as the rest of the window names them; one between two others keeps both handles.
-  const title =
-    other !== undefined && row.label === row.other?.handle
-      ? actorName(actorOf(other.id))
-      : row.label;
+  // A direct message is named by who it is with, both of its two where the reader is neither (`channelLabel`).
+  const title = row.label;
   const mark =
     other !== undefined ? (
       <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />

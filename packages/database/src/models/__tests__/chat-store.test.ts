@@ -20,6 +20,7 @@ import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  agentMembersOf,
   agentWorkspace,
   answerAsk,
   attachMessageImages,
@@ -255,6 +256,36 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
           yield* findOrMakeDm(owner, workspace, agent.id, outsider.id),
           Option.none(),
         );
+      }),
+  );
+
+  it.effect(
+    "each agent member is read as its coding agent names it: its task, none for an agent on no task, and its title or else its model's id, while an outsider reads none",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openAccount();
+        const stranger = yield* openAccount();
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* openTask(owner, workspace);
+        const titled = yield* openAgent(owner, task);
+        const taskless = yield* openAgent(owner, task);
+        yield* db
+          .update(codingAgent)
+          .set({ title: "Invite emails" })
+          .where(eq(codingAgent.id, titled));
+        yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, taskless));
+        for (const agentId of [titled, taskless]) {
+          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.AGENT, agentId });
+        }
+
+        const agents = yield* agentMembersOf(owner, workspace);
+        assert.deepEqual(agents.get(titled), { taskId: task, name: "Invite emails" });
+        assert.deepEqual(agents.get(taskless), {
+          taskId: undefined,
+          name: "anthropic/claude-opus-5.5",
+        });
+        assert.equal((yield* agentMembersOf(stranger, workspace)).size, 0);
       }),
   );
 

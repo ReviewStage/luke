@@ -1345,39 +1345,61 @@ export function roster(
   });
 }
 
-const findAgentMemberTasks = SqlSchema.findAll({
+const findAgentMembers = SqlSchema.findAll({
   Request: OrganizationKeySchema,
-  Result: Schema.Struct({ agentId: Schema.String, taskId: Schema.String }),
+  Result: Schema.Struct({
+    agentId: Schema.String,
+    taskId: Schema.NullOr(Schema.String),
+    title: Schema.NullOr(Schema.String),
+    model: Schema.String,
+  }),
   execute: ({ organizationId }) =>
     Database.use((db) =>
       db
-        .select({ agentId: codingAgent.id, taskId: codingAgent.taskId })
+        .select({
+          agentId: codingAgent.id,
+          taskId: codingAgent.taskId,
+          title: codingAgent.title,
+          model: codingAgent.model,
+        })
         .from(chatMember)
         .innerJoin(codingAgent, eq(codingAgent.id, chatMember.agentId))
         .where(
           and(
             eq(chatMember.organizationId, organizationId),
             eq(chatMember.kind, MEMBER_KIND.AGENT),
-            isNotNull(codingAgent.taskId),
           ),
         ),
     ),
 });
 
+/** An agent member as its coding agent names it: the task it works on, none for an agent on no task, and the name its tab shows. */
+export interface ChatAgentMember {
+  readonly taskId: string | undefined;
+  readonly name: string;
+}
+
 /**
- * The task each agent member of the workspace works on, by the agent's id,
- * every agent's rather than the few a task's summary names, so a window
- * draws an agent's line under its task and opens its tab there; none for
- * an agent on no task, and none where the account is not in the workspace.
+ * Each agent member of the workspace as its coding agent names it, by the
+ * agent's id, every agent's rather than the few a task's summary names, so
+ * a window names an agent and draws its line under its task wherever it
+ * stands: its task, and the name its tab shows, its title or else its
+ * model's id. None for an agent whose coding agent is gone, and none where
+ * the account is not in the workspace.
  */
-export function agentMemberTasks(
+export function agentMembersOf(
   userId: string,
   organizationId: string,
-): ChatStoreEffect<ReadonlyMap<string, string>> {
+): ChatStoreEffect<ReadonlyMap<string, ChatAgentMember>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return new Map();
-    const rows = yield* findAgentMemberTasks({ organizationId });
-    return new Map(rows.map((row) => [row.agentId, row.taskId]));
+    const rows = yield* findAgentMembers({ organizationId });
+    return new Map(
+      rows.map((row) => [
+        row.agentId,
+        { taskId: row.taskId ?? undefined, name: row.title ?? row.model },
+      ]),
+    );
   });
 }
 

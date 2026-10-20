@@ -2,7 +2,6 @@ import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { readerZone } from "@luke/features/date-mention";
-import { encodeMention, type MentionPlace } from "@luke/features/mention-link";
 import {
   ComboboxList,
   comboboxOptionId,
@@ -56,16 +55,16 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
  * starts a new line, and the box is empty again once the post is taken; a
  * post refused keeps its words and says why under the box. An `@` or a `#`
  * at the start of a word opens the chat's own list over the box
- * (`chat-mention-picker.tsx`). A person or an agent chosen is written as
- * their chip, the same mention link the agent box, the Inbox, and a plan
- * comment write (`[@ada](…/person/<id>)`), which the service reads to tell
- * them; Luke and a channel are written as their word (`@luke`, `#general`),
- * Luke because every task's answers to `@luke` by the channel it is said in.
+ * (`chat-mention-picker.tsx`). A member chosen, a person, an agent, or a
+ * task's Luke, is written as their chip, the same mention link the agent
+ * box, the Inbox, and a plan comment write
+ * (`[@Ada Lovelace](…/person/<id>)`), which the service reads to tell them;
+ * a channel is written as its word (`#general`).
  * Words after an `@` that read as a date offer it first, and a pick writes
  * the same date link the other boxes write (`[@Oct 20, 2026](luke://date/…)`).
  * The microphone records a dictation and lays its words in at the
- * caret (`use-dictation.ts`), listening for the chat's handles and channel
- * names (`chatKeywords`). Pictures go with a post as files go with an Inbox
+ * caret (`use-dictation.ts`), listening for the chat's members' names and
+ * its channels' (`chatKeywords`). Pictures go with a post as files go with an Inbox
  * answer (`attached-files.ts`): the "+" at the foot's left opens the
  * system's picker for images, an image pasted into the box is taken, and
  * images dropped on the card are, each drawn as a chip above the words with
@@ -146,8 +145,6 @@ interface ChatComposerProps {
   readonly targets: readonly ChatTarget[];
   /** The words a dictation here is likely to say (`chatKeywords`). */
   readonly keywords: readonly string[];
-  /** The workspace a chip's link is written in; where none is known yet, a member is written as their `@handle`. */
-  readonly place?: MentionPlace | undefined;
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
   readonly compact?: boolean;
   /** Sends the words and the pictures, either of which may be empty; answers why they were refused, or nothing once they are taken. */
@@ -284,7 +281,6 @@ function EditorChatComposer({
   keywords,
   compact,
   onSend,
-  place,
   module,
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
@@ -315,12 +311,9 @@ function EditorChatComposer({
         editor.current?.chooseMention({ name: target.detail ?? target.name, target: target.date });
         return;
       }
-      // A person or an agent is written as their chip, the link every box of the app writes; Luke and a channel as their word.
-      if (target.mention !== undefined && place !== undefined) {
-        editor.current?.chooseMention({
-          name: target.name,
-          target: encodeMention(target.mention, place),
-        });
+      // A member is written as their chip, the link every box of the app writes; a channel as its word.
+      if (target.link !== undefined) {
+        editor.current?.chooseMention({ name: target.name, target: target.link });
         return;
       }
       editor.current?.chooseWords(`${target.sigil}${target.name}`);
@@ -465,7 +458,7 @@ function PlainChatComposer({
 
   const now = useMinute();
   const zone = readerZone();
-  // Note that this box reads an `@` word as one word, as a handle is, so it offers a date one word names (`@tomorrow`, `@fri`) and the editor the rest.
+  // Note that this box reads an `@` word as one word, so it offers a date one word names (`@tomorrow`, `@fri`) and the editor the rest.
   const mention: ChatMention | undefined =
     caret === undefined ? undefined : chatMentionAt(draft, caret);
   // A word closed with Escape stays closed only while the caret is in it.
