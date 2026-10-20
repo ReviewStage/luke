@@ -59,6 +59,17 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
+    // Web's store tests against the real Postgres CI's postgres job stands.
+    // The database URL is hashed, not passed through, because without it the
+    // same files run on PGlite: a pass there must never replay as a pass on
+    // Postgres. CI's URL names a throwaway local server and carries no secret.
+    // The runner starts vitest from the root, so the root config is an input.
+    "test:store": {
+      "dependsOn": ["^transit"],
+      "env": ["LUKE_STORE_TEST_DATABASE_URL"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.config.ts"],
+      "outputs": []
+    },
     "build": {
       "dependsOn": ["^transit"],
       "outputs": []

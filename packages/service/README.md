@@ -2230,11 +2230,11 @@ and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
-`check.sh` and CI need no service; `test:store` runs the same migrations and
-store tests against a real Postgres, by hand. Both are Postgres 18, the major
-production runs: Neon serves 18.x and PGlite 0.5.8 embeds PostgreSQL 18.3, so
-a failure in either is about the database the service actually runs, and a
-local `check.sh` is a reproduction on 18 already. On either
+`check.sh` needs no service; the `postgres` CI job runs the same migrations,
+then `test:store`, against a Postgres container. Every one of those is
+Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
+embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
+any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
 dialect an opening of the test database is a database of that opening's own:
 a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
 names, made with `create database ... template ...` on the cluster's
