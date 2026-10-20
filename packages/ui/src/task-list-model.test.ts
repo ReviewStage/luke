@@ -24,6 +24,7 @@ import {
   type TaskRow,
   taskRow,
   taskRowName,
+  taskRowsAssignedTo,
   taskRowsCreatedBy,
   taskRowsInStatuses,
   taskTime,
@@ -355,4 +356,18 @@ test("a status turned on joins the others in the order work moves through them, 
     TASK_STATUS.BACKLOG,
     TASK_STATUS.IN_PROGRESS,
   ]);
+});
+
+test("the rows assigned to one member are the tasks they are on and the one-off agents they started, and every row where nobody is named", () => {
+  const rows = [
+    taskRow({
+      ...task("Dean's on it", "acme/relay", 1, 10, CHARLES),
+      assignee: { userId: DEAN, name: "Dean" },
+    }),
+    taskRow(task("No one's on it", "acme/relay", 1, 20, DEAN)),
+    oneOff("Dean's agent", "acme/relay", 1, 30, DEAN),
+    oneOff("Charles's agent", "acme/relay", 1, 40, CHARLES),
+  ];
+  expect(taskRowsAssignedTo(rows, DEAN).map(taskRowName)).toEqual(["Dean's on it", "Dean's agent"]);
+  expect(taskRowsAssignedTo(rows, undefined)).toHaveLength(4);
 });
