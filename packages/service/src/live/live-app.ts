@@ -8,7 +8,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { reachedAgent, resolvedUserId, uuidOf } from "../agents/agent-reach.js";
-import { transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { unparsedWire } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -174,7 +174,7 @@ const agentTranscriptLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentTranscri
     if (callId !== undefined && Result.isFailure(callId)) {
       return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     }
-    const { target } = yield* reachedAgent(seams, request);
+    const { userId, target } = yield* reachedAgent(seams, request);
     const read =
       callId === undefined
         ? target
@@ -182,7 +182,11 @@ const agentTranscriptLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentTranscri
             userId: target.userId,
             conversationId: childConversationId(target.conversationId, callId.success),
           };
-    const statements = transcriptLiveStatements(read, target.conversationId);
+    const statements = transcriptLiveStatements(
+      read,
+      target.conversationId,
+      agentFollowedBy(target.userId, target.conversationId, userId),
+    );
     const sealing = yield* LiveSealing;
     if (Option.isNone(sealing) || Option.isNone(statements)) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);

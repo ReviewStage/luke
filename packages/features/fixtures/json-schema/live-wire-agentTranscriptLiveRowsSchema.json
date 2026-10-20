@@ -57,6 +57,9 @@
       "items": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "title": {
             "anyOf": [
               {
@@ -73,6 +76,7 @@
           }
         },
         "required": [
+          "id",
           "title",
           "revision"
         ],
@@ -84,6 +88,9 @@
       "items": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "title": {
             "anyOf": [
               {
@@ -96,6 +103,7 @@
           }
         },
         "required": [
+          "id",
           "title"
         ],
         "additionalProperties": false

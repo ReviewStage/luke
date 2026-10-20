@@ -29,7 +29,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -79,7 +79,7 @@ import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START, transcriptNow, transcriptPast } from "./transcript.js";
-import { transcriptLiveStatements } from "./transcript-live.js";
+import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -407,10 +407,20 @@ const turnRow = (id: string) =>
   );
 
 /** A transcript's live statements run as Realtime runs them, their rows decoded as the desktop decodes them, each part in an order of its own since Realtime keeps none. */
-const liveRowsOf = (target: ConversationTarget, parentConversationId: string) =>
+const liveRowsOf = (
+  target: ConversationTarget,
+  parentConversationId: string,
+  readerId = target.userId,
+) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const statements = Option.getOrThrow(transcriptLiveStatements(target, parentConversationId));
+    const statements = Option.getOrThrow(
+      transcriptLiveStatements(
+        target,
+        parentConversationId,
+        agentFollowedBy(target.userId, parentConversationId, readerId),
+      ),
+    );
     const rows = yield* Effect.all({
       messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
       turns: sql.unsafe(statements.turns.sql, [...statements.turns.params]),
@@ -429,7 +439,7 @@ const liveRowsOf = (target: ConversationTarget, parentConversationId: string) =>
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
   it.effect(
-    "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing of another account's",
+    "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing for an account outside the agent's workspace, nor for a member once removed",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
@@ -516,6 +526,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           yield* liveRowsOf({ userId: stranger, conversationId: child }, parent),
           nothing,
         );
+
+        // A member of the agent's workspace follows the owner's rows, an outsider nothing, and a member taken out stops at once.
+        const owned = yield* liveRowsOf(target, parent);
+        assert.equal(yield* liveRowsOf(target, parent, stranger), nothing);
+        yield* joinWorkspace(agent.organizationId, stranger);
+        assert.equal(yield* liveRowsOf(target, parent, stranger), owned);
+        yield* leaveWorkspace(agent.organizationId, stranger);
+        assert.equal(yield* liveRowsOf(target, parent, stranger), nothing);
       }),
   );
 

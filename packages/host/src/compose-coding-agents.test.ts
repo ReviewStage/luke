@@ -1430,8 +1430,8 @@ function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, 
   realtime.deliver("turns", [
     { status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 },
   ]);
-  realtime.deliver("conversation", [{ title: null, revision: seq }]);
-  realtime.deliver("agent", [{ title: "Invites" }]);
+  realtime.deliver("conversation", [{ id: "conversation-1", title: null, revision: seq }]);
+  realtime.deliver("agent", [{ id: AGENT_ID, title: "Invites" }]);
   realtime.deliver("workers", []);
 }
 

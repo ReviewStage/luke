@@ -6,10 +6,11 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
+import { agentReachableBy } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
+import { and, eq, exists, isNull, type SQL, sql } from "drizzle-orm";
 import { Option } from "effect";
 
 /**
@@ -26,8 +27,12 @@ import { Option } from "effect";
  * status, so a turn moving from one to another moves them), which is where the
  * status is read from and a line stops awaiting its turn, and a title
  * landing, the agent's own (`agent`) or a worker's, or a worker's
- * delegation being recorded (`workers`). Each reads only the account's own
- * rows, as the held read does. Nothing in them reads the clock: a status
+ * delegation being recorded (`workers`). Each reads only the rows of the
+ * account that started the agent, as the held read does, and only while
+ * the reader is a member of the agent's workspace: the membership is joined
+ * in the statement, so a member taken out of the workspace stops hearing
+ * anything at once, as Neon's guide asks, rather than at the next seal.
+ * Every row that is one of many carries its key. Nothing in them reads the clock: a status
  * that changes with time alone, such as an agent past its grace, is the
  * reader's to ask for at the end of its hold.
  */
@@ -53,14 +58,42 @@ const TURN_CHANGED = sql`greatest(
 )`;
 
 /**
+ * The condition that `readerId` may follow the transcripts under the coding
+ * agent whose conversation is `parentConversationId`, which `ownerId`
+ * started: it is a member of the agent's workspace. Joined in each statement,
+ * so it stays live.
+ */
+export function agentFollowedBy(
+  ownerId: string,
+  parentConversationId: string,
+  readerId: string,
+): SQL {
+  return exists(
+    queryBuilder
+      .select({ one: codingAgent.id })
+      .from(codingAgent)
+      .where(
+        and(
+          eq(codingAgent.conversationId, parentConversationId),
+          eq(codingAgent.userId, ownerId),
+          agentReachableBy(readerId),
+        ),
+      ),
+  );
+}
+
+/**
  * The statements the transcript of `target`'s conversation is followed by,
- * under the agent whose conversation is `parentConversationId`: its own,
- * where the two are the same, or one of its workers'. None where a statement
- * names a value Realtime cannot carry.
+ * under the conversation `parentConversationId`: an agent's own, where the
+ * two are the same, or one of its workers', while `reached` holds, the
+ * reader's membership of the workspace the transcript belongs to
+ * (`agentFollowedBy`). None where a statement names a value Realtime cannot
+ * carry.
  */
 export function transcriptLiveStatements(
   target: ConversationTarget,
   parentConversationId: string,
+  reached: SQL,
 ): Option.Option<TranscriptLiveStatements> {
   const { userId, conversationId } = target;
   const written = queryBuilder
@@ -69,7 +102,7 @@ export function transcriptLiveStatements(
       seq: asNumber(sql`coalesce(max(${messages.seq}), 0)`).as("seq"),
     })
     .from(messages)
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.userId, userId)));
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.userId, userId), reached));
   const run = queryBuilder
     .select({
       ...liveSelection({ status: turns.status }),
@@ -78,11 +111,11 @@ export function transcriptLiveStatements(
       changedAt: liveLatest(TURN_CHANGED).as("changedAt"),
     })
     .from(turns)
-    .where(and(eq(turns.conversationId, conversationId), eq(turns.userId, userId)))
+    .where(and(eq(turns.conversationId, conversationId), eq(turns.userId, userId), reached))
     .groupBy(turns.status);
   const conversation = queryBuilder
     .select({
-      ...liveSelection({ title: conversations.title }),
+      ...liveSelection({ id: conversations.id, title: conversations.title }),
       revision: asNumber(sql`${conversations.journalRevision}`).as("revision"),
     })
     .from(conversations)
@@ -91,13 +124,18 @@ export function transcriptLiveStatements(
         eq(conversations.id, conversationId),
         eq(conversations.userId, userId),
         isNull(conversations.deletedAt),
+        reached,
       ),
     );
   const agent = queryBuilder
-    .select(liveSelection({ title: codingAgent.title }))
+    .select(liveSelection({ id: codingAgent.id, title: codingAgent.title }))
     .from(codingAgent)
     .where(
-      and(eq(codingAgent.conversationId, parentConversationId), eq(codingAgent.userId, userId)),
+      and(
+        eq(codingAgent.conversationId, parentConversationId),
+        eq(codingAgent.userId, userId),
+        reached,
+      ),
     );
   const workers = queryBuilder
     .select(
@@ -117,6 +155,7 @@ export function transcriptLiveStatements(
         eq(conversations.parentConversationId, parentConversationId),
         eq(conversations.userId, userId),
         isNull(conversations.deletedAt),
+        reached,
       ),
     );
   return Option.all({

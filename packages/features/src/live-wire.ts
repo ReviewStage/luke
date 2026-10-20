@@ -473,12 +473,16 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   ),
   conversation: EffectSchema.Array(
     EffectSchema.Struct({
+      id: EffectSchema.String,
       title: EffectSchema.NullOr(EffectSchema.String),
       revision: countedNumber,
     }),
   ),
   agent: EffectSchema.Array(
-    EffectSchema.Struct({ title: EffectSchema.NullOr(EffectSchema.String) }),
+    EffectSchema.Struct({
+      id: EffectSchema.String,
+      title: EffectSchema.NullOr(EffectSchema.String),
+    }),
   ),
   workers: EffectSchema.Array(
     EffectSchema.Struct({

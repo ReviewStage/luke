@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
@@ -31,6 +32,14 @@ function liveStatements() {
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
+  const parent = randomUUID();
+  const transcript = Option.getOrThrow(
+    transcriptLiveStatements(
+      { userId: USER_ID, conversationId: parent },
+      parent,
+      agentFollowedBy(USER_ID, parent, USER_ID),
+    ),
+  );
   return {
     ...Object.fromEntries(
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
@@ -38,6 +47,9 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
+    ...Object.fromEntries(
+      Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
+    ),
   };
 }
 
