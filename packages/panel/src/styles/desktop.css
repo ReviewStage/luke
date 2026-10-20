@@ -5102,6 +5102,31 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-16);
 }
 
+/* An automation's page's two screens: its setup, toolbar and all, and in a
+   narrow room its runs, which stand one at a time the whole width, the other
+   hidden (`hiddenColumns`). A wide room hides neither and draws no runs
+   screen, its runs standing in their panel beside the setup. */
+.automation-editor-screen,
+.automation-runs-screen {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.automation-editor-screen[hidden],
+.automation-runs-screen[hidden] {
+  display: none;
+}
+
+/* The runs screen's way back, named for the automation, cut short where the
+   name is long rather than pushing past the bar. */
+.automation-runs-back {
+  display: flex;
+  min-width: 0;
+}
+
 /* Chat ----------------------------------------------------------------------- */
 
 /* The window's Chat, in the plan's place beside the sidebar as the Inbox

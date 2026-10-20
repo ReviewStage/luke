@@ -15,7 +15,10 @@
  * shows both columns, hides neither, and is left alone.
  *
  * The screen's list is its root's `<nav>` and the item its `<section>`,
- * as all three draw them.
+ * as all three draw them; a screen whose two are something else, as an
+ * automation's setup and its runs are, names them. Where the list holds
+ * the control that opened the item, the one whose `aria-controls` names
+ * it, the focus goes back to that control, as it does to a list's row.
  */
 
 import { type RefObject, useLayoutEffect, useRef } from "react";
@@ -35,6 +38,14 @@ function firstIn(column: HTMLElement, selector: string): HTMLElement | undefined
   );
 }
 
+/** The control in `list` that opens `item`, by the `aria-controls` naming it, where the item has an id to name. */
+function openerIn(list: HTMLElement, item: HTMLElement): HTMLElement | undefined {
+  if (item.id === "") return undefined;
+  return [...list.querySelectorAll<HTMLElement>("[aria-controls]")].find(
+    (each) => each.getAttribute("aria-controls") === item.id && each.closest("[inert]") === null,
+  );
+}
+
 /** The column's heading, made able to take the focus it is handed, where the column has no control. */
 function headingOf(column: HTMLElement): HTMLElement | undefined {
   const heading = firstIn(column, "h1, h2");
@@ -48,6 +59,15 @@ function focusLost(hidden: HTMLElement): boolean {
   const active = document.activeElement;
   return active === null || active === document.body || hidden.contains(active);
 }
+
+/** A screen's two columns, each a selector run from its root. */
+export interface NarrowColumns {
+  readonly list: string;
+  readonly item: string;
+}
+
+/** The columns Settings, a version history, and Chat draw: the root's `<nav>` and its `<section>`. */
+const LIST_AND_ITEM: NarrowColumns = { list: ":scope > nav", item: ":scope > section" };
 
 /** What the screen last showed: the room, and whether the list stood. */
 interface Shown {
@@ -72,9 +92,14 @@ function swapped(before: Shown | undefined, listed: boolean): boolean {
 /**
  * Hands the focus on as a narrow room swaps the screen between its list and
  * its item, `listed` saying which stands. Returns the ref for the screen's
- * root, the element whose `<nav>` and `<section>` are the two columns.
+ * root, the element whose `columns` are the two, its `<nav>` and its
+ * `<section>` unless named.
  */
-export function useNarrowFocus(room: ShellRoom, listed: boolean): RefObject<HTMLDivElement | null> {
+export function useNarrowFocus(
+  room: ShellRoom,
+  listed: boolean,
+  columns: NarrowColumns = LIST_AND_ITEM,
+): RefObject<HTMLDivElement | null> {
   const screen = useRef<HTMLDivElement>(null);
   const was = useRef<Shown>(undefined);
   const handed = useRef<HTMLElement>(undefined);
@@ -98,8 +123,8 @@ export function useNarrowFocus(room: ShellRoom, listed: boolean): RefObject<HTML
       return;
     }
     const root = screen.current;
-    const list = root?.querySelector<HTMLElement>(":scope > nav");
-    const item = root?.querySelector<HTMLElement>(":scope > section");
+    const list = root?.querySelector<HTMLElement>(columns.list);
+    const item = root?.querySelector<HTMLElement>(columns.item);
     // Note that a screen still standing in for its columns, as Chat does
     // while its read is out, keeps the swap pending, so it is handed on once
     // the columns are drawn.
@@ -108,7 +133,7 @@ export function useNarrowFocus(room: ShellRoom, listed: boolean): RefObject<HTML
     handed.current = undefined;
     if (!focusLost(listed ? item : list)) return;
     const target = listed
-      ? (firstIn(list, CHOSEN) ?? firstIn(list, FOCUSABLE))
+      ? (openerIn(list, item) ?? firstIn(list, CHOSEN) ?? firstIn(list, FOCUSABLE))
       : (firstIn(item, FOCUSABLE) ?? headingOf(item));
     target?.focus();
     handed.current = target;

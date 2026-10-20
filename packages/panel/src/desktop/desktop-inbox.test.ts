@@ -477,8 +477,7 @@ function mount(
         onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
         onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
         automationsView: {
-          open: false,
-          place: { kind: AUTOMATIONS_PAGE.LIST },
+          ...tasksControl().automationsView,
           onOpen: (place) => {
             if (place?.kind === AUTOMATIONS_PAGE.EDIT)
               asked.shownAutomations.push(place.automationId);

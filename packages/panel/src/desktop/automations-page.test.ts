@@ -38,6 +38,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -378,7 +379,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
         createElement(
           Fragment,
           null,
-          createElement(AutomationsPage, { tasks }),
+          createElement(AutomationsPage, { tasks, room: SHELL_ROOM.WIDE }),
           createElement(ToastHost),
         ),
       ),
@@ -640,6 +641,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
     tasksControl({
       workspace: undefined,
       automationsView: {
+        ...tasksControl().automationsView,
         open: true,
         place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id },
         onOpen: () => undefined,
@@ -711,6 +713,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
       workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],
       automationsView: {
+        ...tasksControl().automationsView,
         open: true,
         place,
         onOpen: leaveGuard.guard((next: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) => {
@@ -738,6 +741,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
           }),
         },
       },
+      room: SHELL_ROOM.WIDE,
     });
   }
   const container = document.createElement("div");
@@ -1543,7 +1547,7 @@ test("with no workspace listed because the workspaces could not be read, the lis
       onRetryWorkspaces: () => {
         retries += 1;
       },
-      automationsView: { open: true, place, onOpen: () => undefined, onClose: () => undefined },
+      automationsView: { ...tasksControl().automationsView, open: true, place },
     });
   const page = mount(unread({ kind: AUTOMATIONS_PAGE.LIST }));
   await settle();

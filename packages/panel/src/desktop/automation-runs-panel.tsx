@@ -13,6 +13,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import {
+  BackIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -35,6 +36,7 @@ import {
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { FoldingButton } from "../folding-button.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
 import { momentText, sinceText, useMinute } from "../tasks/task-time.js";
@@ -56,6 +58,9 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * why it did not start, and when it fired. A run that started an agent
  * opens that agent's page; one that started none is no press. A new
  * automation has no runs yet, and the panel, empty, says how to have one.
+ * A narrow room, a phone's, has no room beside the setup, so there the
+ * runs are a screen of their own the whole width (`AutomationRunsScreen`),
+ * under a way back to the setup.
  */
 
 /** What may fire a run: its automation's trigger, or Run now. */
@@ -201,30 +206,8 @@ function RunsSkeleton(): React.JSX.Element {
   );
 }
 
-/** What the room beside the panel keeps for the form, as the side panel keeps the document's. */
-const FORM_RESERVE = 480;
-
-/**
- * The runs panel: the runs, quiet blocks in their place while they are first
- * read, or that there are none yet, or that they could not be read. Its left
- * edge resizes it as the side panel's does, and a
- * drag past its least width folds it away; nothing stands while it is folded.
- * It comes and goes as the window's panes do (`usePaneSlide`): in from the
- * page's right edge as it is shown, and out past it as it is folded, held
- * drawn, out of the layout and out of reach, until that slide has played.
- */
-export function AutomationRunsPanel({
-  panel,
-  mine,
-  created,
-  automationId,
-  linkedRun,
-  runs,
-  onRetry,
-  onOpenAgent,
-}: {
-  /** How wide it stands and whether it stands, kept by the window (`folded-groups.ts`). */
-  panel: RunsPanel;
+/** What the runs say of themselves, wherever they stand: the automation's, the reader's, and the presses on them. */
+interface RunsShown {
   /** Whether the reading account made it, whose keys its runs' agents run on; another's runs name its creator's key. */
   mine: boolean;
   /** Whether the automation exists yet, so has runs to read. */
@@ -236,8 +219,79 @@ export function AutomationRunsPanel({
   runs: RunsRead;
   onRetry: () => void;
   onOpenAgent: (agentId: string) => void;
-}): React.JSX.Element | null {
+}
+
+/**
+ * The runs under their heading, scrolling by themselves: quiet blocks in
+ * their place while they are first read, or that there are none yet, or
+ * that they could not be read.
+ */
+function RunsBody({
+  mine,
+  created,
+  automationId,
+  linkedRun,
+  runs,
+  onRetry,
+  onOpenAgent,
+}: RunsShown): React.JSX.Element {
   const now = useMinute();
+  return (
+    <ScrollArea fade={SCROLL_FADE.START}>
+      <div className="automation-runs-body">
+        <div className="automation-runs-head">
+          <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
+            Runs
+          </Text>
+        </div>
+        {!created ? (
+          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
+        ) : runs === undefined ? (
+          <RunsSkeleton />
+        ) : "failed" in runs ? (
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            Its runs could not be read.
+          </ErrorState>
+        ) : runs.runs.length === 0 ? (
+          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
+        ) : (
+          <List label="Runs" density={LIST_DENSITY.COMPACT}>
+            {runs.runs.map((run) => (
+              <RunRow
+                key={run.id}
+                run={run}
+                keyHolder={mine ? undefined : CREATOR}
+                automationId={automationId}
+                linked={run.id === linkedRun}
+                now={now}
+                onOpenAgent={onOpenAgent}
+              />
+            ))}
+          </List>
+        )}
+      </div>
+    </ScrollArea>
+  );
+}
+
+/** What the room beside the panel keeps for the form, as the side panel keeps the document's. */
+const FORM_RESERVE = 480;
+
+/**
+ * The runs panel: the runs (`RunsBody`) on the page's right. Its left
+ * edge resizes it as the side panel's does, and a
+ * drag past its least width folds it away; nothing stands while it is folded.
+ * It comes and goes as the window's panes do (`usePaneSlide`): in from the
+ * page's right edge as it is shown, and out past it as it is folded, held
+ * drawn, out of the layout and out of reach, until that slide has played.
+ */
+export function AutomationRunsPanel({
+  panel,
+  ...shown
+}: RunsShown & {
+  /** How wide it stands and whether it stands, kept by the window (`folded-groups.ts`). */
+  panel: RunsPanel;
+}): React.JSX.Element | null {
   const edge = useResizableEdge({
     side: EDGE_SIDE.LEFT,
     width: panel.width,
@@ -261,41 +315,41 @@ export function AutomationRunsPanel({
     >
       <div className="side-panel-resize" {...edge} />
       <aside className="automation-runs" aria-label="Runs">
-        <ScrollArea fade={SCROLL_FADE.START}>
-          <div className="automation-runs-body">
-            <div className="automation-runs-head">
-              <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
-                Runs
-              </Text>
-            </div>
-            {!created ? (
-              <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
-            ) : runs === undefined ? (
-              <RunsSkeleton />
-            ) : "failed" in runs ? (
-              <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-                Its runs could not be read.
-              </ErrorState>
-            ) : runs.runs.length === 0 ? (
-              <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
-            ) : (
-              <List label="Runs" density={LIST_DENSITY.COMPACT}>
-                {runs.runs.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    keyHolder={mine ? undefined : CREATOR}
-                    automationId={automationId}
-                    linked={run.id === linkedRun}
-                    now={now}
-                    onOpenAgent={onOpenAgent}
-                  />
-                ))}
-              </List>
-            )}
-          </div>
-        </ScrollArea>
+        <RunsBody {...shown} />
       </aside>
     </div>
+  );
+}
+
+/**
+ * The runs as a narrow room's screen of their own, the whole width in the
+ * setup's place: the way back to the setup, named for the automation, over
+ * the runs. It is drawn while hidden too, so the setup's Runs names it
+ * (`aria-controls`) and the focus can be handed between the two
+ * (`narrow-focus.ts`).
+ */
+export function AutomationRunsScreen({
+  id,
+  name,
+  hidden,
+  onBack,
+  ...shown
+}: RunsShown & {
+  /** The id the setup's Runs names it by. */
+  id: string;
+  /** What the way back says: the automation's name, the setup it goes back to. */
+  name: string;
+  hidden: boolean;
+  onBack: () => void;
+}): React.JSX.Element {
+  return (
+    <section id={id} className="automation-runs-screen" aria-label="Runs" hidden={hidden}>
+      <header className="desktop-toolbar">
+        <div className="automation-runs-back">
+          <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
+        </div>
+      </header>
+      <RunsBody {...shown} />
+    </section>
   );
 }

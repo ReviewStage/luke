@@ -175,6 +175,7 @@ function onAutomations(
   return tasksControl({
     workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
     automationsView: {
+      ...tasksControl().automationsView,
       open: page !== undefined,
       place: page ?? { kind: AUTOMATIONS_PAGE.LIST },
       onOpen: (place) => opened.push(place),

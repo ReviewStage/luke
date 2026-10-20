@@ -663,7 +663,7 @@ export function DesktopShell({
                 active={tasks.shown}
               >
                 <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
-                  <AutomationsPage tasks={tasks} />
+                  <AutomationsPage tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : (

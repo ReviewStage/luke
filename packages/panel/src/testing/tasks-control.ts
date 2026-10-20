@@ -321,7 +321,9 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     automationsView: {
       open: false,
       place: { kind: AUTOMATIONS_PAGE.LIST },
+      runs: false,
       onOpen: ignore,
+      onRuns: ignore,
       onClose: ignore,
     },
     callTaskId: undefined,
