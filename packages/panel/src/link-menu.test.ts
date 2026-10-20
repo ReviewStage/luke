@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ListRow, useMenu } from "@luke/ui";
+import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -174,11 +174,12 @@ test("a chip the editor holds fixed in words being edited opens through its own 
         createElement(
           "span",
           { contentEditable: false },
-          createElement(
-            "button",
-            { type: "button", "data-link-href": ADDRESS, onClick: () => pressed.push(ADDRESS) },
-            "app.ts",
-          ),
+          createElement(InlineRef, {
+            look: INLINE_REF_LOOK.PILL,
+            label: "app.ts",
+            onPress: () => pressed.push(ADDRESS),
+            linkHref: ADDRESS,
+          }),
         ),
       ),
     ),

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { useLinkAddress } from "../menu/link-address.js";
 
 /**
  * text-button.tsx -- a press drawn as words among words: a link's look on a button, for an act that stays in the window.
@@ -76,7 +77,7 @@ export function TextButton({
   /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
   id?: string | undefined;
-  /** The address its press opens, where it opens one, which a right-click offers as a link's (`LINK_HREF_ATTRIBUTE`). */
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
   /** Its accessible name, where the words on screen say less than the act. */
   "aria-label"?: string | undefined;
@@ -85,13 +86,14 @@ export function TextButton({
   "aria-controls"?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
+  const linkAddress = useLinkAddress(linkHref);
   return (
     <button
       type="button"
       className="luke-text-button"
       data-tone={tone}
       data-lines={lines}
-      data-link-href={linkHref}
+      ref={linkAddress}
       id={id}
       aria-label={props["aria-label"]}
       aria-expanded={props["aria-expanded"]}

@@ -1,9 +1,9 @@
 /**
  * link-menu.tsx -- a right-click on any link in the window: Open link and Copy link, hung at the pointer.
  *
- * A link is an `<a href>`, or a control that opens an address and names it
- * (`LINK_HREF_ATTRIBUTE`): a mention's chip, a pull request's row, a check's
- * row. The window hears every right-click once, at the document, after
+ * A link is an `<a href>`, or a control that opens an address and handed it
+ * by its ref (`@luke/ui`'s `useLinkAddress`): a mention's chip, a pull
+ * request's row, a check's row. The window hears every right-click once, at the document, after
  * whatever was clicked heard it, so a row or a tab that hangs a menu of its
  * own keeps it; a right-click that lands on a link and nothing else's menu
  * hangs the link's. Open link is the link's own press, so it opens where a
@@ -16,13 +16,7 @@
  * copy does.
  */
 
-import {
-  dropBelowStart,
-  LINK_HREF_ATTRIBUTE,
-  MENU_ALIGN,
-  type MenuPlacement,
-  useMenu,
-} from "@luke/ui";
+import { dropBelowStart, linkAddressOf, MENU_ALIGN, type MenuPlacement, useMenu } from "@luke/ui";
 import { ExternalLinkIcon, LinkIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
@@ -34,9 +28,6 @@ interface HeardLink {
   readonly href: string;
   readonly element: HTMLElement;
 }
-
-/** The elements that are links: an anchor with an address, or a control naming the address it opens. */
-const LINK_SELECTOR = `a[href], [${LINK_HREF_ATTRIBUTE}]`;
 
 /** The words the menu is announced by. */
 const LINK_MENU_LABEL = "Link";
@@ -67,16 +58,20 @@ function editedLinkOpenerOf(element: Element): ((href: string) => void) | undefi
   return undefined;
 }
 
-/** The link a right-click landed on or in, where its address is one the window opens; nothing otherwise. */
+/** The address `element` is a link to: an anchor's, read resolved as a click would follow it, or the one a control handed; nothing for any other. */
+function addressOf(element: Element): string | undefined {
+  if (element instanceof HTMLAnchorElement && element.hasAttribute("href")) return element.href;
+  return linkAddressOf(element);
+}
+
+/** The nearest link a right-click landed on or in, where its address is one the window opens; nothing otherwise. */
 function linkAt(target: EventTarget | null): HeardLink | undefined {
-  const element = target instanceof Element ? target.closest<HTMLElement>(LINK_SELECTOR) : null;
-  if (element === null) return undefined;
-  // Note that an anchor's address is read resolved, as a click would follow it, and a control's as written.
-  const href =
-    element instanceof HTMLAnchorElement
-      ? element.href
-      : (element.getAttribute(LINK_HREF_ATTRIBUTE) ?? "");
-  return opensAsLink(href) ? { href, element } : undefined;
+  for (let at = target instanceof Element ? target : null; at !== null; at = at.parentElement) {
+    const href = addressOf(at);
+    if (href === undefined || !(at instanceof HTMLElement)) continue;
+    return opensAsLink(href) ? { href, element: at } : undefined;
+  }
+  return undefined;
 }
 
 /** Where the menu hangs: at the pointer, or under the link for the menu key, which says no point. */

@@ -64,15 +64,6 @@ export type MenuItemMark = (typeof MENU_ITEM_MARK)[keyof typeof MENU_ITEM_MARK];
 
 /** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
-
-/**
- * The attribute a control that opens an address carries, naming the
- * address, as an `<a href>` names its own: a right-click on either is a
- * right-click on a link, which the window answers with the link's own menu
- * (Open link, Copy link) wherever it stands. A chip, a row, or a button
- * that opens a page carries it; an `<a href>` needs none.
- */
-export const LINK_HREF_ATTRIBUTE = "data-link-href";
 /** The items the menu's keys move between: every one that applies now, a setting's as an action's. */
 const MENU_ITEM = ':is([role="menuitem"], [role="menuitemcheckbox"]):not(:disabled)';
 
