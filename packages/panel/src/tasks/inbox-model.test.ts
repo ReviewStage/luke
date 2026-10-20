@@ -53,13 +53,16 @@ import {
   inboxList,
   inboxMedia,
   inboxMissing,
+  inboxPlaces,
   inboxPreview,
   inboxReply,
   inboxSettledWords,
   inboxSteps,
   inboxThreadOf,
   inboxThreadSend,
+  isDone,
   listedItems,
+  NO_PLACES,
   nextNeedingYou,
   numberedPick,
   openItems,
@@ -605,6 +608,69 @@ test("the list holds every item the latest changed first, under its plan, the pl
     ),
     ["retry", "expiry", "threshold", "channel"],
   );
+});
+
+test("an item whose place is held stands where the list drew it, under the status it stood under, whatever it changed to since, under either sort and every grouping", () => {
+  // The threshold question is answered once the list is drawn, which changes when it changed and where it stands.
+  const answered = TASKS.map(({ holder, items }) => ({
+    holder,
+    items: items.map((each) =>
+      each.id === "threshold" ? { ...each, status: INBOX_STATUS.ANSWERED, updatedAt: 60 } : each,
+    ),
+  }));
+  for (const grouping of Object.values(INBOX_GROUPING)) {
+    for (const sort of Object.values(INBOX_SORT)) {
+      const view = { grouping, sort, show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined };
+      const drawnFirst = inboxList(TASKS, view);
+      const places = inboxPlaces(drawnFirst, NO_PLACES);
+      assert.deepEqual(drawn(inboxList(answered, { ...view, places })), drawn(drawnFirst));
+      assert.notDeepEqual(drawn(inboxList(answered, view)), drawn(drawnFirst), "unheld, it moves");
+    }
+  }
+  const status = {
+    grouping: INBOX_GROUPING.STATUS,
+    show: INBOX_SHOW.ALL,
+    readerId: undefined,
+    chosen: undefined,
+  } as const;
+  assert.deepEqual(
+    drawn(
+      inboxList(answered, { ...status, places: inboxPlaces(inboxList(TASKS, status), NO_PLACES) }),
+    ),
+    [
+      [INBOX_STATUS_GROUP.NEEDS_YOU, ["expiry", "threshold"]],
+      [INBOX_STATUS_GROUP.ANSWERED, ["retry", "channel"]],
+    ],
+  );
+});
+
+test("a list's places are its rows', a held one kept and a new one where it stands now, so an item it no longer draws holds none and one new to it stands where it changed", () => {
+  const all = {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
+    readerId: undefined,
+    chosen: undefined,
+  } as const;
+  const held = inboxPlaces(inboxList(TASKS, all), NO_PLACES);
+  const toDo = inboxList(TASKS, { ...all, show: INBOX_SHOW.TO_DO, places: held });
+  const kept = inboxPlaces(toDo, held);
+  assert.deepEqual([...kept.keys()].toSorted(), ["expiry", "threshold"], "the settled items left");
+  const fresh = [
+    ...TASKS,
+    { holder: taskHolder(INVITES), items: [item({ id: "fresh", updatedAt: 35 })] },
+  ];
+  assert.deepEqual(drawn(inboxList(fresh, { ...all, show: INBOX_SHOW.TO_DO, places: kept })), [
+    "expiry",
+    "fresh",
+    "threshold",
+  ]);
+});
+
+test("an item is done with once it is settled, answered or closed, and read; one open, or settled and unread since, is not", () => {
+  assert.equal(isDone(item({ id: "answered", status: INBOX_STATUS.ANSWERED })), true);
+  assert.equal(isDone(item({ id: "closed", status: INBOX_STATUS.CLOSED })), true);
+  assert.equal(isDone(item({ id: "open" })), false);
+  assert.equal(isDone(item({ id: "again", status: INBOX_STATUS.ANSWERED, unread: true })), false);
 });
 
 test("To do lists only what waits, and the item chosen where one is given, as the steps through the list keep it, and a plan with nothing listed has no group", () => {

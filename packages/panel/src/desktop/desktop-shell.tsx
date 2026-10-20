@@ -60,7 +60,7 @@ import { OfflineMark, useOffline } from "./offline-mark.js";
 import { FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
-import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
+import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { taskCardOf } from "./task-card.js";
 import { useSummaryPin } from "./task-summary.js";
 import { useWindowTitle } from "./window-title.js";
@@ -564,7 +564,12 @@ export function DesktopShell({
       : undefined;
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
-  const inboxListing = useInboxListing(tasks, inboxFirst && tasks.signedIn);
+  // Note that the sidebar draws its list, so the list holds still while the sidebar is in sight.
+  const inboxListing = useInboxListing(
+    tasks,
+    inboxFirst && tasks.signedIn,
+    tasks.shown && sidebarInSight(sidebar),
+  );
   const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
