@@ -294,3 +294,26 @@ test("a note Luke adds while ⌘F stands open over a File tab joins the count at
 
   assert.equal(findTally(), "2 of 6");
 });
+
+test("⌘F counts a note's words as its card shows them: a link by its words and never its address, a code span as written", async () => {
+  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
+  draw([
+    {
+      callId: "call-1",
+      shownAt: 1_760_000_000_000,
+      startLine: 3,
+      endLine: 4,
+      note: "See [the docs](https://example.com/seat) and `seat**s`",
+    },
+  ]);
+  await wholeFileDrawn(container);
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("seat");
+
+  // Four on the lines, and one in the note's code span; none in the link's address.
+  assert.equal(findTally(), "1 of 5");
+  typeFind("seat**s");
+  assert.equal(findTally(), "1 of 1");
+});

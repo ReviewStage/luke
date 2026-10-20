@@ -16,7 +16,7 @@ import {
 } from "../find-matches.js";
 import { SpinnerRegion } from "../spinner.js";
 import { useDiffLook } from "./file-diff.js";
-import { type FileMatch, type FindNote, fileMatches, matchFrom } from "./file-find.js";
+import { type FileMatch, fileMatches, matchFrom } from "./file-find.js";
 
 /**
  * whole-file.tsx -- a whole file drawn as every code is, by Pierre's diffs: a File tab's file, a page's source, a text file opened over the window, in the look View settings chose, its lines lit, and each note under its line.
@@ -31,17 +31,27 @@ import { type FileMatch, type FindNote, fileMatches, matchFrom } from "./file-fi
  * changed draws its threads (`diff-list.tsx`).
  *
  * Since most of a long file's lines are in no DOM, ⌘F finds in its text
- * rather than the DOM's (`file-find.ts`), handed to the tab's scope as a
- * source of its own: the bar counts every match in the file and its notes,
+ * rather than the DOM's (`file-find.ts`), and in its notes' cards, which
+ * React draws whether or not their lines are in view, handed to the tab's
+ * scope as a source of its own: the bar counts every match in the file and its notes,
  * a step scrolls the file to its match's line, and the matches Pierre has
  * drawn are painted, read again each time the lines drawn change, the one
  * the find is at brought into view, with a folded card or a chip around it
  * opened, as the DOM's find opens one.
  */
 
-/** A note drawn under a line of the file: its key, the line, its words as a find reads them, and the tree the view draws for it. */
-export interface WholeFileNote extends FindNote {
+/** A note drawn under a line of the file: its key, the line, and the tree the view draws for it. */
+export interface WholeFileNote {
+  readonly key: string;
+  readonly line: number;
   readonly content: ReactNode;
+}
+
+/** A note as a find reads it: where it stands, and the words its card holds as it was last read. */
+interface ReadNote {
+  readonly key: string;
+  readonly line: number;
+  readonly words: string;
 }
 
 /** What the file's owner asks of it once drawn: a run of lines centred, and the lines the reader picked. */
@@ -63,7 +73,7 @@ type FindStep = (typeof FIND_STEP)[keyof typeof FIND_STEP];
 const NO_TALLY: FindTally = { count: 0, at: -1 };
 
 /** Whether two runs of notes read alike to a find: the same words under the same lines by the same keys. */
-function sameFindNotes(a: readonly FindNote[], b: readonly FindNote[]): boolean {
+function sameReadNotes(a: readonly ReadNote[], b: readonly ReadNote[]): boolean {
   return (
     a.length === b.length &&
     a.every(
@@ -107,7 +117,8 @@ function drawnAt(ranges: readonly Range[], match: FileMatch | undefined): number
  */
 function useWholeFileFind(
   host: RefObject<HTMLDivElement | null>,
-  read: RefObject<{ text: string; notes: readonly FindNote[]; from: number }>,
+  read: RefObject<{ text: string; notes: readonly WholeFileNote[]; from: number }>,
+  noteElement: (key: string) => HTMLElement,
   handle: RefObject<FileViewHandle | undefined>,
 ): () => void {
   const [find] = useState(() => {
@@ -119,7 +130,7 @@ function useWholeFileFind(
       // Whether the match the find is at still waits to be brought into view, once drawn.
       pending: false,
       // The text and notes the matches were read from.
-      searched: { text: "", notes: [] as readonly FindNote[] },
+      searched: { text: "", notes: [] as readonly ReadNote[] },
       listeners: new Set<(tally: FindTally) => void>(),
     };
     const tell = () => {
@@ -148,10 +159,22 @@ function useWholeFileFind(
         handle.current?.revealLines({ startLine: match.line, endLine: match.line });
       paint();
     };
+    // Note that a note's words are read from the card the view draws for it, which React draws whether or not Pierre has its line in view.
+    const readNotes = (): ReadNote[] =>
+      read.current.notes.map((note) => ({
+        key: note.key,
+        line: note.line,
+        words: noteElement(note.key).textContent ?? "",
+      }));
     const readMatches = () => {
       const { text, notes } = read.current;
-      state.searched = { text, notes };
-      return fileMatches(text.split("\n"), notes, state.query);
+      state.searched = { text, notes: readNotes() };
+      const counted = notes.map((note) => ({
+        key: note.key,
+        line: note.line,
+        matches: findRanges(noteElement(note.key), state.query).length,
+      }));
+      return fileMatches(text.split("\n"), counted, state.query);
     };
     const search = (query: string) => {
       state.query = query;
@@ -161,9 +184,9 @@ function useWholeFileFind(
     };
     // Note that matches are read again where the text or the notes changed under an open find, as a note Luke adds, the find kept at the match it was at where that still stands, and nothing scrolled.
     const refresh = () => {
-      const { text, notes } = read.current;
       if (state.query.length === 0) return;
-      if (text === state.searched.text && sameFindNotes(notes, state.searched.notes)) return;
+      const { text } = read.current;
+      if (text === state.searched.text && sameReadNotes(readNotes(), state.searched.notes)) return;
       const was = state.matches[state.at];
       state.matches = readMatches();
       const kept = state.matches.findIndex(
@@ -247,9 +270,9 @@ export function WholeFile({
     elements.current.set(key, element);
     return element;
   }, []);
-  const read = useRef({ text: "", notes: [] as readonly FindNote[], from: 1 });
+  const read = useRef({ text: "", notes: [] as readonly WholeFileNote[], from: 1 });
   read.current = { text, notes, from: findFrom };
-  const paint = useWholeFileFind(host, read, handle);
+  const paint = useWholeFileFind(host, read, elementFor, handle);
   const props: FileViewProps = {
     name,
     text,
