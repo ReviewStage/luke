@@ -16,7 +16,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -24,7 +24,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -108,6 +113,7 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({});
+  fakeActPort({});
 });
 
 afterEach(() => {
@@ -576,17 +582,14 @@ test("a question a teammate's agent asks, which main does not count as the reade
     postedAt: NOW - HOUR,
     updatedAt: NOW - HOUR,
   };
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
       const value: CodingAgentInboxAnswerView = {
-        items: request.payload.taskId === BILLING.id ? [asked] : [],
+        items: taskId === BILLING.id ? [asked] : [],
         cursor: "1",
       };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      return Promise.resolve(value);
     },
   });
   const { page } = mount([SEARCH, BILLING], {
@@ -606,22 +609,17 @@ test("a question a teammate's agent asks, which main does not count as the reade
   ]);
 });
 
-/** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
+/** The act port answering a plan's Inbox read as `answer` says, counting the reads. */
 function answerInbox(answer: (taskId: string) => readonly InboxItem[] | undefined) {
   const counted = { reads: 0 };
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
       counted.reads += 1;
-      const items = answer(request.payload.taskId);
-      if (items === undefined) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
-      }
+      const items = answer(taskId);
+      if (items === undefined) return Promise.reject(refusedOnPort("No service."));
       const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      return Promise.resolve(value);
     },
   });
   return counted;

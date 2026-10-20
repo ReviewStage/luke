@@ -39,7 +39,6 @@ const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 // building the host's rows reads none of these.
 const UNREACHED = {
   tasks: {},
-  codingAgents: {},
 } as unknown as HostActDependencies;
 
 /**

@@ -6,6 +6,7 @@ import type {
 } from "@orpc/contract";
 import { accountActsContract } from "./account.js";
 import { accountAskActsContract } from "./account-asks.js";
+import { agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
@@ -36,6 +37,7 @@ export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
   AGENT_ACT_KIND,
+  AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
   FACTORY_ACT_KIND,
@@ -59,6 +61,7 @@ export const actContract = {
   ...accountActsContract,
   ...accountAskActsContract,
   ...agentActsContract,
+  ...agentInboxActsContract,
   ...automationActsContract,
   ...avatarActsContract,
   ...factoryActsContract,

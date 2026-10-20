@@ -19,7 +19,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -217,26 +217,20 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
   fakeAppBridge({
-    act: (request: Act) => {
-      const inbox =
-        request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
-        request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
-      if (inbox && inboxHeld) return new Promise(() => undefined);
-      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-        const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
-        const value: CodingAgentInboxAnswerView = {
-          items: INBOXES.get(request.payload.taskId) ?? [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-    },
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   fakeActPort({
+    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: () => {
+      if (inboxHeld) return new Promise(() => undefined);
+      const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
+      return Promise.resolve(value);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
+      if (inboxHeld) return new Promise(() => undefined);
+      if (inboxRefused) return Promise.reject(refusedOnPort("Not here."));
+      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
+      return Promise.resolve(value);
+    },
     [ACT_KIND.AUTOMATIONS_LIST]: () => {
       if (automationsHeld) return new Promise(() => undefined);
       if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));

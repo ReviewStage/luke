@@ -83,7 +83,6 @@ const UNREACHED = {
   account: {},
   settings: {},
   tasks: {},
-  codingAgents: {},
 } as unknown as HostActDependencies;
 
 /** A platform table of every kind the host's rows leave, each recording that it ran. */
