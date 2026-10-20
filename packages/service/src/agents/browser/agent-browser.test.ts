@@ -214,6 +214,24 @@ it.effect(
     }),
 );
 
+it.effect("a stream that subscribes as the connection ends still ends", () =>
+  Effect.gen(function* () {
+    const peer = yield* fakeCdpPeer();
+    const { service } = browserOver(peer);
+
+    const events = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const cdp = yield* service.connect(SESSION);
+        const collecting = yield* Effect.forkChild(Stream.runCollect(cdp.events));
+        yield* peer.hangUp;
+        return yield* Fiber.join(collecting);
+      }),
+    );
+
+    assert.deepEqual(events, []);
+  }),
+);
+
 it.effect("a browser that cannot be reached says why", () =>
   Effect.gen(function* () {
     const peer = yield* fakeCdpPeer();
@@ -245,7 +263,7 @@ it.effect("a browser that cannot be reached says why", () =>
 );
 
 it.effect(
-  "a sandbox that never comes up, and a bridge that never says it is ready, are given up on",
+  "a sandbox that never comes up, Vercel refusing every resume, and a bridge that never says it is ready are each given up on, saying why",
   () =>
     Effect.gen(function* () {
       const peer = yield* fakeCdpPeer();
@@ -255,13 +273,19 @@ it.effect(
       });
       const silent = browserOver(peer, {}, FAKE_BRIDGE.SILENT);
 
+      const refused = browserOver(peer, { status: "stopped", resumeUnavailable: 503 });
+
       const resuming = yield* Effect.forkChild(Effect.flip(stuck.service.ensure(SESSION)));
+      const outage = yield* Effect.forkChild(Effect.flip(refused.service.ensure(SESSION)));
       const bridging = yield* Effect.forkChild(
         Effect.flip(Effect.scoped(silent.service.connect(SESSION))),
       );
       yield* TestClock.adjust(Duration.minutes(2));
 
       assert.equal((yield* Fiber.join(resuming)).reason, BROWSER_UNREACHABLE.NOT_RESUMED);
+      const unavailable = yield* Fiber.join(outage);
+      assert.equal(unavailable.reason, BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE);
+      assert.equal(unavailable.status, 503);
       assert.equal((yield* Fiber.join(bridging)).reason, BROWSER_UNREACHABLE.BRIDGE_FAILED);
     }),
 );

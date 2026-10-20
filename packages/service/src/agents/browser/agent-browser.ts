@@ -40,7 +40,6 @@ import {
   Schema,
   type Scope,
   Stream,
-  type Take,
 } from "effect";
 import type { HttpClient } from "effect/http";
 import {
@@ -294,7 +293,8 @@ function cdpSessionOver(
     const nextId = yield* Ref.make(0);
     const closed = yield* Ref.make(false);
     const ready = yield* Deferred.make<void, BrowserUnreachable>();
-    const events = yield* PubSub.sliding<Take.Take<CdpEvent>>(AGENT_BROWSER.EVENT_BACKLOG);
+    // Each event the browser sent, and `null` once as the connection ends.
+    const events = yield* PubSub.sliding<CdpEvent | null>(AGENT_BROWSER.EVENT_BACKLOG);
 
     const settle = (id: number, exit: Exit.Exit<UnparsedWireValue, CdpFailure>) =>
       Effect.suspend(() => {
@@ -334,7 +334,7 @@ function cdpSessionOver(
           value.sessionId === undefined
             ? { method: value.method, params: value.params }
             : { method: value.method, params: value.params, sessionId: value.sessionId };
-        return PubSub.publish(events, [event]);
+        return PubSub.publish(events, event);
       });
 
     // The connection's end: what waits fails as closed, and every event stream ends.
@@ -344,7 +344,7 @@ function cdpSessionOver(
       for (const [id, { method }] of [...waiting]) {
         yield* settle(id, Exit.fail(new CdpFailure({ kind: CDP_FAILURE.CLOSED, method })));
       }
-      yield* PubSub.publish(events, Exit.void);
+      yield* PubSub.publish(events, null);
     });
 
     yield* Effect.forkScoped(
@@ -382,11 +382,16 @@ function cdpSessionOver(
 
     return {
       send,
-      // Note that a stream run after the end would wait on an end already published, so it is empty instead.
+      // Note that the stream subscribes before it reads the end, which is marked before its `null` is
+      // published, so an end is either seen here or reaches the subscription, never neither.
       events: Stream.unwrap(
-        Effect.map(Ref.get(closed), (gone) =>
-          gone ? Stream.empty : Stream.fromPubSubTake(events),
-        ),
+        Effect.gen(function* () {
+          const subscription = yield* PubSub.subscribe(events);
+          if (yield* Ref.get(closed)) return Stream.empty;
+          return Stream.fromSubscription(subscription).pipe(
+            Stream.takeWhile((event): event is CdpEvent => event !== null),
+          );
+        }),
       ),
       pages: Effect.flatMap(send({ method: "Target.getTargets" }), (result) => {
         const pages = pagesOf(result);
@@ -432,7 +437,9 @@ export function agentBrowserOver(
       if (sandbox.status === RUNNING_STATUS && sandbox.currentSessionId !== undefined) {
         return sandbox.currentSessionId;
       }
-      // Note that each try asks the resume again, which answers a sandbox already coming up as it stands.
+      // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
+      // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
+      // last try's failure is the answer, so an outage still says Vercel was unavailable.
       const resumed = api.resume(sandbox.name).pipe(
         Effect.mapError(sandboxUnavailable),
         Effect.flatMap((found) =>
@@ -446,11 +453,6 @@ export function agentBrowserOver(
           schedule: Schedule.spaced(AGENT_BROWSER.RESUME_SPACING),
           times: AGENT_BROWSER.RESUME_TRIES,
         }),
-        Effect.mapError((error) =>
-          error.reason === BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE
-            ? unreachable(BROWSER_UNREACHABLE.NOT_RESUMED, error.status)
-            : error,
-        ),
       );
     });
 

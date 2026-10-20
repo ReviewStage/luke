@@ -234,6 +234,8 @@ export interface FakeSandboxScenario {
   readonly startExit?: number;
   /** Whether every call is unavailable, as Vercel answering the status given. */
   readonly unavailable?: number;
+  /** Whether every resume is unavailable, as Vercel answering the status given. */
+  readonly resumeUnavailable?: number;
 }
 
 export const FAKE_SANDBOX = {
@@ -264,6 +266,9 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
       Effect.succeed(sessionId === scenario.sessionId && status !== undefined ? [listed()] : []),
     resume: () =>
       refused() ??
+      (scenario.resumeUnavailable === undefined
+        ? undefined
+        : Effect.fail(new SandboxUnavailable({ status: scenario.resumeUnavailable }))) ??
       Effect.sync(() => {
         if (status === "running") return listed();
         resumes += 1;

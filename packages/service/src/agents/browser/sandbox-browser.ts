@@ -58,11 +58,16 @@ const CHROMIUM_FLAGS = [
   "--no-sandbox",
   "--disable-gpu",
   "--disable-dev-shm-usage",
-  "--password-store=basic",
   "--disable-background-timer-throttling",
   "--disable-backgrounding-occluded-windows",
   "--disable-renderer-backgrounding",
 ] as const;
+
+/** What a new profile starts with: Chromium's password manager off, so it never offers to save one. */
+const PROFILE_PREFERENCES = {
+  credentials_enable_service: false,
+  profile: { password_manager_enabled: false },
+} as const;
 
 /**
  * The start, as positional parameters take it: the port, the display, the
@@ -83,18 +88,22 @@ const START_SCRIPT = [
   `if answers; then echo ${BROWSER_START_OUTPUT.ATTACHED}; exit 0; fi`,
   'chrome=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -n 1)',
   `[ -x "$chrome" ] || { echo 'no Chromium in the image' >&2; exit ${BROWSER_START_EXIT.NO_CHROMIUM}; }`,
-  // Xvfb by the pid it was started under, checked by name, since a resumed sandbox may have handed that pid to another process.
-  'xvfb_pid=$(cat "$state/xvfb.pid" 2>/dev/null || true)',
+  // Xvfb by the pid its own lock file names, checked by name, since a resumed sandbox may have handed that pid to another process.
+  'xvfb_pid=$(cat "/tmp/.X$display-lock" 2>/dev/null | tr -d " ")',
   'if [ -z "$xvfb_pid" ] || [ "$(cat "/proc/$xvfb_pid/comm" 2>/dev/null)" != Xvfb ]; then',
   '  rm -f "/tmp/.X$display-lock" "/tmp/.X11-unix/X$display"',
   '  setsid Xvfb ":$display" -screen 0 "$width"x"$height"x24 -nolisten tcp >"$state/xvfb.log" 2>&1 </dev/null 9>&- &',
-  '  echo $! >"$state/xvfb.pid"',
   "fi",
   "tries=0",
   `until [ -S "/tmp/.X11-unix/X$display" ]; do`,
   `  tries=$((tries + 1)); [ "$tries" -le ${SANDBOX_BROWSER.DISPLAY_WAIT_TENTHS} ] || { echo 'Xvfb did not start' >&2; exit ${BROWSER_START_EXIT.NO_DISPLAY}; }`,
   "  sleep 0.1",
   "done",
+  // A new profile never offers to save a password, so none a developer types sits in it beside the cookies.
+  'if [ ! -e "$profile/Default/Preferences" ]; then',
+  '  mkdir -p "$profile/Default"',
+  `  printf '%s' '${JSON.stringify(PROFILE_PREFERENCES)}' >"$profile/Default/Preferences"`,
+  "fi",
   // A stop snapshots the profile with the running browser's locks in it, which would refuse the next start.
   'rm -f "$profile/SingletonLock" "$profile/SingletonSocket" "$profile/SingletonCookie"',
   'DISPLAY=":$display" setsid "$chrome" --remote-debugging-port="$port" --remote-debugging-address=127.0.0.1 --user-data-dir="$profile" --window-size="$width,$height" "$@" about:blank >"$state/chromium.log" 2>&1 </dev/null 9>&- &',
