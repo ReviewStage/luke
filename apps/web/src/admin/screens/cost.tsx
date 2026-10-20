@@ -24,8 +24,9 @@ import { formatCompact, formatNumber, formatTrendMove, formatUsd } from "@luke/u
 import { AccountCell } from "../accounts-table/accounts-table";
 import { CostChart } from "../charts/cost-chart";
 import { SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
+import { PageNote } from "../chrome/notes";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { windowedReadQuery } from "../routing";
@@ -41,7 +42,7 @@ const readCost =
     // SAFETY: the admin cost procedure answers an AdminCost (`@luke/service/admin/admin-cost-wire`), which the contract cannot name.
     (await browserClient.admin.cost(query, { signal })) as AdminCost;
 
-/** What every figure on the screen is, said once under the title. */
+/** What every figure on the screen is, said once at the top of the page. */
 const COST_DESCRIPTION =
   "Every model token and metered second at its public list price: a list-price equivalent, not what Luke pays.";
 
@@ -50,6 +51,7 @@ const LIST_PRICE = "List-price equivalent";
 
 /** The screen's own sections, in the order the loaded page states them. */
 const COST_SHAPES: readonly SkeletonShape[] = [
+  { kind: SKELETON_SHAPE.STATIC, node: <PageNote>{COST_DESCRIPTION}</PageNote> },
   { kind: SKELETON_SHAPE.STAT_GROUP },
   { kind: SKELETON_SHAPE.STATIC, node: <ListPriceNote /> },
   { kind: SKELETON_SHAPE.HEADING, label: `Daily ${LIST_PRICE.toLowerCase()}` },
@@ -246,14 +248,7 @@ export function CostScreen({
 
   switch (state.status) {
     case "loading":
-      return frame(
-        <PageSkeleton
-          title="Cost"
-          description={COST_DESCRIPTION}
-          controls={controls}
-          shapes={COST_SHAPES}
-        />,
-      );
+      return frame(<PageSkeleton title="Cost" controls={controls} shapes={COST_SHAPES} />);
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -261,17 +256,20 @@ export function CostScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, COST_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title="Cost" controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, COST_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready": {
       const cost = state.value;
       return frame(
-        <AdminPage title="Cost" description={COST_DESCRIPTION} controls={controls}>
+        <AdminPage title="Cost" controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
+            <PageNote>{COST_DESCRIPTION}</PageNote>
             <StatGroup>
               <StatCard
                 label={`${LIST_PRICE} · ${cost.windowDays} days`}

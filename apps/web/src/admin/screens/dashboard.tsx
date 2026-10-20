@@ -17,7 +17,7 @@ import { RetentionGrid } from "../charts/retention-grid";
 import { FunnelChart, ReachChart } from "../charts/share-bars";
 import { SignupsChart } from "../charts/signups-chart";
 import { SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
@@ -230,20 +230,17 @@ export function DashboardScreen({
   // The basis is the page's own choice, kept across refreshes and windows:
   // both grids ride every answer, so flipping it reads nothing.
   const [basis, setBasis] = useState<RetentionBasis>(RETENTION_BASIS.MEANINGFUL);
+  const controls = (
+    <>
+      <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+      <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+    </>
+  );
 
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title={OVERVIEW_TITLE}
-          controls={
-            <>
-              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            </>
-          }
-          shapes={DASHBOARD_SHAPES}
-        />,
+        <PageSkeleton title={OVERVIEW_TITLE} controls={controls} shapes={DASHBOARD_SHAPES} />,
       );
     case "signed-out":
       return <SignInCard />;
@@ -252,26 +249,20 @@ export function DashboardScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, METRICS_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title={OVERVIEW_TITLE} controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, METRICS_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready": {
       const metrics = state.value;
       const overview = metrics.overview;
 
       return frame(
-        <AdminPage
-          title={OVERVIEW_TITLE}
-          controls={
-            <>
-              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            </>
-          }
-        >
+        <AdminPage title={OVERVIEW_TITLE} controls={controls}>
           {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
           says so while the next read is in flight. */}

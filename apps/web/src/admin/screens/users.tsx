@@ -22,7 +22,7 @@ import { useEffect, useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { SignInMethodsChart } from "../charts/signups-chart";
 import { SectionHeading } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
@@ -147,7 +147,7 @@ export function UsersScreen({
   const page = (
     content: Pick<
       React.ComponentProps<typeof AdminCollectionPage>,
-      "filters" | "state" | "empty" | "children"
+      "filters" | "state" | "empty" | "error" | "children"
     >,
   ) =>
     frame(
@@ -183,13 +183,17 @@ export function UsersScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
     case "error":
-      return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, USERS_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
-      );
+      return page({
+        filters: search,
+        state: COLLECTION_STATE.ERROR,
+        error: (
+          <AdminErrorState
+            detail={adminReadFailure(state, USERS_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        ),
+      });
     case "ready": {
       const list = state.value;
       // The service searches the whole roster once the debounce settles; until

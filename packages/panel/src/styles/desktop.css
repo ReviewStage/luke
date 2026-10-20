@@ -233,10 +233,6 @@ body,
   width: var(--luke-space-6);
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
-  padding-left: var(--sidebar-toggle-clearance);
-}
-
 .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
     .side-panel[data-full-screen="true"]
   )
@@ -1639,32 +1635,8 @@ ul.actor-stack {
 
 /* Work column ------------------------------------------------------------- */
 
-/* The work column is one layer of the shell's: what it raises inside it,
-   the strip's pinned tab and fades, a floating bar, a menu hung in it,
-   stands among the column's own layers and never over the shell's, so the
-   sidebar floating open over the column, a phone's drawer among it, and the
-   title bar's buttons draw over all of it. */
-.desktop-main {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
-/* One row at the one bar height the side panel's bar shares, so the two
-   bars' bottom borders are one line across the window. */
-.desktop-toolbar {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  min-height: var(--desktop-bar-height);
-  padding: var(--luke-space-8) var(--content-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
+/* The work column and its toolbar's row are the shared shell's (shell.css);
+   what follows restages them for the window's own screens. */
 
 [data-luke-profile="desktop"] .desktop-toolbar {
   -webkit-app-region: drag;
@@ -1686,37 +1658,12 @@ ul.actor-stack {
 /* A pane sliding in finds the work column already narrowed for it, so the
    column's bars draw on past both its sides, beneath everything else, and
    no gap opens between the column and a pane still on its way. */
-.desktop-toolbar::before,
 .desktop-call-bar::before {
   position: absolute;
   z-index: -1;
   right: -100vw;
   left: -100vw;
   content: "";
-}
-
-.desktop-toolbar::before {
-  top: 0;
-  bottom: -1px;
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-.desktop-toolbar-heading {
-  min-width: 0;
-  flex: 1;
-}
-
-/* Its room reaches 6px left of the words, so the title's own hover fill and
-   field ring, which start there, are not clipped. */
-.desktop-toolbar-title {
-  margin: 0 0 0 calc(-1 * var(--luke-space-6));
-  padding-left: var(--luke-space-6);
-  overflow: hidden;
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-bold);
-  letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The plan's toolbar leads with its tab rather than a title, so it starts
@@ -1760,14 +1707,6 @@ ul.actor-stack {
    the bar (`SplitButton`). */
 .desktop-shell[data-room="narrow"] .desktop-task-main .desktop-toolbar .start-agent {
   --luke-fold: worded;
-}
-
-.desktop-toolbar-actions {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
 }
 
 [data-luke-profile="desktop"] .toolbar-button,

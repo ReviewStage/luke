@@ -38,7 +38,7 @@ import { AccountCell } from "../accounts-table/accounts-table";
 import { BreakdownChart, type BreakdownSeries } from "../charts/breakdown-chart";
 import { FailureRatesChart } from "../charts/failure-rates-chart";
 import { MetricCard, SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
@@ -437,11 +437,13 @@ export function ReliabilityScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, RELIABILITY_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title="Reliability" controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, RELIABILITY_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready":
       return frame(

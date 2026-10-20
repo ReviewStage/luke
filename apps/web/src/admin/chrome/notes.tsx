@@ -15,6 +15,18 @@ function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Ele
 }
 
 /**
+ * What every figure on a page is, where its title cannot say it: a muted
+ * line at the top of its content, since the toolbar holds a title alone.
+ */
+export function PageNote({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="mb-3">
+      <Text tone={TEXT_TONE.MUTED}>{children}</Text>
+    </div>
+  );
+}
+
+/**
  * What a retention cell counts, by the grid's basis: a meaningful action, or
  * any hosted-tier call, the basis the grid had before the Overview was rebuilt.
  */
