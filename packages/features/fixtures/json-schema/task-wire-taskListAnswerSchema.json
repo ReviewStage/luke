@@ -263,6 +263,48 @@
               "pullRequests"
             ],
             "additionalProperties": false
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "linear",
+                    "github"
+                  ]
+                },
+                "key": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "relation": {
+                  "type": "string",
+                  "enum": [
+                    "closes",
+                    "part_of"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "provider",
+                "key",
+                "url",
+                "relation"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 10
           }
         },
         "required": [

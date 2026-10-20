@@ -8075,3 +8075,28 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   -webkit-line-clamp: 3;
   overflow-wrap: anywhere;
 }
+
+/* A card that links issues fills as one while the pointer is anywhere on
+   it, its tags included, rather than its press alone, and its press gives
+   the tags under it its foot. */
+.tasks-board-card:has(.tasks-board-tags) {
+  border-radius: var(--luke-control-radius);
+}
+
+.tasks-board-card:has(.tasks-board-tags):hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.tasks-board-card:has(.tasks-board-tags) > .sidebar-task {
+  padding-bottom: var(--luke-space-4);
+  background: none;
+}
+
+/* The issues a card's task links, a tag each, in a row under its name that
+   wraps where the column is too narrow for them. */
+.tasks-board-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  padding: 0 var(--row-inset) var(--luke-space-8);
+}

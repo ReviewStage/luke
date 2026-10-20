@@ -12,7 +12,12 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
-import { sameIssueChoice, type TaskIssueChoice, taskIssueChoiceSchema } from "./task-issue-wire.js";
+import {
+  sameIssueChoice,
+  type TaskIssueChoice,
+  taskIssueChoiceSchema,
+  taskIssueTagSchema,
+} from "./task-issue-wire.js";
 
 /**
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
@@ -492,13 +497,18 @@ export const taskAgentsSummarySchema = EffectSchema.Struct({
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
 
 /**
- * One row of the task list: everything but the document, and what its
- * coding agents are doing, which only the list answers, and only for a task
- * with an agent.
+ * One row of the task list: everything but the document, what its coding
+ * agents are doing, which only the list answers, and only for a task with
+ * an agent, and the issues it links, oldest linked first, which only the
+ * list answers too, and only for a task that links one.
  */
 export const taskSummarySchema = EffectSchema.Struct({
   ...taskSummaryFields,
   agents: EffectSchema.optionalKey(taskAgentsSummarySchema),
+  /** Absent for a task that links no issue, and from a service before the list named them. */
+  issues: EffectSchema.optionalKey(
+    EffectSchema.Array(taskIssueTagSchema).check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES)),
+  ),
 });
 
 export type TaskSummary = typeof taskSummarySchema.Type;

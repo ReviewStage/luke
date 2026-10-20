@@ -1,3 +1,5 @@
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import {
   TASK_STATUS,
   TASK_STATUS_ORDER,
@@ -8,6 +10,7 @@ import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
+  CHIP_SIZE,
   Chip,
   ChipName,
   COLLECTION_STATE,
@@ -18,6 +21,8 @@ import {
   ErrorState,
   PAGE_FRAME,
   PAGE_WIDTH,
+  PROVIDER_MARK_SIZE,
+  ProviderMark,
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
@@ -36,7 +41,9 @@ import { useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
+import { issueTagWords } from "../tasks/task-issue-links-model.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { readKept, writeKept } from "./folded-groups.js";
@@ -50,7 +57,10 @@ import { useRowDrag } from "./use-row-drag.js";
  * Issues board's are, by its status's mark, its name, and how many tasks
  * stand in it, and scrolls its own cards, the most pressing first. A card
  * is a row of the sidebar's own on two lines: its priority's mark, its key,
- * and its creator's face over its whole name. A press opens the task. A
+ * and its creator's face over its whole name, then a tag for each issue
+ * the task links, oldest first, its provider's mark and its key, a GitHub
+ * issue of the task's own repository by its `#N` alone; a press on a tag
+ * opens the issue as an issue link does elsewhere. A press opens the task. A
  * card dragged onto another column is sent that column's status, as the
  * task page's Status chip sends it, and stands where it was until the list
  * read again says otherwise; a change the service did not keep says so.
@@ -94,7 +104,37 @@ function boardState(tasks: TasksControl, empty: boolean): CollectionState {
   return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
-/** One task's card: its priority, key, and creator's face over its name, one press that opens it. */
+/** The mark a tag wears for who holds its issue. */
+const TAG_MARK = {
+  [TASK_ISSUE_PROVIDER.GITHUB]: INTEGRATION_PROVIDER.GITHUB,
+  [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
+} as const satisfies Record<TaskIssueProvider, string>;
+
+/** The tags of the issues a card's task links, in a row under its name; nothing for a task that links none. */
+function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | null {
+  // A tag opens its issue as a link to it does (`../tasks/use-open-link.ts`).
+  const openLink = useOpenLink();
+  const tags = task.issues ?? [];
+  if (tags.length === 0) return null;
+  return (
+    <span className="tasks-board-tags">
+      {tags.map((tag) => (
+        <Chip
+          key={tag.id}
+          look={CHIP_LOOK.PILL}
+          size={CHIP_SIZE.COMPACT}
+          data-provider={tag.provider}
+          onClick={() => openLink(tag.url)}
+        >
+          <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
+          <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>
+        </Chip>
+      ))}
+    </span>
+  );
+}
+
+/** One task's card: its priority, key, and creator's face over its name, one press that opens it, and its issues' tags under. */
 function TaskBoardCard({
   task,
   workspaceName,
@@ -106,7 +146,7 @@ function TaskBoardCard({
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
   return (
-    <li className="sidebar-task-item home-row factory-row" data-task-id={task.id}>
+    <li className="sidebar-task-item home-row factory-row tasks-board-card" data-task-id={task.id}>
       <button type="button" className="sidebar-task" onClick={onOpen}>
         <span className="sidebar-task-line">
           {task.priority === undefined ? null : <TaskPriorityMark priority={task.priority} />}
@@ -119,6 +159,7 @@ function TaskBoardCard({
         </span>
         <span className="sidebar-task-name tasks-board-name">{task.name}</span>
       </button>
+      <TaskBoardTags task={task} />
     </li>
   );
 }

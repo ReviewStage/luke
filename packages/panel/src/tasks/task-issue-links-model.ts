@@ -1,5 +1,5 @@
 /**
- * task-issue-links-model.ts -- what a task page's Linked issues box says: each link's state in words, and why a change of its links did not land.
+ * task-issue-links-model.ts -- what a task page's Linked issues box says: each link's state in words, and why a change of its links did not land; and what a Board card's tag calls a link.
  *
  * DOM-free, so the box and its tests read the same words. A GitHub issue's
  * state is GitHub's own three, a Linear issue's the name of the workflow
@@ -13,6 +13,7 @@ import {
   TASK_ISSUE_PROVIDER,
   type TaskIssueLinkRefusal,
   type TaskIssueStanding,
+  type TaskIssueTag,
 } from "@luke/features/task-issue-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TaskIssueCallFailure } from "@luke/features/tasks-view";
@@ -56,4 +57,18 @@ export function linkNoteOf(
 /** Whether the task links as many issues as a task may, so the picker offers no more. */
 export function linksFull(count: number): boolean {
   return count >= TASK_BOUNDS.MAX_ISSUES;
+}
+
+/**
+ * What a Board card's tag says of a linked issue: a Linear issue's key, and
+ * a GitHub issue's `#N` where it is filed in the task's own repository, or
+ * its whole `owner/name#N` in another, the repository's name compared
+ * whatever its case, as GitHub reads it.
+ */
+export function issueTagWords(tag: TaskIssueTag, repository: string | null): string {
+  if (tag.provider !== TASK_ISSUE_PROVIDER.GITHUB || repository === null) return tag.key;
+  const filed = tag.key.slice(0, repository.length);
+  const own =
+    filed.toLowerCase() === repository.toLowerCase() && tag.key.charAt(repository.length) === "#";
+  return own ? tag.key.slice(repository.length) : tag.key;
 }

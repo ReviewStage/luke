@@ -125,6 +125,35 @@ export const taskIssueLinkViewSchema = EffectSchema.Struct({
 
 export type TaskIssueLinkView = typeof taskIssueLinkViewSchema.Type;
 
+/**
+ * One issue a task links as its row of the task list names it, the Board's
+ * card drawing it as a tag: the link's own id, which a change of it on the
+ * task page finds the tag by, the provider, its key and page as the
+ * provider last answered them, and the keyword its pull requests write of
+ * it. Never its title, description, or where it stands, which the task's
+ * page alone reads.
+ */
+export const taskIssueTagSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  provider: EffectSchema.Literals(Object.values(TASK_ISSUE_PROVIDER)),
+  key: EffectSchema.String,
+  url: EffectSchema.String,
+  relation: taskIssueRelationSchema,
+});
+
+export type TaskIssueTag = typeof taskIssueTagSchema.Type;
+
+/** A link as the task list's tag names it. */
+export function issueTagOf(link: TaskIssueLinkView): TaskIssueTag {
+  return {
+    id: link.id,
+    provider: link.provider,
+    key: link.key,
+    url: link.url,
+    relation: link.relation,
+  };
+}
+
 /** A task's links, oldest linked first, each with where its issue stands now. */
 export const taskIssueLinksAnswerSchema = EffectSchema.Struct({
   issues: EffectSchema.Array(taskIssueLinkViewSchema),

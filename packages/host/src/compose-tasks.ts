@@ -23,6 +23,7 @@ import {
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
+import { issueTagOf, type TaskIssueTag } from "@luke/features/task-issue-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
@@ -1129,6 +1130,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
+  /**
+   * The list's row of `taskId` with the issues it links changed as the
+   * service answered a change of them, so the Board's tags follow the task
+   * page without a read of the whole list; a row left linking none names
+   * none, as the list answers it. Note that it runs as a read of the
+   * service does, one at a time, and each change is one a second time
+   * changes no further, because a list read out when the change was made
+   * may land before it and hold it already.
+   */
+  const retag = (
+    taskId: string,
+    change: (tags: readonly TaskIssueTag[]) => readonly TaskIssueTag[],
+  ): Effect.Effect<void> =>
+    serial(
+      Effect.sync(() => {
+        // A task the list does not hold, as one archived out of it, has no row to change.
+        if (!view.tasks.some((row) => row.id === taskId)) return;
+        const tasks = view.tasks.map((row) => {
+          if (row.id !== taskId) return row;
+          const { issues: before, ...rest } = row;
+          const issues = change(before ?? []);
+          return issues.length === 0 ? rest : { ...rest, issues };
+        });
+        write({ tasks });
+      }),
+    );
+
   /** The pin and the archive a task answered carries, each only where it stands. */
   function marksOf(task: Task): TaskMarkStamps {
     return {
@@ -1445,7 +1473,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksIssueLinkAnswer>(TASK_ISSUES_UNANSWERED);
         const { taskId, issue } = read.success;
-        return carried<TasksIssueLinkAnswer>(yield* served(client.linkIssue(taskId, issue)));
+        const answer = yield* served(client.linkIssue(taskId, issue));
+        if ("issue" in answer) {
+          const tag = issueTagOf(answer.issue);
+          yield* retag(taskId, (tags) =>
+            tags.some((each) => each.id === tag.id) ? tags : [...tags, tag],
+          );
+        }
+        return carried<TasksIssueLinkAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_ISSUE_RELATE]: (params) =>
       Effect.gen(function* () {
@@ -1455,9 +1490,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksIssueRelateAnswer>(TASK_ISSUES_UNANSWERED);
         const { taskId, linkId, relation } = read.success;
-        return carried<TasksIssueRelateAnswer>(
-          yield* served(client.relateIssue(taskId, linkId, relation)),
-        );
+        const answer = yield* served(client.relateIssue(taskId, linkId, relation));
+        if ("issue" in answer) {
+          const tag = issueTagOf(answer.issue);
+          yield* retag(taskId, (tags) => tags.map((each) => (each.id === tag.id ? tag : each)));
+        }
+        return carried<TasksIssueRelateAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_ISSUE_UNLINK]: (params) =>
       Effect.gen(function* () {
@@ -1467,7 +1505,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksIssueUnlinkAnswer>(TASK_ISSUES_UNANSWERED);
         const { taskId, linkId } = read.success;
-        return carried<TasksIssueUnlinkAnswer>(yield* served(client.unlinkIssue(taskId, linkId)));
+        const answer = yield* served(client.unlinkIssue(taskId, linkId));
+        if ("unlinked" in answer) {
+          yield* retag(taskId, (tags) => tags.filter((each) => each.id !== linkId));
+        }
+        return carried<TasksIssueUnlinkAnswer>(answer);
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps

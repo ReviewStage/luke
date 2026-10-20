@@ -2830,6 +2830,54 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a link made, related, and unlinked on a task's page lands on its row of the list in place, as the Board's tags, and nothing is read again",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.issueLinks[INVITES] = [];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const reads = service.reads.length;
+      const tagsOf = () => last()?.tasks.find((each) => each.id === INVITES)?.issues;
+
+      yield* call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
+        taskId: INVITES,
+        issue: { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "ENG-42" },
+      });
+      yield* call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
+        taskId: INVITES,
+        issue: { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "ENG-7" },
+      });
+      const [first, second] = service.issueLinks[INVITES] ?? [];
+      assert.ok(first !== undefined && second !== undefined, "both were linked");
+      assert.deepEqual(
+        tagsOf()?.map(({ key, relation }) => [key, relation]),
+        [
+          ["ENG-42", TASK_ISSUE_RELATION.CLOSES],
+          ["ENG-7", TASK_ISSUE_RELATION.CLOSES],
+        ],
+      );
+
+      yield* call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
+        taskId: INVITES,
+        linkId: second.id,
+        relation: TASK_ISSUE_RELATION.PART_OF,
+      });
+      assert.equal(tagsOf()?.[1]?.relation, TASK_ISSUE_RELATION.PART_OF);
+
+      yield* call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId: INVITES, linkId: first.id });
+      assert.deepEqual(
+        tagsOf()?.map(({ key }) => key),
+        ["ENG-7"],
+      );
+      yield* call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId: INVITES, linkId: second.id });
+      assert.equal(tagsOf(), undefined, "a task left linking nothing names no tags");
+      assert.equal(service.reads.length, reads, "the list is not read again");
+    }),
+);
+
 it.effect("the repository chip's read names the workspace it is for to the service", () =>
   Effect.gen(function* () {
     const service = fakeService([]);

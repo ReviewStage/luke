@@ -4,9 +4,10 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueProvider,
   type TaskIssueRelation,
+  type TaskIssueTag,
 } from "@luke/features/task-issue-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
-import { and, asc, count, eq, exists, max, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, exists, inArray, max, type SQL } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
@@ -14,7 +15,7 @@ import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
 import { InstantColumnSchema } from "./columns.js";
 import { TaskArchived } from "./task-store.js";
-import { reachableTask } from "./workspace-store.js";
+import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
  * task-issue-store.ts -- the external issues a task links, as the members of its workspace link, read, and change them.
@@ -202,6 +203,35 @@ const findLinks = SqlSchema.findAll({
     ),
 });
 
+/** The tags of every link of the tasks named, each beside its task, where the account reaches the task; oldest linked first. */
+const findTags = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    taskId: Schema.String,
+    id: Schema.String,
+    provider: Schema.Literals(Object.values(TASK_ISSUE_PROVIDER)),
+    key: Schema.String,
+    url: Schema.String,
+    relation: Schema.Literals(Object.values(TASK_ISSUE_RELATION)),
+  }),
+  execute: ({ userId, taskIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          taskId: taskIssue.taskId,
+          id: taskIssue.id,
+          provider: taskIssue.provider,
+          key: taskIssue.key,
+          url: taskIssue.url,
+          relation: taskIssue.relation,
+        })
+        .from(taskIssue)
+        .innerJoin(task, eq(task.id, taskIssue.taskId))
+        .where(and(inArray(taskIssue.taskId, [...taskIds]), taskReachableBy(userId)))
+        .orderBy(asc(taskIssue.createdAt), asc(taskIssue.id)),
+    ),
+});
+
 const updateRelation = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...LinkKeySchema.fields,
@@ -324,6 +354,31 @@ export function listTaskIssues(
   taskId: string,
 ): Effect.Effect<readonly TaskIssueLink[], TaskIssueStoreFailure, DatabaseServices> {
   return findLinks({ userId, taskId });
+}
+
+/**
+ * The issues each of the tasks named links, as the task list's tags name
+ * them, oldest linked first, read in one statement for the whole list; a
+ * task that links none, or that the account does not reach, is absent.
+ */
+export function listTaskIssueTags(
+  userId: string,
+  taskIds: readonly string[],
+): Effect.Effect<
+  ReadonlyMap<string, readonly TaskIssueTag[]>,
+  TaskIssueStoreFailure,
+  DatabaseServices
+> {
+  if (taskIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(findTags({ userId, taskIds }), (rows) => {
+    const tags = new Map<string, TaskIssueTag[]>();
+    for (const { taskId, ...tag } of rows) {
+      const held = tags.get(taskId);
+      if (held === undefined) tags.set(taskId, [tag]);
+      else held.push(tag);
+    }
+    return tags;
+  });
 }
 
 /**

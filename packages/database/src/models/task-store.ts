@@ -45,6 +45,7 @@ import { readTemplateAt } from "./plan-template-revisions.js";
 import {
   linkTaskIssue,
   listTaskIssues,
+  listTaskIssueTags,
   type NewTaskIssueLink,
   type TaskIssueLink,
 } from "./task-issue-store.js";
@@ -1008,7 +1009,8 @@ export function createTaskOnce(
 
 /**
  * Every task of every workspace the account is a member of, newest started first, without their documents,
- * and without the archived ones unless `includeArchived` asks for them.
+ * and without the archived ones unless `includeArchived` asks for them; each
+ * with the issues it links, read for the whole list at once.
  * Nothing but starting a task moves the order: opening, reading, saving,
  * pinning, and archiving one leave every row where it stood, and the order a
  * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
@@ -1020,13 +1022,19 @@ export function listTasks(
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId, includeArchived: options.includeArchived === true });
     const names = yield* readAccountNames(rows.map((row) => row.userId));
-    return rows.map((row) =>
-      summaryOf(
+    const tags = yield* listTaskIssueTags(
+      userId,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => {
+      const summary = summaryOf(
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
         names,
-      ),
-    );
+      );
+      const issues = tags.get(row.id);
+      return issues === undefined ? summary : { ...summary, issues };
+    });
   });
 }
 

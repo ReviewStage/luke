@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -63,13 +64,21 @@ let keeps = true;
 /** How many times the board was closed. */
 let closed = 0;
 
+/** The pages the board opened, in order. */
+let pages: string[] = [];
+
 beforeEach(() => {
   opened = [];
   sent = [];
   keeps = true;
   closed = 0;
+  pages = [];
   window.localStorage.clear();
-  fakeAppPlatform(QUIET_PANEL);
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    openGitHub: (url) => pages.push(url),
+    openWeb: (url) => pages.push(url),
+  });
   fakeAppBridge({
     act: (): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
@@ -294,4 +303,61 @@ test("a card dragged onto Done whose change the service refused says so", async 
 
   assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.DONE }]]);
   assert.match(newestToastSays() ?? "", /Couldn't change the task\. Try again\./);
+});
+
+test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number, and a press on a tag opens the issue", async () => {
+  const linked: TaskSummary = {
+    ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+    issues: [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        provider: TASK_ISSUE_PROVIDER.GITHUB,
+        key: "acme/web#312",
+        url: "https://github.com/acme/web/issues/312",
+        relation: TASK_ISSUE_RELATION.CLOSES,
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000002",
+        provider: TASK_ISSUE_PROVIDER.LINEAR,
+        key: "ENG-455",
+        url: "https://linear.app/acme/issue/ENG-455",
+        relation: TASK_ISSUE_RELATION.CLOSES,
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000003",
+        provider: TASK_ISSUE_PROVIDER.GITHUB,
+        key: "Acme/Auth#270",
+        url: "https://github.com/acme/auth/issues/270",
+        relation: TASK_ISSUE_RELATION.PART_OF,
+      },
+    ],
+  };
+  const board = await mountBoard([
+    linked,
+    task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+  ]);
+
+  const tagsOf = (taskId: string) => [
+    ...board.querySelectorAll<HTMLButtonElement>(
+      `li[data-task-id="${taskId}"] .tasks-board-tags button`,
+    ),
+  ];
+  const tags = tagsOf("t-42");
+  assert.deepEqual(
+    tags.map((tag) => [tag.getAttribute("data-provider"), tag.textContent]),
+    [
+      [TASK_ISSUE_PROVIDER.GITHUB, "#312"],
+      [TASK_ISSUE_PROVIDER.LINEAR, "ENG-455"],
+      [TASK_ISSUE_PROVIDER.GITHUB, "Acme/Auth#270"],
+    ],
+  );
+  assert.ok(
+    tags.every((tag) => tag.querySelector("svg")),
+    "each tag wears its provider's mark",
+  );
+  assert.deepEqual(tagsOf("t-39"), [], "a task that links nothing draws no tags");
+
+  act(() => tags[1]?.click());
+  assert.deepEqual(pages, ["https://linear.app/acme/issue/ENG-455"]);
+  assert.deepEqual(opened, [], "a press on a tag opens the issue, not the task");
 });
