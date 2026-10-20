@@ -179,6 +179,12 @@ let root: Root | undefined;
 const standIn: DiffViewModule = {
   colourLines: () => Promise.resolve(undefined),
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
+  mountFile: () => ({
+    update: () => undefined,
+    revealLines: () => undefined,
+    pickedLines: () => undefined,
+    unmount: () => undefined,
+  }),
   mountList: (_host, props) => {
     drawn.push(props);
     return {

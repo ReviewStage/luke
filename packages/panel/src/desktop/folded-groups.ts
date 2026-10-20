@@ -60,6 +60,7 @@ const STORAGE_KEY = {
   INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
+  INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   CHAT_LIST_WIDTH: "luke.chatListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
@@ -329,6 +330,9 @@ export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
   /** Whether each row shows the pictures and pages its item carries, drawn small under its preview. */
   mediaPreviews: boolean;
   onMediaPreviews: (mediaPreviews: boolean) => void;
+  /** Whether each row shows its second line, what its item asks or how it ended, under its title; off, every row is one line. */
+  secondLine: boolean;
+  onSecondLine: (secondLine: boolean) => void;
 }
 
 /** Whose items the window's Inbox lists, and the press that lists another's. */
@@ -419,6 +423,11 @@ export function useInboxViewChoices(): InboxViewChoices {
     storedFlag,
     false,
   );
+  const [secondLine, onSecondLine] = useKeptChoice<boolean>(
+    STORAGE_KEY.INBOX_SECOND_LINE,
+    storedFlag,
+    true,
+  );
   return {
     ...shown,
     grouping,
@@ -429,6 +438,8 @@ export function useInboxViewChoices(): InboxViewChoices {
     onWhose,
     mediaPreviews,
     onMediaPreviews,
+    secondLine,
+    onSecondLine,
   };
 }
 

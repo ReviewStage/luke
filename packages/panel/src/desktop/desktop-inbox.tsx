@@ -219,7 +219,7 @@ function InboxShown({
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
   });
@@ -231,6 +231,7 @@ function InboxShown({
     ),
     open,
     folds.folded,
+    direction,
   );
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.

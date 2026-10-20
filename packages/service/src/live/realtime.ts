@@ -23,7 +23,12 @@ import { databaseUrl } from "../db/index.js";
 export const REALTIME_ENVIRONMENT = {
   URL: "NEON_REALTIME_URL",
   SECRET: "NEON_REALTIME_SECRET",
+  /** Luke's own switch: Realtime is used only where this reads `on`, so a deployment keeps Neon's variables while it is off. */
+  SWITCH: "LUKE_REALTIME",
 } as const;
+
+/** The value of `LUKE_REALTIME` that turns Realtime on; anything else, or none, leaves it off. */
+const REALTIME_ON = "on";
 
 /** Why a statement could not be sealed: the secret refused it. */
 export class SealRefused extends Data.TaggedError("SealRefused")<{ readonly reason: string }> {}
@@ -119,19 +124,23 @@ function liveSealer(options: {
 }
 
 /**
- * Realtime as the deployment's environment configures it: on where both of
- * its variables and the database name stand, off where any is missing or
- * blank, so a deployment turns it on by setting them and off by removing
- * them. A secret Realtime refuses leaves it off, said once in the log.
+ * Realtime as the deployment's environment configures it: on only where
+ * `LUKE_REALTIME` is `on` and both of Neon's variables and the database name
+ * stand, off otherwise, when every live read is answered polled. So a
+ * deployment keeps Neon's variables and turns Realtime on or off with the
+ * switch alone. A secret Realtime refuses leaves it off, said once in the log.
  */
 export const liveSealingFromEnvironment = Layer.effect(
   LiveSealing,
   Effect.gen(function* () {
     const read = yield* Config.all({
+      switch: Config.option(Config.String(REALTIME_ENVIRONMENT.SWITCH)),
       url: Config.option(Config.String(REALTIME_ENVIRONMENT.URL)),
       secret: Config.option(Config.Redacted(REALTIME_ENVIRONMENT.SECRET)),
       database: Config.option(databaseUrl),
     });
+    // Off by choice: every live read is answered polled, said nowhere, since nothing is wrong.
+    if (Option.getOrUndefined(read.switch)?.trim() !== REALTIME_ON) return Option.none();
     const url = Option.getOrUndefined(read.url)?.trim();
     const secret = Option.getOrUndefined(read.secret);
     const database = Option.flatMap(read.database, databaseNameOf);

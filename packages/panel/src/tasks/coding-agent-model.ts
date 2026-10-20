@@ -216,6 +216,20 @@ export function archivedByReading(
   };
 }
 
+/**
+ * A subagent or a brain's worker as its card's tile draws it: the harness
+ * its model runs in, or the empty box where the model is not known, giving
+ * way to the working mark while it works, as an agent's tile does.
+ */
+export function subagentActor(model: string | undefined, state: GlyphState, name: string): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: model === undefined ? undefined : providerOf(model),
+    state: ACTOR_STATE_OF_GLYPH[state],
+  };
+}
+
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
 export function agentActor(
   agent: { readonly model: string; readonly status: CodingAgentStatus },
@@ -329,7 +343,7 @@ export function endLineReason(
     : FAILURE_REASON.OTHER;
 }
 
-/** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
+/** The statuses an agent may still write under, which is when it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
@@ -353,15 +367,6 @@ export function agentGlyphState(status: CodingAgentStatus): GlyphState {
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: CodingAgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
-}
-
-/**
- * Whether an agent's transcript is read on the held long-poll now: only
- * while its tab is on screen and the agent may still write. A tab hidden,
- * a task left, and an agent that ended each stop the reads.
- */
-export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
-  return input.shown && agentStillWriting(input.status);
 }
 
 /** What the Start button says while it cannot start: the task names no repository yet. */

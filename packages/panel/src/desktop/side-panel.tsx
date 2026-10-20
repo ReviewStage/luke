@@ -1,5 +1,6 @@
 import type { Board } from "@luke/features/board-wire";
 import type { BrowserPage } from "@luke/features/browser-acts";
+import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -85,7 +86,12 @@ import {
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
-import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model.js";
+import {
+  agentGlyphState,
+  agentStateWords,
+  agentTabLabel,
+  subagentActor,
+} from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
@@ -1124,6 +1130,13 @@ export function workerCardReading(
       state: stateWords,
     }),
     choice: worker && workerChoice(worker),
+    tile:
+      worker &&
+      subagentActor(
+        workerChoice(worker)?.model,
+        state,
+        worker.session?.title ?? workerJob(worker.call),
+      ),
     transcript:
       worker &&
       messages &&
@@ -1231,6 +1244,7 @@ function subagentCardReading(
     const running = state === GLYPH_STATE.WORKING;
     const own = held.workers.get(tab.subagent);
     const messages = heldLatest(own, { writing: running, runStartedAt: own?.runStartedAt }, chosen);
+    const choices = delegationChoices(delegation, tab.subagent, agents, held);
     return {
       corner: cardCorner({
         writing: running,
@@ -1238,7 +1252,9 @@ function subagentCardReading(
         movedAt: lastFinished(messages),
         state: stateWords,
       }),
-      choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
+      choice: choices.delegated,
+      // Note that the tile falls back on its agent's model, as the worker's tab does, until the call that started it is held.
+      tile: subagentActor((choices.delegated ?? choices.own)?.model, state, label),
       transcript:
         messages &&
         agentTranscript({
@@ -1366,7 +1382,6 @@ function TabContent({
   files,
   pages,
   transcript,
-  work,
   workRows,
   agents,
   standings,
@@ -1403,7 +1418,6 @@ function TabContent({
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
   transcript: SidePanelTranscript;
-  work: SidePanelWork;
   /** The task's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
@@ -1551,8 +1565,6 @@ function TabContent({
     );
   }
   if (isSubagentTab(tab)) {
-    // A brain's worker's tab is an agent's worker's own, reading its session under the task.
-    const tasksWorkers = { ...agents, readTranscript: work.readWorker };
     if (tab.delegation !== undefined) {
       const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
       const { subagent } = tab;
@@ -1592,7 +1604,9 @@ function TabContent({
         callId={tab.subagent}
         task={worker.task}
         status={workerStatus(worker)}
-        control={tasksWorkers}
+        control={agents}
+        // A brain's worker's tab is an agent's worker's own, following its session under the task.
+        transcriptKey={{ kind: TRANSCRIPT_KIND.TASK_WORKER, taskId, callId: tab.subagent }}
         shown={shown}
         // Where a brain's worker stands is the plan's pages' to say, beside its call.
         onStatus={() => undefined}
@@ -2137,7 +2151,6 @@ export function SidePanel({
             files={files}
             pages={taskPages}
             transcript={transcript}
-            work={work}
             workRows={workRows}
             agents={agents}
             standings={standings}

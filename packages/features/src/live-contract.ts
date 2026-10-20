@@ -412,7 +412,7 @@ export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
  * its own since can drop a draft that does not hold it; the saved one
  * carries who last changed each section, which each section's line reads.
  */
-export const planDraftFrameSchema = Schema.Struct({
+const planDraftFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
   planId: wireUuidSchema,
   document: planDocumentSchema,
@@ -427,7 +427,7 @@ export const planDraftFrameSchema = Schema.Struct({
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
 
 /** The activity on the call about the task named, as the service sends it to the desktop. */
-export const taskActivityFrameSchema = Schema.Struct({
+const taskActivityFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_ACTIVITY),
   planId: wireUuidSchema,
   ...taskActivitySchema.fields,
@@ -441,7 +441,7 @@ export type TaskActivityFrame = typeof taskActivityFrameSchema.Type;
  * call and turn that showed it, as the task's work reads them back, so the
  * desktop holds a call's code and the record's copy of it once.
  */
-export const taskCodeFrameSchema = Schema.Struct({
+const taskCodeFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CODE),
   planId: wireUuidSchema,
   ...taskShownCodeSchema.fields,
@@ -450,7 +450,7 @@ export const taskCodeFrameSchema = Schema.Struct({
 export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
 
 /** One brain turn's work on the call about the task named, as the service sends it to the desktop. */
-export const taskWorkFrameSchema = Schema.Struct({
+const taskWorkFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_WORK),
   planId: wireUuidSchema,
   turn: taskWorkTurnSchema,
@@ -459,7 +459,7 @@ export const taskWorkFrameSchema = Schema.Struct({
 export type TaskWorkFrame = typeof taskWorkFrameSchema.Type;
 
 /** Luke is ending the call about the task named, once his goodbye has played. */
-export const taskCallEndingFrameSchema = Schema.Struct({
+const taskCallEndingFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
   planId: wireUuidSchema,
 });
@@ -576,7 +576,7 @@ export const avatarStopFrameSchema = Schema.Struct({
 export type AvatarStopFrame = typeof avatarStopFrameSchema.Type;
 
 /** Either avatar frame the desktop sends after the handshake, read by the service and forwarded nowhere. */
-export const avatarRequestFrameSchema = Schema.Union([
+const avatarRequestFrameSchema = Schema.Union([
   avatarStartFrameSchema,
   avatarStopFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
@@ -588,7 +588,7 @@ export type AvatarRequestFrame = typeof avatarRequestFrameSchema.Type;
  * as its create-session call answered it, the LiveKit server, the participant token the call
  * window joins with, and the identity the avatar publishes its tracks under.
  */
-export const avatarStartedFrameSchema = Schema.Struct({
+const avatarStartedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STARTED),
   requestId: avatarRequestId,
   ...avatarGrantSchema.fields,
@@ -597,7 +597,7 @@ export const avatarStartedFrameSchema = Schema.Struct({
 export type AvatarStartedFrame = typeof avatarStartedFrameSchema.Type;
 
 /** The avatar the request asked for could not come up, and why; the call goes on as voice. */
-export const avatarUnavailableFrameSchema = Schema.Struct({
+const avatarUnavailableFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE),
   requestId: avatarRequestId,
   reason: answeredReason(Object.values(AVATAR_UNAVAILABLE_REASON), AVATAR_UNAVAILABLE_REASON.ERROR),

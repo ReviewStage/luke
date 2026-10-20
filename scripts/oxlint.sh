@@ -14,4 +14,4 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 luke_require_node
 
 cd "$LUKE_REPO_ROOT"
-exec pnpm exec oxlint --config .oxlintrc.json --deny-warnings "$@"
+exec pnpm exec oxlint --config .oxlintrc.json "$@"

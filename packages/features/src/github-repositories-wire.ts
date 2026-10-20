@@ -337,13 +337,13 @@ export function isOutsideAuthor(association: string): boolean {
 }
 
 /** A GitHub issue's node id, which survives a rename or a transfer of its repository. */
-export const githubIssueNodeIdSchema = EffectSchema.String.check(
+const githubIssueNodeIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_NODE_ID_CHARS),
 );
 
 /** One issue as New task's picker lists it: what a person picks it by, and who opened it. */
-export const githubIssuePickSchema = EffectSchema.Struct({
+const githubIssuePickSchema = EffectSchema.Struct({
   nodeId: githubIssueNodeIdSchema,
   /** `owner/name` as GitHub spells it. */
   repository: githubRepositoryFullNameSchema,

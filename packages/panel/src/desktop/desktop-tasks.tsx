@@ -2,7 +2,6 @@ import type { CodingAgentAttachment, CodingAgentStatus } from "@luke/features/co
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
-import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -76,7 +75,7 @@ import {
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
 import { CallBar } from "../tasks/tasks-parts.js";
-import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands.js";
+import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
@@ -88,6 +87,7 @@ import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { workRowsOf } from "../tasks/work-model.js";
 import { useCapability } from "../use-app-state.js";
+import { useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopHome } from "./desktop-home.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -281,7 +281,7 @@ function TaskInboxTab({
     active: shown,
     onMark: marks.onMark,
   });
-  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown,
     folded: NO_FOLDS,
   });
@@ -298,6 +298,7 @@ function TaskInboxTab({
     ),
     open,
     NO_FOLDS,
+    direction,
   );
   return (
     <section
@@ -448,8 +449,6 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
-  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
-  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -470,7 +469,12 @@ function PlanDocument({
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  const openTerminal = useOpenTerminal(tasks.sidePanel, showSide);
+  // Open terminal and Run open an agent's terminals as on every surface that draws it (`agent-actions.tsx`).
+  const terminalDoors = useAgentTerminalDoors(
+    tasks.sidePanel,
+    region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
+    showSide,
+  );
   // A refusal is said beside the chip, under the task it was about and no
   // other. Note that it is held above the states with no document, because
   // a task opened from the list is drawn reading before its read lands, and
@@ -827,16 +831,6 @@ function PlanDocument({
   const openTaskLink = (href: string) => {
     if (!openHere(href)) openLink(href);
   };
-  // Run opens the agent's run on this Mac in the side panel at once;
-  // the tab reads the agent's pushed branch and starts it (`mac-terminal-tab.tsx`).
-  const { repository } = task;
-  const openOnMac =
-    repository === null || !macTerminalOffered
-      ? undefined
-      : (agentId: string) => {
-          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
-          showSide();
-        };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
   // A summary row that opens a tab of the side panel hands the panel the
@@ -939,12 +933,8 @@ function PlanDocument({
                             shown={tasks.shown}
                             chat={chatOn && tasks.chatView.available}
                             actionsSlot={actionsSlot}
-                            onOpenTerminal={
-                              terminalsOffered
-                                ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
-                                : undefined
-                            }
-                            onOpenOnMac={openOnMac}
+                            onOpenTerminal={terminalDoors.onOpenTerminal}
+                            onOpenOnMac={terminalDoors.onOpenOnMac}
                           />
                         }
                       >
@@ -959,7 +949,7 @@ function PlanDocument({
                           </p>
                         ) : null}
                         <CopyChord copy={tasks.copy} />
-                        {terminalsOffered ? (
+                        {terminalDoors.terminals ? (
                           <TerminalCommands
                             here={terminalHere}
                             agents={agents}
