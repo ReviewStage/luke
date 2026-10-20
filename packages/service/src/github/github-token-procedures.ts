@@ -1,4 +1,30 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+/**
+ * github-token-procedures.ts -- the member's own classic GitHub personal access token: read what it is, save one, remove it.
+ *
+ * `GET /api/github/token` answers the member's token as its login, hint,
+ * status, and expiry; `PUT` saves one, first asking GitHub whose it is with
+ * one `GET /user` on it, and keeps it sealed
+ * (`@luke/database/models/provider-key-seal`) only where GitHub accepts it,
+ * it carries the `repo` scope, and it is the member's own linked GitHub
+ * account's; `DELETE` removes it. A fine-grained token is refused before it
+ * is sent anywhere. Every answer is the token as it then stands and none
+ * carries it: the one body that holds a token is the `PUT`'s own, it is
+ * sealed the moment it is checked, and neither it nor what GitHub said of it
+ * is logged. A save whose body its schema refuses is answered as the bare
+ * `invalid-request` slug (`orpc/errors.ts`), so what the schema said of the
+ * token never leaves the function.
+ *
+ * The path answers only while the member has the GitHub token experiment on
+ * (`EXPERIMENT.GITHUB_TOKEN`), and as a path that names nothing otherwise.
+ * A deployment holding no ring, or one it cannot parse, answers every
+ * request unavailable. The caller, the experiment, the ring, and the save's
+ * body bound are each checked on the resource's implementer, in that order,
+ * so they run before oRPC reads the save's body, as the old group checked
+ * them before it read one. A save is braked per member, ten an hour, as the
+ * provider keys' is, so the endpoint is no oracle for tokens that are not
+ * the caller's.
+ */
+
 import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   type GitHubTokenRow,
@@ -13,57 +39,32 @@ import {
   parseKeyRing,
   sealGitHubToken,
 } from "@luke/database/models/provider-key-seal";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
+  type GitHubTokenAnswer,
   type GitHubTokenRejection,
   type GitHubTokenSummary,
-  githubTokenSaveRequestSchema,
 } from "@luke/features/github-token-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { readEither } from "@luke/wire/effect";
-import { DateTime, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
-import { HttpClient, HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import { middlewareGen } from "@orpc/experimental-effect";
+import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
+import { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
   hostedStoreOrUnavailable,
-  readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { makeRateBrake, type RateBrake } from "../http/rate-brake.js";
-import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { makeRateBrake } from "../http/rate-brake.js";
+import {
+  accountMiddleware,
+  bodyLimit,
+  type HostedCaller,
+  type HostedContext,
+  hosted,
+} from "../orpc/base.js";
 import { githubRead } from "./github-app.js";
-
-/**
- * github-token-app.ts -- the member's own classic GitHub personal access token: read what it is, save one, remove it.
- *
- * `GET /api/github/token` answers the member's token as its login, hint,
- * status, and expiry; `PUT` saves one, first asking GitHub whose it is with
- * one `GET /user` on it, and keeps it sealed
- * (`@luke/database/models/provider-key-seal`) only where GitHub accepts it,
- * it carries the `repo` scope, and it is the member's own linked GitHub
- * account's; `DELETE` removes it. A fine-grained token is refused before it
- * is sent anywhere. Every answer is the token as it then stands and none
- * carries it: the one body that holds a token is the `PUT`'s own, it is
- * sealed the moment it is checked, and neither it nor what GitHub said of it
- * is logged.
- *
- * The path answers only while the member has the GitHub token experiment on
- * (`EXPERIMENT.GITHUB_TOKEN`), and as a path that names nothing otherwise.
- * A deployment holding no ring, or one it cannot parse, answers every
- * request unavailable. A save is braked per member, ten an hour, as the
- * provider keys' is, so the endpoint is no oracle for tokens that are not
- * the caller's.
- */
-
-const HTTP_METHOD = { GET: "GET", PUT: "PUT", DELETE: "DELETE" } as const;
 
 /** A save is one token bounded at 255 characters, so a body past this is not one. */
 const MAXIMUM_SAVE_BODY_BYTES = 1_024;
@@ -104,15 +105,9 @@ const HINT_TAIL_CHARS = 4;
 
 const GitHubUserSchema = Schema.Struct({ id: Schema.Number, login: Schema.String });
 
-export interface GitHubTokenAppSeams {
+export interface GitHubTokenProcedureSeams {
   resolveUserId: UserIdResolver;
 }
-
-type GitHubTokenRequirements =
-  | HttpServerRequest.HttpServerRequest
-  | DatabaseServices
-  | HostedEnvironment
-  | HttpClient.HttpClient;
 
 /** What GitHub said of a token it accepted. */
 interface CheckedToken {
@@ -195,8 +190,22 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/** The deployment's ring, or the request refused as unavailable where it holds none it can parse. */
-const keyRingOrUnavailable = Effect.gen(function* () {
+/** The path names nothing for a member without the GitHub token experiment on. */
+const experimentMiddleware = middlewareGen<HostedContext & HostedCaller>(function* ({
+  context,
+  next,
+}) {
+  const on = yield* hostedStoreOrUnavailable(
+    accountExperimentOn(context.userId, EXPERIMENT.GITHUB_TOKEN),
+  );
+  if (!on) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return yield* next();
+});
+
+/** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
+const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(function* ({
+  next,
+}) {
   const configured = (yield* HostedEnvironment).providerKeyEncryptionKeys;
   if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const ring = parseKeyRing(configured);
@@ -205,7 +214,7 @@ const keyRingOrUnavailable = Effect.gen(function* () {
     yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
-  return ring.success;
+  return yield* next({ context: { ring: ring.success } });
 });
 
 /** The token as the member is shown it, answered unreadable where the ring cannot open it. */
@@ -221,80 +230,51 @@ function summaryOf(userId: string, ring: KeyRing, row: GitHubTokenRow): GitHubTo
   };
 }
 
-const tokenResponse = /* @__PURE__ */ Effect.fnUntraced(function* (
+const tokenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   ring: KeyRing,
   rejected?: GitHubTokenRejection,
 ) {
   const row = yield* hostedStoreOrUnavailable(readGitHubTokenRow(userId));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+  return {
     token: row === undefined ? null : summaryOf(userId, ring, row),
     ...(rejected === undefined ? undefined : { rejected }),
-  });
+  } satisfies GitHubTokenAnswer;
 });
 
-/** A save: braked, checked with GitHub, and kept sealed only where GitHub accepts it as the member's own. */
-const saveEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  ring: KeyRing,
-  brake: RateBrake,
-) {
-  const body = yield* readJsonBodyEffect(MAXIMUM_SAVE_BODY_BYTES);
-  // Note that a refusal's wording is never logged or answered, because it may quote the token.
-  const asked = readEither(githubTokenSaveRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const token = Redacted.make(asked.success.token);
-  if (!(yield* brake.check(userId))) {
-    return yield* tokenResponse(userId, ring, GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES);
-  }
-  const linked = yield* hostedStoreOrUnavailable(linkedGitHubUserIds(userId));
-  const checked = yield* checkGitHubToken(token, linked);
-  if (Result.isFailure(checked)) return yield* tokenResponse(userId, ring, checked.failure);
-  const now = yield* DateTime.nowAsDate;
-  const facts = { hint: tokenHint(token), ...checked.success };
-  yield* hostedStoreOrUnavailable(
-    saveGitHubToken(userId, sealGitHubToken(ring, userId, token), facts, now),
-  );
-  return yield* tokenResponse(userId, ring);
-});
-
-const githubTokenEndpoint = /* @__PURE__ */ Effect.fn("web/githubTokenEndpoint")(function* (
-  seams: GitHubTokenAppSeams,
-  brake: RateBrake,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, GitHubTokenRequirements> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (!Object.values(HTTP_METHOD).some((method) => method === incoming.method)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const userId = account.value;
-  const on = yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.GITHUB_TOKEN));
-  if (!on) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const ring = yield* keyRingOrUnavailable;
-  switch (incoming.method) {
-    case HTTP_METHOD.PUT:
-      return yield* saveEndpoint(userId, ring, brake);
-    case HTTP_METHOD.DELETE:
-      yield* hostedStoreOrUnavailable(removeGitHubToken(userId));
-      return yield* tokenResponse(userId, ring);
-    default:
-      return yield* tokenResponse(userId, ring);
-  }
-});
-
-/** The group: the one token path, braked per instance, and the hosted vocabulary's own refusal for any other. */
-export function githubTokenApp(
-  seams: GitHubTokenAppSeams,
-): WebRoutes<DatabaseServices | HostedEnvironment | HttpClient.HttpClient> {
+/** The token's three procedures, braked per instance, each to a signed-in member with the experiment on, on a deployment that holds a ring. */
+export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
   const brake = makeRateBrake(SAVE_BRAKE);
-  return Layer.mergeAll(
-    HttpRouter.add(
-      ANY_METHOD,
-      HOSTED_SERVICE_PATH.GITHUB_TOKEN,
-      hostedRefusing(githubTokenEndpoint(seams, brake)),
-    ),
-    hostedNotFoundRoute,
-  );
+  const held = hosted.githubToken
+    .use(accountMiddleware(seams.resolveUserId))
+    .use(experimentMiddleware)
+    .use(keyRingMiddleware);
+  return {
+    read: held.read.effect(function* ({ context }) {
+      return yield* tokenAnswer(context.userId, context.ring);
+    }),
+
+    /** A save: braked, checked with GitHub, and kept sealed only where GitHub accepts it as the member's own. */
+    save: held.use(bodyLimit(MAXIMUM_SAVE_BODY_BYTES)).save.effect(function* ({ context, input }) {
+      const { userId, ring } = context;
+      const token = Redacted.make(input.token);
+      if (!(yield* brake.check(userId))) {
+        return yield* tokenAnswer(userId, ring, GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES);
+      }
+      const linked = yield* hostedStoreOrUnavailable(linkedGitHubUserIds(userId));
+      const checked = yield* checkGitHubToken(token, linked);
+      if (Result.isFailure(checked)) return yield* tokenAnswer(userId, ring, checked.failure);
+      const now = yield* DateTime.nowAsDate;
+      const facts = { hint: tokenHint(token), ...checked.success };
+      yield* hostedStoreOrUnavailable(
+        saveGitHubToken(userId, sealGitHubToken(ring, userId, token), facts, now),
+      );
+      return yield* tokenAnswer(userId, ring);
+    }),
+
+    remove: held.remove.effect(function* ({ context }) {
+      yield* hostedStoreOrUnavailable(removeGitHubToken(context.userId));
+      return yield* tokenAnswer(context.userId, context.ring);
+    }),
+  };
 }

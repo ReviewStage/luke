@@ -325,10 +325,3 @@ export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireVal
     catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
 }
-
-/** The request's JSON body as the unparsed wire value a schema reads next, bounded as `readBodyBytesEffect` bounds it. */
-export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
-  maximumBytes: number,
-): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return yield* parseJsonBytes(yield* readBodyBytesEffect(maximumBytes));
-});
