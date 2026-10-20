@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fixedBearer } from "@luke/features";
 import { fakeHttpClientLayer, jsonResponse } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AppAccessSlice } from "./app-state.js";
 
@@ -148,20 +148,33 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
 
 it.effect("a read still out across a sign-out and the same account's return is dropped", () =>
   Effect.gen(function* () {
-    let whileAnswering = () => undefined;
-    const accessClient = client(async () => {
-      whileAnswering();
-      return jsonResponse({ admin: true });
-    });
-    const { held, published } = holder(accessClient, "admin@luke.test");
-    // The gate closes and the same account signs back in while the read is out.
-    whileAnswering = () => {
-      Effect.runSync(held.forget);
-      return undefined;
-    };
+    // The service answers at once, but holds its body open until the test lets it go.
+    let body: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const held = service([
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              body = controller;
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    ]);
+    const { held: access, published } = holder(held.client, "admin@luke.test");
 
-    yield* held.refresh;
-    assert.deepEqual(held.current(), { admin: false });
+    const reading = yield* Effect.forkChild(access.refresh);
+    for (let turn = 0; turn < 1_000 && body === undefined; turn += 1) yield* Effect.yieldNow;
+    // The gate closes and the same account signs back in while the read is out.
+    yield* access.forget;
+    yield* Effect.sync(() => {
+      body?.enqueue(new TextEncoder().encode(JSON.stringify({ admin: true })));
+      body?.close();
+    });
+    yield* Fiber.join(reading);
+
+    assert.equal(held.requests.length, 1);
+    assert.deepEqual(access.current(), { admin: false });
     assert.deepEqual(published, [{ admin: false }]);
   }),
 );
