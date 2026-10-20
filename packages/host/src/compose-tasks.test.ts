@@ -98,7 +98,7 @@ import {
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
-import { Deferred, Duration, Effect, Equal, Exit, Fiber, Queue, Result } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
 
@@ -182,8 +182,8 @@ interface FakeService extends TasksClient {
   >;
   /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
-  /** Every pull request read that reached the service, as `repository#number`, and the gate it waits on before it answers, where one is set. */
-  pullRequestReads: string[];
+  /** How many more pull request reads the service answers before it answers nothing, as GitHub refusing an App over its rate limit; none for no limit. And the gate a read waits on before it answers, where one is set. */
+  pullRequestQuota: number | undefined;
   pullRequestGate: Deferred.Deferred<void> | undefined;
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
@@ -355,7 +355,7 @@ function fakeService(tasks: Task[]): FakeService {
     skills: {},
     places: {},
     pullRequests: {},
-    pullRequestReads: [],
+    pullRequestQuota: undefined,
     pullRequestGate: undefined,
     issues: {},
     repositoryIssues: {},
@@ -695,8 +695,11 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
     readRepositoryPullRequest: (place, number) =>
       Effect.gen(function* () {
-        service.pullRequestReads.push(`${place.repository}#${number}`);
         if (service.pullRequestGate !== undefined) yield* Deferred.await(service.pullRequestGate);
+        if (service.pullRequestQuota !== undefined) {
+          if (service.pullRequestQuota === 0) return undefined;
+          service.pullRequestQuota -= 1;
+        }
         return service.pullRequests[place.workspaceId]?.[place.repository]?.get(number);
       }),
     readRepositoryIssue: (place, number) =>
@@ -2754,7 +2757,7 @@ it.effect(
 );
 
 it.effect(
-  "a pull request's read is kept for every link: many links asking at once reach the service once, and a change on GitHub is answered once the minute it was kept for passes",
+  "a pull request's read is kept for every link: forty links asking at once of a service that answers one read all get its answer, and a change on GitHub is answered once the minute it was kept for passes",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2768,6 +2771,7 @@ it.effect(
       });
       service.pullRequests[ACME.id] = { "acme/relay": new Map([[42, answered("Batch invites")]]) };
       service.pullRequestGate = yield* Deferred.make<void>();
+      service.pullRequestQuota = 1;
       const { call } = yield* subject(service);
       const asked = call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
         workspaceId: ACME.id,
@@ -2788,12 +2792,12 @@ it.effect(
         "acme/relay": new Map([[42, answered("Send invites in batches")]]),
       };
       const withinTheMinute = yield* asked;
+      service.pullRequestQuota = 1;
       yield* TestClock.adjust(Duration.minutes(1));
       const afterIt = yield* asked;
 
-      assert.deepEqual(service.pullRequestReads, ["acme/relay#42", "acme/relay#42"]);
-      assert.ok(first.every((one) => Equal.equals(one, first[0])));
-      assert.deepEqual(first[0], answered("Batch invites"));
+      assert.equal(first.length, 40);
+      for (const one of first) assert.deepEqual(one, answered("Batch invites"));
       assert.deepEqual(withinTheMinute, answered("Batch invites"));
       assert.deepEqual(afterIt, answered("Send invites in batches"));
     }),
@@ -2895,6 +2899,52 @@ it.effect(
       assert.ok(Exit.isFailure(offTheWire), "an issue is numbered from one");
       assert.deepEqual(gated, { failure: TASK_CALL_FAILURE.UNANSWERED });
       assert.equal(open.told.length, 0, "an issue is never told in the view");
+    }),
+);
+
+it.effect(
+  "an issue's read is kept as a pull request's is: a change on GitHub is answered once the minute passes, and an issue the service did not answer only after two",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const titled = (number: number, title: string): GitHubRepositoryIssueAnswer => ({
+        issue: {
+          number,
+          title,
+          url: `https://github.com/acme/relay/issues/${number}`,
+          state: ISSUE_STATE.OPEN,
+        },
+      });
+      service.issues[ACME.id] = { "acme/relay": new Map([[7, titled(7, "Invites expire")]]) };
+      const { call } = yield* subject(service);
+      const asked = (number: number) =>
+        call(GATEWAY_METHOD.TASKS_ISSUE, {
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          number,
+        });
+
+      const first = yield* asked(7);
+      const refused = yield* asked(8);
+      service.issues[ACME.id] = {
+        "acme/relay": new Map([
+          [7, titled(7, "Invitations expire too soon")],
+          [8, titled(8, "Resend an invite")],
+        ]),
+      };
+      const kept = yield* asked(7);
+      yield* TestClock.adjust(Duration.minutes(1));
+      const changed = yield* asked(7);
+      const stillRefused = yield* asked(8);
+      yield* TestClock.adjust(Duration.minutes(1));
+      const read = yield* asked(8);
+
+      assert.deepEqual(first, titled(7, "Invites expire"));
+      assert.deepEqual(kept, titled(7, "Invites expire"));
+      assert.deepEqual(changed, titled(7, "Invitations expire too soon"));
+      assert.deepEqual(refused, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(stillRefused, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(read, titled(8, "Resend an invite"));
     }),
 );
 
