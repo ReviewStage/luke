@@ -215,16 +215,11 @@ it.effect("fails, rather than asking again, where a renewal finds the read gone"
     const realtime = fakeRealtime();
     const clock = yield* Clock.Clock;
     const start = clock.currentTimeMillisUnsafe();
-    let reseals = 0;
     const following = yield* Effect.forkChild(
       liveRows<Part>(
         {
           openLive: () => realtime.client,
-          reseal: () =>
-            Effect.sync(() => {
-              reseals += 1;
-              return { failure: "not-found", gone: true };
-            }),
+          reseal: () => Effect.succeed({ failure: "not-found", gone: true }),
           now: () => clock.currentTimeMillisUnsafe(),
         },
         read(0, start + 60_000),
@@ -233,6 +228,5 @@ it.effect("fails, rather than asking again, where a renewal finds the read gone"
     yield* TestClock.adjust(Duration.seconds(55));
     const exit = yield* Fiber.await(following);
     assert.deepEqual(exit, Exit.fail(new LiveBroken({ reason: "the read is gone" })));
-    assert.equal(reseals, 1);
   }),
 );

@@ -3361,3 +3361,28 @@ it.effect(
       assert.deepEqual(realtime.subscribed(), []);
     }),
 );
+
+it.effect(
+  "a renewal that finds the open task gone ends the board's follow, rather than asking again",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
+      service.boardSeals[INVITES] = sealedBoard(0);
+      const realtime = fakeBoardRealtime();
+      const { call, tasks } = yield* subject(service, { openLive: () => realtime.client });
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* TestClock.adjust(Duration.millis(1));
+      realtime.deliver("board-0", []);
+      assert.deepEqual(realtime.subscribed(), ["board-0"]);
+
+      // Another member deletes the task, so its seal is not found when the follow renews it.
+      delete service.boardSeals[INVITES];
+      yield* TestClock.adjust(Duration.hours(1));
+      assert.deepEqual(realtime.subscribed(), []);
+      yield* TestClock.adjust(Duration.hours(1));
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
