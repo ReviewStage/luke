@@ -470,6 +470,8 @@ function fakeService(tasks: Task[]): FakeService {
     },
     // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
+      tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      setTokenRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
       list: () =>
         Effect.gen(function* () {
           service.reads.push("workspaces");

@@ -19,6 +19,7 @@ import {
   githubRepositoryIssueAnswerSchema,
   githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
+  workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
@@ -87,6 +88,7 @@ import {
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
@@ -1148,6 +1150,27 @@ export const tasksWorkspacePhotoAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspacePhotoAnswer = typeof tasksWorkspacePhotoAnswerSchema.Type;
+
+/** A workspace's token repositories, as Settings › Workspace asks for them: the workspace. */
+export const tasksWorkspaceTokenRepositoriesParamsSchema = workspaceLeaveRequestSchema;
+
+export type TasksWorkspaceTokenRepositoriesParams =
+  typeof tasksWorkspaceTokenRepositoriesParamsSchema.Type;
+
+/** A repository added to a workspace on the account's own token, or removed from it, as Settings › Workspace asks it. */
+export const tasksWorkspaceTokenRepositorySetParamsSchema = workspaceTokenRepositoryRequestSchema;
+
+export type TasksWorkspaceTokenRepositorySetParams =
+  typeof tasksWorkspaceTokenRepositorySetParamsSchema.Type;
+
+/** A workspace's token repositories, as the window hears them after a read, an add, or a removal: as they then stand, or why there are none. */
+export const tasksWorkspaceTokenRepositoriesAnswerSchema = EffectSchema.Union([
+  workspaceTokenRepositoriesAnswerSchema,
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceTokenRepositoriesAnswer =
+  typeof tasksWorkspaceTokenRepositoriesAnswerSchema.Type;
 
 /** Leaving a workspace, as the window asks it: the workspace. */
 export const tasksWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;

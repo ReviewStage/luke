@@ -421,6 +421,8 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_LEAVE: "workspace.leave",
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
+  WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
+  WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
 } as const;
 
 /**

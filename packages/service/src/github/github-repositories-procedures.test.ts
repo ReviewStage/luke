@@ -4,10 +4,12 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
+import { listWorkspaceTokenRepositories } from "@luke/database/models/workspace-token-repository-store";
 import { user } from "@luke/database/schemas/auth";
 import {
   fakeWorkspaceSeams,
   getTestDB,
+  joinWorkspace,
   openInstallationWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
@@ -25,6 +27,7 @@ import {
   GITHUB_ACCESS,
   githubRepositoryIssuesAnswerSchema,
   ISSUE_STATE,
+  workspaceTokenRepositoriesAnswerSchema,
 } from "@luke/features/github-repositories-wire";
 import {
   TASK_FILE_REFUSAL,
@@ -53,11 +56,13 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
+  connectWorkspaceGitHub,
   type FakeGitHub,
   GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE,
   GITHUB_FIXTURE_MEMBER,
   githubReaching,
+  type InstallationFixture,
   memberRepositoryJson,
   openGithubUser,
   openTokenMember,
@@ -1538,6 +1543,186 @@ it.layer(getTestDB())("the repositories route", (it) => {
             `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Fledger`,
             `GET /api/github/repositories/skills?workspaceId=${workspace}&repository=acme%2Frelay`,
           ],
+        );
+      }),
+  );
+});
+
+/** `octo-member`'s repositories as the member's own token reads them: `side` it may push to, `fork` it may not. */
+const MEMBER_REPOSITORY = /^\/repos\/octo-member\/(side|fork)$/u;
+
+/** A GitHub where the workspace's App is on `acme` alone, plus any installation given, and the member's token reads `octo-member`'s two repositories. */
+const tokenGitHub = (installationId: number, also: readonly InstallationFixture[] = []) =>
+  githubReaching(
+    [
+      { id: installationId, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+      ...also,
+    ],
+    GITHUB_APP_WITH_TOKENS,
+    {},
+    (sent) => {
+      if (sent.headers.get("authorization") !== `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`) {
+        return undefined;
+      }
+      const { pathname } = new URL(sent.url);
+      if (pathname === "/user/repos") return Response.json([]);
+      const named = MEMBER_REPOSITORY.exec(pathname)?.[1];
+      if (named === undefined) return undefined;
+      return Response.json(
+        memberRepositoryJson({ owner: "octo-member", name: named }, named === "side"),
+      );
+    },
+  );
+
+/** The owner's `acme` workspace, with the member who saved a token and the Google-only account both members of it. */
+const openTokenWorkspace = (github: FakeGitHub, installationId: number) =>
+  Effect.gen(function* () {
+    const accounts = yield* openAccounts(github);
+    const member = yield* openTokenMember();
+    accounts.bearers.set(`Bearer ${member}`, member);
+    const workspace = yield* openInstallationWorkspace(accounts.owner, {
+      installationId,
+      accountId: installationId + 2000,
+      accountLogin: "acme",
+    });
+    yield* joinWorkspace(workspace, member);
+    yield* joinWorkspace(workspace, accounts.other);
+    return { ...accounts, member, workspace };
+  });
+
+/** The token repositories route asked as the account given: a read, or an add or removal. */
+const askTokenRepositories = (
+  bearers: ReadonlyMap<string, string>,
+  github: FakeGitHub,
+  userId: string,
+  workspaceId: string,
+  change?: { readonly repository: string; readonly added: boolean },
+) => {
+  const url = new URL(HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES, ORIGIN);
+  if (change === undefined) url.searchParams.set("workspaceId", workspaceId);
+  return answer(
+    bearers,
+    github,
+    new Request(url, {
+      method: change === undefined ? "GET" : "PUT",
+      headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
+      ...(change === undefined ? undefined : { body: JSON.stringify({ workspaceId, ...change }) }),
+    }),
+  );
+};
+
+it.layer(getTestDB())("the token repositories route", (it) => {
+  it.effect(
+    "a member adds a repository their own token may push to, every member lists it, and the picker offers it marked the token's to a member with no token; one the token cannot push to is refused",
+    () =>
+      Effect.gen(function* () {
+        const github = tokenGitHub(7301);
+        const { bearers, member, other, workspace } = yield* openTokenWorkspace(github, 7301);
+        const ask = (userId: string, change?: { repository: string; added: boolean }) =>
+          askTokenRepositories(bearers, github, userId, workspace, change);
+
+        const added = readOf(
+          workspaceTokenRepositoriesAnswerSchema,
+          yield* ask(member, { repository: "octo-member/side", added: true }),
+        );
+        const refused = yield* ask(member, { repository: "octo-member/fork", added: true });
+        const seenByOther = readOf(workspaceTokenRepositoriesAnswerSchema, yield* ask(other));
+        const picker = listed(
+          yield* answer(
+            bearers,
+            github,
+            new Request(
+              new URL(
+                `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}?workspaceId=${workspace}`,
+                ORIGIN,
+              ),
+              { headers: { authorization: `Bearer ${other}` } },
+            ),
+          ),
+        );
+
+        assert.deepEqual(
+          added.repositories.map((one) => [one.fullName, one.addedBy, one.removable]),
+          [["octo-member/side", member, true]],
+        );
+        assert.equal(
+          (refused.body as { error?: string }).error,
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        );
+        assert.deepEqual(
+          seenByOther.repositories.map((one) => [one.fullName, one.removable]),
+          [["octo-member/side", false]],
+        );
+        assert.deepEqual(
+          picker.repositories.map((one) => [one.fullName, one.access]),
+          [
+            ["acme/relay", GITHUB_ACCESS.APP],
+            ["octo-member/side", GITHUB_ACCESS.TOKEN],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "only its adder or a workspace's owner or admin removes it, and once the workspace's App reaches it the list hides it and the picker offers it as the App's, its row kept",
+    () =>
+      Effect.gen(function* () {
+        const github = tokenGitHub(7311);
+        const { bearers, owner, member, other, workspace } = yield* openTokenWorkspace(
+          github,
+          7311,
+        );
+        const ask = (
+          userId: string,
+          change?: { repository: string; added: boolean },
+          over = github,
+        ) => askTokenRepositories(bearers, over, userId, workspace, change);
+        const side = { repository: "octo-member/side", added: true };
+
+        yield* ask(member, side);
+        const byOther = yield* ask(other, { ...side, added: false });
+        const byOwner = readOf(
+          workspaceTokenRepositoriesAnswerSchema,
+          yield* ask(owner, { ...side, added: false }),
+        );
+        yield* ask(member, side);
+        const installed = {
+          id: 7302,
+          login: "octo-member",
+          repositories: [{ owner: "octo-member", name: "side" }],
+        };
+        yield* connectWorkspaceGitHub(workspace, installed);
+        const reaching = tokenGitHub(7311, [installed]);
+        const hidden = readOf(
+          workspaceTokenRepositoriesAnswerSchema,
+          yield* ask(member, undefined, reaching),
+        );
+        const picker = listed(
+          yield* answer(
+            bearers,
+            reaching,
+            new Request(
+              new URL(
+                `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}?workspaceId=${workspace}`,
+                ORIGIN,
+              ),
+              { headers: { authorization: `Bearer ${other}` } },
+            ),
+          ),
+        );
+
+        assert.equal((byOther.body as { error?: string }).error, HOSTED_API_ERROR.NOT_PERMITTED);
+        assert.deepEqual(byOwner.repositories, []);
+        assert.deepEqual(hidden.repositories, []);
+        assert.deepEqual(
+          picker.repositories
+            .filter((one) => one.fullName === "octo-member/side")
+            .map((one) => one.access),
+          [GITHUB_ACCESS.APP],
+        );
+        assert.deepEqual(
+          (yield* listWorkspaceTokenRepositories(member, workspace)).map((row) => row.repository),
+          ["octo-member/side"],
         );
       }),
   );

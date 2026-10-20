@@ -293,6 +293,9 @@ const EFFECT_MODULE_SCHEMAS = {
     githubIssueNodeIdSchema: githubRepositoriesWire.githubIssueNodeIdSchema,
     githubIssuePickSchema: githubRepositoriesWire.githubIssuePickSchema,
     githubRepositoryIssuesAnswerSchema: githubRepositoriesWire.githubRepositoryIssuesAnswerSchema,
+    workspaceTokenRepositorySchema: githubRepositoriesWire.workspaceTokenRepositorySchema,
+    workspaceTokenRepositoriesAnswerSchema:
+      githubRepositoriesWire.workspaceTokenRepositoriesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "integration-view": {
     integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
@@ -543,6 +546,7 @@ const EFFECT_MODULE_SCHEMAS = {
     workspaceTransferSchema: workspaceWire.workspaceTransferSchema,
     workspaceLeaveRequestSchema: workspaceWire.workspaceLeaveRequestSchema,
     workspaceLeaveAnswerSchema: workspaceWire.workspaceLeaveAnswerSchema,
+    workspaceTokenRepositoryRequestSchema: workspaceWire.workspaceTokenRepositoryRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;
 

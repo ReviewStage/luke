@@ -1,5 +1,6 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { sniffImageType } from "./image-signature.js";
 import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
 import { countedNumber } from "./service-wire.js";
@@ -395,6 +396,13 @@ export const workspaceTransferSchema = EffectSchema.Struct({
 
 /** Leaving a workspace (POST), answered with the workspace left. */
 export const workspaceLeaveRequestSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+/** A repository added to a workspace on the caller's own GitHub token, or removed from it (`github-repositories-wire.ts`). */
+export const workspaceTokenRepositoryRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+  added: EffectSchema.Boolean,
+});
 
 /** The workspace the account left. */
 export const workspaceLeaveAnswerSchema = workspaceLeaveRequestSchema;

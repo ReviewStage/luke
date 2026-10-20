@@ -7,6 +7,10 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import {
+  GITHUB_ACCESS,
+  type WorkspaceTokenRepository,
+} from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
@@ -144,6 +148,10 @@ let macSaveHeld: Promise<void> | undefined;
 let githubRepositories: string[] = [];
 /** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
 let repositoriesHeld: Promise<void> | undefined;
+/** The repositories the reader's own token may push to that the picker lists as the token's, by full name. */
+let tokenReach: string[] = [];
+/** The repositories members added to the workspace on their tokens, as the service lists them to the reader. */
+let tokenRepositories: WorkspaceTokenRepository[] = [];
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -317,9 +325,20 @@ function answer(request: Asked): Promise<Answered> {
           repositories: {
             installed: true,
             installationUrl: "https://github.com/apps/luke/installations/new",
-            repositories: githubRepositories.map((fullName) => {
+            repositories: [
+              ...githubRepositories.map((fullName) => ({ fullName, access: GITHUB_ACCESS.APP })),
+              ...tokenReach.map((fullName) => ({ fullName, access: GITHUB_ACCESS.TOKEN })),
+            ].map(({ fullName, access }) => {
               const [owner = "", name = ""] = fullName.split("/");
-              return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1 };
+              return {
+                owner,
+                name,
+                fullName,
+                defaultBranch: "main",
+                private: true,
+                updatedAt: 1,
+                access,
+              };
             }),
           },
         }),
@@ -343,6 +362,18 @@ function answer(request: Asked): Promise<Answered> {
     }
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ:
+      return Promise.resolve(done(tokenRepositories));
+    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET: {
+      const { repository, added } = request.payload;
+      tokenRepositories = added
+        ? [
+            { fullName: repository, addedBy: READER_ID, addedAt: 2, removable: true },
+            ...tokenRepositories,
+          ]
+        : tokenRepositories.filter((one) => one.fullName !== repository);
+      return Promise.resolve(done(tokenRepositories));
+    }
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
@@ -399,6 +430,8 @@ beforeEach(() => {
   macSaveHeld = undefined;
   githubRepositories = [];
   repositoriesHeld = undefined;
+  tokenReach = [];
+  tokenRepositories = [];
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   fakeActPort({
@@ -822,7 +855,7 @@ test("the chosen team workspace's members are listed with their email and role, 
 
   assert.deepEqual(
     sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ],
+    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACT_KIND.WORKSPACE_MEMBERS_READ],
   );
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
@@ -1378,7 +1411,7 @@ const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
 /** A connected workspace whose Linear is connected too. */
 const WITH_LINEAR: Workspace = { ...CONNECTED, linear: { active: true } };
 
-test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with one Manage on GitHub and no menu, and every account connected under it", async () => {
+test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...SEVERAL, role });
     const group = githubGroup(page);
@@ -1392,7 +1425,11 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       row.querySelector(".settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
-    assert.deepEqual(rowButtons(row), ["Manage on GitHub"], `a ${role}'s controls`);
+    assert.deepEqual(
+      rowButtons(row),
+      ["Add repository", "Manage on GitHub"],
+      `a ${role}'s controls`,
+    );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
       ["GitHub", MANAGES_ON_GITHUB],
@@ -1437,7 +1474,7 @@ test("a service from before several connections names one GitHub account alone, 
     ["GitHub", MANAGES_ON_GITHUB],
     ["acme-org", "Connected"],
   ]);
-  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Manage on GitHub"]);
+  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
 
 test("Escape in Linear's menu hands focus back to its ⋯", async () => {
@@ -1471,13 +1508,13 @@ test("a GitHub page the browser could not open is said under the row, from Manag
   }
 });
 
-test("an owner or an admin of a workspace with no GitHub is offered Connect alone, which opens the same connect", async () => {
+test("an owner or an admin of a workspace with no GitHub is offered Connect beside Add repository, which opens the same connect", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...ACME, role, githubInstallations: [] });
     const row = rowNamed(page, "GitHub");
 
     assert.deepEqual(rowWords(row), ["GitHub", "Not connected."]);
-    assert.deepEqual(rowButtons(row), ["Connect"]);
+    assert.deepEqual(rowButtons(row), ["Add repository", "Connect"]);
     assert.equal(row.querySelector('[aria-haspopup="menu"]'), null);
     assert.deepEqual(integrationRows(page), [["GitHub", "Not connected."]]);
     act(() => button(row, "Connect").click());
@@ -1490,7 +1527,7 @@ test("an owner or an admin of a workspace with no GitHub is offered Connect alon
   ]);
 });
 
-test("a member reads every account connected, or is told to ask an owner or admin, and is offered no Manage on GitHub, Connect, or right-click menu", async () => {
+test("a member reads every account connected, or is told to ask an owner or admin, and is offered Add repository alone: no Manage on GitHub, Connect, or right-click menu", async () => {
   const connected = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const unconnected = await mount(ACME);
 
@@ -1504,7 +1541,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
   ]);
   for (const { page } of [connected, unconnected]) {
     const group = githubGroup(page);
-    assert.equal(group.querySelector("button"), null);
+    assert.deepEqual(rowButtons(group), ["Add repository"]);
     for (const row of group.querySelectorAll<HTMLElement>(ROWS)) {
       act(() => {
         row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
@@ -1512,6 +1549,69 @@ test("a member reads every account connected, or is told to ask an owner or admi
       assert.equal(document.querySelector('[role="menu"]'), null);
     }
   }
+});
+
+test("the repositories members added on their tokens stand under GitHub's accounts marked Token, with Remove where the service says the reader may, and a removal lists what the service answers", async () => {
+  tokenRepositories = [
+    { fullName: "octo-member/side", addedBy: MEMBER.userId, addedAt: 2, removable: false },
+    { fullName: "acme/relay", addedBy: READER_ID, addedAt: 1, removable: true },
+  ];
+  const { page } = await mount(SEVERAL);
+  const group = githubGroup(page);
+
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs", "octo-member/side", "acme/relay"],
+  );
+  for (const name of ["octo-member/side", "acme/relay"]) {
+    assert.equal(rowNamed(group, name).querySelector(".luke-badge")?.textContent, "Token");
+  }
+  assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
+
+  act(() => button(rowNamed(group, "acme/relay"), "Remove").click());
+  await settle();
+
+  assert.deepEqual(
+    sent
+      .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
+      .map((one) => one.payload),
+    [{ workspaceId: SEVERAL.id, repository: "acme/relay", added: false }],
+  );
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs", "octo-member/side"],
+  );
+});
+
+test("Add repository offers the repositories the reader's own token may push to that the workspace lists nowhere yet, and a pick adds one", async () => {
+  githubRepositories = ["acme/relay"];
+  tokenReach = ["octo-member/side", "octo-member/notes"];
+  tokenRepositories = [
+    { fullName: "octo-member/notes", addedBy: MEMBER.userId, addedAt: 1, removable: false },
+  ];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const offered = [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent);
+  const side =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (one) => one.textContent === "octo-member/side",
+    ) ?? assert.fail("octo-member/side is not offered");
+  act(() => side.click());
+  await settle();
+
+  assert.deepEqual(offered, ["octo-member/side"]);
+  assert.deepEqual(
+    sent
+      .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
+      .map((one) => one.payload),
+    [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
+  );
+  assert.equal(
+    rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
+    "Token",
+  );
 });
 
 test("the page has no workspace picker of its own, and shows another workspace, the account's role in it, and its own members once the sidebar lists it", async () => {
@@ -1606,7 +1706,9 @@ test("the owner invites an address as a role, sees it pending with its link to c
     sent
       .filter(
         (request) =>
-          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ && !MAC_GROUP_READS.has(request.kind),
+          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
+          !MAC_GROUP_READS.has(request.kind),
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [

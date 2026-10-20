@@ -230,6 +230,9 @@ import {
   type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
+  type TasksWorkspaceTokenRepositoriesAnswer,
+  type TasksWorkspaceTokenRepositoriesParams,
+  type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
   tasksCommentAnswerSchema,
@@ -265,6 +268,7 @@ import {
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
+  tasksWorkspaceTokenRepositoriesAnswerSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -521,6 +525,14 @@ export interface HostOperator {
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
+  /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
+  workspaceTokenRepositories(
+    params: TasksWorkspaceTokenRepositoriesParams,
+  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+  /** A repository added to a workspace on the account's own GitHub token, or removed from it; the workspace's token repositories as they then stand, or why nothing changed. */
+  workspaceTokenRepositorySet(
+    params: TasksWorkspaceTokenRepositorySetParams,
+  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
   /** One member removed from a workspace; the members who remain, or why none was removed. */
   workspaceMemberRemove(
     params: TasksWorkspaceMemberRemoveParams,
@@ -1489,6 +1501,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
         workspaceAnswer(tasksWorkspacePhotoAnswerSchema),
+      ),
+    workspaceTokenRepositories: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(tasksWorkspaceTokenRepositoriesAnswerSchema),
+      ),
+    workspaceTokenRepositorySet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          added: params.added,
+        }),
+        workspaceAnswer(tasksWorkspaceTokenRepositoriesAnswerSchema),
       ),
     workspaceMemberRemove: (params) =>
       Effect.map(
