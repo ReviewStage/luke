@@ -51,6 +51,7 @@ import {
   PlanDocumentEditor,
   textBoxOf,
   useTextRoom,
+  useWordsKeptOnClose,
 } from "./plan-document-editor.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import {
@@ -960,6 +961,7 @@ export function PlanBody({
   const body = useRef<HTMLDivElement>(null);
   // The open editor's handle, which a comment started on its words is measured through.
   const editorHandle = useRef<PlanEditorHandle | undefined>(undefined);
+  const closedOn = useWordsKeptOnClose(editing.editor !== undefined, body, scroller);
   // A press on the document's empty room opens its text there, at its end
   // where it lands under the last line, or anywhere on a plan with no text
   // yet, which has no section to click into; the open editor's own room
@@ -1251,6 +1253,7 @@ export function PlanBody({
               mentions={mentionDoors}
               scroller={scroller}
               handle={editorHandle}
+              closedOn={closedOn}
             />
           )}
           {comments === undefined || !commentsHere || drawnSections === undefined ? null : (

@@ -243,6 +243,8 @@ export interface PlanEditorHandle {
   readonly focusAt: (placement: PlanEditorPlacement) => void;
   /** Where the line of the words a click opened the editor on stands in the window, down from its top; none where it opened elsewhere, the words not found, or the caret has since been put elsewhere, or where it cannot be measured. */
   readonly wordsTop: () => number | undefined;
+  /** The words the caret stands in, as the drawn text finds them again, and where their line stands in the window; none off any words, or where nothing is laid out. The panel keeps them where they stood as the editor closes. */
+  readonly caretWords: () => PlacedWords | undefined;
   /** Image files laid in as pictures after the block the caret stands in, each handed to the panel to keep. */
   readonly insertPictures: (files: readonly File[]) => void;
   /** The picture waiting on `upload` given its address, kept at last, which the text now names. */

@@ -168,6 +168,49 @@ function wordsUnder(
   return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
 }
 
+/** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
+function drawnWordsTop(body: HTMLElement, words: PlacedWords): number | undefined {
+  const block = body.querySelectorAll(`[${TEXT_BLOCK_ATTRIBUTE}]`)[words.section];
+  if (block === undefined) return undefined;
+  let seen = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (!(at instanceof Text) || at.data !== words.text || inCode(at) !== words.code) continue;
+    if (seen === words.occurrence) {
+      const range = document.createRange();
+      range.setStart(at, Math.min(words.offset, at.data.length));
+      return lineTop(range, at);
+    }
+    seen += 1;
+  }
+  return undefined;
+}
+
+/**
+ * The words the caret stood on kept where they stood as the editor closes,
+ * as `PlanDocumentEditor` keeps the words a click landed on as it opens:
+ * the drawn text may draw what stands above them at another height than the
+ * editor did, a picture, a table or a diagram's preview say, so the column
+ * is scrolled by as much as the drawn text moved them. Answers where the
+ * closing editor leaves its words (`PlanDocumentEditor`'s `closedOn`).
+ */
+export function useWordsKeptOnClose(
+  open: boolean,
+  body: React.RefObject<HTMLElement | null>,
+  scroller: React.RefObject<HTMLElement | null>,
+): React.RefObject<PlacedWords | undefined> {
+  const closedOn = useRef<PlacedWords | undefined>(undefined);
+  useLayoutEffect(() => {
+    const words = closedOn.current;
+    if (open || words === undefined) return;
+    closedOn.current = undefined;
+    const top = body.current === null ? undefined : drawnWordsTop(body.current, words);
+    if (top !== undefined && scroller.current !== null)
+      scroller.current.scrollTop += top - words.top;
+  }, [open]);
+  return closedOn;
+}
+
 /** Where a text's words stand in the window. */
 export interface TextBox {
   readonly top: number;
@@ -756,6 +799,7 @@ export function PlanDocumentEditor({
   mentions,
   scroller,
   handle,
+  closedOn,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -768,8 +812,17 @@ export function PlanDocumentEditor({
   scroller?: React.RefObject<HTMLElement | null> | undefined;
   /** Where the mounted editor's handle is kept, for the merged answers and for a comment started on its words. */
   handle: React.RefObject<PlanEditorHandle | undefined>;
+  /** Where the words the caret stood on are left as the editor closes, for the drawn text to keep them where they stood (`useWordsKeptOnClose`). */
+  closedOn?: React.RefObject<PlacedWords | undefined> | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
+  // Note that this runs before the editor itself is taken down, so its caret is still measured.
+  useLayoutEffect(
+    () => () => {
+      if (closedOn !== undefined) closedOn.current = handle.current?.caretWords();
+    },
+    [],
+  );
   // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
   const comments = usePlanCommentsControl();
   const commentAnchors =
