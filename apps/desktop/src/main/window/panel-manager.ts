@@ -1,9 +1,9 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
+import type { PushName, PushPayload } from "@luke/host/contract";
 import { PanelAvatarRelay } from "@luke/host/panel-avatar";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
-import type { UnparsedWireValue } from "@luke/wire";
 import {
   app,
   BrowserWindow,
@@ -21,6 +21,7 @@ import {
   readWindowPlacement,
   writeWindowPlacement,
 } from "./window-placement";
+import { windowPushes } from "./window-pushes";
 import { trafficLightsAt } from "./zoom";
 
 interface PanelDuck {
@@ -127,7 +128,9 @@ export class PanelManager {
   readonly #drawn = new WeakSet<BrowserWindow>();
   readonly #avatar = new PanelAvatarRelay(() => {
     const window = this.primaryPanel();
-    return window && this.#drawn.has(window) ? window.webContents : undefined;
+    if (!window || !this.#drawn.has(window)) return undefined;
+    const page = window.webContents;
+    return { push: (push, payload) => windowPushes.push(page, push, payload) };
   });
 
   constructor(options: PanelManagerOptions) {
@@ -162,11 +165,14 @@ export class PanelManager {
    * already holds the answer in its reply and must redraw from that rather
    * than race a broadcast.
    */
-  broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
+  broadcast<Name extends PushName>(
+    push: Name,
+    payload: PushPayload<Name>,
+    except?: WebContents,
+  ): void {
     for (const window of this.#windows.values()) {
       if (window.isDestroyed() || window.webContents === except) continue;
-      // SAFETY: Main-process broadcasts carry structured-clone snapshots produced for channels fixed by this build.
-      window.webContents.send(channel, payload as UnparsedWireValue);
+      windowPushes.push(window.webContents, push, payload);
     }
   }
 

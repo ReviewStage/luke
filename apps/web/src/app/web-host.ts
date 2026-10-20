@@ -31,6 +31,7 @@ import {
   createActPortHandler,
   type PlatformActProcedures,
   refusedPlatformProcedures,
+  WindowPushes,
 } from "@luke/host/act-port";
 import { createActRouter } from "@luke/host/act-router";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
@@ -285,6 +286,10 @@ function portDependencies(
     factory: { host },
     integrations: { host },
     issues: { host },
+    // Note that nothing is pushed on the tab's port: the tab hears the host
+    // through the in-process bridge's own listeners, so its push stream is
+    // never opened and this table stays empty.
+    pushes: new WindowPushes(),
     settings: {
       host,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),

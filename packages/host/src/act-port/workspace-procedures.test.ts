@@ -32,6 +32,7 @@ import {
   type IssueProceduresDependencies,
   type PlatformActProcedures,
   type TasksProceduresDependencies,
+  WindowPushes,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -345,6 +346,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ...elsewhere,
       accountAsks,
       issues: NO_ISSUES,
+      pushes: new WindowPushes(),
       tasks,
       workspaces: {
         host,

@@ -11,6 +11,7 @@ import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { initialAppState } from "@luke/host/client";
+import { PUSH_METHOD } from "@luke/host/contract";
 import { App } from "@luke/panel/app";
 import { installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
@@ -87,16 +88,15 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
     version: 1,
     window: { fullScreen: false },
   };
-  const quiet = Object.fromEntries(
-    bridgeEntries().map(([method, entry]) => [
+  const quiet = Object.fromEntries([
+    ...Object.keys(PUSH_METHOD).map((method) => [method, () => () => undefined]),
+    ...bridgeEntries().map(([method, entry]) => [
       method,
-      entry.kind === "subscribe"
-        ? () => () => undefined
-        : entry.kind === "invoke"
-          ? () => Promise.reject(new Error("The fixture does not act."))
-          : () => undefined,
+      entry.kind === "invoke"
+        ? () => Promise.reject(new Error("The fixture does not act."))
+        : () => undefined,
     ]),
-  );
+  ]);
   // SAFETY: the map derives every method of the contract from BRIDGE by its kind's shape, as the web root's fixture does.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The manifest map proves the dynamically keyed object is the derived bridge.
   return {
