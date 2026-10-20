@@ -1222,4 +1222,24 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(oversized.body, { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE });
       }),
   );
+
+  it.effect(
+    "a body past its cap is refused as too large before the caller is resolved, where a body that is not JSON is refused, so an unsigned one is too large rather than unauthenticated",
+    () =>
+      Effect.gen(function* () {
+        const { task, ask } = yield* openAccounts;
+        const unsignedOversized = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, undefined, {
+          method: "POST",
+          body: {
+            ...weekdays(task.id),
+            action: {
+              kind: AUTOMATION_ACTION.CODING_AGENT,
+              prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),
+            },
+          },
+        });
+        assert.equal(unsignedOversized.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
+        assert.deepEqual(unsignedOversized.body, { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE });
+      }),
+  );
 });
