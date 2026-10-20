@@ -116,7 +116,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { FACTORY } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
-import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse.js";
+import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 import {
   archiveTasksQuestion,
@@ -1098,7 +1098,7 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
     { state: sidebar.overlay, onState: sidebar.onOverlay },
     { focusAt: sidebarFocus, stays: ".title-bar-controls" },
   );
-  return { ...pane, inSight: !sidebar.collapsed || pane.floating };
+  return { ...pane, inSight: sidebarInSight(sidebar) };
 }
 
 /**

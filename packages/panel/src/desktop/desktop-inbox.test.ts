@@ -219,6 +219,8 @@ let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefi
 let setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
 /** Lands the account's first read of its task list, where a test mounted the Inbox before it. */
 let setListRead: (read: boolean) => void = () => undefined;
+/** Leaves the Inbox for another place and comes back to it, as the window's sidebar does. */
+let setInboxOpen: (open: boolean) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no task, as main does when an item opens or is answered. */
@@ -451,6 +453,8 @@ function mount(
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listAsked, setListAsked] = useState(false);
+    const [inboxOpen, setOpen] = useState(true);
+    setInboxOpen = setOpen;
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
@@ -474,7 +478,7 @@ function mount(
       inboxTasks: holding,
       inboxTaskless: taskless,
       inboxView: {
-        open: true,
+        open: inboxOpen,
         chosen,
         onOpen: () => undefined,
         onClose: () => {
@@ -601,6 +605,11 @@ function wordsOf(element: Element | null | undefined): string | null {
   assert.ok(copy instanceof Element);
   for (const disc of copy.querySelectorAll(".actor-mark")) disc.remove();
   return copy.textContent;
+}
+
+/** Whether the row of the item so titled is drawn gray, its item done with. */
+function rowMuted(page: HTMLElement, title: string): boolean {
+  return rowNamed(page, title).closest("li")?.getAttribute("data-muted") === "true";
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
@@ -2205,7 +2214,7 @@ test("an item's row hangs a card naming the teammate who started its agent, as t
   assert.doesNotMatch(own ?? "", /Started by/u);
 });
 
-test("a plan main says changed is read again, so an item answered on another Mac lists as settled; To do then lists only what still needs you until All is chosen, and the choice outlives a relaunch", async () => {
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the list is shown; To do then lists only what still needs you until All is chosen, which sorts it anew, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   inboxes.set(INVITES.id, [
@@ -2223,6 +2232,18 @@ test("a plan main says changed is read again, so an item answered on another Mac
     ]),
   );
   await settle();
+  assert.deepEqual(
+    listed(page),
+    [
+      "# Billing usage alerts",
+      "How is a failed email retried?",
+      "▸ *Alert at 80%?",
+      "# Invites",
+      "Expire after 7 days?",
+    ],
+    "the answer moves no row while the list is shown",
+  );
+  assert.equal(rowMuted(page, "Expire after 7 days?"), true);
   const everything = [
     "# Invites",
     "Expire after 7 days?",
@@ -2230,7 +2251,6 @@ test("a plan main says changed is read again, so an item answered on another Mac
     "How is a failed email retried?",
     "▸ *Alert at 80%?",
   ];
-  assert.deepEqual(listed(page), everything);
 
   showScope(page, "To do");
   assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
@@ -2482,7 +2502,7 @@ test("grouped by person or by nothing, each row names its task in a chip before 
   );
 });
 
-test("on To do, your unread update leading the list is the first item chosen, and keeps its place among the steps once opening it reads it, so J steps on from it and K finds it gone once left", async () => {
+test("on To do, your unread update leading the list is the first item chosen, and keeps its row, gray, once opening it reads it, so J steps on from it and K finds it gone once left", async () => {
   inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
@@ -2490,9 +2510,15 @@ test("on To do, your unread update leading the list is the first item chosen, an
   await settle();
   const keys = standKeymap();
   assert.equal(readTitle(page), "How is a failed email retried?");
-  assert.deepEqual(listed(page), ["*Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(
+    listed(page),
+    ["▸ How is a failed email retried?", "*Expire after 7 days?", "*Alert at 80%?"],
+    "the row read stays where it stood while it is chosen",
+  );
+  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "drawn gray");
   pressKey("j");
   assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
   pressKey("k");
   assert.equal(
     readTitle(page),
@@ -2519,11 +2545,12 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
     ),
   ];
   for (const header of headers()) act(() => header.click());
+  // Note that the plans keep the order they were drawn in, since the list is shown as the item closes.
   assert.deepEqual(
     headers().map((header) => [header.getAttribute("aria-expanded"), header.textContent]),
     [
-      ["false", "Invites"],
       ["false", "Billing usage alerts1 needs you"],
+      ["false", "Invites"],
     ],
   );
 });
@@ -5452,13 +5479,17 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
-    "▸ Alert at 80%?",
-    "How is a failed email retried?",
-    "# Invites",
-    "*Expire after 7 days?",
-  ]);
+  assert.deepEqual(
+    listed(page),
+    [
+      "# Billing usage alerts",
+      "How is a failed email retried?",
+      "▸ Alert at 80%?",
+      "# Invites",
+      "*Expire after 7 days?",
+    ],
+    "the answered row stays where it stood",
+  );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
 
@@ -5491,6 +5522,100 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
   await settle();
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
   assert.equal(readTitle(page), "Expire after 7 days?", "the choice never jumps back");
+});
+
+/** The list as drawn, each row by its title alone and each group by its name, what marks a row and what a group counts left out, so a row that moves or changes group is told from one that only changes its marks. */
+function placesOf(page: HTMLElement): string[] {
+  return listed(page).map((line) =>
+    line.startsWith("# ") ? line.replace(/\d+ needs? you$/u, "") : line.replace(/^(▸ )?\*?/u, ""),
+  );
+}
+
+test("on To do, answering the chosen item draws its row gray where it stood, and choosing another row clears it", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.equal(rowMuted(page, "Expire after 7 days?"), false);
+
+  answerWithNote(page, "Keep 7 days");
+  await settle();
+  await act(async () =>
+    answer({
+      item: {
+        ...EXPIRY,
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.ANSWERED, note: "Keep 7 days" },
+        answeredBy: READER,
+        settledAt: 6_000,
+        updatedAt: 6_000,
+      },
+      taken: true,
+    }),
+  );
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["▸ Expire after 7 days?", "*Alert at 80%?"],
+    "the answered row stays where it stood, needing nobody",
+  );
+  assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
+  assert.equal(rowMuted(page, "Alert at 80%?"), false);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.deepEqual(
+    listed(page),
+    ["▸ *Alert at 80%?"],
+    "the gray row clears once another is chosen",
+  );
+});
+
+test("on All, every item settled and read is drawn gray, and what waits or is unread is not", async () => {
+  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, unread: true }]);
+  const { page } = mount();
+  await settle();
+  showScope(page, "All");
+  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "answered and read");
+  assert.equal(rowMuted(page, "Alert at 80%?"), false, "waiting on you");
+  assert.equal(rowMuted(page, "Expire after 7 days?"), false, "settled, but unread");
+});
+
+test("an answer moves no row while the list is shown, under either sort and every grouping, and the list sorts anew once the Inbox is left and come back to", async () => {
+  const groupings = ["plan", "person", "status", "newest"] as const;
+  const sorts = ["latest", "oldest"] as const;
+  for (const grouping of groupings) {
+    for (const sort of sorts) {
+      window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+      window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
+      window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+      const { page } = mount();
+      await settle();
+      const { answer } = gatedAnswers();
+      act(() => rowNamed(page, "Alert at 80%?").click());
+      await settle();
+      const before = placesOf(page);
+
+      answerWithNote(page, "Use 90%");
+      await settle();
+      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
+      await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+      await settle();
+      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
+      assert.equal(rowMuted(page, "Alert at 80%?"), true);
+
+      act(() => setInboxOpen(false));
+      act(() => setInboxOpen(true));
+      await settle();
+      assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+
+      act(() => root?.unmount());
+      root = undefined;
+      document.body.innerHTML = "";
+    }
+  }
 });
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {

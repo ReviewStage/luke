@@ -105,6 +105,11 @@ export interface SidebarCollapse {
   staged: boolean;
 }
 
+/** Whether the sidebar is on screen: pinned, or floating over the work as a peek or opened. */
+export function sidebarInSight(sidebar: Pick<SidebarCollapse, "collapsed" | "overlay">): boolean {
+  return !sidebar.collapsed || sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+}
+
 /**
  * The collapse, the width, and the overlay. The chord is the sidebar toggle's
  * to offer, so it answers only while the toggle stands. The choice itself

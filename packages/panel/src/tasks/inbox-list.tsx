@@ -121,6 +121,7 @@ import {
   type InboxWhose,
   inboxMedia,
   inboxPreview,
+  isDone,
   isUnread,
   listedItems,
   NEEDS_YOU,
@@ -166,7 +167,10 @@ import { cardTitle } from "./tool-call-model.js";
  * since the developer last read it, or they marked it so: the blue dot in
  * a gutter before its tile, its title in the unread weight; opening it
  * reads it, and its row, its menu, U, and Mark all as read in the view's
- * menu mark it read or unread (`use-inbox-read-marks.ts`). A folded task
+ * menu mark it read or unread (`use-inbox-read-marks.ts`). An item settled
+ * and read is done with (`isDone`), and its row stands back, gray, with no
+ * word saying so: the chosen row To do keeps once it is answered or read,
+ * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers the view's
  * menu: first what the list holds, To do, the developer's own items they are
@@ -525,6 +529,7 @@ export function InboxItemRow({
   context,
   face = true,
   chip = false,
+  muted = false,
   media,
   ref,
   onChoose,
@@ -544,6 +549,8 @@ export function InboxItemRow({
   face?: boolean;
   /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
   chip?: boolean;
+  /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
+  muted?: boolean;
   /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
   media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
@@ -710,6 +717,7 @@ export function InboxItemRow({
           }
           current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={unread}
+          muted={muted}
           hint={{ Hint: RowHint, label: title }}
           onPress={() => onChoose(listed)}
           contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
@@ -1381,6 +1389,7 @@ export function InboxList({
   });
   const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
+  // A row whose item is done with is drawn gray, the chosen row kept on To do and every such row on All alike.
   const row = (listed: InboxListed) => (
     <InboxItemRow
       key={listed.item.id}
@@ -1392,6 +1401,7 @@ export function InboxList({
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
       chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
+      muted={isDone(listed.item)}
       media={media}
       ref={rows.hold(listed.item.id)}
       onChoose={onChoose}
