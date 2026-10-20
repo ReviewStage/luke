@@ -6,7 +6,7 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
 import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
@@ -324,7 +324,7 @@ function pressHere(key: BrowserKey): void {
   );
 }
 
-/** One of the bar's steps: a press of its glyph, which says what it does. */
+/** One of the bar's steps: a press of its glyph, which says what it does, drawn as every tab's bar draws its glyphs. */
 function BarStep({
   label,
   icon,
@@ -338,15 +338,7 @@ function BarStep({
 }): React.JSX.Element {
   return (
     <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={onPress}
-      >
-        {icon}
-      </button>
+      <IconButton icon={icon} label={label} disabled={disabled} onClick={onPress} />
     </Tooltip>
   );
 }
