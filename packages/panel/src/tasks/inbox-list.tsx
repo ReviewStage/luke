@@ -410,14 +410,16 @@ export function ItemMark({
   );
 }
 
+/** What an archived task's open item says of where it stands: put away with its task, waiting on nobody. */
+const ARCHIVED_WORDS = "Archived with its task";
+
 /** Where an item stands, as its row's card says it under its title. */
-function standingWords(
-  item: InboxListed["item"],
-  needsYou: boolean,
-  starter: Actor | undefined,
-): string {
+function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | undefined): string {
+  const { holder, item } = listed;
   if (needsYou) return NEEDS_YOU.LABEL;
   if (item.status === INBOX_STATUS.OPEN) {
+    // Note that an archived task's open item waits on nobody, since nothing answers it until the task is back.
+    if (archivedHolder(holder)) return ARCHIVED_WORDS;
     return starter === undefined ? "Waiting" : waitingOn(starter);
   }
   return item.status === INBOX_STATUS.ANSWERED ? "Answered" : "Closed";
@@ -449,7 +451,7 @@ function InboxItemCard({
 }): React.JSX.Element {
   const { holder, item } = listed;
   const subject = itemSubject(holder, item.agentId, models, readerId);
-  const standing = standingWords(item, needsYou, starter);
+  const standing = standingWords(listed, needsYou, starter);
   if (subject !== undefined) {
     return (
       <AgentCard subject={subject} models={models} foot={`${holderName(holder)} · ${standing}`} />

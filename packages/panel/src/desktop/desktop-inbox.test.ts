@@ -2162,6 +2162,14 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   await settle();
   assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
   assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
+  act(() => {
+    rowNamed(page, "Expire after 7 days?").dispatchEvent(
+      new MouseEvent("pointerover", { bubbles: true }),
+    );
+  });
+  const rowCard = wordsOf(document.querySelector(".luke-tooltip-card [data-inbox-row-card]")) ?? "";
+  assert.match(rowCard, /Archived with its task/u, "the row's card says it waits on nobody");
+  assert.doesNotMatch(rowCard, /Waiting/u);
   const pane =
     page.querySelector<HTMLElement>(".inbox-view-items:not([hidden])") ??
     assert.fail("the item is shown beside the list");
