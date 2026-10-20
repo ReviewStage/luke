@@ -65,6 +65,7 @@ import {
   tasklessGroups,
   withChoice,
   withDecision,
+  withDone,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -1321,7 +1322,7 @@ test("an item is drawn as its thread where the thread asks, or where the agent's
   assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
 });
 
-test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words or Mark done with a step unticked", () => {
+test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words", () => {
   const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
   const decide = [asking(pick)];
   const draft: InboxDraft = { ...EMPTY_INBOX_DRAFT, note: "  Why not C?  " };
@@ -1347,7 +1348,6 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
 
   const steps = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
   const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] };
-  assert.equal(inboxThreadSend(steps, done), undefined);
   assert.deepEqual(inboxThreadSend(steps, { ...done, press: INBOX_REPLY.NOT_DONE })?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.NOT_DONE,
@@ -1363,6 +1363,36 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     inboxThreadSend([settled], { ...EMPTY_INBOX_DRAFT, choices: ["B"], note: "x" }),
     { text: "x", attachments: [] },
     "a pick on a settled ask is no answer",
+  );
+});
+
+test("Mark done ticks every step of a to-do, ticked by hand or not, and letting a step go after takes it off", () => {
+  const ask: InboxAsk = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] };
+  const steps = [asking(ask)];
+  const untouched = withDone(ask, EMPTY_INBOX_DRAFT);
+  assert.deepEqual(untouched.steps, [0, 1, 2], "the checklist shows every step ticked");
+  assert.deepEqual(inboxThreadSend(steps, untouched)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [0, 1, 2],
+  });
+  const partly = withDone(ask, withStep(EMPTY_INBOX_DRAFT, 1));
+  assert.deepEqual(inboxThreadSend(steps, partly)?.answers?.steps, [0, 1, 2]);
+  assert.deepEqual(
+    inboxThreadSend(steps, { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] })?.answers
+      ?.steps,
+    [0, 1, 2],
+    "a Done attached with steps unticked still sends every one",
+  );
+  const letGo = withStep(untouched, 2);
+  assert.equal(letGo.press, undefined);
+  assert.deepEqual(letGo.steps, [0, 1]);
+
+  const titled = withDone({ steps: [] }, EMPTY_INBOX_DRAFT);
+  assert.deepEqual(titled.steps, [0], "the title standing as the one step is ticked on the card");
+  assert.deepEqual(
+    inboxThreadSend([asking({ type: INBOX_ASK.DO, steps: [] })], titled)?.answers?.steps,
+    [],
   );
 });
 

@@ -537,17 +537,32 @@ function tickedSteps(draft: InboxDraft): readonly number[] {
   return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
 }
 
-/** Whether every step the ask shows is ticked, which Mark done waits for. */
-export function everyStepTicked(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): boolean {
-  const ticked = new Set(draft.steps ?? []);
-  return Array.from({ length: shownSteps(ask) }, (_, at) => at).every((at) => ticked.has(at));
+/** Every step a `do` ask shows, by place, in order. */
+function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
+  return Array.from({ length: shownSteps(ask) }, (_, at) => at);
 }
 
-/** The draft with the step at `at` ticked, or let go where it was. */
+/**
+ * The draft with Mark done pressed, which ticks every step the ask shows,
+ * so the checklist reads done whether or not the reader ticked each first.
+ */
+export function withDone(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): InboxDraft {
+  return { ...draft, press: INBOX_REPLY.DONE, steps: everyStep(ask) };
+}
+
+/**
+ * The draft with the step at `at` ticked, or let go where it was. Note that
+ * letting a step go takes Mark done off, since it ticks every step.
+ */
 export function withStep(draft: InboxDraft, at: number): InboxDraft {
   const ticked = tickedSteps(draft);
-  const steps = ticked.includes(at) ? ticked.filter((each) => each !== at) : [...ticked, at];
-  return { ...draft, steps };
+  if (ticked.includes(at)) {
+    const steps = ticked.filter((each) => each !== at);
+    return draft.press === INBOX_REPLY.DONE
+      ? { ...draft, steps, press: undefined }
+      : { ...draft, steps };
+  }
+  return { ...draft, steps: [...ticked, at] };
 }
 
 /** Whether a form's required fields are filled as the draft holds them, which Submit waits for. */
@@ -558,8 +573,8 @@ export function formFilled(form: Pick<InboxForm, "fields">, draft: InboxDraft): 
 
 /**
  * The answer the draft attaches to the reply for the open ask, or none: a
- * `decide`'s options picked, a `do`'s Mark done or Couldn't do it with the
- * steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
+ * `decide`'s options picked, a `do`'s Mark done with every step ticked or
+ * Couldn't do it with the steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
  * whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
  */
@@ -575,7 +590,10 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
     case INBOX_ASK.DO: {
       if (draft.press !== INBOX_REPLY.DONE && draft.press !== INBOX_REPLY.NOT_DONE)
         return undefined;
-      const steps = tickedSteps(draft).filter((at) => at < ask.steps.length);
+      const steps =
+        draft.press === INBOX_REPLY.DONE
+          ? everyStep(ask).filter((at) => at < ask.steps.length)
+          : tickedSteps(draft).filter((at) => at < ask.steps.length);
       return { ask: id, reply: draft.press, steps };
     }
     case INBOX_ASK.ANSWER:

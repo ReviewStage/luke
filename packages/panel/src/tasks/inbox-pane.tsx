@@ -97,7 +97,6 @@ import {
   decideButtons,
   decidedOf,
   decisionsOf,
-  everyStepTicked,
   fieldValueOf,
   formFilled,
   INBOX_HOLDER,
@@ -125,6 +124,7 @@ import {
   threadCut,
   threadEntries,
   withDecision,
+  withDone,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -1605,7 +1605,7 @@ function AskPress({
  * An open ask's controls, each attaching its answer to the reply rather
  * than sending it: a `decide`'s options numbered for the keys, or its two
  * small buttons where it is a yes or no in other words; a `do`'s steps as
- * checkboxes, then Mark done once every one is ticked, and Couldn't do it;
+ * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
  * an `answer`'s fields, then Submit once the required ones are filled, or
  * its Answer, whose reply's words are the answer.
  */
@@ -1667,8 +1667,8 @@ function AskControls({
           <div className="inbox-ask-presses">
             <AskPress
               label={ASK_PRESS.DONE}
-              disabled={disabled || !everyStepTicked(ask, draft)}
-              onPress={() => press(INBOX_REPLY.DONE)}
+              disabled={disabled}
+              onPress={() => onDraft(withDone(ask, draft))}
             />
             <AskPress
               label={ASK_PRESS.NOT_DONE}
