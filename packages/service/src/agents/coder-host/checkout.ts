@@ -294,6 +294,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
         recordedAs: agent.repository,
       },
       minted.token,
+      { access: minted.access },
     ).pipe(Effect.mapError(refused));
     yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refused));
     return minted.token;

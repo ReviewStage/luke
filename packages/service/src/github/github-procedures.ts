@@ -200,7 +200,9 @@ const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
     place.member,
   );
   if (Option.isNone(reached)) return null;
-  const found = yield* pullRequestByNumber(reached.value.token, place.repository, number);
+  const found = yield* pullRequestByNumber(reached.value.token, place.repository, number).pipe(
+    markRefusedToken(reached.value.access),
+  );
   if (Option.isNone(found)) return null;
   const pull = found.value;
   return {
