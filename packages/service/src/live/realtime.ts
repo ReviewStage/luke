@@ -30,6 +30,9 @@ export const REALTIME_ENVIRONMENT = {
   SECRET: "NEON_REALTIME_SECRET",
 } as const;
 
+/** What Vercel names the deployment a function runs in, production being the one that should never poll. */
+const VERCEL_DEPLOYMENT = { VARIABLE: "VERCEL_ENV", PRODUCTION: "production" } as const;
+
 /** Why a statement could not be sealed: the secret refused it. */
 export class SealRefused extends Data.TaggedError("SealRefused")<{ readonly reason: string }> {}
 
@@ -125,7 +128,8 @@ export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
 /**
  * Realtime as the deployment's environment configures it: on where both of
  * its variables and the database name stand, polled where any is missing or
- * blank, so a deployment turns it on by setting them and back to polling by
+ * blank (said once in the log as an error in production, which should never
+ * poll), so a deployment turns it on by setting them and back to polling by
  * removing them. A secret Realtime refuses leaves it off, said once in the log.
  */
 export const liveSealingFromEnvironment = Layer.effect(
@@ -135,12 +139,18 @@ export const liveSealingFromEnvironment = Layer.effect(
       url: Config.option(Config.String(REALTIME_ENVIRONMENT.URL)),
       secret: Config.option(Config.Redacted(REALTIME_ENVIRONMENT.SECRET)),
       database: Config.option(databaseUrl),
+      deployment: Config.option(Config.String(VERCEL_DEPLOYMENT.VARIABLE)),
     });
     const url = Option.getOrUndefined(read.url)?.trim();
     const secret = Option.getOrUndefined(read.secret);
     const database = Option.flatMap(read.database, databaseNameOf);
     const secretText = secret === undefined ? "" : Redacted.value(secret).trim();
     if (!url || secretText === "" || Option.isNone(database)) {
+      if (Option.getOrUndefined(read.deployment)?.trim() === VERCEL_DEPLOYMENT.PRODUCTION) {
+        yield* Effect.logError(
+          "realtime: production has no Neon Realtime configured; live reads poll instead",
+        );
+      }
       return Option.some(pollSealer(yield* SqlClient.SqlClient));
     }
     const sealer = yield* Effect.option(

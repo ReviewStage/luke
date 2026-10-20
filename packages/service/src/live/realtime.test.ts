@@ -6,7 +6,7 @@ import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB } from "@luke/database/testing";
 import { LIVE_POLL_URL } from "@luke/features/live-wire";
 import { eq } from "drizzle-orm";
-import { ConfigProvider, Effect, Layer, Option, Result } from "effect";
+import { ConfigProvider, Effect, Layer, Logger, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -127,6 +127,27 @@ it.layer(getTestDB())("the deployment's Realtime", (it) => {
         assert.ok(Result.isSuccess(aliased));
         const renamed = yield* Effect.result(sealing.value.seal(select({ itemId: inboxItem.id })));
         assert.ok(Result.isFailure(renamed));
+      }),
+  );
+
+  it.effect(
+    "a production deployment without Realtime says so once in the log as an error, and a preview polls quietly",
+    () =>
+      Effect.gen(function* () {
+        const errors: string[] = [];
+        const recorder = Logger.make(({ logLevel, message }) => {
+          if (logLevel === "Error") errors.push(JSON.stringify(message));
+        });
+        const quietly = Effect.provide(Logger.layer([recorder]));
+        yield* sealingOver({ DATABASE_URL, VERCEL_ENV: "preview" }).pipe(quietly);
+        assert.deepEqual(errors, []);
+        const sealing = yield* sealingOver({ DATABASE_URL, VERCEL_ENV: "production" }).pipe(
+          quietly,
+        );
+        assert.ok(Option.isSome(sealing));
+        assert.equal(sealing.value.url, LIVE_POLL_URL);
+        assert.equal(errors.length, 1);
+        assert.match(errors[0] ?? "", /production has no Neon Realtime configured/);
       }),
   );
 });
