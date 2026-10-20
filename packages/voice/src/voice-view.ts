@@ -1,18 +1,13 @@
-import {
-  LIVE_STATUS,
-  type LiveStatus,
-  TRANSCRIPT_SPEAKER,
-  type TranscriptSpeaker,
-} from "@luke/live";
+import { LIVE_STATUS, type LiveStatus, TRANSCRIPT_SPEAKER } from "@luke/live";
 import {
   isOptionalWireString,
   isRecord,
   isWireBoolean,
-  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
 } from "@luke/wire";
+import { Schema } from "effect";
 
 /**
  * What a panel needs to draw the live conversation and cannot derive or read
@@ -28,13 +23,15 @@ export interface VoiceSpeakers {
 }
 
 /** One line said on the standing call, as the voice window's captions group it, with its span in milliseconds into the call. */
-interface VoiceCallLine {
-  readonly rowId: string;
-  readonly speaker: TranscriptSpeaker;
-  readonly words: string;
-  readonly startMs: number;
-  readonly endMs: number;
-}
+const voiceCallLineSchema = Schema.Struct({
+  rowId: Schema.String,
+  speaker: Schema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
+  words: Schema.String,
+  startMs: Schema.Number,
+  endMs: Schema.Number,
+});
+
+type VoiceCallLine = typeof voiceCallLineSchema.Type;
 
 /**
  * Everything said on the standing call so far: the store's id for its
@@ -62,10 +59,19 @@ export interface VoiceCallTranscript {
  * while its words still grow; a call gone is the change from 0 to no lines.
  * Applied twice it is applied once, so a report heard again changes nothing.
  */
-export interface VoiceCallTranscriptChange {
-  readonly voiceSessionId: string | undefined;
-  readonly from: number;
-  readonly lines: readonly VoiceCallLine[];
+const voiceCallTranscriptChangeSchema = Schema.Struct({
+  voiceSessionId: Schema.UndefinedOr(Schema.String),
+  from: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  lines: Schema.Array(voiceCallLineSchema),
+});
+
+export type VoiceCallTranscriptChange = typeof voiceCallTranscriptChangeSchema.Type;
+
+const isTranscriptChange = Schema.is(voiceCallTranscriptChangeSchema);
+
+/** Whether a value crossing from the voice window is a transcript change, read by its one Schema. */
+export function isVoiceCallTranscriptChange(value: UnparsedWireValue): boolean {
+  return isTranscriptChange(value);
 }
 
 export interface VoiceView extends VoiceSpeakers {
@@ -158,34 +164,6 @@ export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand 
 
 function isOptionalWireStrings(value: UnparsedWireValue): value is readonly string[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every(isWireString));
-}
-
-const TRANSCRIPT_SPEAKERS: ReadonlySet<string> = new Set(Object.values(TRANSCRIPT_SPEAKER));
-
-function isVoiceCallLine(value: UnparsedWireValue): boolean {
-  return (
-    isRecord(value) &&
-    isWireString(value.rowId) &&
-    isWireString(value.speaker) &&
-    TRANSCRIPT_SPEAKERS.has(value.speaker) &&
-    isWireString(value.words) &&
-    isWireNumber(value.startMs) &&
-    isWireNumber(value.endMs)
-  );
-}
-
-export function isVoiceCallTranscriptChange(
-  value: UnparsedWireValue,
-): value is VoiceCallTranscriptChange & WireRecord {
-  return (
-    isRecord(value) &&
-    isOptionalWireString(value.voiceSessionId) &&
-    isWireNumber(value.from) &&
-    Number.isInteger(value.from) &&
-    value.from >= 0 &&
-    Array.isArray(value.lines) &&
-    value.lines.every(isVoiceCallLine)
-  );
 }
 
 /**
