@@ -43,7 +43,6 @@
     "./agents/agent-runtime/servers": "./src/agents/agent-runtime/servers.js",
     "./agents/agent-runtime/skills": "./src/agents/agent-runtime/skills.js",
     "./agents/agent-runtime/tools": "./src/agents/agent-runtime/tools.js",
-    "./agents/agent-terminals-app": "./src/agents/agent-terminals-app.js",
     "./agents/attached-files": "./src/agents/attached-files.js",
     "./agents/brain-host/auth": "./src/agents/brain-host/auth.js",
     "./agents/brain-host/bounds": "./src/agents/brain-host/bounds.js",

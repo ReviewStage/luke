@@ -4,10 +4,15 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { GitHubIssuePick } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
+import {
+  TASK_ISSUE_PROVIDER,
+  TASK_ISSUE_RELATION,
+  type TaskIssueChoice,
+} from "@luke/features/task-issue-wire";
 import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
@@ -19,11 +24,7 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
-  CloseIcon,
-  IconButton,
   PencilIcon,
-  PROVIDER_MARK_SIZE,
-  ProviderMark,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -45,6 +46,14 @@ import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
+import {
+  choiceOf,
+  linkedElsewhere,
+  linkIdOf,
+  linkIssueOf,
+  type NewTaskLink,
+  NewTaskLinks,
+} from "./new-task-links.js";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
@@ -65,7 +74,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * hands a title, as
  * the dialog does (`heading`): the title, then the repository the task is
  * about (`repository-chip.tsx`), and at the row's right end the Issue
- * chip, where the workspace has Linear connected
+ * chip, where the workspace has GitHub or Linear connected
  * (`issue-picker-chip.tsx`, ⌘L from the card). With no title, as on Home, both stand in the foot after
  * the "+" instead. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
@@ -94,14 +103,18 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *   by its issue where one was picked, and else stands Untitled until Luke
  *   names it, as a planned task always has.
  *
- * Choosing a Linear issue lays it over the words as a chip, its mark, key,
- * title, and state, with the × that lets it go, rather than starting
- * anything; one issue stands at a time, and the owner's workspace changing,
- * as Home's does, lets it go too. The task is linked to it in either mode
- * and named by it, Luke researches it in Plan mode as he always did, beside
- * the brief, and in Agent mode the agent is handed a mention of it, by its
- * link, before the words (`agentPromptOf`), so an issue picked and Return
- * starts an agent on it.
+ * Choosing a GitHub or a Linear issue links it, as a chip over the words
+ * (`new-task-links.tsx`) with its key, its title, its Closes / Part of
+ * switch, and the × that lets it go, rather than starting anything; the
+ * card links up to as many as a task may, GitHub's and Linear's mixed, and
+ * starting the task links each with its relation. A GitHub issue is the
+ * chosen repository's: picking one of another repository, or with none
+ * chosen, makes its repository the task's, and a change of repository lets
+ * go the GitHub issues of the one before. The owner's workspace changing,
+ * as Home's does, lets every one go. The task is named by the first issue
+ * picked, Luke researches them in Plan mode beside the brief, and in Agent
+ * mode the agent is handed a mention of each, by its page, before the words
+ * (`agentPromptOf`), so an issue picked and Return starts an agent on it.
  *
  * An agent's start carries a key the card mints, and a press asking the
  * same again, as Retry after a start the service never answered does,
@@ -135,7 +148,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
  * and opened again, or Home's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
- * does. The card holds its own issue, repository, and model, so the owner
+ * does. The card holds its own issues, repository, and model, so the owner
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  */
@@ -171,7 +184,6 @@ const COMPOSER_WORDS = {
   PLAN: "Plan",
   TOGGLE_LABEL: "Plan with Luke first",
   TOGGLE_KEYS: "Shift+Tab",
-  DROP_ISSUE: "Remove issue",
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
   FILE: "File for later",
   FILE_HINT: "Add it to the backlog without starting it",
@@ -199,8 +211,21 @@ interface AgentAsk {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
-  readonly linearIssueId: string | undefined;
+  readonly issues: readonly TaskIssueChoice[];
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
+}
+
+/** Whether two presses link the same issues, in the same order and with the same relations. */
+function sameIssues(a: readonly TaskIssueChoice[], b: readonly TaskIssueChoice[]): boolean {
+  return a.length === b.length && a.every((issue, index) => sameChoice(issue, b[index]));
+}
+
+function sameChoice(a: TaskIssueChoice, b: TaskIssueChoice | undefined): boolean {
+  if (b === undefined || a.relation !== b.relation) return false;
+  if (a.provider === TASK_ISSUE_PROVIDER.LINEAR || b.provider === TASK_ISSUE_PROVIDER.LINEAR) {
+    return a.provider === b.provider && "id" in a && "id" in b && a.id === b.id;
+  }
+  return a.repository === b.repository && a.number === b.number;
 }
 
 /** Whether two presses ask the same: the same task, words, files in the same order, and model. */
@@ -209,7 +234,7 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
     a.name === b.name &&
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
-    a.linearIssueId === b.linearIssueId &&
+    sameIssues(a.issues, b.issues) &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
@@ -227,38 +252,6 @@ function newTaskPlace(workspaceId: string | undefined): DraftPlace {
 /** Whether a key press is Shift+Tab alone, which turns the mode from the field. */
 function turnsMode(event: KeyboardEvent): boolean {
   return event.key === "Tab" && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
-}
-
-/** The issue picked, over the words: its mark, key, title, and state where it has one, and the × that lets it go. */
-function IssueChip({
-  issue,
-  disabled,
-  onDrop,
-}: {
-  issue: LinearIssueSummary;
-  disabled: boolean;
-  onDrop: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="new-task-issue" data-issue-chip="">
-      <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />
-      <span className="new-task-issue-key">{issue.identifier}</span>
-      <span className="new-task-issue-title">{issue.title}</span>
-      {issue.state === undefined ? null : (
-        <span className="new-task-issue-state">{issue.state}</span>
-      )}
-      <span className="new-task-issue-drop">
-        <Tooltip label={COMPOSER_WORDS.DROP_ISSUE}>
-          <IconButton
-            icon={<CloseIcon />}
-            label={COMPOSER_WORDS.DROP_ISSUE}
-            disabled={disabled}
-            onClick={onDrop}
-          />
-        </Tooltip>
-      </span>
-    </div>
-  );
 }
 
 /** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
@@ -314,7 +307,8 @@ export function NewTaskComposer({
     writer.update(newTaskPlace(workspaceId), () => loose);
     writer.update(newTaskPlace(undefined), () => EMPTY_DRAFT);
   }, [workspaceId, loose, writer]);
-  const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
+  // The GitHub and Linear issues picked from the Issue chip, in the order picked.
+  const [picks, setLinks] = useState<readonly NewTaskLink[]>([]);
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
   const [choice, choose] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
@@ -323,8 +317,9 @@ export function NewTaskComposer({
   const pressed = useRef<{ ask: AgentAsk; key: string } | undefined>(undefined);
   // How many times ⌘L asked the Issue chip to open its menu.
   const [issueAsks, setIssueAsks] = useState(0);
-  const { linearIssuesIn } = newTask;
-  const offersIssues = linearIssuesIn(workspaceId) !== undefined;
+  const { linearIssuesIn, githubIssuesIn } = newTask;
+  const offersIssues =
+    linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined;
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
   // A repository or an issue picked in one workspace is none of another's,
@@ -334,7 +329,7 @@ export function NewTaskComposer({
   if (repositories.scope !== scope) {
     if (scope !== undefined) {
       setChosen(undefined);
-      setIssue(undefined);
+      setLinks([]);
     }
     setScope(repositories.scope);
   }
@@ -345,15 +340,25 @@ export function NewTaskComposer({
       ? null
       : chosen;
   const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
+  // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
+  const [linkedFor, setLinkedFor] = useState(repository);
+  if (linkedFor !== repository) {
+    setLinkedFor(repository);
+    setLinks((was) => was.filter((link) => !linkedElsewhere(link, repository)));
+  }
+  const links = picks.filter((link) => !linkedElsewhere(link, repository));
   const planning = mode === NEW_TASK_MODE.PLAN;
   const said = words.trim();
   const filled = hasWordsOrFiles(said, attachments);
   // Agent mode needs a repository to work in, and something to work on:
-  // words, files, or a Linear issue.
-  const onIssue = issue !== undefined;
+  // words, files, or a GitHub or Linear issue.
+  const onIssue = links.length > 0;
   const blocked = !planning && repository === null;
   const canStart = planning || (!blocked && (filled || onIssue));
-  const issueName = issue === undefined ? undefined : taskNameOfIssue(issue);
+  const linkedIssues = links.map(linkIssueOf);
+  const named = linkedIssues[0];
+  const issueName = named === undefined ? undefined : taskNameOfIssue(named);
+  const issues = links.map(choiceOf);
   // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
   const { act } = useAct();
   const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
@@ -396,7 +401,7 @@ export function NewTaskComposer({
     setNote(undefined);
     newTask
       .start(name, repository, workspaceId, withCall, {
-        ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
+        ...(issues.length === 0 ? undefined : { issues }),
         ...handing,
       })
       .then((refused) => {
@@ -426,8 +431,8 @@ export function NewTaskComposer({
         name,
         repository,
         workspaceId,
-        linearIssueId: issue?.id,
-        agent: { prompt: agentPromptOf(issue, said), attachments, choice },
+        issues,
+        agent: { prompt: agentPromptOf(linkedIssues, said), attachments, choice },
       };
       const held = pressed.current;
       const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
@@ -441,7 +446,7 @@ export function NewTaskComposer({
     begin(issueName ?? "", false);
   };
   // File for later is a bare task in the backlog, its words kept as its brief.
-  const filable = said !== "" || issue !== undefined;
+  const filable = said !== "" || named !== undefined;
   const file = () => {
     if (!filable) return;
     filing.current = true;
@@ -486,19 +491,43 @@ export function NewTaskComposer({
       onUnreached={() => setChosen(null)}
     />
   );
-  const chooseIssue = (chosenIssue: LinearIssueSummary) => {
-    setIssue(chosenIssue);
+  const full = links.length >= TASK_BOUNDS.MAX_ISSUES;
+  const link = (linked: NewTaskLink) => {
+    if (full || links.some((each) => linkIdOf(each) === linkIdOf(linked))) return;
+    setLinks([...links, linked]);
     setNote(undefined);
+  };
+  const chooseIssue = (chosenIssue: LinearIssueSummary) =>
+    link({
+      provider: TASK_ISSUE_PROVIDER.LINEAR,
+      issue: chosenIssue,
+      relation: TASK_ISSUE_RELATION.CLOSES,
+    });
+  // Note that a GitHub issue of another repository, or picked with none chosen, makes its repository the task's.
+  const chooseGitHub = (chosenIssue: GitHubIssuePick) => {
+    if (chosenIssue.repository.toLowerCase() !== repository?.toLowerCase()) {
+      setChosen(chosenIssue.repository);
+    }
+    link({
+      provider: TASK_ISSUE_PROVIDER.GITHUB,
+      issue: chosenIssue,
+      relation: TASK_ISSUE_RELATION.CLOSES,
+    });
   };
   // Note that the chip at the head row's right end hangs its menu from its trailing edge.
   const issueChip = (
     <IssuePickerChip
       linearIn={linearIssuesIn}
+      githubIn={githubIssuesIn}
       workspaceId={workspaceId}
+      repository={repository}
+      linked={new Set(links.map(linkIdOf))}
+      full={full}
       disabled={starting}
       openRequest={issueAsks}
       align={heading === undefined ? PICKER_ALIGN.START : PICKER_ALIGN.END}
       onChoose={chooseIssue}
+      onChooseGitHub={chooseGitHub}
     />
   );
   const chips = (
@@ -560,8 +589,8 @@ export function NewTaskComposer({
         // Note that Home's card stands at the top of its page, where a list risen over it is cut off under the page's head.
         listSide={heading === undefined ? MENTION_MENU_SIDE.BELOW : MENTION_MENU_SIDE.ABOVE}
         above={
-          issue === undefined ? undefined : (
-            <IssueChip issue={issue} disabled={starting} onDrop={() => setIssue(undefined)} />
+          links.length === 0 ? undefined : (
+            <NewTaskLinks links={links} disabled={starting} onChange={setLinks} />
           )
         }
         tools={heading === undefined ? chips : undefined}

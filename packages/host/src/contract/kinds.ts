@@ -2,8 +2,7 @@
  * kinds.ts -- the act kinds the window's act port answers, by domain, and the handshake that opens the port.
  *
  * Kept free of oRPC and of every schema, so `acts.ts` can spell these kinds
- * in `ACT_KIND` beside the ones `app:act` still carries without resolving the
- * contract behind them. A kind here is the key of its procedure in
+ * in `ACT_KIND` without resolving the contract behind them. A kind here is the key of its procedure in
  * `actContract`, so the panel's act door calls a kind by its own name.
  */
 
@@ -163,6 +162,24 @@ export const AVATAR_ACT_KIND = {
   VOICE_SET_VIDEO: "voice.setVideo",
 } as const;
 
+/**
+ * A Browser tab's view, which main owns over the panel that asked
+ * (`browser-views.ts`): opened on an address and answered how its page
+ * stands, sent to another, stepped back, forward, reloaded or stopped,
+ * placed over the tab's body or put out of sight, caught as a still while
+ * something covers it, and closed with its tab. How the page goes on to
+ * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
+ * and only while the account has the Browser tab experiment on.
+ */
+export const BROWSER_ACT_KIND = {
+  BROWSER_OPEN: "browser.open",
+  BROWSER_NAVIGATE: "browser.navigate",
+  BROWSER_STEP: "browser.step",
+  BROWSER_PLACE: "browser.place",
+  BROWSER_CAPTURE: "browser.capture",
+  BROWSER_CLOSE: "browser.close",
+} as const;
+
 /** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */
 export const FACTORY_ACT_KIND = {
   FACTORY_WORLD: "factory.world",
@@ -318,6 +335,18 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
+ * The updater as Settings' row and the sidebar's foot reach it: a check
+ * asked for, answered with where the updater then stands; the ready build
+ * installed; and the releases page and the changelog opened.
+ */
+export const UPDATE_ACT_KIND = {
+  UPDATE_CHECK: "update.check",
+  UPDATE_INSTALL: "update.install",
+  UPDATE_OPEN_RELEASE: "update.openRelease",
+  UPDATE_OPEN_CHANGELOG: "update.openChangelog",
+} as const;
+
+/**
  * The voice window's runtime: a command to it from a panel or the call
  * window; the call card's way back, Luke's window brought forward on the
  * call's own task; the voice window as a GPT Live peer, its SDP offer handed
@@ -369,6 +398,7 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
   WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
   WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
+  WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
@@ -379,6 +409,32 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
 } as const;
 
+/**
+ * What a window asks of the system it is drawn on: the microphone asked for
+ * and its route read afresh, the notification settings opened and a test
+ * notification posted, a new mail to the people who make Luke, the panel
+ * focused, words copied, a file saved, and feedback sent.
+ */
+export const WINDOW_SURFACE_ACT_KIND = {
+  MICROPHONE_REQUEST: "microphone.request",
+  /**
+   * Where the developer's voice would be captured from, read afresh: the act
+   * probes the native watcher rather than answering the document, because the
+   * route decides which device a press opens and macOS moves it between
+   * presses.
+   */
+  MICROPHONE_ROUTE: "microphone.route",
+  NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
+  /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
+  NOTIFICATIONS_TEST: "notifications.test",
+  /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
+  CONTACT_EMAIL: "contact.email",
+  WINDOW_FOCUS_PANEL: "window.focusPanel",
+  WINDOW_COPY_TEXT: "window.copyText",
+  WINDOW_SAVE_FILE: "window.saveFile",
+  FEEDBACK_SEND: "feedback.send",
+} as const;
+
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
@@ -387,13 +443,16 @@ export const PORT_ACT_KIND = {
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
+  ...BROWSER_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
+  ...UPDATE_ACT_KIND,
   ...VOICE_RUNTIME_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
 } as const;
 
@@ -406,9 +465,12 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  */
 export const PLATFORM_PORT_ACT_KIND = {
   ...AVATAR_ACT_KIND,
+  ...BROWSER_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
+  ...UPDATE_ACT_KIND,
   ...VOICE_RUNTIME_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
 } as const;
 
 export type PlatformPortActKind =

@@ -17,6 +17,7 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
@@ -1874,7 +1875,7 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
   await tab.control().newTask.start("", null, "workspace-acme", true, {
-    linearIssueId: "issue-1",
+    issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
     brief: "Keep the queue order stable.",
   });
   await tab.control().newTask.start("", null, "workspace-acme", true, { brief: " \n " });
@@ -1886,7 +1887,7 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
     [
       {
         workspaceId: "workspace-acme",
-        linearIssueId: "issue-1",
+        issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
         brief: "Keep the queue order stable.",
       },
       { workspaceId: "workspace-acme" },

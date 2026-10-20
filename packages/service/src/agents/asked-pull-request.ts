@@ -4,7 +4,7 @@
  * The agent's own, from the instance's kept published answers, or the pull
  * request of its repository the request names by its number, read afresh,
  * as a tab showing a pull request other than the agent's own asks. Shared
- * by the route group's changes read (`coding-agents-app.ts`) and the tab's
+ * by the agent's changes read (`agents-procedures.ts`) and the tab's
  * procedures (`agent-pull-request-procedures.ts`), each failure answered as
  * the refusal a route answers.
  */
@@ -15,6 +15,7 @@ import { githubPullRequestNumberSchema } from "@luke/features/github-repositorie
 import { readEither } from "@luke/wire/effect";
 import { Cache, Effect, Result } from "effect";
 import { unparsedWire } from "../core.js";
+import type { GitHubWorkspaceReadFailure } from "../github/github-app.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
 import {
   HOSTED_REFUSAL,
@@ -27,6 +28,31 @@ import {
   PublishedKey,
 } from "./coder-host/published.js";
 import { statusOf } from "./coder-host/stop.js";
+
+/** How a read of GitHub for an agent's repository fails: the store, GitHub, or the repository out of the workspace's reach. */
+type GitHubAskFailure = GitHubWorkspaceReadFailure | { readonly _tag: "RepositoryNotReachable" };
+
+/**
+ * A read of GitHub for an agent's repository as the refusal a route
+ * answers: the repository out of reach, the store, or GitHub's own
+ * refusal.
+ */
+export function githubReadRefusal<A, R>(
+  effect: Effect.Effect<A, GitHubAskFailure, R>,
+): Effect.Effect<A, HostedRefusal, R> {
+  return Effect.catch(effect, (failure) => {
+    switch (failure._tag) {
+      case "RepositoryNotReachable":
+        return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+      case "SqlError":
+      case "EffectDrizzleQueryError":
+      case "SchemaError":
+        return hostedStoreOrUnavailable(Effect.fail(failure));
+      default:
+        return githubReadOrRefusal(Effect.fail(failure));
+    }
+  });
+}
 
 /** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
 const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (

@@ -5,7 +5,7 @@
  * connect intent, the page's claim of it, whether GitHub is connected, and
  * the disconnect. And the repositories of a workspace's GitHub installation
  * (`github-repositories-wire.ts`), and one of them's tree, skills, pull
- * request, and issue.
+ * request, and issue, and the issues New task's picker offers of it.
  *
  * Every read of a repository is a GET whose input is its query, so each
  * field is declared by what the query carries, text, and decodes to the
@@ -28,11 +28,13 @@ import {
   githubConnectionAnswerSchema,
 } from "../github-connection-wire.js";
 import {
+  GITHUB_ISSUES_BOUNDS,
   GITHUB_REPOSITORIES_QUERY,
   githubPullRequestNumberSchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
   githubRepositoryIssueAnswerSchema,
+  githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
 } from "../github-repositories-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -122,4 +124,17 @@ export const githubContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE }))
     .input(numberedQuerySchema)
     .output(EffectSchema.flip(githubRepositoryIssueAnswerSchema)),
+  /** A repository's issues: the one `number` names, else those `query`'s words find, else its open issues. */
+  repositoryIssues: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES }))
+    .input(
+      EffectSchema.Struct({
+        ...repositoryPlaceQuery,
+        [GITHUB_REPOSITORIES_QUERY.QUERY]: EffectSchema.optionalKey(
+          EffectSchema.String.check(EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_QUERY_CHARS)),
+        ),
+        [GITHUB_REPOSITORIES_QUERY.NUMBER]: EffectSchema.optionalKey(numberQuerySchema),
+      }),
+    )
+    .output(EffectSchema.flip(githubRepositoryIssuesAnswerSchema)),
 };

@@ -10,12 +10,14 @@ import {
   turnRecordFields,
 } from "./coding-agent-wire.js";
 import {
+  GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
   githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
   githubRepositoryIssueAnswerSchema,
+  githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
 import { linearIssueSummarySchema } from "./linear-wire.js";
@@ -813,6 +815,30 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
+
+/**
+ * A repository's issues, as New task's picker asks the host for them: the
+ * workspace whose installation reaches the repository, the repository, and
+ * the words to search for or the number of the one issue asked, its open
+ * issues where neither is named.
+ */
+export const tasksGitHubIssuesParamsSchema = EffectSchema.Struct({
+  ...repositoryPlaceFields,
+  query: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_QUERY_CHARS)),
+  ),
+  number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
+});
+
+export type TasksGitHubIssuesParams = typeof tasksGitHubIssuesParamsSchema.Type;
+
+/** A repository's issues, as the window hears them: the issues, that the installation grants none, or that the service did not answer. */
+export const tasksGitHubIssuesAnswerSchema = EffectSchema.Union([
+  githubRepositoryIssuesAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksGitHubIssuesAnswer = typeof tasksGitHubIssuesAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

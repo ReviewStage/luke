@@ -1,9 +1,11 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_REPLY,
   INBOX_STATUS,
   type InboxFormValue,
   type InboxItem,
+  type InboxReplyKind,
   inboxFormValueSchema,
 } from "@luke/features/inbox-wire";
 import { Equal, Schema } from "effect";
@@ -20,7 +22,8 @@ import { readKept, writeKept } from "./desktop/folded-groups.js";
  * draft agent its first message per plan, New task its words per workspace
  * the task starts in, and an inbox
  * card its answer per item, at the revision it was written against, the
- * options picked and the fields filled beside its note. A draft is known by where
+ * options picked, the fields filled, and, on a thread, the steps ticked and
+ * the answer pressed beside its note. A draft is known by where
  * it goes, a place named by the ids of what it goes to, never one key built
  * of them. Sending a draft lets it go, and so does emptying its box, so a
  * place holds a draft only while its box holds something.
@@ -133,6 +136,8 @@ const storedDrafts = Schema.fromJsonString(
       text: Schema.String,
       choices: Schema.optionalKey(Schema.Array(Schema.String)),
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
+      steps: Schema.optionalKey(Schema.Array(Schema.Number)),
+      press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
     }),
   ),
 );
@@ -142,12 +147,14 @@ type StoredDraft = (typeof storedDrafts.Type)[number];
 /** The account a window's drafts are written by: the one signed in, none before its state is read, as in a test. */
 type Owner = string | null;
 
-/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled. */
+/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled, and a thread's steps ticked and answer pressed. */
 export interface Draft {
   readonly text: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
+  readonly steps?: readonly number[] | undefined;
+  readonly press?: InboxReplyKind | undefined;
 }
 
 /** One place's draft. */
@@ -166,7 +173,13 @@ export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], valu
 
 /** Whether a draft holds anything storage keeps: everything but its files. */
 function stored(draft: Draft): boolean {
-  return draft.text !== "" || draft.choices.length > 0 || draft.values.length > 0;
+  return (
+    draft.text !== "" ||
+    draft.choices.length > 0 ||
+    draft.values.length > 0 ||
+    (draft.steps ?? []).length > 0 ||
+    draft.press !== undefined
+  );
 }
 
 /** Whether a draft holds anything to keep. */
@@ -183,8 +196,20 @@ function readStored(): readonly StoredDraft[] {
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .flatMap(({ place, text, choices = [], values = [] }) =>
-      isDraftPlace(place) ? [{ place, text, attachments: [], choices, values }] : [],
+    .flatMap(({ place, text, choices = [], values = [], steps, press }) =>
+      isDraftPlace(place)
+        ? [
+            {
+              place,
+              text,
+              attachments: [],
+              choices,
+              values,
+              ...(steps === undefined ? undefined : { steps }),
+              ...(press === undefined ? undefined : { press }),
+            },
+          ]
+        : [],
     )
     .filter(stored);
 }
@@ -196,7 +221,9 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.place, kept.place) &&
     entry.text === kept.text &&
     Equal.equals(entry.choices ?? [], kept.choices) &&
-    Equal.equals(entry.values ?? [], kept.values)
+    Equal.equals(entry.values ?? [], kept.values) &&
+    Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
+    entry.press === kept.press
   );
 }
 
@@ -215,12 +242,14 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
   );
   const written = kept
     .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
-    .map(({ place, text, choices, values }) => ({
+    .map(({ place, text, choices, values, steps = [], press }) => ({
       accountId: owner,
       place,
       text,
       ...(choices.length === 0 ? undefined : { choices }),
       ...(values.length === 0 ? undefined : { values }),
+      ...(steps.length === 0 ? undefined : { steps }),
+      ...(press === undefined ? undefined : { press }),
     }));
   const entries = [...standing, ...written].slice(-MAX_KEPT);
   writeKept(STORAGE_KEY, storedDrafts, entries);

@@ -5,7 +5,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { StripTab } from "@luke/ui/tab-strip-model";
@@ -89,10 +89,7 @@ beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
   // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.TERMINAL_LIST]: ({ agentId }) =>
       Promise.resolve(

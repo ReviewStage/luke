@@ -26,6 +26,74 @@
       "minLength": 1,
       "maxLength": 100
     },
+    "issues": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "linear"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "relation": {
+                "type": "string",
+                "enum": [
+                  "closes",
+                  "part_of"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "github"
+                ]
+              },
+              "repository": {
+                "type": "string",
+                "maxLength": 140
+              },
+              "number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "relation": {
+                "type": "string",
+                "enum": [
+                  "closes",
+                  "part_of"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "repository",
+              "number"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "maxItems": 10
+    },
     "planning": {
       "type": "boolean"
     },

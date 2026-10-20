@@ -10,6 +10,10 @@ import {
 import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type {
+  GitHubRepositoryIssuesAnswer,
+  RepositoryIssuesAsk,
+} from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
@@ -17,6 +21,7 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import type { TaskIssueChoice } from "@luke/features/task-issue-wire";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -478,13 +483,13 @@ export interface NewTaskPreset {
 
 /**
  * What a start comes from beyond its name, repository, workspace, and
- * planning: a Linear issue, the agent New task's composer starts on its
- * words in the task's own start (`handed`), the words Plan mode hands Luke
- * as the task's brief (`brief`), trimmed and none where blank, and where it
- * starts (`status`).
+ * planning: the Linear and GitHub issues it links, each with its relation,
+ * the agent New task's composer starts on its words in the task's own start
+ * (`handed`), the words Plan mode hands Luke as the task's brief
+ * (`brief`), trimmed and none where blank, and where it starts (`status`).
  */
 export interface NewTaskStart {
-  readonly linearIssueId?: string;
+  readonly issues?: readonly TaskIssueChoice[];
   readonly handed?: NewTaskAgent;
   readonly brief?: string;
   /** Where the task starts: to do where none is named, or the backlog for one New task files for later. */
@@ -766,6 +771,18 @@ export interface TasksControl {
     linearIssuesIn: (
       workspaceId: string | undefined,
     ) => ((ask?: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>) | undefined;
+    /**
+     * The read of a repository's GitHub issues through a workspace's
+     * installation, where that workspace has GitHub connected; none where it
+     * has not. Asked nothing, it answers the repository's open issues; asked
+     * words or a number, what GitHub finds for them; either way, or that the
+     * installation grants the App no issues, with where that is granted.
+     */
+    githubIssuesIn: (
+      workspaceId: string | undefined,
+    ) =>
+      | ((repository: string, ask: RepositoryIssuesAsk) => Promise<GitHubRepositoryIssuesAnswer>)
+      | undefined;
   };
   /** Leaves the open task for the home page; a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -2423,7 +2440,9 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
+      ...(from.issues === undefined || from.issues.length === 0
+        ? undefined
+        : { issues: from.issues }),
       ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
       ...(from.status === undefined ? undefined : { status: from.status }),
       ...(planning ? undefined : { planning }),
@@ -2477,6 +2496,13 @@ export function useTasksTab(input: {
     const linked = viewed.workspaces.find((each) => each.id === workspaceId);
     if (linked?.linear?.active !== true) return undefined;
     return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
+  };
+  // The dialog lists the chosen repository's GitHub issues, where the workspace has GitHub connected.
+  const githubIssuesIn: TasksControl["newTask"]["githubIssuesIn"] = (workspaceId) => {
+    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+    if (linked?.github == null || !linked.github.active) return undefined;
+    return (repository, ask) =>
+      act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
   };
 
   // New task opens the dialog over whatever stands, an open task and its
@@ -3252,6 +3278,7 @@ export function useTasksTab(input: {
       tasks: [...sidebar.pinned, ...sidebar.rest, ...sidebar.archived],
       onShowMention: guard(showMention),
       linearIssuesIn,
+      githubIssuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),
     // Home is the page with no task open, so where none is, only the Inbox, an

@@ -7,6 +7,7 @@
 
 import { accountContract } from "./account.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
+import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
 import { dictationContract } from "./dictation.js";
 import { factoryContract } from "./factory.js";
@@ -24,6 +25,7 @@ import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceLinearContract } from "./workspace-linear.js";
 import { workspacesContract } from "./workspaces.js";
 
+export { AGENT_START_STATUS } from "./agents.js";
 export { HOSTED_ERRORS } from "./errors.js";
 export { integrationStatusesReadSchema } from "./integrations.js";
 export { TASK_START_STATUS } from "./tasks.js";
@@ -32,6 +34,7 @@ export { TASK_START_STATUS } from "./tasks.js";
 export const hostedContract = {
   account: accountContract,
   agentPullRequests: agentPullRequestsContract,
+  agents: agentsContract,
   automations: automationsContract,
   dictation: dictationContract,
   factory: factoryContract,

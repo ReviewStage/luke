@@ -143,26 +143,32 @@ const LABEL_SPECIAL = /[[\]\\]/gu;
 /** The characters a markdown link's target encodes so it ends where it should. */
 const TARGET_SPECIAL = /[()]/gu;
 
-/**
- * The prompt a coding agent New task starts is handed: a mention of the
- * issue picked, where one was, by its key and title over its own address,
- * a Linear issue's as the app writes its link
- * (`[@ENG-1 Title](https://linear.app/…)`) and one of the workspace's own
- * over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
- * then a blank line and the words, trimmed; the issue alone where no words
- * were written, and the words alone where no issue was picked.
- */
-export function agentPromptOf(
-  issue: Pick<LinearIssueSummary, "identifier" | "title" | "url"> | undefined,
-  words: string,
-): string {
-  const said = words.trim();
-  if (issue === undefined) return said;
+/** One issue as the app writes a link to it: its key and title over its own address. */
+function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
   const name = `${issue.identifier} ${issue.title.trim()}`.trim();
   const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
   const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
-  const mention = `[${label}](${target})`;
-  return said === "" ? mention : `${mention}\n\n${said}`;
+  return `[${label}](${target})`;
+}
+
+/**
+ * The prompt a coding agent New task starts is handed: a mention of each
+ * issue picked, in the order picked, one to a line, by its key and title
+ * over its own address, a Linear issue's as the app writes its link
+ * (`[@ENG-1 Title](https://linear.app/…)`), a GitHub issue's over its page
+ * (`[@acme/relay#7 Title](https://github.com/…)`), and one of the
+ * workspace's own over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
+ * then a blank line and the words, trimmed; the issues alone where no words
+ * were written, and the words alone where no issue was picked.
+ */
+export function agentPromptOf(
+  issues: readonly Pick<LinearIssueSummary, "identifier" | "title" | "url">[],
+  words: string,
+): string {
+  const said = words.trim();
+  const mentions = issues.map(issueMention).join("\n");
+  if (mentions === "") return said;
+  return said === "" ? mentions : `${mentions}\n\n${said}`;
 }
 
 /** How many of a workspace's Linear issues New task offers under its name field at once. */

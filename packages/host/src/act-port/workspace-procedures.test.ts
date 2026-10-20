@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import type { TasksWorkspaceGitHubConnectAnswer } from "@luke/features/tasks-view";
+import { GITHUB_AUTHOR_ASSOCIATION, ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  TASK_CALL_FAILURE,
+  type TasksWorkspaceGitHubConnectAnswer,
+} from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
@@ -79,6 +83,19 @@ const LINEAR_ISSUE = {
   title: "Start a plan from Linear",
   url: "https://linear.app/acme/issue/ENG-1",
 };
+const RELAY = "acme/relay";
+const GITHUB_ISSUE = {
+  nodeId: "I_kwDOAcme7",
+  repository: RELAY,
+  number: 7,
+  title: "Invitations expire too soon",
+  url: "https://github.com/acme/relay/issues/7",
+  state: ISSUE_STATE.OPEN,
+  author: "octo-dev",
+  authorAssociation: GITHUB_AUTHOR_ASSOCIATION.CONTRIBUTOR,
+  updatedAt: 1_760_000_000_000,
+};
+const GRANT_URL = "https://github.com/organizations/acme/settings/installations/7811";
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -98,6 +115,8 @@ const REFUSAL = {
     "Could not disconnect Linear from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]:
     "Could not read that workspace's Linear issues on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]:
+    "Could not read that repository's issues on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]:
     "Could not read that workspace's members on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]:
@@ -137,6 +156,10 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: WORKSPACE },
+  {
+    kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES,
+    payload: { ...WORKSPACE, repository: RELAY },
+  },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, payload: WORKSPACE },
   {
@@ -234,6 +257,15 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           ? { issues: [LINEAR_ISSUE] }
           : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const),
       ),
+    // Acme's relay lists its one issue, its ledger's installation grants none, and anything else went unanswered.
+    tasksGitHubIssues: (params) =>
+      ask(`github-issues:${params.workspaceId}:${params.repository}`, () => {
+        if (params.workspaceId !== ACME.id)
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+        return params.repository === RELAY
+          ? { issues: [GITHUB_ISSUE] }
+          : { ungranted: { settingsUrl: GRANT_URL } };
+      }),
     workspaceMembers: (params) =>
       ask(`members:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),
@@ -517,6 +549,25 @@ it("a workspace's Linear sign-in opens only an https address, and its issues are
   assert.deepEqual(browsed, [LINEAR_SIGN_IN_URL]);
   assert.deepEqual(issues, { answer: [LINEAR_ISSUE] });
   assert.deepEqual(none, { refused: LINEAR_UNAVAILABLE_REFUSAL });
+});
+
+it("a repository's GitHub issues are answered from a panel, an installation that grants none answers so with its settings page rather than an empty list, and one unanswered is refused in the kind's own words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const read = (workspaceId: string, repository: string) =>
+    settled(client, WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId, repository });
+
+  const listed = await read(ACME.id, RELAY);
+  const ungranted = await read(ACME.id, "acme/ledger");
+  const unanswered = await read("workspace-other", RELAY);
+
+  assert.deepEqual(listed, { answer: { issues: [GITHUB_ISSUE] } });
+  assert.deepEqual(ungranted, { answer: { ungranted: { settingsUrl: GRANT_URL } } });
+  assert.deepEqual(unanswered, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES] });
+  assert.deepEqual(asked, [
+    `github-issues:${ACME.id}:${RELAY}`,
+    `github-issues:${ACME.id}:acme/ledger`,
+    "github-issues:workspace-other:acme/relay",
+  ]);
 });
 
 it("a workspace write the account's role does not allow is refused in words that say so, and one unanswered in its kind's own", async () => {

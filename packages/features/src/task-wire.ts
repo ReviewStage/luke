@@ -12,6 +12,7 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { sameIssueChoice, type TaskIssueChoice, taskIssueChoiceSchema } from "./task-issue-wire.js";
 
 /**
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
@@ -201,12 +202,28 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
   return request.agent === undefined || request.planning !== true;
 }
 
+/** Whether a start names its issues one way and each once: never `linearIssueId` beside `issues`, and no issue twice among them. */
+function issuesNamedOnce(request: {
+  linearIssueId?: string;
+  issues?: readonly TaskIssueChoice[];
+}): boolean {
+  const issues = request.issues ?? [];
+  if (request.linearIssueId !== undefined && issues.length > 0) return false;
+  return issues.every((issue, index) =>
+    issues.slice(index + 1).every((later) => !sameIssueChoice(issue, later)),
+  );
+}
+
 /**
  * Starting a plan (POST): its name where one is given, the repository it is
  * about where one is chosen, the workspace it starts in where one is named,
  * the account's first workspace where none is, and the Linear issue it
  * starts from where one was picked, which the service reads through the
- * workspace's own Linear connection (`linear-wire.ts`); the document starts
+ * workspace's own Linear connection (`linear-wire.ts`), or the issues it
+ * links from the start, Linear's and GitHub's, up to `TASK_BOUNDS.MAX_ISSUES`,
+ * each named once and each with its relation (`task-issue-wire.ts`), a
+ * GitHub issue only of the repository the task is about, which the service
+ * reads itself, refusing the start where it reads none; the document starts
  * as the untouched template, or empty where `planning` is false: a task
  * started without its planning phase, whose window opens no call on it
  * either. A name left out, or nothing but whitespace, starts the plan as
@@ -229,6 +246,11 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
+  issues: EffectSchema.optionalKey(
+    EffectSchema.Array(taskIssueChoiceSchema).check(
+      EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES),
+    ),
+  ),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
   brief: EffectSchema.optionalKey(
@@ -236,7 +258,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   ),
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned));
+}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(issuesNamedOnce));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 

@@ -253,6 +253,7 @@ import {
   sourceSandbox,
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
+import { agentsProcedures } from "./agents-procedures.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -284,12 +285,14 @@ import {
 } from "./coder-host/chat-notify.js";
 import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
 import { accountInboxPast } from "./coder-host/inbox-page.js";
+import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 import { messagesProcedures } from "./messages-procedures.js";
+import { AgentSandbox } from "./terminal/agent-sandbox.js";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -539,6 +542,11 @@ const countedFor = (userId: string, name: string) =>
  * it, as a request here does.
  */
 const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
+  ["/api/plans/agents", (id: string) => `/api/plans/${id}/agents`],
+  ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
+  ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
+  ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
+  ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
   ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
   ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
@@ -616,8 +624,14 @@ const standing = (
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
+    // One cache of the kept published answers for both resources that read them, as the hosted router hands it.
+    const shared = { ...seams, published: instancePublishedCache() };
     const routed = hostedFetch({
-      agentPullRequests: agentPullRequestProcedures(seams),
+      agentPullRequests: agentPullRequestProcedures(shared),
+      agents: agentsProcedures({
+        ...shared,
+        sandbox: Layer.effect(AgentSandbox, Effect.die("the agents routes reach no sandbox")),
+      }),
       messages: messagesProcedures(seams),
       plans: tasksProcedures(seams),
     });
@@ -640,7 +654,7 @@ const standing = (
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
           return routed(new Request(url, request), webServices);
         }
-        if (pathname === CHAT) return routed(request, webServices);
+        if (pathname === CHAT || pathname === WORKSPACE_AGENTS) return routed(request, webServices);
         if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
         return pathname === TASKS || TASK_PATH.test(pathname)
           ? routed(request, webServices)
@@ -2349,6 +2363,66 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         yield* ask(actionAs(other, agent.id, "ready-for-review"));
 
         assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.OPEN);
+      }),
+  );
+
+  it.effect(
+    "a change to a pull request lets go of what the agent's changes read had kept, so the next changes read asks GitHub afresh",
+    () =>
+      Effect.gen(function* () {
+        // The agent's branch has no pull request until the change, which a member makes on the one the request numbers.
+        let opened = false;
+        const pulls = `/repos/${RELAY.owner}/${RELAY.name}/pulls`;
+        const headed = publishedPullRequestDrafted(() => false, LINE_HEAD);
+        const { other, agent, ask } = yield* published({
+          repository: (sent) => {
+            const { pathname } = new URL(sent.url);
+            if (pathname === `${pulls}/${PUBLISHED.number}/files`) {
+              return Response.json([
+                {
+                  filename: "src/seats.ts",
+                  status: "modified",
+                  additions: 1,
+                  deletions: 1,
+                  changes: 2,
+                  patch: "@@ -1 +1 @@\n-a\n+b",
+                  sha: "b".repeat(40),
+                },
+              ]);
+            }
+            return !opened && pathname === pulls ? Response.json([]) : headed(sent);
+          },
+          answer: (call) => {
+            if (call.query.includes("mutation")) opened = true;
+            return Response.json({
+              data: call.query.includes("mutation")
+                ? {}
+                : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+        const changedUrl = Effect.map(
+          ask(request(AGENT_CHANGES, other, { id: agent.id })),
+          (answered) =>
+            readAnswer(codingAgentChangesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).pullRequest
+              ?.url ?? null,
+        );
+        assert.equal(yield* changedUrl, null);
+
+        const changed = yield* ask(
+          request(AGENT_PULL_REQUEST_ACTION, other, {
+            method: "POST",
+            id: agent.id,
+            number: String(PUBLISHED.number),
+            body: { action: "ready-for-review" },
+          }),
+        );
+
+        assert.deepEqual(changed, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.equal(
+          yield* changedUrl,
+          `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+        );
       }),
   );
 

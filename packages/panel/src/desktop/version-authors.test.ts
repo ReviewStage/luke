@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -50,11 +50,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  fakeAppBridge({
-    act: (_request: Act): Promise<ActOutcome> => {
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([LEE]),
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),

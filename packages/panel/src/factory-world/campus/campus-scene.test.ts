@@ -5,7 +5,7 @@ import { CHECK_SUMMARY, CODING_AGENT_STATUS } from "@luke/features/coding-agent-
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { factoryWorldViewOf } from "@luke/ui/factory-world";
 import {
@@ -104,11 +104,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: (request: Act) => {
-      throw new Error(`unexpected ${request.kind}`);
-    },
-  });
+  fakeAppBridge({});
   fakeActPort({ [ACT_KIND.FACTORY_WORLD]: () => Promise.resolve({ world: WORLD }) });
 });
 
