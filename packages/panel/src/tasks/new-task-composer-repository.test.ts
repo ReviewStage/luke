@@ -78,37 +78,47 @@ const TOKEN_LISTING = (): Promise<TasksRepositoriesAnswer> =>
   });
 
 /** The card in Acme over `read`, opened on `preset`, each start's repository written down. */
-async function mount(read: () => Promise<TasksRepositoriesAnswer>, preset?: string) {
+async function mount(
+  read: () => Promise<TasksRepositoriesAnswer>,
+  preset?: string,
+  scope: { id: string | undefined } = { id: ACME.id },
+) {
   const control = tasksControl();
   const starts: (string | null)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
+  const registry = AtomRegistry.make();
+  const draw = () =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(NewTaskComposer, {
           newTask: {
             ...control.newTask,
             workspaces: [ACME],
-            workspaceId: ACME.id,
+            workspaceId: scope.id,
             ...(preset === undefined ? undefined : { preset: { repository: preset } }),
-            repositoriesIn: () => ({ ...control.repositories, recent: [], scope: ACME.id, read }),
+            repositoriesIn: () => ({ ...control.repositories, recent: [], scope: scope.id, read }),
             start: (_name: string, repository: string | null) => {
               starts.push(repository);
               return Promise.resolve(undefined);
             },
           },
-          workspaceId: ACME.id,
+          workspaceId: scope.id,
           onLeave: () => undefined,
           listSide: MENTION_MENU_SIDE.ABOVE,
         }),
       ),
-    ),
-  );
+    );
+  act(draw);
   await settle();
-  return { container, starts };
+  /** Draws the card again, as the workspaces resolving does. */
+  const redraw = async () => {
+    act(draw);
+    await settle();
+  };
+  return { container, starts, redraw };
 }
 
 test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
@@ -168,4 +178,29 @@ test("a preset a read does not list is let go, so a later read listing it does n
 
   assert.equal(reads, 2);
   assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
+});
+
+test("a preset survives a read made before the workspace resolved and stands once its workspace's read lists it", async () => {
+  const scope: { id: string | undefined } = { id: undefined };
+  const { container, redraw } = await mount(
+    () =>
+      scope.id === undefined
+        ? Promise.resolve({
+            repositories: {
+              installed: true,
+              repositories: [],
+              installationUrl: "https://github.com/apps/luke/installations/new",
+            },
+          })
+        : TOKEN_LISTING(),
+    "octo/tools",
+    scope,
+  );
+  scope.id = ACME.id;
+  await redraw();
+  const chip =
+    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    assert.fail("the card draws the repository chip");
+
+  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
 });

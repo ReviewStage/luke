@@ -341,21 +341,22 @@ export function NewTaskComposer({
     }
     setScope(repositories.scope);
   }
-  // A pick a read does not list is let go, so a later read listing it does not bring it back.
-  const unlisted =
-    chosen != null &&
-    listed !== undefined &&
-    !listed.some((each) => each.toLowerCase() === chosen.toLowerCase());
-  if (unlisted) setChosen(null);
-  // Note that a pick is not started on before the read lands unless the
-  // workspace's GitHub reaches it, because the service would refuse it.
-  const pick =
-    chosen != null &&
-    (unlisted ||
-      (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, chosen)))
+  const isListed = (name: string) =>
+    listed === undefined || listed.some((each) => each.toLowerCase() === name.toLowerCase());
+  // A pick a read does not list is let go, so a later read listing it does
+  // not bring it back; a read made before the workspace resolved, or for the
+  // one before a switch still under way, judges none.
+  const judged = repositories.scope !== undefined && repositories.scope === scope;
+  if (chosen != null && !isListed(chosen) && judged) setChosen(null);
+  // Note that a repository is not started on before the read lands unless
+  // the workspace's GitHub reaches it, because the service would refuse it.
+  const candidate = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
+  const repository =
+    candidate !== null &&
+    (!isListed(candidate) ||
+      (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, candidate)))
       ? null
-      : chosen;
-  const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
+      : candidate;
   // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
   const [linkedFor, setLinkedFor] = useState(repository);
   if (linkedFor !== repository) {
@@ -504,7 +505,7 @@ export function NewTaskComposer({
       value={repository}
       chooser={repositories}
       onChoose={setChosen}
-      onUnreached={() => setChosen(null)}
+      onUnreached={judged ? () => setChosen(null) : undefined}
       onListed={setListed}
     />
   );
