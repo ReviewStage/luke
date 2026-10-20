@@ -91,9 +91,10 @@ jobs:
   # What only a real Postgres can prove, and nothing more: the generated
   # migrations apply on the major production runs (Neon, 18.x), so a statement
   # PGlite accepts and Postgres refuses is caught before a deployment's
-  # `db:migrate` finds it, and they end at the declared schema
-  # (`apps/web/tests/storage-schema.test.ts`, run against what `db:migrate`
-  # built; `@luke/database/testing` clones it as a template). The store tests
+  # `db:migrate` finds it, and they end at the declared schema, its tables
+  # (`apps/web/tests/storage-schema.test.ts`) and its columns
+  # (`drizzle-schema.test.ts`), read back through the real `pg` driver from
+  # what `db:migrate` built (`@luke/database/testing` clones it as a template). The store tests
   # themselves run on PGlite, the same Postgres 18, in the test jobs above.
   # The job keeps its old name because the ruleset requires it. The image
   # comes from whichever of three registries answers first, because each one
@@ -147,4 +148,4 @@ jobs:
           exit 1
       - run: pnpm --filter @luke/web db:migrate
       - name: The migrations end at the declared schema
-        run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts
+        run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts apps/web/tests/drizzle-schema.test.ts
