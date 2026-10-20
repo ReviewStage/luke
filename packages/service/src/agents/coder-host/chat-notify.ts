@@ -34,6 +34,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { mentionLinksIn } from "@luke/features/mention-link";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
@@ -278,7 +279,7 @@ function noticeFrom(name: string): string {
 }
 
 /**
- * The line a notice is: who said it, by their mention link, where and at what place, the words,
+ * The line a notice is: who said it, by their mention link, where and at what place, the words, cut outside any link,
  * what it asks where it asks, and how to answer. Bounded to a message's own
  * bound by the words alone, so the head and the closing lines always stand
  * whole: the agent always reads how to answer, and a window reading the
@@ -296,9 +297,20 @@ function noticeText(from: string, channel: ChatChannelRow, message: ChatMessageR
   const words = message.blocks
     .map((block) => blockWords(block))
     .filter((part) => part !== "")
-    .join(PARAGRAPH_BREAK)
-    .slice(0, Math.max(room, 0));
-  return [header, words, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
+    .join(PARAGRAPH_BREAK);
+  const cut = words.slice(0, wholeLinksEnd(words, Math.max(room, 0)));
+  return [header, cut, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
+}
+
+/**
+ * Where words cut at the bound end, never inside a mention link: a link the
+ * bound falls inside is left out whole, so every link a notice carries is
+ * one the agent can copy to address its member.
+ */
+function wholeLinksEnd(words: string, bound: number): number {
+  if (words.length <= bound) return words.length;
+  const straddling = mentionLinksIn(words).find((link) => link.start < bound && link.end > bound);
+  return straddling?.start ?? bound;
 }
 
 /**

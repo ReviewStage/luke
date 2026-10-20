@@ -152,7 +152,7 @@ import {
   inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { MENTION_KIND, mentionLinksIn, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request-write-wire";
@@ -6353,6 +6353,36 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           assert.ok(words.startsWith(block("a")), "the words are cut from their end");
           assert.equal(words.includes("Reply with"), false);
         }
+      }),
+  );
+
+  it.effect(
+    "a post past a notice's bound is cut outside any mention link, so every link the notice carries is whole",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Each block is the second agent's link over and over, so the bound falls inside one of them.
+        const link = `${chat.links.second} `;
+        const text = link.repeat(Math.floor(7_900 / link.length));
+        const blocks = [0, 1, 2].map(() => ({ type: CHAT_BLOCK.MARKDOWN, text }));
+        yield* postChat(chat.telling, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: chat.channel.id },
+          blocks,
+          subjects: chat.toSecond,
+          clientKey: randomUUID(),
+        }).pipe(Effect.provide(chat.github.layer));
+        const notice = String(eve.sent.at(-1)?.message.message);
+        assert.ok(notice.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+        const words = chatNoticeWords(notice);
+        assert.ok(words.length < text.length * 3, "the words were cut");
+        assert.equal(
+          mentionLinksIn(words).length,
+          words.split("[@").length - 1,
+          "no link is cut short",
+        );
+        assert.equal(words.trimEnd().endsWith(")"), true);
       }),
   );
 
