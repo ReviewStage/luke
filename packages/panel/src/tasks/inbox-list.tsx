@@ -1,6 +1,8 @@
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { INBOX_ASK, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -18,7 +20,9 @@ import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardNote,
   HoverCardRow,
+  HoverCardRule,
   IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -31,6 +35,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  TaskStatusMark as TaskStatusGlyph,
   useMenu,
 } from "@luke/ui";
 import {
@@ -45,6 +50,7 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
+  CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
   ClockIcon,
@@ -55,7 +61,10 @@ import {
   ListIcon,
   MailIcon,
   MailOpenIcon,
+  PenLineIcon,
+  Rows2Icon,
   SlidersHorizontalIcon,
+  SquareCheckIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -81,14 +90,10 @@ import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
-import {
-  AgentCard,
-  AgentMarkRef,
-  type AgentSubject,
-  lineSubject,
-  tasklessSubject,
-} from "./agent-ref.js";
+import { useAppState } from "../use-app-state.js";
+import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { providerOf } from "./coding-agent-model.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -104,6 +109,7 @@ import {
   holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
+  INBOX_LINE,
   INBOX_SHOW,
   INBOX_SORT,
   INBOX_STATUS_GROUP,
@@ -111,6 +117,8 @@ import {
   type InboxCounts,
   type InboxGrouping,
   type InboxHolder,
+  type InboxKnownAsk,
+  type InboxLineKind,
   type InboxListed,
   type InboxListView,
   type InboxPersonGroup,
@@ -120,6 +128,8 @@ import {
   type InboxStatusGroup,
   type InboxStatusGroupKind,
   type InboxWhose,
+  inboxCardThread,
+  inboxLineKind,
   inboxMedia,
   inboxPreview,
   isUnread,
@@ -138,7 +148,7 @@ import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { markReadItem } from "./task-menu-items.js";
 import { useMinute } from "./task-time.js";
-import { cardTitle } from "./tool-call-model.js";
+import { cardTitle, plainWords } from "./tool-call-model.js";
 
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
@@ -213,6 +223,9 @@ const MARK_ALL_READ = "Mark all as read";
 
 /** What the view's menu offers to show or hide the media under each row's preview with. */
 const MEDIA_PREVIEWS = "Media previews";
+
+/** What the view's menu offers to show or hide each row's second line with, its rows one line where it is off. */
+const SECOND_LINE = "Second line";
 
 /** The items whose media the rows show while they show none, kept as one so the reads see no change. */
 const NO_ITEMS: readonly string[] = [];
@@ -429,12 +442,15 @@ function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | 
 
 /**
  * An Inbox row's card, hung beside the row as a sidebar task's row hangs
- * its task's, so the row's tile hangs none of its own: the card of the agent
- * that asked, where the window names it (where its work stands, its model,
- * who started it, its latest step), closed by the task or automation that
- * holds the item and where the item stands. An agent the window names
- * nothing of gets the item's own card instead: its title, when it last
- * changed, its holder, and where it stands.
+ * its task's, so the row's tile hangs none of its own: the card of the
+ * thread. It leads with what holds it, a task as its key and its status
+ * and name or an automation by its name, as a task's card leads with where
+ * it stands; then the item's title and when it last moved; where it stands,
+ * waiting on the reader, on a teammate, put away with its task, or settled;
+ * the ask in full while one waits, every option with the recommended one
+ * marked or every step as the reader's draft ticks it, or how it ended; and
+ * the agent's latest words, three lines at most. The agent that asked
+ * stands at its foot, the loading spinner beside it while it works.
  */
 function InboxItemCard({
   listed,
@@ -443,6 +459,7 @@ function InboxItemCard({
   readerId,
   needsYou,
   starter,
+  settled,
 }: {
   listed: InboxListed;
   now: number;
@@ -450,33 +467,150 @@ function InboxItemCard({
   readerId: string | undefined;
   needsYou: boolean;
   starter: Actor | undefined;
+  /** How the item ended, as its row's second line says it, where nothing waits any longer. */
+  settled: string | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const subject = itemSubject(holder, item.agentId, models, readerId);
-  const standing = standingWords(listed, needsYou, starter);
-  if (subject !== undefined) {
-    return (
-      <AgentCard subject={subject} models={models} foot={`${holderName(holder)} · ${standing}`} />
-    );
-  }
+  const thread = inboxCardThread(item);
+  const ticked = useInboxItemTicked(item) ?? NO_TICKS;
+  const working =
+    subject?.agent?.status === CODING_AGENT_STATUS.RUNNING ||
+    subject?.agent?.status === CODING_AGENT_STATUS.STARTING;
   return (
     <HoverCard data-inbox-row-card="">
+      <HolderChips holder={holder} />
       <HoverCardHead
         name={cardTitle(item.title)}
         corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
       />
+      <span className="inbox-card-standing" data-needs-you={needsYou ? "true" : undefined}>
+        {needsYou ? <AttentionMark /> : null}
+        {standingWords(listed, needsYou, starter)}
+      </span>
+      {thread.ask === undefined ? (
+        settled === undefined ? null : (
+          <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
+        )
+      ) : (
+        <CardAsk ask={thread.ask} ticked={ticked} />
+      )}
+      {thread.words === "" ? null : <HoverCardNote>{thread.words}</HoverCardNote>}
+      <HoverCardRule />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
-        glyph={<HolderGlyph holder={holder} />}
-        label={holderName(holder)}
-      />
-      <HoverCardRow
-        look={HOVER_CARD_ROW_LOOK.DETAIL}
-        glyph={needsYou ? <AttentionMark /> : <InboxIcon />}
-        label={standing}
+        glyph={
+          <ItemMark
+            holder={holder}
+            agentId={item.agentId}
+            models={models}
+            readerId={readerId}
+            plain
+          />
+        }
+        label={subject?.name ?? UNNAMED_AGENT.name}
+        end={working ? <StateGlyph state={GLYPH_STATE.WORKING} /> : undefined}
       />
     </HoverCard>
   );
+}
+
+/** What holds an item, as its card leads with it: a task by its key and its status and name, an automation, or the agents no automation names, by its glyph and name. */
+function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
+  const workspaces = useAppState()?.tasks?.workspaces;
+  if (holder.kind !== INBOX_HOLDER.TASK) {
+    return (
+      <div className="task-card-standing">
+        <span className="task-card-chip">
+          <HolderGlyph holder={holder} />
+          {holderName(holder)}
+        </span>
+      </div>
+    );
+  }
+  const { task } = holder;
+  const workspaceName = workspaces?.find((each) => each.id === task.workspaceId)?.name;
+  return (
+    <div className="task-card-standing">
+      {task.number === undefined || workspaceName === undefined ? null : (
+        <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
+      )}
+      <span className="task-card-chip">
+        {task.status === undefined ? <DocumentIcon /> : <TaskStatusGlyph status={task.status} />}
+        {task.name}
+      </span>
+    </div>
+  );
+}
+
+/** An open ask as an item's card shows it in full: a choice's options, the recommended one marked; a to-do's steps, ticked as the reader's draft ticks them; or what a form or an answer asks. */
+function CardAsk({
+  ask,
+  ticked,
+}: {
+  ask: InboxKnownAsk;
+  ticked: readonly number[];
+}): React.JSX.Element {
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      return (
+        <ul className="inbox-card-options" aria-label="Options">
+          {ask.options.map((option) => (
+            <li key={option.label}>
+              <span className="inbox-card-option">{option.label}</span>
+              {option.label === ask.recommended ? (
+                <span className="inbox-card-recommended">{RECOMMENDED}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      );
+    case INBOX_ASK.DO:
+      return (
+        <ul className="inbox-card-steps" aria-label="Steps">
+          {ask.steps.map((step, at) => (
+            <li key={at} data-done={ticked.includes(at) ? "true" : undefined}>
+              <SquareCheckIcon aria-hidden="true" />
+              {plainWords(step)}
+            </li>
+          ))}
+        </ul>
+      );
+    case INBOX_ASK.ANSWER:
+      return (
+        <HoverCardRow
+          look={HOVER_CARD_ROW_LOOK.DETAIL}
+          glyph={<PenLineIcon />}
+          label={
+            ask.fields === undefined
+              ? "Write an answer"
+              : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`
+          }
+        />
+      );
+  }
+}
+
+/** No step ticked, where the reader's draft ticks none. */
+const NO_TICKS: readonly number[] = [];
+
+/** What marks a choice's option the agent recommends, on an item's card. */
+const RECOMMENDED = "Recommended";
+
+/** The glyph leading an item's second line: its open ask's kind, a tick where an answer settled it, and none before words alone. */
+function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
+  switch (kind) {
+    case INBOX_LINE.DECIDE:
+      return <CircleDotIcon aria-hidden="true" />;
+    case INBOX_LINE.DO:
+      return <SquareCheckIcon aria-hidden="true" />;
+    case INBOX_LINE.ANSWER:
+      return <PenLineIcon aria-hidden="true" />;
+    case INBOX_LINE.SETTLED:
+      return <CheckIcon aria-hidden="true" />;
+    case INBOX_LINE.SAID:
+      return null;
+  }
 }
 
 /**
@@ -526,6 +660,7 @@ export function InboxItemRow({
   context,
   face = true,
   chip = false,
+  line = true,
   media,
   ref,
   onChoose,
@@ -545,6 +680,8 @@ export function InboxItemRow({
   face?: boolean;
   /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
   chip?: boolean;
+  /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
+  line?: boolean;
   /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
   media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
@@ -566,6 +703,7 @@ export function InboxItemRow({
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
   const ticked = useInboxItemTicked(item);
+  const lineKind = inboxLineKind(item);
   const preview = inboxPreview(
     item,
     (member) => actorName(personActor(member, directory.members, reader, directory.former)),
@@ -614,6 +752,7 @@ export function InboxItemRow({
             readerId={readerId}
             needsYou={needsYou}
             starter={starter}
+            settled={lineKind === INBOX_LINE.SETTLED ? preview : undefined}
           />
         }
         cardBeside
@@ -641,12 +780,21 @@ export function InboxItemRow({
             </>
           }
           title={title}
-          description={preview}
+          description={
+            line ? (
+              <span className="inbox-row-line" data-line={lineKind}>
+                {lineGlyph(lineKind)}
+                {preview}
+              </span>
+            ) : undefined
+          }
           lead={
-            chip ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) } : undefined
+            line && chip
+              ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) }
+              : undefined
           }
           attachments={
-            media === undefined || carried.length === 0 ? undefined : (
+            !line || media === undefined || carried.length === 0 ? undefined : (
               <RowMedia media={carried} reads={media} />
             )
           }
@@ -968,6 +1116,12 @@ function ViewOptions({
     },
   ];
   const looks: MenuEntry[] = [
+    {
+      label: SECOND_LINE,
+      icon: <Rows2Icon />,
+      checked: choices.secondLine,
+      onSelect: () => choices.onSecondLine(!choices.secondLine),
+    },
     {
       label: MEDIA_PREVIEWS,
       icon: <ImagesIcon />,
@@ -1430,6 +1584,7 @@ export function InboxList({
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
       chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
+      line={head.view?.choices.secondLine !== false}
       media={media}
       ref={rows.hold(listed.item.id)}
       onChoose={onChoose}

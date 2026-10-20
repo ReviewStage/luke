@@ -841,7 +841,7 @@ test("an account with no plan yet but an automation's question waiting on it is 
   assert.deepEqual(rows(page, "home-inbox"), ["Quarantine the flaky test? · Nightly flake sweep"]);
 });
 
-test("a waiting row wears its agent's tile, whose card names the teammate who started it by their face, read against the listed workspace's members", async () => {
+test("a waiting row wears its agent's tile, and hangs the thread's card, its task leading it and the agent that asked at its foot with the spinner while it works", async () => {
   const agents = {
     total: 1,
     working: 1,
@@ -879,14 +879,18 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.match(card?.textContent ?? "", /Started by.*Charles Pan/u);
-  const face = card?.querySelector<HTMLImageElement>('.actor-mark[data-kind="person"] img');
-  assert.equal(
-    face?.getAttribute("src"),
-    CHARLES_PICTURE,
-    "the starter wears their member picture",
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.match(card?.textContent ?? "", /Email the invitee when an invite is withdrawn\?/u);
+  assert.match(
+    card?.textContent ?? "",
+    /Invite emails$/u,
+    "the agent that asked stands at its foot",
   );
+  assert.ok(
+    card?.querySelector('.state-glyph[data-state="working"]'),
+    "the spinner says the agent works, in no words",
+  );
+  assert.doesNotMatch(card?.textContent ?? "", /Working/u);
 });
 
 test("a waiting row of an agent with no plan names the automation that started it on its card, the window reading the automations for it alone", async () => {
@@ -937,8 +941,8 @@ test("a waiting row of an agent with no plan names the automation that started i
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.match(card?.textContent ?? "", /Sweep the flaky tests.*Started by.*Nightly flake sweep/u);
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.match(card?.textContent ?? "", /^Nightly flake sweep.*Sweep the flaky tests$/su);
 });
 
 test("a question of another workspace's automation, which Home does not list, reads none of the listed workspace's automations", async () => {
