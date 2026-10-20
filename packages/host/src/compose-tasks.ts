@@ -85,6 +85,7 @@ import {
   tasksRevisionParamsSchema,
   tasksRevisionsParamsSchema,
   tasksSetRepositoryParamsSchema,
+  tasksSetStandingParamsSchema,
   tasksSkillsParamsSchema,
   tasksStartRequestSchema,
   tasksTreeParamsSchema,
@@ -350,6 +351,7 @@ export type TasksClient = Pick<
   | "stopWork"
   | "repositories"
   | "setRepository"
+  | "setStanding"
   | "move"
   | "edit"
 > & {
@@ -1627,6 +1629,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                   },
             );
             return { renamed: true };
+          }),
+        );
+      }),
+    // The service answers the task as changed, so the list's row and the open
+    // document take it in place and nothing is read again.
+    [GATEWAY_METHOD.TASKS_SET_STANDING]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksSetStandingParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("setting where a task stands names it and its status or priority");
+        }
+        if (!gate()) return { changed: false };
+        const { taskId, ...standing } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const changed = yield* served(client.setStanding(taskId, standing));
+            if (changed === undefined) return { changed: false };
+            takeAnswered(changed);
+            return { changed: true };
           }),
         );
       }),

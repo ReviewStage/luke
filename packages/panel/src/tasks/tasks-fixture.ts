@@ -1,7 +1,7 @@
 import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
 import type { Board, DrawingElement } from "@luke/features/board-wire";
-import type { Task, TaskSummary } from "@luke/features/task-wire";
+import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
   type CodeToken,
   TASK_WORK_STATE,
@@ -121,6 +121,9 @@ const FIXTURE_TASK: Task = {
   createdAt: 1,
   updatedAt: 2,
   repository: "ada/relay",
+  status: TASK_STATUS.IN_PROGRESS,
+  priority: TASK_PRIORITY.HIGH,
+  number: 42,
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
 
@@ -187,6 +190,9 @@ const FIXTURE_TASK_LIST: TasksView = {
       createdAt: FIXTURE_TASK.createdAt,
       updatedAt: FIXTURE_TASK.updatedAt,
       repository: FIXTURE_TASK.repository,
+      status: TASK_STATUS.IN_PROGRESS,
+      priority: TASK_PRIORITY.HIGH,
+      number: 42,
     },
     ...FIXTURE_OTHER_TASKS,
   ],

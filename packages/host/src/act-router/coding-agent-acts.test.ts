@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_RESPONSE,
@@ -10,11 +9,6 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import {
-  FILE_VIEWED_STATE,
-  PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
 import { Effect } from "effect";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "../acts.js";
 import { codingAgentActRows } from "./coding-agent-acts.js";
@@ -58,78 +52,10 @@ const ITEM: InboxItem = {
 
 function fixture() {
   const asked: string[] = [];
-  /** What the notices were told, in order. */
-  const noted: string[] = [];
   const rows = codingAgentActRows({
-    notices: {
-      observePublished: (agentId, pullRequest) => {
-        noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
-      },
-    },
     host: {
       codingAgentAgentInbox: () =>
         Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
-      codingAgentPullRequest: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`pull-request:${agentId}`);
-          return {
-            repository: "acme/relay",
-            branch: "luke/invites",
-            pullRequest: {
-              number: 41,
-              title: "Teammate invitations",
-              url: "https://github.com/acme/relay/pull/41",
-              state: PULL_REQUEST_STATE.OPEN,
-              checks: CHECK_SUMMARY.PASSING,
-              additions: 12,
-              deletions: 3,
-              changedFiles: 2,
-            },
-          };
-        }),
-      codingAgentChanges: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`changes:${agentId}`);
-          return { pullRequest: null };
-        }),
-      codingAgentOverviewPullRequest: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`overview-pull-request:${agentId}`);
-          return { pullRequest: null };
-        }),
-      codingAgentReviewOptions: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`review-options:${agentId}`);
-          return { labels: [], users: [], teams: [] };
-        }),
-      codingAgentOverviewChecks: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`overview-checks:${agentId}`);
-          return { pullRequest: null };
-        }),
-      codingAgentOverviewConversation: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`overview-conversation:${agentId}`);
-          return { pullRequest: null };
-        }),
-      codingAgentPullRequestAction: ({ agentId, request }) =>
-        Effect.sync(() => {
-          asked.push(`pull-request-action:${agentId}:${request.action}`);
-          return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE } as const;
-        }),
-      codingAgentPullRequestViewed: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`pull-request-viewed:${agentId}`);
-          return {
-            outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-            files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
-          } as const;
-        }),
-      codingAgentGitHubImage: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`github-image:${agentId}`);
-          return { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } as const;
-        }),
       codingAgentInbox: ({ taskId, after }) =>
         Effect.sync(() => {
           asked.push(`inbox:${taskId}:${after}`);
@@ -190,7 +116,7 @@ function fixture() {
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, noted };
+  return { router, asked };
 }
 
 it.effect(
@@ -200,7 +126,10 @@ it.effect(
       const { router, asked } = fixture();
 
       const refused = yield* router.performAct(
-        { kind: ACT_KIND.CODING_AGENTS_CHANGES, payload: { agentId: AGENT_ID } },
+        {
+          kind: ACT_KIND.CODING_AGENTS_PICTURE,
+          payload: { agentId: AGENT_ID, pictureId: "4fb17055-c16e-4293-bea5-7a8b9cadbec5" },
+        },
         VOICE,
       );
       const inbox = yield* router.performAct(
@@ -210,7 +139,7 @@ it.effect(
 
       assert.deepEqual(refused, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CODING_AGENTS_CHANGES].refusal,
+        reason: ACT[ACT_KIND.CODING_AGENTS_PICTURE].refusal,
       });
       assert.deepEqual(inbox, {
         status: ACT_OUTCOME_STATUS.REFUSED,
@@ -219,61 +148,6 @@ it.effect(
       assert.deepEqual(asked, []);
     }),
 );
-it.effect(
-  "a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and the voice window's is refused before it",
-  () =>
-    Effect.gen(function* () {
-      const { router, asked } = fixture();
-      const act = {
-        kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION,
-        payload: { agentId: AGENT_ID, request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT } },
-      } as const;
-
-      const refused = yield* router.performAct(act, VOICE);
-      const changed = yield* router.performAct(act, PANEL);
-
-      assert.deepEqual(refused, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION].refusal,
-      });
-      assert.deepEqual(changed, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
-      });
-      assert.deepEqual(asked, [
-        `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.CONVERT_TO_DRAFT}`,
-      ]);
-    }),
-);
-
-it.effect(
-  "a panel's read of which files it viewed reaches the host and hears each file's mark, and the voice window's is refused before it",
-  () =>
-    Effect.gen(function* () {
-      const { router, asked } = fixture();
-      const act = {
-        kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED,
-        payload: { agentId: AGENT_ID },
-      } as const;
-
-      const refused = yield* router.performAct(act, VOICE);
-      const read = yield* router.performAct(act, PANEL);
-
-      assert.deepEqual(refused, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED].refusal,
-      });
-      assert.deepEqual(read, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: {
-          outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-          files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
-        },
-      });
-      assert.deepEqual(asked, [`pull-request-viewed:${AGENT_ID}`]);
-    }),
-);
-
 it.effect(
   "a panel's message on an inbox item's thread reaches the host with its words, files, and key, and hears the item; the voice window's is refused before it",
   () =>

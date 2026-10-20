@@ -366,6 +366,14 @@
   padding: var(--luke-space-6) calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
+/* A touch screen picks a row with a finger, so the keys the foot names say
+   nothing there, and the foot goes. */
+@media (pointer: coarse) {
+  .mention-menu .mention-menu-foot {
+    display: none;
+  }
+}
+
 /* The editor of a plan's text is the room its @ list hangs in. */
 .plan-document-editor {
   position: relative;
@@ -2244,6 +2252,25 @@
   align-items: center;
   gap: var(--luke-space-2);
   margin-inline-start: auto;
+}
+
+/* A narrow header, a phone's or the side panel's at its least, gives the
+   title a line of its own over the pill and the controls, which stand
+   under it at the row's two ends; beside them it would wrap a word to a
+   line. Note that Tab follows the row as it is drawn (`reading-flow`)
+   rather than the markup's pill-first order, where the browser reads it. */
+@container pull-request-header (max-width: 520px) {
+  .pull-request-title-row {
+    flex-wrap: wrap;
+    reading-flow: flex-visual;
+  }
+
+  .pull-request-title-row > .pull-request-title,
+  .pull-request-title-row > .luke-skeleton-region {
+    order: -1;
+    flex-basis: 100%;
+    padding-block: 0;
+  }
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a

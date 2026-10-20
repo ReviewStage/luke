@@ -47,6 +47,8 @@ import {
   planRevisionsAnswerSchema,
   TASK_BOUNDS,
   TASK_FILE_REFUSAL,
+  TASK_PRIORITY,
+  TASK_STATUS,
   taskAnswerSchema,
   taskFileAnswerSchema,
   taskListAnswerSchema,
@@ -776,6 +778,54 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(unknown, notFound);
         const listed = yield* ask(request(TASKS, owner));
         assert.deepEqual(readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans, []);
+      }),
+  );
+
+  it.effect(
+    "a plan starts to do and unweighed unless its start says otherwise, and a PATCH sets where it stands and how much it matters, refused while archived and as none to another account",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const started = yield* ask(request(TASKS, owner, { method: "POST", body: RELAY }));
+        const plain = readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan;
+        assert.deepEqual([plain.status, plain.priority], [TASK_STATUS.TODO, TASK_PRIORITY.NONE]);
+        const filed = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(TASKS, owner, {
+              method: "POST",
+              body: { ...RELAY, status: TASK_STATUS.BACKLOG, priority: TASK_PRIORITY.LOW },
+            }),
+          ),
+        ).plan;
+        assert.deepEqual([filed.status, filed.priority], [TASK_STATUS.BACKLOG, TASK_PRIORITY.LOW]);
+        assert.equal(filed.number, (plain.number ?? 0) + 1);
+
+        const patch = (userId: string, body: WireBoundaryInput) =>
+          ask(request(ONE_TASK(plain.id), userId, { method: "PATCH", body }));
+        const changed = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* patch(owner, { status: TASK_STATUS.DONE, priority: TASK_PRIORITY.URGENT }),
+        ).plan;
+        assert.deepEqual(
+          [changed.status, changed.priority, changed.number],
+          [TASK_STATUS.DONE, TASK_PRIORITY.URGENT, plain.number],
+        );
+        assert.deepEqual(
+          yield* patch(owner, { status: "started" }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* patch(other, { status: TASK_STATUS.CANCELED }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        yield* patch(owner, { archived: true });
+        assert.deepEqual(
+          yield* patch(owner, { priority: TASK_PRIORITY.LOW }),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        );
       }),
   );
 

@@ -307,6 +307,40 @@ body,
   --work-left: 0px;
 }
 
+/* A narrow room is a phone's, whose keyboard takes half the screen: a box's
+   field stops growing at a share of what is seen (`--luke-stage-height`),
+   and scrolls past it, so the words written to and the box writing them both
+   keep a part of the screen. Home's card keeps its five lines under the cap,
+   since Home scrolls. */
+.desktop-shell[data-room="narrow"] .agent-composer-field {
+  --agent-composer-field-lines: calc(
+    8 *
+    var(--luke-type-body-leading) +
+    var(--agent-composer-field-block)
+  );
+  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
+}
+
+.desktop-shell[data-room="narrow"] .comment-field .agent-composer-field {
+  --agent-composer-field-lines: calc(
+    8 *
+    1.45em +
+    10px
+  ); /* off-scale: as `.comment-field .agent-composer-input` */
+}
+
+.desktop-shell[data-room="narrow"] .agent-composer-input {
+  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
+}
+
+/* A thread opened over a narrow room's plan spans the column rather than
+   standing a margin card's width at its right over the words, so its reply
+   box has the column's room. */
+.desktop-shell[data-room="narrow"] .comment-float {
+  left: calc(var(--luke-space-6) * -1);
+  width: auto;
+}
+
 /* Where the pointer peeks the folded sidebar out: a strip at the window's
    left edge, under the title bar so the traffic lights keep their presses. */
 .sidebar-peek-edge {
@@ -2440,6 +2474,16 @@ ul.actor-stack {
   margin-top: 1.5em;
 }
 
+/* A task's key stands tight over its title, and its status and priority
+   chips close under it, as one head rather than three blocks. */
+.desktop-document .plan-body > .plan-task-key + * {
+  margin-top: var(--luke-space-2);
+}
+
+.desktop-document .plan-body > .plan-task-standing {
+  margin-top: var(--luke-space-12);
+}
+
 .desktop-document .markdown-heading {
   color: var(--luke-color-text);
 }
@@ -2683,7 +2727,13 @@ ul.actor-stack {
 
 /* Wherever it stands, the menu is placed as a Settings picker's is
    (`usePickerPlacement`): above the chip where the window leaves more room
-   there, its list capped to the room on the side it took. */
+   there, its list capped to the room on the side it took, and no wider than
+   the room from the chip's edge it hangs from, so on a phone it never runs
+   past the screen's edge and scrolls the shell sideways. */
+.repository-chip .searchable-menu {
+  max-width: var(--settings-picker-width-max, 340px);
+}
+
 .repository-chip[data-side="above"] .searchable-menu {
   top: auto;
   bottom: calc(100% + var(--luke-space-4));
@@ -7283,6 +7333,34 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .new-task-composer .agent-composer-actions {
   margin-left: auto;
+}
+
+/* The dialog portals out of the shell, so its narrow room is the dimmed
+   window's own (`luke-dialog-room`, `@luke/ui`'s dialog.css): on a phone,
+   its field stops growing at the same share of what is seen as a box's in
+   the shell does, so Start stays in the card above the keyboard. */
+@container luke-dialog-room (max-width: 639px) {
+  .new-task .agent-composer-field {
+    --agent-composer-field-lines: calc(
+      8 *
+      var(--luke-type-body-leading) +
+      var(--agent-composer-field-block)
+    );
+    --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
+  }
+
+  .new-task .new-task-composer .agent-composer-input {
+    max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
+  }
+}
+
+/* A card too narrow for its placeholder on one line, as on a phone, wraps
+   it, since its field stands five lines tall; the agent's one-line box cuts
+   its own short instead, which would otherwise run over its foot. */
+@container composer (max-width: 479px) {
+  .new-task-composer .agent-composer-placeholder {
+    white-space: normal;
+  }
 }
 
 /* The foot's short chips stand whole, so the repository's name is what

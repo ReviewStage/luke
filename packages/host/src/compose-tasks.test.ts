@@ -48,6 +48,8 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type RepositoryPin,
+  TASK_PRIORITY,
+  TASK_STATUS,
   type Task,
   type TaskAgentsSummary,
   type TaskFileAnswer,
@@ -755,6 +757,17 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? renamed : candidate,
         );
         return renamed;
+      }),
+    // The service sets the status and the priority named, and leaves the other standing.
+    setStanding: (taskId, standing) =>
+      Effect.sync(() => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return undefined;
+        const changed = { ...found, ...standing };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? changed : candidate,
+        );
+        return changed;
       }),
     // The service stamps a pin or an archive at its own clock, and a false takes it away.
     mark: (taskId, { pinned, archived }) =>
@@ -2706,6 +2719,36 @@ it.effect(
       );
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
+    }),
+);
+
+it.effect(
+  "a plan's status and priority set on the service land in the list and the open document in place, and a change naming neither never travels",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const { call, last } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+
+      const changed = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
+        taskId: INVITES,
+        status: TASK_STATUS.DONE,
+        priority: TASK_PRIORITY.HIGH,
+      });
+      const bare = yield* Effect.exit(call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES }));
+
+      assert.deepEqual(changed, { changed: true });
+      assert.ok(Exit.isFailure(bare));
+      assert.deepEqual(
+        last()?.tasks.map((each) => [each.status, each.priority]),
+        [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH]],
+      );
+      const open = last()?.document;
+      assert.equal(
+        open?.status === TASKS_READ.READY ? open.task?.status : undefined,
+        TASK_STATUS.DONE,
+      );
     }),
 );
 

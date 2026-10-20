@@ -267,14 +267,11 @@ function platformRows(
 }
 
 /** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
-function hostRowDependencies(
-  operator: OperatorClient,
-  notices: HostActDependencies["codingAgents"]["notices"],
-): HostActDependencies {
+function hostRowDependencies(operator: OperatorClient): HostActDependencies {
   const host = operator.host;
   return {
     tasks: { host, colourCode: highlightSnippet },
-    codingAgents: { host, notices },
+    codingAgents: { host },
   };
 }
 
@@ -411,7 +408,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
 
       // The notices' toasts reach the panel through the bridge, which is built
-      // over the rows the notices are handed to, so they find it late.
+      // after the notices, so they find it late.
       let events: Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined;
       const doors = yield* noticeDoors(state, () => events);
       const notices = yield* linkClientNotices({
@@ -434,7 +431,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
         routerFor: () =>
-          createHostActRouter(hostRowDependencies(operator, notices), platformRows(http, doors)),
+          createHostActRouter(hostRowDependencies(operator), platformRows(http, doors)),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),

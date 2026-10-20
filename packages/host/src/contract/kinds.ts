@@ -65,7 +65,8 @@ export const AUTOMATION_ACT_KIND = {
 /**
  * A task's coding agents, the core of what the Tasks tab asks of them: the
  * models, the default, the lists, an agent started, read, messaged, changed,
- * and shown, and an agent's page.
+ * and shown, an agent's page, and what an agent published: its pull request,
+ * its changes, and its Pull request tab's overview.
  */
 export const AGENT_ACT_KIND = {
   /**
@@ -100,6 +101,24 @@ export const AGENT_ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PAGE: "codingAgents.page",
+  /** What one agent published: its branch and pull request as GitHub holds them. */
+  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
+  CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  /** What the reviewer and label pickers of an agent's Pull request tab offer. */
+  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
+  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
+  /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
+  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
 } as const;
 
 /**

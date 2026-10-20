@@ -8,8 +8,14 @@ import {
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
+  TASK_PRIORITY,
+  TASK_STATUS,
   type Task,
+  type TaskPriority,
+  type TaskStatus,
   type TaskSummary,
+  taskPrioritySchema,
+  taskStatusSchema,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
@@ -24,7 +30,7 @@ import { inboxItem } from "../schemas/inbox.js";
 import { issue } from "../schemas/issue.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
-import { task } from "../schemas/task.js";
+import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
@@ -177,6 +183,10 @@ export interface NewTask {
   readonly issueId?: string;
   readonly planning?: boolean;
   readonly brief?: string;
+  /** Where the task stands as it starts; to do where none is named. */
+  readonly status?: TaskStatus;
+  /** How much the task matters as it starts; unweighed where none is named. */
+  readonly priority?: TaskPriority;
 }
 
 /**
@@ -193,6 +203,8 @@ export interface TaskChanges {
   /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
   readonly pinPosition?: string;
   readonly archived?: boolean;
+  readonly status?: TaskStatus;
+  readonly priority?: TaskPriority;
 }
 
 /**
@@ -207,6 +219,9 @@ const TASK_SUMMARY_COLUMNS = {
   userId: task.userId,
   organizationId: task.organizationId,
   name: task.name,
+  number: task.number,
+  status: task.status,
+  priority: task.priority,
   repository: task.repository,
   issueId: task.issueId,
   archivedAt: task.archivedAt,
@@ -228,6 +243,9 @@ const TaskSummaryRowSchema = Schema.Struct({
   userId: Schema.String,
   organizationId: Schema.String,
   name: Schema.String,
+  number: Schema.Number,
+  status: taskStatusSchema,
+  priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
   issueId: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
@@ -487,6 +505,9 @@ function summaryOf(
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
     ...(row.issueId === null ? undefined : { issueId: row.issueId }),
+    status: row.status,
+    priority: row.priority,
+    number: row.number,
   };
 }
 
@@ -495,6 +516,9 @@ const TaskInsertSchema = Schema.Struct({
   userId: Schema.String,
   organizationId: Schema.String,
   name: Schema.String,
+  number: Schema.Number,
+  status: taskStatusSchema,
+  priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
   document: Schema.String,
   issueId: Schema.NullOr(Schema.String),
@@ -509,6 +533,9 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     userId: write.userId,
     organizationId: write.organizationId,
     name: write.name,
+    number: write.number,
+    status: write.status,
+    priority: write.priority,
     repository: write.repository,
     document: write.document,
     issueId: write.issueId,
@@ -538,6 +565,37 @@ const insertTaskOnce = SqlSchema.findOneOption({
         .returning(TASK_COLUMNS),
     ),
 });
+
+/**
+ * The workspace's next task number, taken from its counter in one statement:
+ * one for its first task, and one past the last it handed out after, so a
+ * number is never handed out twice, though one taken by a write that then
+ * failed is skipped.
+ */
+const takeTaskNumber = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: Schema.Struct({ lastNumber: Schema.Number }),
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .insert(taskNumberCounter)
+        .values({ organizationId, lastNumber: 1 })
+        .onConflictDoUpdate({
+          target: taskNumberCounter.organizationId,
+          set: { lastNumber: sql`${taskNumberCounter.lastNumber} + 1` },
+        })
+        .returning({ lastNumber: taskNumberCounter.lastNumber }),
+    ),
+});
+
+/** The number the workspace's next task takes. */
+function nextTaskNumber(organizationId: string): TaskStoreEffect<number> {
+  return takeTaskNumber(organizationId).pipe(
+    Effect.map((taken) => taken.lastNumber),
+    // An upsert that returned no row is the database breaking its own contract, not an outcome.
+    Effect.catchTag("NoSuchElementError", Effect.die),
+  );
+}
 
 const findTasks = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
@@ -650,12 +708,15 @@ const TaskColumnChangesSchema = Schema.Struct({
   organizationId: Schema.optionalKey(Schema.String),
   repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
   issueId: Schema.optionalKey(Schema.Null),
+  number: Schema.optionalKey(Schema.Number),
+  status: Schema.optionalKey(taskStatusSchema),
+  priority: Schema.optionalKey(taskPrioritySchema),
   archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace, the repository, and the archive the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -885,6 +946,9 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       issueId: started.issueId ?? null,
       brief: brief.length > 0 ? brief : null,
+      status: started.status ?? TASK_STATUS.TODO,
+      priority: started.priority ?? TASK_PRIORITY.NONE,
+      number: yield* nextTaskNumber(started.organizationId),
       now,
     };
   });
@@ -1030,15 +1094,26 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
   return standing ?? now;
 }
 
-/** The columns of the row the change names, its archive stamped from the one standing; none where it names only a pin. */
-function columnChangesOf(changes: TaskChanges, standing: TaskRow, now: Date): TaskColumnChanges {
+/**
+ * The columns of the row the change names, its archive stamped from the one
+ * standing; none where it names only a pin. A move takes `movedNumber`, the
+ * next number of the workspace it moves to.
+ */
+function columnChangesOf(
+  changes: TaskChanges,
+  standing: TaskRow,
+  now: Date,
+  movedNumber: number | undefined,
+): TaskColumnChanges {
   return {
     ...(changes.name === undefined ? undefined : { name: changes.name }),
     // An issue is its workspace's, so a task moved to another lets its issue go.
-    ...(changes.organizationId === undefined || changes.organizationId === standing.organizationId
+    ...(movedNumber === undefined || changes.organizationId === undefined
       ? undefined
-      : { organizationId: changes.organizationId, issueId: null }),
+      : { organizationId: changes.organizationId, issueId: null, number: movedNumber }),
     ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
+    ...(changes.status === undefined ? undefined : { status: changes.status }),
+    ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.archived === undefined
       ? undefined
       : { archivedAt: stampOf(changes.archived, standing.archivedAt, now) }),
@@ -1254,7 +1329,9 @@ export function updateTask<E = never, R = never, RA = never>(
         const reworded =
           changes.name !== undefined ||
           changes.repository !== undefined ||
-          changes.organizationId !== undefined;
+          changes.organizationId !== undefined ||
+          changes.status !== undefined ||
+          changes.priority !== undefined;
         if (stillArchived && reworded) return yield* new TaskArchived();
         if (changes.organizationId !== undefined && moveGuard !== undefined) {
           yield* moveGuard(
@@ -1273,7 +1350,12 @@ export function updateTask<E = never, R = never, RA = never>(
         if (changes.pinned !== undefined) {
           yield* pinAsAsked(userId, taskId, changes.pinned, changes.pinPosition, now);
         }
-        const columns = columnChangesOf(changes, locked.value, now);
+        const moved =
+          changes.organizationId !== undefined &&
+          changes.organizationId !== locked.value.organizationId;
+        // A task moved to another workspace takes the next number there; its old one is never handed out again.
+        const movedNumber = moved ? yield* nextTaskNumber(changes.organizationId) : undefined;
+        const columns = columnChangesOf(changes, locked.value, now, movedNumber);
         // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
         const row =
           Object.keys(columns).length === 0
@@ -1319,6 +1401,34 @@ export function nameUntitledTask(
   const named = name.trim();
   if (named.length === 0) return Effect.succeed(false);
   return Effect.map(nameUntitled({ userId, taskId, name: named }), Option.isSome);
+}
+
+/** The statuses work on a task has not yet begun in, which an agent started on it moves it out of. */
+const NOT_BEGUN: readonly TaskStatus[] = [TASK_STATUS.BACKLOG, TASK_STATUS.TODO];
+
+const beginTask = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: TaskIdRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ status: TASK_STATUS.IN_PROGRESS })
+        .where(and(reachableTask(userId, taskId), inArray(task.status, [...NOT_BEGUN])))
+        .returning({ id: task.id }),
+    ),
+});
+
+/**
+ * Moves a task whose work has not begun, in the backlog or to do, to in
+ * progress, as a coding agent started on it does, and answers whether it
+ * moved. A task already in progress, done, or canceled, and one the account
+ * does not reach, stand as they were, so asking again moves nothing and
+ * nothing ever moves a task back. Like any change it is not a save, so the
+ * list's order stands; the check and the write are one statement.
+ */
+export function beginTaskWork(userId: string, taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(beginTask({ userId, taskId }), Option.isSome);
 }
 
 /**

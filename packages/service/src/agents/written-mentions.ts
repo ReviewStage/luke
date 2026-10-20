@@ -28,6 +28,24 @@ export const workspaceStepOf = (
     (found) => Option.getOrUndefined(found)?.slug ?? workspaceId,
   );
 
+/**
+ * The step a workspace's links are written under, as `workspaceStepOf` reads
+ * it, and its name, which its tasks' keys are drawn from (`workspace-key.ts`);
+ * no name where the member reads the workspace no longer.
+ */
+export const workspaceNamingOf = (
+  userId: string,
+  workspaceId: string,
+): Effect.Effect<
+  { readonly step: string; readonly name: string },
+  StoreFailure,
+  DatabaseServices
+> =>
+  Effect.map(workspaceOf(userId, workspaceId), (found) => {
+    const workspace = Option.getOrUndefined(found);
+    return { step: workspace?.slug ?? workspaceId, name: workspace?.name ?? "" };
+  });
+
 /** The step a task's links are written under, its workspace's as the member reads the task; nothing for a task the member cannot read. */
 export const taskStepOf = (
   userId: string,

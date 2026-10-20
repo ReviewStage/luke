@@ -43,6 +43,7 @@ import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
+import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
@@ -62,8 +63,10 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  * The card is the agent box's own (`agent-composer.tsx`): the words field,
  * the "+" that attaches files, with an image pasted or files dropped taken
  * too, dictation, the model chip, and the round Start button, with the
- * Plan toggle at the foot's right, before the model chip. New task's own
- * chips stand in a head row over the card where the owner hands a title, as
+ * Plan toggle at the foot's right, before the model chip, drawing its
+ * pencil alone where the card is too narrow for its word, as on a phone.
+ * New task's own chips stand in a head row over the card where the owner
+ * hands a title, as
  * the dialog does (`heading`): the title, then the repository the task is
  * about (`repository-chip.tsx`), and at the row's right end the Issue
  * chip, where the workspace offers its own issues or has Linear connected
@@ -587,6 +590,8 @@ export function NewTaskComposer({
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
+        // Note that Home's card stands at the top of its page, where a list risen over it is cut off under the page's head.
+        listSide={heading === undefined ? MENTION_MENU_SIDE.BELOW : MENTION_MENU_SIDE.ABOVE}
         above={
           // Note that the issue the card was opened on is named in the owner's title instead.
           pickedIssue === undefined ? undefined : (
@@ -602,23 +607,26 @@ export function NewTaskComposer({
         }
         tools={heading === undefined ? chips : undefined}
         actions={
-          agentOnly ? undefined : (
-            <span className="new-task-plan-toggle">
-              <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
-                <Chip
-                  look={CHIP_LOOK.FILTER}
-                  aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
-                  aria-pressed={planning}
-                  aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
-                  disabled={starting}
-                  onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
-                >
-                  <PencilIcon />
-                  <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
-                </Chip>
-              </Tooltip>
-            </span>
-          )
+          agentOnly
+            ? undefined
+            : (narrow) => (
+                <span className="new-task-plan-toggle">
+                  <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
+                    <Chip
+                      look={CHIP_LOOK.FILTER}
+                      iconOnly={narrow}
+                      aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
+                      aria-pressed={planning}
+                      aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
+                      disabled={starting}
+                      onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
+                    >
+                      <PencilIcon />
+                      <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
+                    </Chip>
+                  </Tooltip>
+                </span>
+              )
         }
       />
       {blocked ? (

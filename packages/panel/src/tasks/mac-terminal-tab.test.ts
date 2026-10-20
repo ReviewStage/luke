@@ -6,14 +6,7 @@ import {
   MAC_TERMINAL_PORT_MESSAGE,
   type MacTerminalPortOutbound,
 } from "@luke/features/mac-terminal-wire";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
-} from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -47,33 +40,32 @@ beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 
 beforeEach(() => {
   sent = [];
-  const answer = (request: Act): ActResultFor<ActKind> =>
-    request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST
-      ? {
-          repository: "acme/app",
-          branch: "luke/add-thing",
-          pullRequest: {
-            number: 42,
-            title: "Add the thing",
-            url: "https://github.com/acme/app/pull/42",
-            state: "open",
-            checks: "passing",
-            additions: 1,
-            deletions: 0,
-            changedFiles: 1,
-          },
-        }
-      : undefined;
+  const published = {
+    repository: "acme/app",
+    branch: "luke/add-thing",
+    pullRequest: {
+      number: 42,
+      title: "Add the thing",
+      url: "https://github.com/acme/app/pull/42",
+      state: "open",
+      checks: "passing",
+      additions: 1,
+      deletions: 0,
+      changedFiles: 1,
+    },
+  };
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
-  // Note that the acts main answers itself, a run's among them, ride the act port.
+  // Note that the acts main answers itself, a run's among them, and what the agent published, ride the act port.
   fakeActPortAnswering((request) => {
     sent.push(request);
-    return Promise.resolve(undefined);
+    return Promise.resolve(
+      request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST ? published : undefined,
+    );
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
   Object.defineProperty(document, "adoptedStyleSheets", {

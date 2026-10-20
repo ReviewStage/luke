@@ -11,7 +11,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { beginIssueWork } from "@luke/database/models/issue-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
-import { readTask, type StoredTaskIssue } from "@luke/database/models/task-store";
+import { beginTaskWork, readTask, type StoredTaskIssue } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
@@ -135,7 +135,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * taken such an agent, the issue moves into progress where it stood in the
  * backlog or to do and is not archived, and stands as it was otherwise
  * (`beginIssueWork`), a move that fails logged rather than the Start's
- * failure. An agent
+ * failure. The task itself moves into progress the same way, from the
+ * backlog or to do and never back (`beginTaskWork`), whatever it was
+ * started from. An agent
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
@@ -882,6 +884,14 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const issueId = landing.task?.issueId;
   if (issueId !== undefined) {
     yield* beginIssueWork(userId, issueId).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
+  }
+  // Work on the task itself has begun too, so one in the backlog or to do moves into progress,
+  // and one further along stands; a move that fails is logged, never the Start's failure.
+  if (landing.task !== undefined) {
+    yield* beginTaskWork(userId, landing.task.id).pipe(
+      Effect.asVoid,
+      Effect.catch(logStoreFailure),
+    );
   }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(

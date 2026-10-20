@@ -30,6 +30,7 @@ import type {
   ComposerTrigger,
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
+import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { SkillCard } from "./skill-ref.js";
 
 /**
@@ -133,6 +134,11 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
   );
 }
 
+/** Where the list stands in its box: its left edge, and its foot over the slash's line, or its top under it. */
+type SkillMenuPlace =
+  | { readonly left: number; readonly bottom: number }
+  | { readonly left: number; readonly top: number };
+
 /** The list itself: a row per skill offered, the highlighted one washed, or the line saying why there is none. */
 function SkillMenu({
   id,
@@ -147,8 +153,8 @@ function SkillMenu({
   rows: readonly SkillOption[];
   at: number;
   read: SkillsRead | undefined;
-  /** Where the list stands in the box: its left edge, and how far its foot stands above the box's foot. */
-  place: { readonly left: number; readonly bottom: number };
+  /** Where the list stands in the box: its left edge, and how far its foot stands above the box's foot, or its top under the box's top. */
+  place: SkillMenuPlace;
   onHover: (index: number) => void;
   onChoose: (skill: SkillOption) => void;
 }): React.JSX.Element {
@@ -219,6 +225,7 @@ export function useSkillPicker({
   draft,
   source,
   onOpen,
+  side = MENTION_MENU_SIDE.ABOVE,
 }: {
   /** The box's editor, which a chosen skill is written into; nothing until it has mounted. */
   editor: RefObject<ComposerEditorHandle | undefined>;
@@ -230,6 +237,8 @@ export function useSkillPicker({
   source: SkillSource | undefined;
   /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no task's page. */
   onOpen: ((skill: SkillOption) => void) | undefined;
+  /** Which side of the slash's line the list stands: over it, as at the foot of an agent's tab, or under it, as at the top of Home. */
+  side?: MentionMenuSide;
 }): SkillPicker {
   const listId = useId();
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
@@ -313,9 +322,15 @@ export function useSkillPicker({
     return false;
   };
 
-  // The list stands over the slash's line, measured from the box's field, which it keeps inside.
+  // The list stands by the slash's line, on the side asked, measured from the box's field, which it keeps inside.
   const box = room.current;
   const placed = box?.getBoundingClientRect();
+  const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): SkillMenuPlace => {
+    const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
+    return side === MENTION_MENU_SIDE.BELOW
+      ? { left, top: word.rect.bottom - at.top + MENU_GAP }
+      : { left, bottom: at.bottom - word.rect.top + MENU_GAP };
+  };
   const menu =
     !open || box === null || placed === undefined ? null : (
       <SkillMenu
@@ -323,13 +338,7 @@ export function useSkillPicker({
         rows={rows}
         at={at}
         read={skills}
-        place={{
-          left: Math.max(
-            0,
-            Math.min(mention.rect.left - placed.left, box.clientWidth - MENU_WIDTH),
-          ),
-          bottom: placed.bottom - mention.rect.top + MENU_GAP,
-        }}
+        place={placeOf(mention, placed, box.clientWidth)}
         onHover={(index) => setHighlight({ start: mention.start, query: mention.query, at: index })}
         onChoose={choose}
       />

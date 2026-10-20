@@ -26,6 +26,7 @@ import type {
   TasksRevisionParams,
   TasksRevisionsAnswer,
   TasksRevisionsParams,
+  TasksSetStandingParams,
   TasksSkillsAnswer,
   TasksSkillsParams,
   TasksTreeAnswer,
@@ -36,7 +37,7 @@ import { ACT, ACT_KIND } from "../acts.js";
 import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
- * tasks-acts.ts -- the Tasks tab's reads of a task's content: the panel's asks of the host about what one task holds.
+ * tasks-acts.ts -- the Tasks tab's reads of a task's content, and a task's status and priority: the panel's asks of the host about what one task holds.
  *
  * The task list and the open task's lifecycle ride the act port
  * (`act-port/tasks-procedures.ts`).
@@ -49,6 +50,7 @@ import { ActRefused, type ActRows, type ActSender } from "./router.js";
  */
 export interface TasksActsDependencies {
   host: {
+    tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
     tasksWorkEarlier(): Effect.Effect<void>;
     tasksConversationEarlier(): Effect.Effect<void>;
     tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
@@ -73,6 +75,7 @@ export interface TasksActsDependencies {
 }
 
 export type TasksActKind =
+  | typeof ACT_KIND.TASKS_SET_STANDING
   | typeof ACT_KIND.TASKS_WORK_EARLIER
   | typeof ACT_KIND.TASKS_CONVERSATION_EARLIER
   | typeof ACT_KIND.TASKS_MESSAGES
@@ -120,6 +123,10 @@ function pageSourceLines(
 export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows, TasksActKind> {
   const { host } = dependencies;
   return {
+    [ACT_KIND.TASKS_SET_STANDING]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_SET_STANDING, sender);
+      return host.tasksSetStanding(params);
+    },
     [ACT_KIND.TASKS_WORK_EARLIER]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_WORK_EARLIER, sender);
       return host.tasksWorkEarlier();

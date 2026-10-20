@@ -61,6 +61,11 @@ function fixture() {
   const page: PageScript = { html: undefined };
   const rows = tasksActRows({
     host: {
+      tasksSetStanding: (params) =>
+        Effect.sync(() => {
+          asked.push(`standing:${params.taskId}`);
+          return true;
+        }),
       tasksWorkEarlier: () => Effect.sync(() => void asked.push("earlier")),
       tasksConversationEarlier: () => Effect.sync(() => void asked.push("conversation-earlier")),
       tasksMessages: (params) =>

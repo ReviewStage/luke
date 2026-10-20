@@ -44,7 +44,7 @@ import {
   REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -285,22 +285,7 @@ beforeEach(() => {
   changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-        changes.push([request.payload.agentId, request.payload.request]);
-        changeNumbers.push(request.payload.number);
-        const answer = changeAnswer;
-        return (changeHeld ?? Promise.resolve()).then(() => ({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: answer,
-        }));
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-        images.push(request.payload.src);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
   });
   fakeActPort({
     [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
@@ -312,6 +297,16 @@ beforeEach(() => {
       return Promise.resolve();
     },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]),
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: (payload) => {
+      changes.push([payload.agentId, payload.request]);
+      changeNumbers.push(payload.number);
+      const answer = changeAnswer;
+      return (changeHeld ?? Promise.resolve()).then(() => answer);
+    },
+    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+      images.push(src);
+      return Promise.resolve(PIXEL);
+    },
   });
 });
 

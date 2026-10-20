@@ -7,10 +7,8 @@ import {
   browserViewParamsSchema,
 } from "@luke/features/browser-acts";
 import {
-  type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
-  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
@@ -18,22 +16,12 @@ import {
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateView,
   type CodingAgentMessagesAnswerView,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentReviewOptionsAnswerView,
   codingAgentAgentInboxParamsSchema,
-  codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChatWriteAnswerViewSchema,
-  codingAgentGitHubImageParamsSchema,
-  codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAnswerViewSchema,
@@ -47,17 +35,7 @@ import {
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
   codingAgentMessagesAnswerViewSchema,
-  codingAgentOverviewChecksAnswerViewSchema,
-  codingAgentOverviewConversationAnswerViewSchema,
-  codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPictureParamsSchema,
-  codingAgentPullRequestActionParamsSchema,
-  codingAgentPullRequestAnswerViewSchema,
-  codingAgentPullRequestParamsSchema,
-  codingAgentPullRequestReadParamsSchema,
-  codingAgentPullRequestViewedAnswerViewSchema,
-  codingAgentPullRequestWriteAnswerViewSchema,
-  codingAgentReviewOptionsAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
   type FeedbackResult,
@@ -107,6 +85,7 @@ import {
   tasksRevisionParamsSchema,
   tasksRevisionsAnswerSchema,
   tasksRevisionsParamsSchema,
+  tasksSetStandingParamsSchema,
   tasksSkillsAnswerSchema,
   tasksSkillsParamsSchema,
   tasksTreeAnswerSchema,
@@ -154,6 +133,12 @@ export const ACT_KIND = {
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
+  /**
+   * The panel's Tasks tab giving a task its status and priority on the
+   * service; answers whether it saved. The task list and lifecycle acts ride
+   * the act port (`contract/kinds.ts`'s `TASKS_ACT_KIND`).
+   */
+  TASKS_SET_STANDING: "tasks.setStanding",
   /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
   TASKS_WORK_EARLIER: "tasks.workEarlier",
   /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
@@ -194,23 +179,6 @@ export const ACT_KIND = {
   TASKS_COMMENTS: "tasks.comments",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
-  /** What one agent published: its branch and pull request as GitHub holds them. */
-  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
-  /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
-  CODING_AGENTS_CHANGES: "codingAgents.changes",
-  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
-  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
-  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
-  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
-  /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
-  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
-  /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
-  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
   /**
    * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
@@ -512,6 +480,11 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
+  [ACT_KIND.TASKS_SET_STANDING]: {
+    payload: actSchema(tasksSetStandingParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not change where that task stands on this system.",
+  },
   [ACT_KIND.TASKS_FILE]: {
     payload: actSchema(tasksFileParamsSchema),
     result: wireResult<TasksFileAnswer>(isReadable(tasksFileAnswerSchema)),
@@ -605,67 +578,6 @@ export const ACT = {
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
     refusal: "Could not read that task's conversation on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
-    payload: actSchema(codingAgentPullRequestReadParamsSchema),
-    result: wireResult<CodingAgentPullRequestAnswerView>(
-      isReadable(codingAgentPullRequestAnswerViewSchema),
-    ),
-    refusal: "Could not read the agent's pull request on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
-    result: wireResult<CodingAgentReviewOptionsAnswerView>(
-      isReadable(codingAgentReviewOptionsAnswerViewSchema),
-    ),
-    refusal: "Could not read the repository's reviewers and labels on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_CHANGES]: {
-    payload: actSchema(codingAgentPullRequestReadParamsSchema),
-    result: wireResult<CodingAgentChangesAnswerView>(
-      isReadable(codingAgentChangesAnswerViewSchema),
-    ),
-    refusal: "Could not read the agent's changes on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: {
-    payload: actSchema(codingAgentPullRequestReadParamsSchema),
-    result: wireResult<CodingAgentOverviewPullRequestAnswerView>(
-      isReadable(codingAgentOverviewPullRequestAnswerViewSchema),
-    ),
-    refusal: "Could not read the agent's pull request on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: {
-    payload: actSchema(codingAgentPullRequestReadParamsSchema),
-    result: wireResult<CodingAgentOverviewChecksAnswerView>(
-      isReadable(codingAgentOverviewChecksAnswerViewSchema),
-    ),
-    refusal: "Could not read the pull request's checks on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: {
-    payload: actSchema(codingAgentPullRequestReadParamsSchema),
-    result: wireResult<CodingAgentOverviewConversationAnswerView>(
-      isReadable(codingAgentOverviewConversationAnswerViewSchema),
-    ),
-    refusal: "Could not read the pull request's conversation on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: {
-    payload: actSchema(codingAgentGitHubImageParamsSchema),
-    result: wireResult<CodingAgentGitHubImageView>(isReadable(codingAgentGitHubImageViewSchema)),
-    refusal: "Could not read the pull request's image on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: {
-    payload: actSchema(codingAgentPullRequestActionParamsSchema),
-    result: wireResult<CodingAgentPullRequestWriteAnswerView>(
-      isReadable(codingAgentPullRequestWriteAnswerViewSchema),
-    ),
-    refusal: "Could not change the pull request on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: {
-    payload: actSchema(codingAgentPullRequestReadParamsSchema),
-    result: wireResult<CodingAgentPullRequestViewedAnswerView>(
-      isReadable(codingAgentPullRequestViewedAnswerViewSchema),
-    ),
-    refusal: "Could not read which files you viewed on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),

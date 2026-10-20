@@ -19,7 +19,12 @@ import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
-import { type CodeRef, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+import {
+  type CodeRef,
+  type Task,
+  type TaskStanding,
+  UNTITLED_TASK_NAME,
+} from "@luke/features/task-wire";
 import {
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -732,6 +737,8 @@ export interface TasksControl {
   onChangeRepository: (taskId: string) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
+  /** Sets where a task stands, how much it matters, or both; answers whether the service kept it. */
+  onSetTaskStanding: (taskId: string, standing: TaskStanding) => Promise<boolean>;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -2392,6 +2399,12 @@ export function useTasksTab(input: {
     );
   };
 
+  // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
+  const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
+    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
+  };
+
   // A fixture's tasks move nowhere, as they are read from nowhere. Note that
   // the workspace moves with the task, because the sidebar lists one
   // workspace's tasks and the open task must not drop out of it, but only
@@ -3331,6 +3344,7 @@ export function useTasksTab(input: {
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
+    onSetTaskStanding: setTaskStanding,
     onMoveTask: moveTask,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.

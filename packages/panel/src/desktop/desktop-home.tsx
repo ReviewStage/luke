@@ -22,6 +22,7 @@ import { createPortal } from "react-dom";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import {
   holderName,
@@ -80,8 +81,15 @@ import { useRowKeys } from "./use-row-keys.js";
  * with Retry, over whatever an earlier read listed.
  */
 
-/** How many tasks Recent lists. */
-const RECENT_COUNT = 6;
+/**
+ * How many tasks Recent lists in each room: a few beside the sidebar, which
+ * lists them all, and more on a phone, where the sidebar is a drawer and
+ * Home, the page the app opens on, is the list at hand.
+ */
+const RECENT_COUNT = {
+  [SHELL_ROOM.WIDE]: 6,
+  [SHELL_ROOM.NARROW]: 20,
+} as const satisfies Record<ShellRoom, number>;
 
 /** How many placeholder rows Home's Inbox stands while its items are read, fewer than a whole Inbox's. */
 const INBOX_SKELETON_ROWS = 3;
@@ -95,7 +103,7 @@ const SKELETON_GREETING = "9em";
 /** How wide each section heading's block stands, as wide as its word in the heading's type. */
 const SKELETON_HEADING = { INBOX: "3em", RECENT: "3.5em" } as const;
 
-/** How wide each of Recent's placeholder rows' names and repositories stand, one row for each task Recent lists, so the rows read as tasks of their own. */
+/** How wide each of Recent's placeholder rows' names and repositories stand, one row for each task Recent lists beside the sidebar, so the rows read as tasks of their own. */
 const SKELETON_RECENT = [
   { name: "46%", repository: "5em" },
   { name: "34%", repository: "6em" },
@@ -118,8 +126,8 @@ function greeting(name: string | undefined): string {
 }
 
 /** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
-function recentTasks(tasks: readonly TaskSummary[]): TaskSummary[] {
-  return orderTasks(tasks, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
+function recentTasks(tasks: readonly TaskSummary[], room: ShellRoom): TaskSummary[] {
+  return orderTasks(tasks, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT[room]);
 }
 
 /** A plan as a `ListRow`: the owner's picture, the name, and at its end the repository, its creator's face where a teammate created it, and its mark and time. */
@@ -231,12 +239,14 @@ function HomeInbox({ tasks, now }: { tasks: TasksControl; now: number }): React.
 /** Recent: the plans saved latest, under a refused read's Retry where the list could not be read, and nothing where neither stands. */
 function HomeRecent({
   tasks,
+  room,
   now,
 }: {
   tasks: TasksControl;
+  room: ShellRoom;
   now: number;
 }): React.JSX.Element | null {
-  const recent = recentTasks(tasks.listed.tasks);
+  const recent = recentTasks(tasks.listed.tasks, room);
   if (recent.length === 0 && !tasks.listFailed) return null;
   return (
     <section className="home-section" aria-labelledby="home-recent">
@@ -405,9 +415,12 @@ function SectionsSkeleton(): React.JSX.Element {
 /** The home page, in the task's place while no task is open. */
 export function DesktopHome({
   tasks,
+  room = SHELL_ROOM.WIDE,
   accountName,
 }: {
   tasks: TasksControl;
+  /** The room the panel's stage gives, which says how many tasks Recent lists; wide where left out. */
+  room?: ShellRoom | undefined;
   /** The signed-in account's name, which greets it. */
   accountName: string | undefined;
 }): React.JSX.Element {
@@ -450,7 +463,7 @@ export function DesktopHome({
             // who created each teammate's task, read against the listed workspace's members.
             <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
               <HomeInbox tasks={tasks} now={now} />
-              <HomeRecent tasks={tasks} now={now} />
+              <HomeRecent tasks={tasks} room={room} now={now} />
             </MemberDirectory>
           )}
         </DetailPage>

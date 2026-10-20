@@ -161,10 +161,11 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
         userId,
         organizationId: own,
         name: "A task the page never names",
+        number: 1,
         document: "",
         createdAt: at(1),
       },
-      { userId, organizationId: own, name: "Older", document: "", createdAt: at(45) },
+      { userId, organizationId: own, name: "Older", number: 2, document: "", createdAt: at(45) },
     ]);
     const merged = yield* startAgent(userId, own, 1, {
       turn: { status: TURN_STATUS.SETTLED },

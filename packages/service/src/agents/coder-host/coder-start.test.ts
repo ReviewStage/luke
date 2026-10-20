@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { changeIssue, createIssue, readIssue } from "@luke/database/models/issue-store";
-import { createTask } from "@luke/database/models/task-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, linearIssueLink, openWorkspace } from "@luke/database/testing";
 import { ISSUE_STATUS } from "@luke/features/issue-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
+import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { Effect, Layer, Option, Result, Stream } from "effect";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
@@ -381,6 +382,45 @@ it.layer(getTestDB())("an agent started on a plan from one of the workspace's is
         assert.equal(yield* statusOf(begun.id), ISSUE_STATUS.IN_PROGRESS);
         assert.equal(yield* statusOf(done.id), ISSUE_STATUS.DONE);
         assert.equal(yield* statusOf(untouched.id), ISSUE_STATUS.BACKLOG);
+      }),
+  );
+});
+
+it.layer(getTestDB())("an agent started on a task", (it) => {
+  /** A Start on the task, handed the plan, under a fresh key. */
+  const taskAsk = (taskId: string): StartAsk => ({
+    taskId,
+    prompt: undefined,
+    idempotencyKey: randomUUID(),
+    choice: undefined,
+  });
+
+  it.effect(
+    "moves the task into progress from the backlog or to do, and leaves one done as it stood",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openConnectedWorkspace;
+        const made = (status: TaskStatus) =>
+          createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invites",
+            repository: RELAY_REPOSITORY,
+            status,
+          });
+        const filed = yield* made(TASK_STATUS.BACKLOG);
+        const todo = yield* made(TASK_STATUS.TODO);
+        const done = yield* made(TASK_STATUS.DONE);
+        const { eve } = fakeEve();
+
+        for (const task of [filed, todo, done]) {
+          yield* startCodingAgent(eve, owner, taskAsk(task.id)).pipe(Effect.provide(services));
+        }
+
+        const statusOf = (taskId: string) =>
+          Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.task.status);
+        assert.equal(yield* statusOf(filed.id), TASK_STATUS.IN_PROGRESS);
+        assert.equal(yield* statusOf(todo.id), TASK_STATUS.IN_PROGRESS);
+        assert.equal(yield* statusOf(done.id), TASK_STATUS.DONE);
       }),
   );
 });
