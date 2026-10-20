@@ -12,15 +12,15 @@ import {
 import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
 import {
   AnchoredPopover,
-  BUTTON_VARIANT,
-  Button,
   Calendar,
   GAP,
   Inline,
   POPOVER_ALIGN,
   SETTINGS_ROW_DENSITY,
   Stack,
+  TEXT_BUTTON_TONE,
   TEXT_FIELD_TYPE,
+  TextButton,
   TextField,
 } from "@luke/ui";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
@@ -38,8 +38,8 @@ import { useMinute } from "./task-time.js";
  * one. It is drawn as the window's other popovers with settings in them
  * are (`view-settings.tsx`): a card under its title and ×, its switches the
  * Settings rows' own (`../settings/switch-row.tsx`) at their compact
- * density, and its one action, Clear, a quiet button at its ruled foot, as
- * the MCP servers popover's Settings stands (`agent-servers.tsx`). Top
+ * density, and its one action, Clear, a quiet word at its ruled foot, lined
+ * up with the fields and the rows' names above it. Top
  * to bottom it holds a field for each end's date, as Notion's does, each
  * read as an `@` word is read (`dateOfWords`, so `next fri 3pm` works) as
  * Enter or leaving the field takes it, and beside each, while Include
@@ -481,10 +481,10 @@ function DatePickerPanel({
           onChange={(on) => update(timeSwitched(latest.current, on))}
         />
       </Stack>
-      <div className="task-compose-menu-foot">
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+      <div className="date-picker-foot">
+        <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
           {WORDS.CLEAR}
-        </Button>
+        </TextButton>
       </div>
     </PopoverPanel>
   );
