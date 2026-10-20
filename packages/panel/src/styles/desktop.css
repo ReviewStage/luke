@@ -3572,27 +3572,7 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
-/* A thread from version 5 leads with its title over one muted line: how
-   many messages, who wrote them, and, while an ask waits, "Waiting on you"
-   in the attention ink after its dot, the only colour the line spends. */
-.inbox-subject-line {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-subject-line > * + *::before {
-  order: -2;
-  padding-inline: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
-  content: "·";
-}
-
+/* "Waiting on you" at an open ask's head, in the attention ink after its dot. */
 .inbox-waiting {
   display: inline-flex;
   align-items: center;

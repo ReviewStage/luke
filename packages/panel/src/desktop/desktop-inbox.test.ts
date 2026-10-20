@@ -5563,10 +5563,10 @@ test("in a narrow room a picture landing above the ask stands it over the box ag
   leaveRoom();
 });
 
-/** The thread's line under its title, a part a span. */
-function subjectLine(pane: HTMLElement): (string | null)[] {
-  const line = pane.querySelector("[data-inbox-subject-line]") ?? assert.fail("the line is drawn");
-  return [...line.children].map((part) => part.textContent);
+/** Everything the thread's subject draws, a part a child: its title alone. */
+function subjectParts(pane: HTMLElement): (string | null)[] {
+  const subject = pane.querySelector(".inbox-subject") ?? assert.fail("the subject is drawn");
+  return [...subject.children].map((part) => part.textContent);
 }
 
 /** Each ask's box on the thread: where it stands, then its head as a reader hears it. */
@@ -5629,7 +5629,7 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
-test("a thread draws every message, the agent's by its tile, name, and tag and a member's by their face and name, under its title and a line counting them and who wrote them, Waiting on you while its ask is open", async () => {
+test("a thread draws every message, the agent's by its tile, name, and tag and a member's by their face and name, under its title alone, Waiting on you on its open ask", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
     threadMessage(
@@ -5651,7 +5651,11 @@ test("a thread draws every message, the agent's by its tile, name, and tag and a
     pane.querySelector("[data-inbox-title]")?.textContent,
     "How long should invites last?",
   );
-  assert.deepEqual(subjectLine(pane), ["3 messages", "Alerts, Charles Pan", "Waiting on you"]);
+  assert.deepEqual(
+    subjectParts(pane),
+    ["How long should invites last?"],
+    "no line stands under the title",
+  );
   assert.deepEqual(threadOf(pane.ownerDocument.body), [
     [
       "message",
@@ -5737,7 +5741,7 @@ test("picking an option attaches it over the box as a stamp, renaming the send, 
   assert.equal(reply.querySelector("[data-inbox-stamp]")?.textContent, "Chose 7 days");
   assert.equal(reply.querySelector("[data-inbox-stamp]")?.getAttribute("data-tone"), "ahead");
   assert.deepEqual(askBoxes(pane), [["answered", "Pick oneYou chose 7 days"]]);
-  assert.deepEqual(subjectLine(pane), ["2 messages", "Alerts, You"], "nothing waits any more");
+  assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
 });
 
 test("an approve-or-request-changes ask is two small buttons: the one pressed is attached and names the send, and the reply sent with words carries it, stamped as requested changes", async () => {
@@ -5850,13 +5854,10 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
 });
 
-test("an ask of a type this build does not know reads as a line naming a newer Luke, and the box still replies", async () => {
+test("an ask of a type this build does not know reads as a line naming a newer Luke, saying who it waits on while open, and the box still replies", async () => {
   const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
   const pane = await mountThread(threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }]));
-  assert.equal(
-    pane.querySelector('[data-inbox-ask="newer"]')?.textContent,
-    "Answer this in a newer Luke.",
-  );
+  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke.Waiting on you"]]);
   assert.equal(sendWords(pane), "Reply");
 });
 
@@ -5917,9 +5918,9 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
   assert.equal(sendWords(pane), "Couldn't do it");
 });
 
-test("a teammate's open ask says it waits on them, in the line and on its box, rather than on you, and still takes your answer", async () => {
+test("a teammate's open ask says it waits on them on its box, rather than on you, and still takes your answer", async () => {
   const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)], { startedBy: TEAMMATE }));
-  assert.deepEqual(subjectLine(pane), ["1 message", "Alerts", "Waiting on Charles Pan"]);
+  assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on Charles Pan"]]);
   assert.equal(pane.querySelector(".inbox-waiting"), null, "no attention ink is spent");
   act(() => openOptions(pane)[0]?.click());
