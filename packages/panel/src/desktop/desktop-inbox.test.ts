@@ -6495,6 +6495,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
   assert.equal(askMarker(pane), "Waiting on you");
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.equal(quietWords(pane), "Replying keeps the ask open");
 
   act(() => steps()[0]?.click());
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
@@ -6512,7 +6513,8 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
     "Couldn't do it after Mark done keeps only the step ticked by hand",
   );
   act(() => askPress(pane, "Couldn't do it").click());
-  assert.equal(quietWords(pane), "Replying keeps the ask open", "pressed again, it is let go");
+  assert.equal(askPress(pane, "Couldn't do it").getAttribute("aria-pressed"), "false");
+  assert.equal(quietWords(pane), null, "pressed again, it is let go, the step ticked still sent");
   act(() => askPress(pane, "Mark done").click());
   assert.equal(quietWords(pane), null, "the picked answer says what is sent");
   assert.equal(sendWords(pane), "Reply");
@@ -6547,6 +6549,64 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   assert.deepEqual(
     [...legacy.querySelectorAll("[data-inbox-step]")].map((step) => step.textContent),
     ["How long should invites last?"],
+  );
+});
+
+test("a to-do with every step ticked by hand stands marked done and Reply sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
+  const toDo = { type: INBOX_ASK.DO, steps: ["Open the repository's settings", "Add the secret"] };
+  const shown = threadItem([askingMessage(toDo)]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
+  const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
+  const markDone = () => askPress(pane, "Mark done").getAttribute("aria-pressed");
+
+  act(() => steps()[0]?.click());
+  act(() => steps()[1]?.click());
+  assert.equal(markDone(), "true", "every step ticked stands as Mark done");
+  assert.equal(quietWords(pane), null, "the reply carries the answer");
+  act(() => steps()[1]?.click());
+  assert.equal(markDone(), "false", "letting a step go takes Mark done back off");
+  assert.equal(quietWords(pane), null, "the step still ticked goes with the reply");
+  act(() => steps()[0]?.click());
+  assert.equal(quietWords(pane), "Replying keeps the ask open", "nothing ticked, nothing attached");
+  act(() => steps()[0]?.click());
+  act(() => steps()[1]?.click());
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent.map(({ answers }) => answers),
+    [{ ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1] }],
+    "Reply sends Mark done with every step, no press needed",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const partly = threadItem([askingMessage(toDo)]);
+  const second = await mountThread(partly);
+  const sentPartly = heldMessages(repliedOn(partly, "e1b2c3d4-0000-4000-8000-000000000013"));
+  act(() => second.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")[1]?.click());
+  assert.equal(askPress(second, "Couldn't do it").getAttribute("aria-pressed"), "false");
+  act(() =>
+    second.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sentPartly.map(({ answers }) => answers),
+    [{ ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED, steps: [1] }],
+    "the step ticked goes as it stands, never as Couldn't do it",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const titled = threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })]);
+  const third = await mountThread(titled);
+  act(() => third.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
+  assert.equal(
+    askPress(third, "Mark done").getAttribute("aria-pressed"),
+    "true",
+    "ticking a to-do's title, its one step, marks it done",
   );
 });
 

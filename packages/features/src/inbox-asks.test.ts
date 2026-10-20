@@ -360,6 +360,25 @@ test("a do takes Mark done once every step is ticked, or Couldn't do it with any
   }
 });
 
+test("a do takes the steps ticked with neither press as an answer, once one is ticked", () => {
+  const ticked = (steps?: number[]) => ({
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.ANSWERED,
+    ...(steps === undefined ? undefined : { steps }),
+  });
+  assert.equal(inboxAnswersRefusal(SECRET, ticked([1]), ""), undefined);
+  assert.equal(inboxAnswersRefusal(SECRET, ticked([0, 1]), ""), undefined);
+  const refusals = [
+    [ticked([]), "The ask does not take that answer."],
+    [ticked(), "The ask does not take that answer."],
+    [ticked([2]), "A tick names no step of the ask."],
+    [ticked([1, 1]), "A step is ticked twice."],
+  ] as const;
+  for (const [answers, refusal] of refusals) {
+    assert.equal(inboxAnswersRefusal(SECRET, answers, "Some words."), refusal, refusal);
+  }
+});
+
 test("an answer with fields takes their values filled, and one without takes words or files", () => {
   const submitted = (values: { label: string; value: string | number | boolean }[]) => ({
     ask: ASKING_ID,
