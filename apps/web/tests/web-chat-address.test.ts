@@ -36,6 +36,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The panel drawn afresh over the tab as it stands, its saved step kept, as a page reloaded on it. */
+async function reloadedHere() {
+  unmountPanels();
+  installPanelDoors(RUN_PROFILE.CHAT);
+  return drawPanel();
+}
+
 /** The panel drawn afresh over a tab loaded at `address`. */
 async function loadedAt(address: string) {
   unmountPanels();
@@ -57,7 +64,7 @@ async function pressRow(words: string): Promise<void> {
 }
 
 it.effect(
-  "Chat and a channel chosen in it write their addresses, a loaded channel's address opens it, and a stale channel or Settings page falls back to its root",
+  "Chat and a channel chosen in it write their addresses, a reload or a loaded channel's address opens it, and a stale channel or Settings page falls back to its root",
   () =>
     Effect.gen(function* () {
       openAt("/app");
@@ -78,6 +85,12 @@ it.effect(
 
         // A wide room's Chat is one step whichever place it shows, so the channel takes For you's entry in place.
         assert.equal(window.history.length, 1);
+
+        const again = await reloadedHere();
+        await vi.waitFor(() =>
+          assert.ok(again.shows("# members-schema"), "a reload reopens the channel its step saved"),
+        );
+        assert.equal(addressBar(), `/personal/chat/${SCHEMA_CHANNEL}`);
 
         const reloaded = await loadedAt(`/personal/chat/${SCHEMA_CHANNEL}`);
         assert.ok(reloaded.shows("# members-schema"), "a channel's address opens it");

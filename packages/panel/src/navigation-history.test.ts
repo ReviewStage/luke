@@ -496,12 +496,13 @@ test("a deleted automation's page is passed over by Back, which returns to the p
   assert.deepEqual(opened, [kept]);
 });
 
-/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open counted in `opened`. */
+/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open, or to open on a place, counted in `opened`. */
 function onChat(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
   const base = tasksControl();
+  const ask = () => opened.push(workspaceId);
   return tasksControl({
     workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
-    chatView: { ...base.chatView, open, onOpen: () => opened.push(workspaceId) },
+    chatView: { ...base.chatView, open, onOpen: ask, onShow: ask },
   });
 }
 
