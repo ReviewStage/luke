@@ -6530,7 +6530,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
 });
 
-test("a replaced ask draws no card, only a quiet marker ending the agent's message saying a newer question replaced it; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+test("a replaced ask draws no card, only a quiet marker ending the agent's message saying a newer question replaced it, or a newer message where none asks; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -6576,6 +6576,20 @@ test("a replaced ask draws no card, only a quiet marker ending the agent's messa
     pane.querySelectorAll("[data-inbox-settled]").length,
     1,
     "no withdrawn ask wears the marker",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const noticed = await mountThread(
+    threadItem([
+      askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000022", "agent", "Deploy finished.", 2_000),
+    ]),
+  );
+  assert.equal(
+    wordsOf(noticed.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
+    "Replaced by a newer message",
+    "an ask replaced by a message that asks nothing names no newer question",
   );
 });
 
