@@ -73,7 +73,7 @@ export function readTaskTree(
     const repository = stored.value.task.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     return Option.some(
-      yield* readRepositoryTree(stored.value.task.workspaceId, repository, request),
+      yield* readRepositoryTree(stored.value.task.workspaceId, repository, userId, request),
     );
   });
 }
@@ -88,10 +88,11 @@ export function readTaskTree(
 export function readRepositoryTree(
   workspaceId: string,
   repository: string,
+  member: string,
   request: TaskTreeRequest,
 ): Effect.Effect<TaskTreeAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   if (withinSecret(request.path)) return Effect.succeed(refused(TASK_FILE_REFUSAL.SECRET));
-  return readFolder(workspaceId, repository, request).pipe(
+  return readFolder(workspaceId, repository, member, request).pipe(
     Effect.catchTag("GitHubUnavailable", (failure) =>
       Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
     ),
@@ -102,9 +103,10 @@ export function readRepositoryTree(
 const readFolder = /* @__PURE__ */ Effect.fn("web/taskTreeFolder")(function* (
   organizationId: string,
   repository: string,
+  member: string,
   request: TaskTreeRequest,
 ) {
-  const reach = yield* reachTaskRepository(organizationId, repository);
+  const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
   const recursive = request.recursive === true;

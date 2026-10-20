@@ -27,7 +27,7 @@ import {
   pullRequestFiles,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import { agentWorkspace } from "../../github/workspace-repository.js";
+import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { CODER } from "./bounds.js";
 
@@ -202,7 +202,7 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
   const app = yield* GitHubApp;
   const reached = Option.isNone(workspace)
     ? Option.none()
-    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository);
+    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository, agentMember(agent));
   if (Option.isNone(reached)) {
     return yield* new RepositoryNotReachable({ repository: agent.repository });
   }

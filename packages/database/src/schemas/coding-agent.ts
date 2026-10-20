@@ -6,6 +6,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PullRequestArea } from "@luke/features/pull-request-area";
 import { sql } from "drizzle-orm";
 import {
@@ -243,6 +244,8 @@ export const codingAgent = pgTable(
     mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
     /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
     author: text("author").$type<CodingAgentAuthor>(),
+    /** How the agent's repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
+    githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

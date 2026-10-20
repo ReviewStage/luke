@@ -601,6 +601,14 @@ function unreachedFailure(
         taskId: taskId,
         workspace: unreached.workspace,
       };
+    case REPOSITORY_UNREACHED.NO_TOKEN:
+      return callFailure("No GitHub token saved.");
+    case REPOSITORY_UNREACHED.TOKEN_INVALID:
+      return callFailure("Your GitHub token was refused.");
+    case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
+      return callFailure(`Your GitHub token can't access ${repository}.`);
+    case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
+      return callFailure(`Your GitHub token can't push to ${repository}.`);
   }
 }
 

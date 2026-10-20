@@ -303,10 +303,11 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
+  // Note that an automation reaches through the workspace's installation alone, so it asks as no member.
   const reached = yield* Effect.forEach(repositories, (repository) =>
-    workspaceRepository(organizationId, repository),
+    workspaceRepository(organizationId, repository, undefined),
   );
-  return reached.map((repository) => repository.fullName);
+  return reached.map((one) => one.repository.fullName);
 });
 
 /** Where a new automation stands: its task, as the task names its workspace and repository, or a workspace and the repositories named, each reached through it. */

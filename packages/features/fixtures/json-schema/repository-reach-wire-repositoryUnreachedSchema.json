@@ -66,6 +66,86 @@
         "reason": {
           "type": "string",
           "enum": [
+            "no-token"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "maxLength": 140
+        }
+      },
+      "required": [
+        "reason",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "token-invalid"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "maxLength": 140
+        }
+      },
+      "required": [
+        "reason",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "token-no-access"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "maxLength": 140
+        }
+      },
+      "required": [
+        "reason",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "token-cannot-push"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "maxLength": 140
+        }
+      },
+      "required": [
+        "reason",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
             "other-owner"
           ]
         },
