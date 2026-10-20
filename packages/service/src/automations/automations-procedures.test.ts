@@ -344,7 +344,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
+    "an automation on a workspace is refused for an account outside it, one on a plan for an account outside the plan's workspace or on a plan that is none, one on a workspace with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openAccounts;
@@ -353,6 +353,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body });
 
         const outside = yield* post(other, onWorkspace(task.workspaceId, [relay]));
+        const othersTask = yield* post(other, weekdays(task.id));
+        const noTask = yield* post(owner, weekdays(randomUUID()));
         const both = yield* post(owner, {
           ...onWorkspace(task.workspaceId, [relay]),
           planId: task.id,
@@ -378,6 +380,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(
           [
             outside.status,
+            othersTask.status,
+            noTask.status,
             both.status,
             noRepositories.status,
             unreached.status,
@@ -385,6 +389,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
             elsewhere.status,
           ],
           [
+            HOSTED_HTTP_STATUS.NOT_FOUND,
+            HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,

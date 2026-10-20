@@ -64,7 +64,8 @@ import {
   deleteTask,
   listTasks,
   readTask,
-  type StoredTask,
+  readTaskHeader,
+  type TaskHeader,
   updateTask,
 } from "@luke/database/models/task-store";
 import { readTranscript } from "@luke/database/models/transcript-store";
@@ -166,14 +167,14 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { repository: reached.repository.fullName, githubAccess: reached.access };
 });
 
-/** The account's plan, or not found for a plan it does not reach. */
+/** The account's plan without its document, or not found for a plan it does not reach. */
 const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
-): Effect.fn.Return<StoredTask, HostedRefusal, DatabaseServices> {
-  const opened = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return opened.value;
+): Effect.fn.Return<TaskHeader, HostedRefusal, DatabaseServices> {
+  const reached = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
+  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return reached.value;
 });
 
 /** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the procedure's refusal. */
@@ -189,7 +190,7 @@ class MoveRefused extends Data.TaggedError("MoveRefused")<{ readonly refusal: Ho
  */
 const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  stored: StoredTask,
+  stored: TaskHeader,
   workspaceId: string,
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
   if (stored.ownerId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
@@ -387,7 +388,7 @@ const linkIdOf = taskIdOf;
  */
 const liveTask = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, taskId: string) {
   const stored = yield* reachedTask(userId, taskId);
-  if (stored.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  if (stored.archived) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
   return stored;
 });
 
@@ -486,8 +487,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /** One plan with its saved document. */
     open: plans.open.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
-      const opened = yield* reachedTask(context.userId, taskId);
-      return { plan: opened.task };
+      const opened = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { plan: opened.value.task };
     }),
 
     /**
@@ -522,7 +524,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             );
       const workspace =
         organizationId === undefined
-          ? Effect.map(reachedTask(userId, taskId), (stored) => stored.task.workspaceId)
+          ? Effect.map(reachedTask(userId, taskId), (stored) => stored.workspaceId)
           : Effect.succeed(organizationId);
       const reached =
         "repository" in changes
@@ -726,7 +728,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const taskId = yield* taskIdOf(input.id);
       const stored = yield* reachedTask(userId, taskId);
       const links = yield* hostedStoreOrUnavailable(listTaskIssues(userId, taskId));
-      const issues = yield* liveTaskIssues(userId, taskId, stored.task.workspaceId, links);
+      const issues = yield* liveTaskIssues(userId, taskId, stored.workspaceId, links);
       return { issues };
     }),
 
@@ -741,7 +743,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const { userId } = context;
       const taskId = yield* taskIdOf(input.params.id);
       const stored = yield* liveTask(userId, taskId);
-      const read = yield* linkedIssue(userId, stored.task.workspaceId, input.body);
+      const read = yield* linkedIssue(userId, stored.workspaceId, input.body);
       const made = yield* linkTaskIssue(userId, taskId, read).pipe(
         Effect.map(
           (link): Option.Option<TaskIssueLinkAnswer> =>

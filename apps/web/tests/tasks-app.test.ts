@@ -9,6 +9,7 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
+import { planRevision } from "@luke/database/schemas/plan-revision";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
@@ -105,7 +106,7 @@ import {
 import { added } from "@luke/service/testing/task-contents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -153,6 +154,9 @@ const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
 const CODE = (taskId: string) => `${ONE_TASK(taskId)}/code`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
 const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
+const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
+/** A window of a file the File tab asks for. */
+const README_WINDOW = { path: "README.md", first: "1", last: "10" } as const;
 const PAGES = (taskId: string) => `${ONE_TASK(taskId)}/pages`;
 const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
 const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
@@ -853,7 +857,70 @@ it.layer(getTestDB())("the plan routes", (it) => {
         yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
         notFound,
       );
+      // The reads that need only where the plan stands, not its document, refuse it as the open does, and a plan that is none alike.
+      for (const id of [taskId, randomUUID()]) {
+        const bearer = id === taskId ? other : owner;
+        for (const read of [
+          request(WORK(id), bearer),
+          request(ISSUES(id), bearer),
+          request(FILE(id), bearer, { query: README_WINDOW }),
+          request(TREE(id), bearer),
+          request(SKILLS(id), bearer),
+        ]) {
+          assert.deepEqual(yield* ask(read), notFound, read.url);
+        }
+      }
+      assert.deepEqual(
+        yield* ask(request(STOP(randomUUID()), owner, { method: "POST" })),
+        notFound,
+      );
     }),
+  );
+
+  it.effect(
+    "a plan's reads that need only where it stands answer while its history holds a revision this build cannot read, which the open, reading who wrote each section, cannot",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        const now = yield* DateTime.nowAsDate;
+        // A revision a later build wrote, by a kind of writer this build has no name for.
+        yield* Database.use((db) =>
+          db.insert(planRevision).values({
+            taskId,
+            seq: 1_000,
+            actor: sql`'a-later-writer'`,
+            document: DEFAULT_PLAN_TEMPLATE,
+            changes: 1,
+            startedAt: now,
+            at: now,
+          }),
+        );
+
+        assert.deepEqual(
+          yield* ask(request(ONE_TASK(taskId), owner)),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        for (const read of [
+          request(MESSAGES, owner, { id: taskId }),
+          request(CODE(taskId), owner),
+          request(WORK(taskId), owner),
+          request(ISSUES(taskId), owner),
+          request(FILE(taskId), owner, { query: README_WINDOW }),
+          request(TREE(taskId), owner),
+          request(SKILLS(taskId), owner),
+          request(STOP(taskId), owner, { method: "POST" }),
+        ]) {
+          const answered = yield* ask(read);
+          assert.equal(
+            answered.status,
+            HOSTED_HTTP_STATUS.OK,
+            `${read.url} ${JSON.stringify(answered.body)}`,
+          );
+        }
+      }),
   );
 
   it.effect("stopping Luke on a plan he never worked on stops nothing, and only a POST stops", () =>

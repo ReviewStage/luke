@@ -10,7 +10,7 @@ import {
   turnsBefore,
 } from "@luke/database/models/message-reads";
 import { conversationOwnerOf } from "@luke/database/models/recorded-session";
-import { readTask, type TaskStoreEffect } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   TASK_WORK_BOUNDS,
   type TaskShownCode,
@@ -146,7 +146,7 @@ export function readTaskWork(
   before: string | undefined,
 ): TaskStoreEffect<Option.Option<TaskWorkAnswer>> {
   return Effect.gen(function* () {
-    const task = yield* readTask(userId, taskId);
+    const task = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(task)) return Option.none();
     const { conversationId } = task.value;
     const newest = before === undefined;
@@ -189,7 +189,7 @@ export function readTaskCode(
   taskId: string,
 ): TaskStoreEffect<Option.Option<{ readonly code: readonly TaskShownCode[] }>> {
   return Effect.gen(function* () {
-    const task = yield* readTask(userId, taskId);
+    const task = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(task)) return Option.none();
     const { conversationId } = task.value;
     const owner =

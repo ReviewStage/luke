@@ -27,7 +27,7 @@
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -293,7 +293,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       if (after !== undefined && before !== undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const { conversationId } = task.value;
       if (conversationId === undefined) {
@@ -315,7 +315,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const taskId = yield* uuidNamed(input.id);
       const call = yield* callNamed(input.call);
       const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task) || task.value.conversationId === undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       }

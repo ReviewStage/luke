@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   CODE_PATH_MAX_CHARS,
   isSecretFile,
@@ -68,12 +68,12 @@ export function readTaskTree(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     return Option.some(
-      yield* readRepositoryTree(stored.value.task.workspaceId, repository, userId, request),
+      yield* readRepositoryTree(stored.value.workspaceId, repository, userId, request),
     );
   });
 }

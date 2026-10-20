@@ -15,7 +15,7 @@ import {
   updateAutomation,
 } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { wireUuidSchema } from "@luke/features";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
@@ -321,14 +321,14 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (made.workspaceId !== undefined || made.repositories !== undefined) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
-    const task = yield* hostedStoreOrUnavailable(readTask(userId, made.planId));
+    const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, made.planId));
     if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    if (task.value.task.repository === null) {
+    if (task.value.repository === null) {
       return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
     }
     return {
       taskId: made.planId,
-      organizationId: task.value.task.workspaceId,
+      organizationId: task.value.workspaceId,
       repositories: undefined,
     };
   }
