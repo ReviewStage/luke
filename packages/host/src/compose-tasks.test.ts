@@ -16,8 +16,10 @@ import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
@@ -96,7 +98,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@luke/gateway";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
@@ -1029,11 +1031,14 @@ function subject(
     }[] = [];
     const standing = options.call ?? { about: undefined };
     const conversations = yield* fakeConversations();
+    /** Every followed transcript's page the host told, in order. */
+    const pages: WireValue[] = [];
     const tasks = yield* composeTasks({
       kernel: {
         runMode: { sendsNetwork: true },
         now: () => 0,
         emit: (kind, payload) => {
+          if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
           const read = readEither(tasksViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
@@ -1082,7 +1087,7 @@ function subject(
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, reported, last, viewWhere, viewLands, conversations };
+    return { tasks, call, told, pages, reported, last, viewWhere, viewLands, conversations };
   });
 }
 
@@ -3396,5 +3401,60 @@ it.effect(
       assert.deepEqual(realtime.subscribed(), []);
       yield* TestClock.adjust(Duration.hours(1));
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a followed planning worker's transcript is told page by page from its start on the service's held read, and the follow ends once the worker ended with nothing more",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, pages, conversations } = yield* subject(service);
+      const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-0-0" };
+      const said = conversationPage(
+        [journal("worker-1", "Compared them.")],
+        "3:0",
+        CODING_AGENT_STATUS.RUNNING,
+      );
+      const ended = conversationPage([], "3:0", CODING_AGENT_STATUS.COMPLETED);
+      yield* conversations.answer(INVITES, said);
+      yield* conversations.answer(INVITES, ended);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript), {});
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+
+      assert.deepEqual(pages, [
+        { transcript, page: said },
+        { transcript, page: ended },
+      ]);
+      assert.deepEqual(conversations.asks, [
+        [INVITES, CONVERSATION_READ.AFTER, CODING_AGENT_CURSOR_START],
+        [INVITES, CONVERSATION_READ.AFTER, "3:0"],
+      ]);
+    }),
+);
+
+it.effect(
+  "a planning worker not yet recorded, whose page is empty and starting at once, is told again only after a pause",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, pages, conversations } = yield* subject(service);
+      const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-7" };
+      const starting = conversationPage(
+        [],
+        CODING_AGENT_CURSOR_START,
+        CODING_AGENT_STATUS.STARTING,
+      );
+      yield* conversations.answer(INVITES, starting);
+      yield* conversations.answer(INVITES, starting);
+      yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript);
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+      assert.deepEqual(pages, [{ transcript, page: starting }]);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+      assert.deepEqual(pages, [
+        { transcript, page: starting },
+        { transcript, page: starting },
+      ]);
     }),
 );
