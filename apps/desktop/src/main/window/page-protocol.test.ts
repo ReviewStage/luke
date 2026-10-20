@@ -57,7 +57,11 @@ it.effect(
       assert.equal(response.headers.get("cache-control"), "no-store");
       assert.equal(response.headers.get("x-content-type-options"), "nosniff");
       // The find served after the page is `page-find.test.ts`'s.
-      assert.ok((yield* Effect.promise(() => response.text())).startsWith(CHART.html));
+      assert.ok(
+        (yield* Effect.promise(() => response.text())).endsWith(
+          CHART.html.slice("<!doctype html>".length),
+        ),
+      );
       assert.equal(policy.get("default-src"), "'none'");
       assert.equal(policy.get("connect-src"), "'none'");
       assert.equal(policy.get("form-action"), "'none'");

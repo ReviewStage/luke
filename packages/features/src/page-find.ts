@@ -5,7 +5,7 @@ import { Schema as EffectSchema } from "effect";
  *
  * A page is drawn in a frame sandboxed to its scripts alone, with an opaque
  * origin, so nothing in the panel reaches its words to find them. Every
- * server of a page therefore answers it with one script of Luke's own after
+ * server of a page therefore answers it with one script of Luke's own ahead of
  * the agent's HTML (`withPageFind`), which finds in the page's text at the
  * panel's asking, tints the matches with the CSS Custom Highlight API rather
  * than wrapping them, so the page's own tree is never rewritten, and brings
@@ -68,7 +68,7 @@ export const pageFindAnswerSchema = EffectSchema.Union([
 ]);
 
 /**
- * The script the frame runs, as the page's last. It is plain JavaScript in
+ * The script the frame runs, ahead of the page's own. It is plain JavaScript in
  * a string because it runs in the page, apart from every bundle of Luke's.
  * A match is the query found in the page's text read as one string, case
  * aside, where an inline element runs on into its neighbours and any other
@@ -159,9 +159,15 @@ const PAGE_FIND_SCRIPT = `(() => {
     for (let element = range.startContainer.parentElement; element !== null; element = element.parentElement) {
       if (element.tagName.toUpperCase() === "DETAILS" && !element.open) element.open = true;
     }
+    // Note that the match is shown only where the window and every scroller it stands in hold it.
     const box = range.getBoundingClientRect();
-    if (box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth) return;
-    range.startContainer.parentElement?.scrollIntoView({ block: "center", inline: "nearest" });
+    const holds = (edges) => box.top >= edges.top && box.bottom <= edges.bottom && box.left >= edges.left && box.right <= edges.right;
+    let shown = holds({ top: 0, bottom: innerHeight, left: 0, right: innerWidth });
+    for (let element = range.startContainer.parentElement; shown && element !== null; element = element.parentElement) {
+      const { overflowX, overflowY } = getComputedStyle(element);
+      if (overflowX !== "visible" || overflowY !== "visible") shown = holds(element.getBoundingClientRect());
+    }
+    if (!shown) range.startContainer.parentElement?.scrollIntoView({ block: "center", inline: "nearest" });
   };
 
   // Whether a match starts at or after one held before, which a change to the page may have taken out of it.
@@ -190,7 +196,7 @@ const PAGE_FIND_SCRIPT = `(() => {
     find.observer = new MutationObserver(() => {
       if (find.query.length > 0) search(find.query, false);
     });
-    find.observer.observe(document, { childList: true, subtree: true, characterData: true });
+    find.observer.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["hidden", "class"] });
   };
 
   const clear = () => {
@@ -227,7 +233,16 @@ const PAGE_FIND_SCRIPT = `(() => {
   });
 })();`;
 
-/** The page as served: the agent's HTML, then the find's script, which the HTML parser places in the body. */
+/** The doctype a page opens with, which keeps it out of quirks mode only where nothing stands before it. */
+const LEADING_DOCTYPE = /^\s*<!doctype[^>]*>/i;
+
+/**
+ * The page as served: the find's script ahead of the agent's HTML, after
+ * its doctype, so markup the page leaves open (a `<textarea>` or a comment
+ * never closed) cannot swallow the script, and a page keeps the standards
+ * mode its doctype asks for.
+ */
 export function withPageFind(html: string): string {
-  return `${html}\n<script>${PAGE_FIND_SCRIPT}</script>\n`;
+  const doctype = LEADING_DOCTYPE.exec(html)?.[0] ?? "";
+  return `${doctype}<script>${PAGE_FIND_SCRIPT}</script>${html.slice(doctype.length)}`;
 }

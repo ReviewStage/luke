@@ -98,6 +98,7 @@ function drawServed(html: string): DrawnPage {
   // Note that jsdom lays nothing out, so each frame's own prototypes say where a match stands.
   Object.defineProperty(protoDefining(page.createRange(), "setStart"), "getBoundingClientRect", {
     value: () => DOMRect.fromRect({ x: 0, y: framed.innerHeight + 100, width: 10, height: 10 }),
+    configurable: true,
   });
   Object.defineProperty(protoDefining(page.body, "getAttribute"), "scrollIntoView", {
     value(this: Element) {
@@ -139,13 +140,55 @@ const FUNNEL = [
   '<details><summary>More</summary><p id="folded">INVITES SENT last week</p></details>',
 ].join("\n");
 
-it.effect("the page is served as the agent wrote it, with the find after it", () =>
-  Effect.gen(function* () {
-    const page = yield* served(FUNNEL);
+it.effect(
+  "the page is served as the agent wrote it, in the standards mode its doctype asks for, with the find ahead of it",
+  () =>
+    Effect.gen(function* () {
+      const page = yield* served(FUNNEL);
+      const parsed = new DOMParser().parseFromString(page, "text/html");
 
-    assert.ok(page.startsWith(FUNNEL));
-    assert.match(page.slice(FUNNEL.length), /^\s*<script>[\s\S]*<\/script>\s*$/);
+      assert.ok(page.endsWith(FUNNEL.slice("<!doctype html>".length)));
+      assert.equal(parsed.compatMode, "CSS1Compat");
+      assert.equal(parsed.title, "Funnel");
+    }),
+);
+
+it.effect("markup the page leaves open does not swallow the find", () =>
+  Effect.gen(function* () {
+    const { ask, posted } = yield* draw("<!doctype html><p>Invites sent</p><textarea>unclosed");
+
+    ask(search("invites sent"));
+
+    assert.deepEqual(talliesOf(posted), [{ count: 1, at: 0 }]);
   }),
+);
+
+it.effect(
+  "a match a page's scroller holds out of sight is scrolled to, though the window holds it",
+  () =>
+    Effect.gen(function* () {
+      const { frame, ask, scrolled } = yield* draw(
+        '<!doctype html><div style="overflow-y: auto"><p id="inner">Invites sent</p></div>',
+      );
+      const framed = frame.contentWindow ?? assert.fail();
+      const page = frame.contentDocument ?? assert.fail();
+      const scroller = page.querySelector("div") ?? assert.fail();
+      // The match stands in the window's height, below the scroller's.
+      Object.defineProperty(
+        protoDefining(page.createRange(), "setStart"),
+        "getBoundingClientRect",
+        {
+          value: () => DOMRect.fromRect({ x: 0, y: 300, width: 10, height: 10 }),
+        },
+      );
+      scroller.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: 0, y: 0, width: 400, height: 200 });
+      assert.ok(framed.innerHeight > 310);
+
+      ask(search("invites sent"));
+
+      assert.deepEqual(scrolled, ["inner"]);
+    }),
 );
 
 it.effect(

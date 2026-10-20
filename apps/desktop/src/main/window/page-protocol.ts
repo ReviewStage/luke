@@ -11,7 +11,7 @@ import type { CustomScheme } from "electron";
  * A page is HTML an agent wrote, so it is served as nothing of Luke's own: a
  * scheme of its own, read from the service by this process on the account's
  * bearer and answered whole, under the page policy `@luke/features/page-policy`
- * states for every server of a page, with the find's script after it
+ * states for every server of a page, with the find's script ahead of it
  * (`@luke/features/page-find`), which ⌘F in the panel finds through. The
  * privileges mark the scheme standard and secure and nothing more: no fetch
  * from another document, no service worker, no CORS.
