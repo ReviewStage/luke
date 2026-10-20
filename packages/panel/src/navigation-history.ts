@@ -390,6 +390,17 @@ function unasked<Args extends readonly unknown[]>(
 }
 
 /**
+ * Whether two places are one draft's: one page, and for a new automation's
+ * page the same suggestion, since one opened from another suggestion starts
+ * another draft.
+ */
+function sameDraftPage(one: Place, other: Place): boolean {
+  if (!samePage(one, other)) return false;
+  if (one.kind !== PLACE_KIND.AUTOMATIONS || other.kind !== PLACE_KIND.AUTOMATIONS) return true;
+  return one.page.kind !== AUTOMATIONS_PAGE.NEW || sameAutomationsOpening(one.page, other.page);
+}
+
+/**
  * How a step to `to` asks: as the window's guard asks, unless it moves only
  * between two panes of the page standing, a narrow room's sub-steps, which
  * leaves no page and so loses nothing written on it.
@@ -399,7 +410,9 @@ function asking(
   to: Place | undefined,
 ): LeaveGuard["guard"] {
   const { place } = latest;
-  return place !== undefined && to !== undefined && samePage(place, to) ? unasked : latest.guard;
+  return place !== undefined && to !== undefined && sameDraftPage(place, to)
+    ? unasked
+    : latest.guard;
 }
 
 /** The window's history as its buttons and keys use it. */
@@ -893,8 +906,15 @@ export function useWindowHistory(input: {
     }
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
       // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again;
-      // one that also marks another run, as a run's link does, opens it on that run past the ask, since it leaves no page.
-      if (!automationsOpen || !sameAutomationsPage(automationsPage, to.page)) {
+      // one that also marks another run of the same automation, as a run's link does, opens it on that run past the ask,
+      // since it keeps the draft. A new automation's page from another suggestion is another draft, so it asks.
+      const here: Place = {
+        kind: PLACE_KIND.AUTOMATIONS,
+        page: automationsPage,
+        workspaceId: listedWorkspace,
+      };
+      const sameDraft = automationsOpen && sameDraftPage(here, to);
+      if (!sameDraft) {
         tasks.automationsView.onOpen(to.page, to.runs);
       } else if (!sameAutomationsOpening(automationsPage, to.page)) {
         tasks.leaveGuard.pass(() => tasks.automationsView.onOpen(to.page, to.runs));
