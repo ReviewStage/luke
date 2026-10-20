@@ -301,6 +301,8 @@ const AUTOMATION_WORDS = "Automation";
 export interface TranscriptOrigin {
   readonly sender: ReactNode;
   readonly lead?: TranscriptLead | undefined;
+  /** The status of the task whose plan it is, where the place knows it, which the plan's card wears until the task list holds the task. */
+  readonly status?: TaskStatus | undefined;
   readonly text?: string | undefined;
   readonly body?: string | undefined;
 }
@@ -802,6 +804,7 @@ function PlanCard({
   body,
   messageId,
   taskId,
+  status: known,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -817,10 +820,13 @@ function PlanCard({
   body?: string | undefined;
   /** The task the agent works on, whose plan's pictures the card draws; none where it works on none. */
   taskId?: string | undefined;
+  /** The task's status as the place knows it, which the card wears where the task list does not yet hold the task. */
+  status?: TaskStatus | undefined;
 }): ReactNode {
   const named = sender != null;
   const words = <TranscriptWords text={text} />;
-  const status = useTaskStatus(lead.plan ? taskId : undefined);
+  const listed = useTaskStatus(lead.plan ? taskId : undefined);
+  const status = lead.plan ? (listed ?? known) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       <Plan data-task-card="" aria-label={lead.label}>
@@ -1023,6 +1029,7 @@ function agentOrigin(input: {
   }
   if (agent.brief === CODING_AGENT_BRIEF.PROMPT) return undefined;
   return {
+    status: task?.status,
     sender:
       task === undefined && starter === undefined ? undefined : (
         <TaskSender task={task} onOpen={input.onOpenTask} starter={starter} />
@@ -1132,6 +1139,7 @@ export function AgentMessage({
         body={origin?.body}
         messageId={message.id}
         taskId={taskId}
+        status={origin?.status}
       />
     );
   }
