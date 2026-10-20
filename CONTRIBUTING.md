@@ -39,6 +39,12 @@ is a named instance without asking: `preview-<branch>` for the Preview the scrip
 looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
 sign-in of its own and never touches the plain instance's.
 
+Vercel builds no Preview for a coding agent's branch (`luke/**`; the root
+`vercel.json`'s `git.deploymentEnabled`), so `--preview` finds none there. To
+try an agent's change against a Preview, push its branch under another name
+(`git push origin HEAD:<name>`) and run `--preview` from that branch, or pass
+that Preview's address by hand.
+
 Each instance has its own profile under `~/Library/Application Support/Luke Dev
 <name>/` (sign-in, settings, window place, single-instance lock), its own
 `Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
