@@ -370,6 +370,31 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
+**Your own GitHub token.** If you save a GitHub personal access token (classic)
+in Settings › Profile, your Mac sends it once, over HTTPS, to our service,
+which asks GitHub whose it is with one request and keeps it only if GitHub
+accepts it, it carries the `repo` scope, and it belongs to the GitHub account
+linked to yours; a fine-grained token is refused without being sent to GitHub.
+It is stored under your account encrypted with AES-256-GCM, under the same
+keys as your own API keys, so a copy of our database alone cannot read it.
+Beside it we keep your GitHub login and account number, a hint (the `ghp_`
+prefix and the last four characters), its expiry where GitHub gives one, when
+you saved it, and whether GitHub has since refused it. You are shown the hint,
+the login, and the expiry, never the token. Our service uses it only to call
+GitHub for you: to list the repositories it can push to, and to read, check
+out, commit to, and open pull requests on the repository of a task or coding
+agent you start on it, where no GitHub App installation connected to the
+workspace reaches that repository. Once a minute it reads the reviews, comments, and
+checks on the open pull requests of your coding agents that run on it, to wake
+those agents. It also asks GitHub whether your token can read the repository
+of a teammate's task or coding agent that runs on their own token, to decide
+whether you see it, and keeps that answer for up to an hour. In a coding agent's sandbox it is set at
+the network firewall on that one repository's paths alone, and never enters
+the sandbox, a command, or its output. After you save it, neither your Mac nor
+any answer from our service holds the token again, and we never log it or send
+it to our analytics, crash reports, or screen recordings. Removing it in
+Settings, or deleting your account, deletes it.
+
 **A task's whiteboard.** You and Luke can both draw on a
 task's whiteboard. Our service stores it with the task, as drawn and readable
 by our own operators: every shape, arrow, line, stroke, and piece of text and
