@@ -41,7 +41,9 @@ import { MenuTab } from "./tab-strip.js";
  * beside it; an agent's Open terminal; a transcript's two copies; and an
  * agent's Archive. Those that act on what the chosen tab shows, an agent's
  * Rename, Open terminal, copies, and Archive, and a subagent's copies, its
- * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`). Each strip
+ * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`), with what the
+ * tab's own body hands up while it is drawn, a Pull request tab's Refresh
+ * and Open on GitHub (`useHandedTabActions`). Each strip
  * ends in a "+" that drops the shared searchable menu over what the strip
  * may open. The columns' own modules say which tabs and rows those are
  * (`main-tabs.tsx`, `side-panel.tsx`).
@@ -88,7 +90,12 @@ export interface TabDoors {
   archive?: MenuAction | undefined;
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
   copyLink?: MenuAction | undefined;
+  /** What the tab's body offers on what it shows while it is drawn (`useHandedTabActions`), which its toolbar's ⋯ alone offers, first. */
+  handed?: MenuAction[] | undefined;
 }
+
+/** Hears the actions a tab's body offers on what it shows, none once it is no longer drawn. */
+export type HandTabActions = (actions: MenuAction[] | undefined) => void;
 
 /** What a tab's menu offers on what the tab shows, each empty where the tab has none. */
 interface ContentActions {
@@ -192,12 +199,34 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
 /**
  * The chosen tab's actions as its toolbar's ⋯ offers them: those of its
  * right-click that act on what it shows (`contentActions`), in the same
- * groups, and none of the tab's own keeping, Close, Close others, and Pin
- * tab, which stay on the right-click alone.
+ * groups, after what its body hands up while it is drawn (`handed`), and
+ * none of the tab's own keeping, Close, Close others, and Pin tab, which
+ * stay on the right-click alone.
  */
 function contentActionGroups(doors: TabDoors): MenuAction[][] {
   const { rename, terminal, copies, archive } = contentActions(doors);
-  return [rename, terminal, copies, archive].filter((group) => group.length > 0);
+  return [doors.handed ?? [], rename, terminal, copies, archive].filter(
+    (group) => group.length > 0,
+  );
+}
+
+/**
+ * Hands the chosen tab's toolbar ⋯ the actions its body offers on what it
+ * shows (`TabDoors.handed`), again each time they change, and none once
+ * the body is no longer drawn. Note that `hand` is read through a ref, so
+ * a door made anew on each render hands nothing more; `actions` is what a
+ * change is heard by, so a caller keeps it the same while it means the same.
+ */
+export function useHandedTabActions(
+  hand: HandTabActions | undefined,
+  actions: MenuAction[] | undefined,
+): void {
+  const told = useRef(hand);
+  told.current = hand;
+  useEffect(() => {
+    told.current?.(actions);
+  }, [actions]);
+  useEffect(() => () => told.current?.(undefined), []);
 }
 
 /**

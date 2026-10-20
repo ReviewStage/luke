@@ -298,6 +298,29 @@
     background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
   }
 
+  /* A compact pill says where a thing stands among a header's words, a pull
+     request's state, beside a `Badge` that says the same of a state no menu
+     changes, so it is drawn in the badge's box: its height, its side room
+     inside the hairline, its medium caption, its glyph, and in a tone its
+     tint with no hairline and its words the tone a fifth of the way to the
+     text's own ink, which holds a caption's contrast. Only the chevron, and
+     the tint deepening under the pointer and while its menu is open, say it
+     is pressed. */
+  .luke-chip[data-look="pill"][data-size="compact"] {
+    padding: 0 calc(var(--luke-space-8) - 1px);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-chip[data-look="pill"][data-size="compact"] .luke-chip-face > :is(svg, img) {
+    width: 12px;
+    height: 12px;
+  }
+
+  .luke-chip[data-look="pill"][data-size="compact"][data-tone] {
+    border-color: transparent;
+    --luke-chip-ink: color-mix(in srgb, var(--luke-chip-tone) 80%, var(--luke-color-text));
+  }
+
   /* Busy, a change it made is out, and it pulses until answered. */
   .luke-chip[aria-busy="true"] {
     animation: luke-chip-wait 1.2s ease-in-out infinite;

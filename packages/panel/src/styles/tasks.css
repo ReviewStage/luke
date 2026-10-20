@@ -2745,8 +2745,9 @@
   }
 }
 
-/* The fixed header: the pill, the title, and the merge control and ⋯ in
-   one row, then the branches, who opened it and its reviewers in one line,
+/* The fixed header: the pill, the title, and the merge control in one
+   row, the pull request's Refresh and Open on GitHub in the side panel's
+   own ⋯ above it, then the branches, who opened it and its reviewers in one line,
    standing put while the tab under it scrolls. It answers its own width,
    so a narrow header shortens the merge control's words. */
 .pull-request-header {
@@ -2799,7 +2800,6 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-2);
   margin-inline-start: auto;
 }
 

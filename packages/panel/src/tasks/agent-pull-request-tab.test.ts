@@ -50,11 +50,12 @@ import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement, useState } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import type { MenuAction } from "../desktop/action-menu.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffListProps,
@@ -379,15 +380,37 @@ function Switching({
   first: PullRequestView;
 }) {
   const [view, setView] = useState<PullRequestView>(first);
-  return createElement(AgentPullRequestTab, {
-    agentId: AGENT.id,
-    control,
-    shown: true,
-    repository: "acme/relay",
-    tree: { open: false, onToggle: () => undefined },
-    view,
-    onView: setView,
-  });
+  const [actions, setActions] = useState<MenuAction[] | undefined>(undefined);
+  return createElement(
+    Fragment,
+    null,
+    createElement(Toolbar, { actions }),
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view,
+      onView: setView,
+      onActions: setActions,
+    }),
+  );
+}
+
+/** What the side panel's toolbar ⋯ offers for the tab, as a row of presses: its items as the tab hands them up. */
+function Toolbar({ actions }: { actions: MenuAction[] | undefined }) {
+  return createElement(
+    "div",
+    { "data-toolbar": "" },
+    (actions ?? []).map((action) =>
+      createElement(
+        "button",
+        { key: action.label, type: "button", disabled: action.disabled, onClick: action.onSelect },
+        action.label,
+      ),
+    ),
+  );
 }
 
 /**
@@ -531,16 +554,20 @@ function mergeControl(tab: HTMLElement): HTMLButtonElement | null {
   return tab.querySelector<HTMLButtonElement>(".pull-request-title-row .merge-control > button");
 }
 
-/** The header's ⋯, opened, and its items' words. */
-function openHeaderMenu(tab: HTMLElement): HTMLButtonElement[] {
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>(
-        '.pull-request-title-row [aria-label="Pull request actions"]',
-      ) ?? assert.fail("the title row has a ⋯")
-    ).click(),
+/** What the toolbar's ⋯ offers for the tab, each item's words and whether it applies now. */
+function toolbarItems(tab: HTMLElement): string[] {
+  return [...tab.querySelectorAll<HTMLButtonElement>("[data-toolbar] button")].map(
+    (each) => `${each.textContent}${each.disabled ? " (off)" : ""}`,
   );
-  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+}
+
+/** Presses the toolbar ⋯'s item named as given. */
+async function pressToolbar(tab: HTMLElement, label: string): Promise<void> {
+  const item =
+    [...tab.querySelectorAll<HTMLButtonElement>("[data-toolbar] button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the toolbar's ⋯ offers ${label}`);
+  await act(async () => item.click());
 }
 
 /** The words of every element the selector names, in order. */
@@ -1698,7 +1725,7 @@ test("a merged pull request says so on its pill, as its overview read it, says n
   ]);
 });
 
-test("where what the agent published is not read, the header still says where the pull request stands, and its ⋯ opens it on GitHub first, as its overview read it", async () => {
+test("where what the agent published is not read, the header still says where the pull request stands, and the toolbar's ⋯ opens it on GitHub, as its overview read it; the header holds no ⋯ of its own", async () => {
   const control = {
     ...controlAnswering(),
     pullRequests: new Map(),
@@ -1710,14 +1737,36 @@ test("where what the agent published is not read, the header still says where th
     null,
     "GitHub is no button of its own",
   );
-  const items = openHeaderMenu(tab);
-  assert.deepEqual(
-    items.map((each) => each.textContent),
-    ["Open on GitHub", "Refresh pull request", "Copy link"],
+  assert.equal(
+    tab.querySelector(".pull-request-header [aria-haspopup='menu'][aria-label$='actions']"),
+    null,
+    "the header holds no ⋯",
   );
-  act(() => items[0]?.click());
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  await pressToolbar(tab, "Open on GitHub");
   await settle();
   assert.deepEqual(opened, [PAGE]);
+});
+
+test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refresh would only repeat", async () => {
+  const pullRequest = held<CodingAgentOverviewPullRequestAnswerView>();
+  const tab = await draw(controlAnswering({ pullRequest: pullRequest.read }));
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh (off)"]);
+  await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
+  await settle();
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+});
+
+test("the toolbar's ⋯ offers nothing for the pull request before any of it is held", async () => {
+  const pullRequest = held<CodingAgentOverviewPullRequestAnswerView>();
+  const tab = await draw({
+    ...controlAnswering({ pullRequest: pullRequest.read }),
+    pullRequests: new Map(),
+  });
+  assert.deepEqual(toolbarItems(tab), []);
+  await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
+  await settle();
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
 });
 
 test("a ⌘-click on the title opens the pull request on GitHub, and a plain one opens nothing", async () => {
@@ -1815,7 +1864,7 @@ test("a box scrolled inside the view, a comment's field or its preview, folds no
   assert.equal(folded(), true);
 });
 
-test("an agent with no pull request yet says so", async () => {
+test("an agent with no pull request yet says so, and the toolbar's ⋯ offers nothing for one, though what it published is still held", async () => {
   const none = await draw(
     controlAnswering({
       pullRequest: () => Promise.resolve({ pullRequest: null }),
@@ -1825,6 +1874,7 @@ test("an agent with no pull request yet says so", async () => {
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
   assert.equal(none.querySelector("section[aria-label='Pull request conversation']"), null);
+  assert.deepEqual(toolbarItems(none), []);
 });
 
 test("the pill, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
@@ -1933,15 +1983,7 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
   );
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2, "nor is the conversation");
 
-  const more =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-    assert.fail("the header has a ⋯");
-  act(() => more.click());
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.deepEqual(words(tab, "li .luke-list-row-title"), ["refreshed, passed"]);
   assert.equal(
@@ -1975,15 +2017,7 @@ test("a pull request renamed on GitHub renames its tab once Refresh is pressed, 
   const name = () => tab.querySelector("[data-tab-name]")?.textContent;
   assert.equal(name(), "#42 Expire invitations");
 
-  const more =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-    assert.fail("the header has a ⋯");
-  act(() => more.click());
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
@@ -2557,17 +2591,7 @@ test("a merge asked about merges the head it was asked about, though a read land
     assert.fail("the merge is asked about");
   assert.match(dialog.textContent ?? "", /at commit c0ffee1/u);
 
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-      assert.fail("the header has a ⋯")
-    ).click(),
-  );
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.ok(reads > 1, "a newer head was read under the question");
 
@@ -2787,17 +2811,7 @@ test("a pull request with no labels spends no line on them: its label picker sta
   assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
 
   labels = [{ name: "bug", color: "d73a4a" }];
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-      assert.fail("the header has a ⋯")
-    ).click(),
-  );
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   const list = people().querySelector('[aria-label="Labels"]') ?? assert.fail("its labels stand");
   assert.equal(list.textContent, "bug");
@@ -3769,15 +3783,7 @@ test("a comment being written outlives a read of the conversation that failed, s
   );
   writeComment(tab, "Half a thought");
 
-  const more =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-    assert.fail("the header has a ⋯");
-  act(() => more.click());
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.equal(
     tab.querySelector(".pull-request-comment-box"),
