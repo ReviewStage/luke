@@ -422,10 +422,6 @@ test("every agent is told to reply to a message on an inbox thread on that threa
       assert.ok(instructions.includes("never answer them in your message alone"), brief);
     }
   }
-  assert.ok(
-    INBOX_TOOLS.POST.description.includes("reply on that thread with a post under its key"),
-  );
-  assert.ok(INBOX_TOOLS.POST.description.includes("never answer them in your message alone"));
 });
 
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {

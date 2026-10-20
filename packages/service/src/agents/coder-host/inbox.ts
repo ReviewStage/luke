@@ -9,7 +9,6 @@ import {
   INBOX_CLOSE_LEAD,
   INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
-  INBOX_MESSAGE_LEAD,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_TOOL,
@@ -106,9 +105,6 @@ export const INBOX_TOOLS = {
       "waits is whether you need to hear the answer as a message: decide and answer wait unless you set it false, and do waits only where you set it true. " +
       "An answer you do not wait for is kept for you to read, though one carrying their words or a file still reaches you as a message. " +
       `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
-      `Replying never answers: a member may write on a thread at any point, which reaches you as a developer's message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key; ` +
-      "where it, or an answer carrying their words, wants a reply, such as a question or a request, reply on that thread with a post under its key that asks nothing unless what you need changed, " +
-      "as you follow up after an answer; they read your reply there and not in your transcript, so never answer them in your message alone. " +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your whole inbox as it stands.`,
     inputSchema: inboxThreadPostInputSchema,
   },
