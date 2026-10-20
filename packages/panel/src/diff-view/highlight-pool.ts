@@ -39,7 +39,7 @@ const HIGHLIGHT_WORKERS = 2;
  * kept result is never asked for again; only the files drawn right now are
  * read back, so a few are all the cache is for.
  */
-export const HIGHLIGHT_CACHE_ENTRIES = 16;
+const HIGHLIGHT_CACHE_ENTRIES = 16;
 
 /**
  * What a list highlights with: the pool to hand Pierre, none for the

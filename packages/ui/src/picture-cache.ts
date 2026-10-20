@@ -52,6 +52,8 @@ interface KeptPicture {
   readonly id: string;
   readonly read: Promise<PictureState>;
   state: PictureState;
+  /** How many places drawing it stand now, which the byte budget never lets go of. */
+  pins: number;
 }
 
 /** The pictures this window read, by what they belong to and then by id. */
@@ -79,7 +81,15 @@ function release(kept: KeptPicture): void {
   if (pictures?.get(kept.id) === kept) pictures.delete(kept.id);
 }
 
-/** Counts a picture that landed, then lets go of those drawn longest ago until the budget holds, the newest kept whatever its size. */
+/** Lets go of the pictures drawn longest ago until the budget holds, sparing `newest` whatever its size and every picture a place is drawing now. */
+function trim(newest: KeptPicture | undefined): void {
+  for (const eldest of drawnOrder) {
+    if (keptBytes <= PICTURE_BYTE_BUDGET) return;
+    if (eldest !== newest && eldest.pins === 0) release(eldest);
+  }
+}
+
+/** Counts a picture that landed, then trims to the budget. */
 function land(kept: KeptPicture, url: string): void {
   if (drawnOrder.has(kept)) release(kept);
   // A picture let go of while it was read is not kept when it lands.
@@ -87,10 +97,7 @@ function land(kept: KeptPicture, url: string): void {
   sizes.set(kept, url.length);
   keptBytes += url.length;
   drawnOrder.add(kept);
-  for (const eldest of drawnOrder) {
-    if (keptBytes <= PICTURE_BYTE_BUDGET || eldest === kept) break;
-    release(eldest);
-  }
+  trim(kept);
 }
 
 /** What a read's answer comes to: drawn, settled as missing, or nothing to keep. */
@@ -111,6 +118,7 @@ function keptPicture(owner: string, id: string, read: () => Promise<PictureAnswe
   const kept: KeptPicture = {
     owner,
     id,
+    pins: 0,
     state: READING,
     read: read()
       .then(stateOf, () => undefined)
@@ -136,7 +144,7 @@ export function keepPictureRead(owner: string, id: string, url: string): void {
   const state: PictureState = { kind: PICTURE_STATE.READY, url };
   const standing = pictures.get(id);
   if (standing !== undefined) release(standing);
-  const kept: KeptPicture = { owner, id, state, read: Promise.resolve(state) };
+  const kept: KeptPicture = { owner, id, pins: 0, state, read: Promise.resolve(state) };
   pictures.set(id, kept);
   land(kept, url);
 }
@@ -172,13 +180,14 @@ export function usePicture(
   const [, redraw] = useReducer((count: number) => count + 1, 0);
   const generation = useSyncExternalStore(heedForgetting, () => forgotten);
   const state = pictureNow(owner, id);
-  // Note that a picture let go of by the byte budget while drawn stops standing, which reads it again at the next draw.
-  const landed = state.kind !== PICTURE_STATE.READING;
   // Note that a failure is this picture's own, so another drawn in its place still reads.
   const [failed, setFailed] = useState<{ owner: string; id: string; generation: number }>();
   useEffect(() => {
     let standing = true;
-    keptPicture(owner, id, () => read(owner, id)).read.then((answered) => {
+    const kept = keptPicture(owner, id, () => read(owner, id));
+    // Note that the budget lets go of no picture a place is drawing, so one never goes back to reading under it.
+    kept.pins += 1;
+    kept.read.then((answered) => {
       if (!standing) return;
       if (
         answered.kind === PICTURE_STATE.MISSING &&
@@ -190,8 +199,10 @@ export function usePicture(
     });
     return () => {
       standing = false;
+      kept.pins -= 1;
+      trim(undefined);
     };
-  }, [owner, id, read, generation, landed]);
+  }, [owner, id, read, generation]);
   const mine =
     failed !== undefined &&
     failed.owner === owner &&

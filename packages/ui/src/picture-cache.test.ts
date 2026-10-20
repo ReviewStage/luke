@@ -1,11 +1,17 @@
+// @vitest-environment jsdom
+
 import assert from "node:assert/strict";
+import { act, createElement, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import {
   forgetPictures,
   keepPictureRead,
   PICTURE_BYTE_BUDGET,
   PICTURE_STATE,
+  type PictureAnswer,
   pictureNow,
+  usePicture,
 } from "./picture-cache.js";
 
 /**
@@ -24,7 +30,10 @@ function urlOf(size: number): string {
   return `data:image/png;base64,${"A".repeat(size - "data:image/png;base64,".length)}`;
 }
 
+const roots: Root[] = [];
+
 afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   forgetPictures();
 });
 
@@ -65,4 +74,39 @@ test("once the window lets go of every picture, the budget counts from nothing",
 
   for (const id of ["a", "b", "c", "d"])
     assert.equal(pictureNow(OWNER, id).kind, PICTURE_STATE.READY);
+});
+
+test("pictures drawn together past the budget all land, each read once, none sent back to reading", async () => {
+  const answers = new Map<string, (answer: PictureAnswer) => void>();
+  let reads = 0;
+  const read = (_owner: string, id: string) =>
+    new Promise<PictureAnswer>((answer) => {
+      reads += 1;
+      answers.set(id, answer);
+    });
+  const ids = ["a", "b", "c", "d", "e", "f"];
+  const shown = new Map<string, string>();
+  function Picture({ id }: { id: string }): ReactElement | null {
+    shown.set(id, usePicture(OWNER, id, read).kind);
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      createElement("div", null, ...ids.map((id) => createElement(Picture, { key: id, id }))),
+    ),
+  );
+
+  // Each picture is a quarter of the budget, as base64 under its type.
+  const base64 = "A".repeat(QUARTER - "data:image/png;base64,".length);
+  await act(async () => {
+    for (const answer of answers.values()) answer({ contentType: "image/png", base64 });
+  });
+
+  assert.deepEqual(
+    [...shown.values()],
+    ids.map(() => PICTURE_STATE.READY),
+  );
+  assert.equal(reads, ids.length);
 });
