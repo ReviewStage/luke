@@ -426,13 +426,13 @@ test("on a phone the chips wrap rather than run past the page, each cutting its 
 });
 
 /**
- * Where Link issue's menu hangs once the chip stands `left` pixels in from a
- * 390px window's left edge, 90px wide: the edge it hangs from, and the widest
- * the menu may stand. jsdom lays nothing out, so the chip's place is answered
- * as the window would lay it.
+ * Where Link issue's menu hangs once the chip stands `left` pixels in from
+ * the left edge of a window `width` wide, 90px wide itself: the edge it
+ * hangs from, and the widest the menu may stand. jsdom lays nothing out, so
+ * the chip's place is answered as the window would lay it.
  */
-async function linkMenuAt(left: number) {
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+async function linkMenuAt(left: number, width = 390) {
+  vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
   const { container } = await mount({ links: [SAFARI] });
   const chip =
@@ -459,4 +459,16 @@ test("Link issue near the row's start hangs its menu from its leading edge", asy
   const { align, widest } = await linkMenuAt(16);
   assert.equal(align, "start");
   assert.ok(widest >= 280, `the menu may stand ${widest}px wide`);
+});
+
+test("Link issue with some room after it but more before it hangs its menu from the edge with more", async () => {
+  const { align, widest } = await linkMenuAt(320, 600);
+  assert.equal(align, "end");
+  assert.equal(widest, 404);
+});
+
+test("Link issue with room for the whole menu after it hangs it from its leading edge, though there is more before it", async () => {
+  const { align, widest } = await linkMenuAt(560, 1000);
+  assert.equal(align, "start");
+  assert.equal(widest, 434);
 });

@@ -64,8 +64,8 @@ type PickerSide = (typeof PICKER_SIDE)[keyof typeof PICKER_SIDE];
 /** The gap the menu keeps from the chip and from the window's edge, which its placement subtracts from the room. */
 const MENU_GAP = 6;
 
-/** The least width a menu is worth drawing at from the chip's leading edge before an automatic one hangs from its trailing edge. */
-const LEAST_MENU_WIDTH = 280;
+/** The widest a searched menu stands, the issue picker's: an automatic menu hangs from the chip's leading edge while that leaves it this much. */
+const WIDEST_MENU = 420;
 
 /** The least height the list is worth drawing at below the chip before the menu turns to the room above. */
 const LEAST_LIST_HEIGHT = 160;
@@ -97,12 +97,13 @@ function pickerPlacement(input: {
     (input.roomBottom - input.chipBottom) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const above = (input.chipTop - input.roomTop) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const side = below >= LEAST_LIST_HEIGHT || below >= above ? PICKER_SIDE.BELOW : PICKER_SIDE.ABOVE;
-  const fromStart = input.roomRight - input.chipLeft;
-  const fromEnd = input.chipRight - input.roomLeft;
-  // Note that an automatic menu hangs from the leading edge while that leaves it room, as a chip leading its line does.
+  // The widest the menu may stand from either edge, past the gap it keeps from what clips it.
+  const fromStart = (input.roomRight - input.chipLeft) / input.scale - MENU_GAP;
+  const fromEnd = (input.chipRight - input.roomLeft) / input.scale - MENU_GAP;
+  // Note that an automatic menu hangs from the leading edge while it stands whole there, as a chip leading its line does, and otherwise from the edge with more room.
   const align: PlacedAlign =
     input.align === PICKER_ALIGN.AUTO
-      ? fromStart / input.scale >= LEAST_MENU_WIDTH || fromStart >= fromEnd
+      ? fromStart >= WIDEST_MENU || fromStart >= fromEnd
         ? PICKER_ALIGN.START
         : PICKER_ALIGN.END
       : input.align;
@@ -111,7 +112,7 @@ function pickerPlacement(input: {
     side,
     align,
     listMax: Math.floor(Math.max(side === PICKER_SIDE.BELOW ? below : above, 0)),
-    widthMax: Math.floor(Math.max(across / input.scale - MENU_GAP, 0)),
+    widthMax: Math.floor(Math.max(across, 0)),
   };
 }
 
