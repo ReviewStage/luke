@@ -21,7 +21,7 @@ import {
   indexAnimationAssets,
 } from "@luke/ui/admin-animations";
 import { useEffect, useRef } from "react";
-import { AdminPage, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage } from "../chrome/page-header";
 
 /**
  * The committed motion SVGs, inlined into the bundle at build time. The glob
@@ -133,13 +133,7 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
  * time — so the local sign-in press is the only gate standing before it, the
  * same first-visit consent every other view starts behind.
  */
-export function AnimationsScreen({
-  account,
-  onSignOut,
-}: {
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
-}): React.JSX.Element {
+export function AnimationsScreen(): React.JSX.Element {
   // SMIL loops answer to neither `--luke-face-motion` nor `prefers-reduced-motion`,
   // so the page holds them still itself wherever the reader asked the system
   // for less motion, following the setting as it changes.
@@ -160,7 +154,7 @@ export function AnimationsScreen({
   }, []);
 
   return (
-    <AdminPage title="Animations" account={account} onSignOut={onSignOut} controls={null}>
+    <AdminPage title="Animations" controls={null}>
       <div
         ref={previewsRef}
         className="mt-8 grid gap-4 min-[560px]:grid-cols-2 min-[880px]:grid-cols-3"

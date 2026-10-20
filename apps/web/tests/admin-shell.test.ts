@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import "@luke/panel/testing/match-media";
+import "@luke/panel/testing/resize-observer";
+import type { WireValue } from "@luke/wire";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
@@ -8,16 +11,26 @@ import { afterEach, expect, test, vi } from "vitest";
  * what it is doing: a view whose read is still out stands under its own
  * title with a status saying it is loading, the navigation marks that view
  * as the current page, and a press on another section moves both; the
- * account menu opens over the page from its avatar and closes on Escape or a
- * press outside it. The page runs as its entry mounts it in the browser, on
+ * sidebar hides and comes back from the toggle at its top, remembering which
+ * across visits, and in a phone's narrow room stands as a drawer over the
+ * view; the account stands at the sidebar's foot, its menu raised over it
+ * closing on Escape or a press outside it, and Log out, asked first, leaves
+ * for the sign-in. The page runs as its entry mounts it in the browser, on
  * its own `#root`, and is unmounted after each test so no render it scheduled
  * outlives jsdom; the network, the HTTP boundary to Luke and Better Auth, is
- * a fake that answers the session and leaves every admin read hanging.
+ * a fake that answers the session and a sign-out and leaves every admin read
+ * hanging. jsdom lays nothing out, so a narrow room is a stage measured
+ * narrow, as the browser's layout would report it.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const SESSION_PATH = "/api/auth/get-session";
+
+const SIGN_OUT_PATH = "/api/auth/sign-out";
+
+/** A phone's width, under the line the app's shell turns narrow at. */
+const PHONE_WIDTH = 390;
 
 let root: Root | undefined;
 
@@ -30,13 +43,16 @@ const SIGNED_IN = {
 async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-    if (url.pathname !== SESSION_PATH) return new Promise(() => undefined);
-    return Promise.resolve(
-      new Response(JSON.stringify(SIGNED_IN), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+    const answer = (body: WireValue) =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    if (url.pathname === SESSION_PATH) return answer(SIGNED_IN);
+    if (url.pathname === SIGN_OUT_PATH) return answer({ success: true });
+    return new Promise(() => undefined);
   });
   window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
   window.history.replaceState(null, "", address);
@@ -57,8 +73,36 @@ async function openAdmin(address = "/admin"): Promise<HTMLElement> {
 /** The names of the navigation links marked as the current page. */
 function currentSections(page: HTMLElement): (string | null)[] {
   return Array.from(page.querySelectorAll('nav a[aria-current="page"]')).map(
-    (link) => link.getAttribute("aria-label") ?? link.textContent,
+    (link) => link.textContent,
   );
+}
+
+/** The sidebar's link to a section, by the name it shows. */
+function sectionLink(page: HTMLElement, name: string): HTMLAnchorElement {
+  const link = Array.from(page.querySelectorAll<HTMLAnchorElement>("nav a")).find(
+    (candidate) => candidate.textContent === name,
+  );
+  if (link === undefined) throw new Error(`No ${name} link`);
+  return link;
+}
+
+/** The button a reader knows by `name`, wherever it stands. */
+function button(name: string): HTMLButtonElement | undefined {
+  return Array.from(document.querySelectorAll("button")).find(
+    (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent?.trim()) === name,
+  );
+}
+
+/** Whether nothing under `element` can be reached, by a pointer, the keyboard, or a screen reader. */
+function unreachable(element: Element): boolean {
+  return element.closest("[inert]") !== null;
+}
+
+/** The view beside the sidebar, the page's own `main`. */
+function view(page: HTMLElement): HTMLElement {
+  const main = page.querySelector("main");
+  if (!(main instanceof HTMLElement)) throw new Error("No view");
+  return main;
 }
 
 /**
@@ -90,22 +134,20 @@ test("a view whose read is out stands under its title and says it is loading", a
 
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
   expect(saysLoading(page)).toBe(true);
-  // The rail and the phone's bar are the same navigation, each marking the view.
-  expect(currentSections(page)).toEqual(["Overview", "Overview"]);
+  expect(currentSections(page)).toEqual(["Overview"]);
 });
 
 test("a press on another section makes it the current page", async () => {
   const page = await openAdmin();
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
-  const users = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Users"]');
-  if (!users) throw new Error("No Users link");
+  const users = sectionLink(page, "Users");
   await act(async () => {
     users.click();
   });
 
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Users"));
-  expect(currentSections(page)).toEqual(["Users", "Users"]);
+  expect(currentSections(page)).toEqual(["Users"]);
   expect(saysLoading(page)).toBe(true);
   expect(window.location.search).toBe("?view=users");
 });
@@ -115,13 +157,15 @@ function sectionNames(navigation: Element): (string | null)[] {
   return Array.from(navigation.querySelectorAll("a"), (link) => link.textContent);
 }
 
-test("the rail lists the measures, with Animations after them in its footer at its own address", async () => {
+test("one sidebar lists the measures, Animations last among them at its own address", async () => {
   const page = await openAdmin();
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
-  const [bar, rail] = Array.from(page.querySelectorAll('nav[aria-label="Admin sections"]'));
-  if (bar === undefined || rail === undefined) throw new Error("No navigation");
-  expect(sectionNames(rail)).toEqual([
+  const navigations = page.querySelectorAll('nav[aria-label="Admin sections"]');
+  expect(navigations).toHaveLength(1);
+  const [sidebar] = Array.from(navigations);
+  if (sidebar === undefined) throw new Error("No navigation");
+  expect(sectionNames(sidebar)).toEqual([
     "Overview",
     "Cost",
     "Reliability",
@@ -129,40 +173,101 @@ test("the rail lists the measures, with Animations after them in its footer at i
     "Users",
     "Animations",
   ]);
-  const animations = Array.from(rail.querySelectorAll("a")).find(
-    (link) => link.textContent === "Animations",
-  );
-  expect(animations?.getAttribute("href")).toBe("/admin?view=animations");
-  // The phone's bar carries the measures alone.
-  expect(Array.from(bar.querySelectorAll("a"), (link) => link.getAttribute("aria-label"))).toEqual([
-    "Overview",
-    "Cost",
-    "Reliability",
-    "Workspaces",
-    "Users",
-  ]);
+  expect(sectionLink(page, "Animations").getAttribute("href")).toBe("/admin?view=animations");
 });
 
-test("the account menu opens on its avatar, and Escape or a press outside closes it", async () => {
+test("the toggle at the sidebar's top hides it and shows it again, remembered across visits", async () => {
+  let page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+  expect(unreachable(sectionLink(page, "Users"))).toBe(false);
+
+  await act(async () => {
+    button("Hide sidebar")?.click();
+  });
+  expect(unreachable(sectionLink(page, "Users"))).toBe(true);
+  expect(unreachable(view(page))).toBe(false);
+  expect(button("Hide sidebar")).toBeUndefined();
+
+  // A later visit opens it hidden, as it was left.
+  act(() => root?.unmount());
+  page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+  expect(unreachable(sectionLink(page, "Users"))).toBe(true);
+
+  await act(async () => {
+    button("Show sidebar")?.click();
+  });
+  expect(unreachable(sectionLink(page, "Users"))).toBe(false);
+  expect(button("Hide sidebar")).toBeDefined();
+});
+
+test("in a phone's narrow room the sidebar is a drawer the toggle opens over the view, and a choice in it puts away", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: PHONE_WIDTH, height: 800 }),
+  );
   const page = await openAdmin();
-  const trigger = await vi.waitFor(() => {
-    const found = page.querySelector<HTMLButtonElement>(
-      'button[aria-label="Account menu for Ada Lovelace"]',
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+  const toggle = button("Show sidebar");
+  if (toggle === undefined) throw new Error("No sidebar toggle");
+  expect(unreachable(sectionLink(page, "Users"))).toBe(true);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+  await act(async () => {
+    toggle.click();
+  });
+  expect(unreachable(sectionLink(page, "Users"))).toBe(false);
+  expect(unreachable(view(page))).toBe(true);
+  expect(toggle.getAttribute("aria-label")).toBe("Hide sidebar");
+  expect(document.activeElement).toBe(sectionLink(page, "Overview"));
+
+  // Escape puts it away and hands the keyboard back to the toggle.
+  await act(async () => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
-    if (!found) throw new Error("No account menu yet");
+  });
+  expect(unreachable(sectionLink(page, "Users"))).toBe(true);
+  expect(document.activeElement).toBe(toggle);
+
+  await act(async () => {
+    toggle.click();
+  });
+  await act(async () => {
+    sectionLink(page, "Users").click();
+  });
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Users"));
+  expect(unreachable(sectionLink(page, "Users"))).toBe(true);
+  expect(unreachable(view(page))).toBe(false);
+  // The drawer is the room's: hiding it there is no choice to remember.
+  expect(window.localStorage.getItem("luke-admin-sidebar-collapsed")).toBeNull();
+});
+
+/** The account's button at the sidebar's foot, once the session names it. */
+async function accountButton(page: HTMLElement): Promise<HTMLButtonElement> {
+  return vi.waitFor(() => {
+    const found = Array.from(page.querySelectorAll<HTMLButtonElement>("aside button")).find(
+      (candidate) => candidate.textContent?.includes("Ada Lovelace") === true,
+    );
+    if (found === undefined) throw new Error("No account in the sidebar yet");
     return found;
   });
+}
+
+test("the account stands at the sidebar's foot, not in the page's header, and its menu closes on Escape or a press outside", async () => {
+  const page = await openAdmin();
+  const trigger = await accountButton(page);
+  expect(view(page).querySelector('button[aria-haspopup="menu"]')).toBeNull();
 
   await act(async () => {
     trigger.click();
   });
-  const signOut = document.querySelector('[role="menu"] [role="menuitem"]');
-  expect(signOut?.textContent).toBe("Sign out");
-  expect(document.activeElement).toBe(signOut);
+  const items = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"]'));
+  expect(items.map((item) => item.textContent)).toEqual(["Log out"]);
+  expect(document.activeElement).toBe(items[0]);
   expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
   await act(async () => {
-    signOut?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    items[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
   expect(document.activeElement).toBe(trigger);
@@ -177,18 +282,47 @@ test("the account menu opens on its avatar, and Escape or a press outside closes
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
 
+test("Log out asks first, then signs out and leaves for the sign-in", async () => {
+  const page = await openAdmin();
+  const trigger = await accountButton(page);
+  await act(async () => {
+    trigger.click();
+  });
+  await act(async () => {
+    document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]')?.click();
+  });
+  const dialog = document.querySelector('[role="alertdialog"]');
+  expect(dialog?.textContent).toContain("Log out of ada@example.com?");
+
+  const confirm = Array.from(dialog?.querySelectorAll("button") ?? []).find(
+    (candidate) => candidate.textContent === "Log out",
+  );
+  await act(async () => {
+    confirm?.click();
+  });
+
+  await vi.waitFor(() => expect(page.querySelector("nav")).toBeNull());
+  const asked = vi
+    .mocked(globalThis.fetch)
+    .mock.calls.map(
+      ([input]) =>
+        new URL(input instanceof Request ? input.url : String(input), window.location.href),
+    );
+  expect(asked.some((url) => url.pathname === SIGN_OUT_PATH)).toBe(true);
+  expect(window.localStorage.getItem("luke-admin-sign-in-chosen")).toBeNull();
+});
+
 test("a press on Reliability opens it as the current page, under its own address", async () => {
   const page = await openAdmin();
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
-  const reliability = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Reliability"]');
-  if (!reliability) throw new Error("No Reliability link");
+  const reliability = sectionLink(page, "Reliability");
   await act(async () => {
     reliability.click();
   });
 
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Reliability"));
-  expect(currentSections(page)).toEqual(["Reliability", "Reliability"]);
+  expect(currentSections(page)).toEqual(["Reliability"]);
   expect(saysLoading(page)).toBe(true);
   expect(window.location.search).toBe("?view=reliability");
 });

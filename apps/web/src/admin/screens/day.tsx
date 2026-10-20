@@ -121,8 +121,6 @@ export function DayScreen({
         <PageSkeleton
           title={formatDayHeading(day)}
           description={DAY_DESCRIPTION}
-          account={account}
-          onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
           back={{ tab: "dashboard", label: "Overview", onBack }}
           shapes={DAY_SHAPES}
@@ -150,8 +148,6 @@ export function DayScreen({
         <AdminPage
           title={formatDayHeading(detail.day)}
           description={`${DAY_DESCRIPTION}${stillFilling ? " — still filling" : ""}`}
-          account={account}
-          onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
         >
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>

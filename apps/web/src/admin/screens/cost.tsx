@@ -250,8 +250,6 @@ export function CostScreen({
         <PageSkeleton
           title="Cost"
           description={COST_DESCRIPTION}
-          account={account}
-          onSignOut={signOut}
           controls={controls}
           shapes={COST_SHAPES}
         />,
@@ -272,13 +270,7 @@ export function CostScreen({
     case "ready": {
       const cost = state.value;
       return frame(
-        <AdminPage
-          title="Cost"
-          description={COST_DESCRIPTION}
-          account={account}
-          onSignOut={signOut}
-          controls={controls}
-        >
+        <AdminPage title="Cost" description={COST_DESCRIPTION} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <StatGroup>
               <StatCard

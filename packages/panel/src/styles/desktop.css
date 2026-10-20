@@ -10,8 +10,6 @@
      shows through it: opaque, a step of ink over the ground. */
   --actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
   --actor-tile-ink: var(--luke-color-text);
-  /* A top row and its hairline, its middle level with the title bar's. */
-  --desktop-bar-height: calc(2 * var(--title-bar-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
      with --luke-space-4 above and below it. Every tab that leads with a bar, in
      the side panel or in a task's column, stands it this tall, so moving
@@ -27,42 +25,12 @@
      read here by their own names (`--luke-space-8`, `--luke-control-height`,
      `--luke-color-identity-1`, …). Every
      padding, margin, and gap in the window is one of those steps or a name
-     below built from them (docs/DESIGN.md). */
-  /* A column's edge to the rows and controls it holds: the sidebar's rows, a
-     top row's first and last control, Settings' page list. */
-  --column-inset: var(--luke-space-12);
-  /* A row's own edge to its glyph or words: a sidebar row, a tab, a menu item. */
-  --row-inset: var(--luke-space-8);
+     built from them, below or in shell.css (docs/DESIGN.md). */
   /* A row's own small act at its end (a sidebar plan's Pin, a version's ⋯). */
   --sidebar-plan-mark: var(--luke-space-24);
-  /* Where a column's glyphs and words start, which is where a row's padding
-     puts them; words drawn on no row (a page's title, the transcript, the
-     code's path) start there too, so a column reads down one edge. */
-  --content-inset: calc(var(--column-inset) + var(--row-inset));
-  /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
-     drawn, which the app stage carries once the developer has dragged it. */
-  --sidebar-width-default: 264px;
-  --sidebar-width: var(--sidebar-width-default);
   /* The window's zoom as a factor, which the page draws every pixel at and
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
-  /* The title bar's row, where its own buttons stand: the height its middle
-     sits at, which every top row is twice as tall as, and where its first
-     button starts. With no window chrome beside it (the web profile) the row
-     is as tall as a control and the toolbar's padding make it, and its
-     buttons stand at the window's edge, as in full screen; the desktop
-     profile sets both by the traffic lights (below). */
-  --title-bar-middle: calc(var(--luke-control-height) / 2 + var(--luke-space-8));
-  --title-bar-left: var(--column-inset);
-  /* Where the work column's toolbar starts its tab while the sidebar is
-     folded: clear of where the title bar starts and both buttons there, by a
-     row's own gap between its items. */
-  --sidebar-toggle-clearance: calc(
-    var(--title-bar-left) +
-    2 *
-    var(--luke-control-height) +
-    var(--luke-control-gap)
-  );
   /* What a top row at the window's right edge leaves past its last control
      for the side panel's toggle: the toggle, a row's inset from the edge,
      and a row's gap between its items. */
@@ -187,106 +155,12 @@ body,
   inset: 0;
 }
 
-/* The title bar's row atop a column with no toolbar of its own, which the
-   title bar's buttons stand over. Only the desktop's window is dragged by it:
-   a page in a browser is no window to drag, so every drag region, and every
-   control claiming its presses back from one, is a rule of its own under the
-   desktop profile, right after the rule it belongs to. */
-.desktop-drag-strip {
-  flex: 0 0 auto;
-  height: var(--desktop-bar-height);
-}
-
-[data-luke-profile="desktop"] .desktop-drag-strip {
-  -webkit-app-region: drag;
-}
-
-.desktop-shell {
-  display: grid;
-  height: 100%;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-}
-
 /* The work column starts at the window's edge where no sidebar stands beside
    it: folded away, or a narrow room's, which shows one place at a time. */
 .app-stage[data-surface="desktop"]:has(
   .desktop-shell:is([data-sidebar-collapsed="true"], [data-room="narrow"])
 ) {
   --work-left: 0px;
-}
-
-/* Sidebar ----------------------------------------------------------------- */
-
-/* Folding the sidebar away moves it rather than narrowing it: the work column
-   takes the window at once and the sidebar slides off the left edge over it,
-   on transform and opacity alone, so neither column re-wraps a line on the
-   way, while what the column holds glides to its new place on the same beat
-   (pane-motion.tsx). Unfolding is the same slide back in beside a column
-   already narrowed. Only the plans' shell folds, so Settings always keeps its
-   page list. The shell clips what slides past its edges with `clip` rather
-   than `hidden`, because `hidden` makes it a scroll container: a panel sliding
-   in from past the right edge, or the column's bars drawn on past both sides,
-   are room that focus or scrollIntoView would scroll the whole window
-   sideways into and leave it there. Every shell clips, Settings' and a
-   version history's too, whose toolbars draw their hairline past both
-   sides as the plans' column's do. */
-.desktop-shell {
-  overflow: clip;
-}
-
-.desktop-shell[data-sidebar-collapsed="true"] {
-  grid-template-columns: 0 minmax(0, 1fr);
-}
-
-.desktop-shell[data-sidebar-collapsed] .desktop-sidebar {
-  position: relative;
-  z-index: 1;
-  width: var(--sidebar-width);
-  transition:
-    transform var(--duration-pane) var(--motion-pane),
-    opacity var(--duration-pane) var(--motion-pane);
-}
-
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-sidebar {
-  opacity: 0;
-  transform: translateX(-100%);
-}
-
-/* A folded sidebar floats open over the work rather than beside it, on the
-   same slide that folds it, so the work under it neither moves nor re-wraps
-   (`sidebar-collapse.ts`). It stands over the work's own layers, the panel
-   filling the window among them, and under the title bar's buttons that
-   follow it; its shadow parts it from the work as a popover's does. */
-.desktop-shell[data-sidebar-overlay="peek"] .desktop-sidebar,
-.desktop-shell[data-sidebar-overlay="open"] .desktop-sidebar {
-  z-index: 2;
-  box-shadow: var(--luke-menu-shadow);
-  opacity: 1;
-  transform: none;
-}
-
-/* A narrow room's sidebar is a drawer: the same float, standing on the
-   window's left edge over the work, never so wide that the work stops showing
-   past it, where a press puts it away (`shell-room.ts`). It stands out of the
-   shell's columns, so the work is the one column left. It clips what runs
-   past its top and bottom: standing out of the shell, it is no longer inside
-   the shell's clip, and a box it holds that its scroller does not, such as a
-   row's visually hidden words, which are placed against the drawer, would
-   otherwise make the page itself taller than the screen, and a finger would
-   drag the whole app by the difference. Only the block axis, so its shadow
-   still falls over the work beside it; its scroller still scrolls its rows. */
-.desktop-shell[data-room="narrow"][data-sidebar-collapsed] {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.desktop-shell[data-room="narrow"][data-sidebar-collapsed] .desktop-sidebar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
-  overflow-x: visible;
-  overflow-y: clip;
 }
 
 /* A narrow room shows a screen's list or the item chosen in it, one at a
@@ -363,42 +237,6 @@ body,
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-/* Beside the traffic lights, centred on them, the sidebar toggle in the same
-   place whichever way the sidebar is and New plan after it while folded;
-   and
-   level with them at the window's other edge, as far in from it as these are
-   from the lights, the side panel's toggle in the same place whichever way
-   the panel is.
-
-   A pane slides beneath them as it opens and shuts, so nothing may show
-   through them on its way past. `--title-bar-ground` is the colour of the bar
-   each cluster rests on, and a button under the pointer draws its translucent fill
-   over that ground rather than over the pane: at rest it looks no different,
-   and in motion it is opaque. The panel's tab row passes beneath the toggle
-   at the right, so that cluster stands on the ground at rest as well, the
-   panel's for as long as the panel is drawn, its exit included; the ground
-   is the cluster's rather than the button's, so a disabled toggle dims its
-   glyph and not the ground. Only the sidebar's own empty edge passes beneath
-   the left cluster, which a ground at rest could match on one side of that
-   edge and never on both. */
-.title-bar-controls {
-  --title-bar-ground: var(--luke-color-ground);
-  --luke-button-ground: var(--title-bar-ground);
-  position: absolute;
-  z-index: 2;
-  top: calc(var(--title-bar-middle) - var(--luke-control-height) / 2);
-  left: var(--title-bar-left);
-  display: flex;
-}
-
-/* The buttons over the open sidebar, or the floating one, stand on its
-   ground. */
-.desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
-  --title-bar-ground: var(--luke-color-sidebar);
-}
-
 .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
     .side-panel[data-full-screen="true"]
   )
@@ -424,68 +262,6 @@ body,
   --title-bar-ground: var(--luke-color-sidebar);
   right: var(--column-inset);
   left: auto;
-}
-
-.desktop-sidebar {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--luke-color-border);
-  background: var(--luke-color-sidebar);
-}
-
-.sidebar-identity {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-2) var(--row-inset) var(--luke-section-gap);
-}
-
-.sidebar-identity-face {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-strong);
-}
-
-.sidebar-identity-face .luke-face {
-  width: 24px;
-  height: 24px;
-}
-
-.sidebar-identity-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.sidebar-identity-name {
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-bold);
-  letter-spacing: -0.01em;
-}
-
-/* The sidebar's places, New task and Search over the pages: each a
-   NavItem a list's gap from the next, as the task rows under them are, and
-   a hairline under them parts them from the list. */
-.sidebar-places {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin-bottom: var(--luke-list-gap);
-}
-
-.sidebar-rule {
-  height: 1px;
-  flex: 0 0 auto;
-  margin: var(--luke-space-8) var(--row-inset);
-  border: 0;
-  background: var(--luke-color-border);
 }
 
 /* A workspace's tile: a square of its hue with its first letter as its text,
@@ -1734,21 +1510,6 @@ ul.actor-stack {
    answering its hover, its Unpin, and its menu. */
 .sidebar-pinned-tab-gone {
   opacity: 0.55;
-}
-
-.sidebar-foot {
-  display: flex;
-  flex-direction: column;
-  padding-top: var(--luke-space-8);
-}
-
-/* The foot's one row: the account at its start, taking what room is left;
-   a release on its way in, while there is one; and Settings' gear last. */
-.sidebar-account-row {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  container: sidebar-foot / inline-size;
 }
 
 /* A release with something to press, a pill between the account and the

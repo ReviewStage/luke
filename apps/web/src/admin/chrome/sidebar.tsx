@@ -1,286 +1,329 @@
-import { IconButton, NAV_CURRENT, NavItemLink } from "@luke/ui";
-import { LukeMark, WORDMARK } from "../../SiteChrome";
-import { type AdminTab, plainLeftClick, tabHref } from "../routing";
-
 /**
- * The rail's two widths, in pixels, kept here as the single source the drawn
- * `style` reads. Collapsed, the rail is a row's glyph-alone pill and the
- * column's inset either side of it, so the icon stands on the rail's centre.
- */
-const SIDEBAR_WIDTH = {
-  EXPANDED: 224,
-  COLLAPSED: 64,
-} as const;
-
-type SidebarWidth = (typeof SIDEBAR_WIDTH)[keyof typeof SIDEBAR_WIDTH];
-
-function sidebarRailWidth(collapsed: boolean): SidebarWidth {
-  return collapsed ? SIDEBAR_WIDTH.COLLAPSED : SIDEBAR_WIDTH.EXPANDED;
-}
-
-/**
- * What the fold toggle names for a reader, distinct from the chevron it draws:
- * collapsed it offers to expand, expanded to collapse. The icon carries the
- * direction; this carries the word.
- */
-const SIDEBAR_TOGGLE_LABEL = {
-  EXPAND: "Expand sidebar",
-  COLLAPSE: "Collapse sidebar",
-} as const;
-
-function sidebarToggleLabel(collapsed: boolean): string {
-  return collapsed ? SIDEBAR_TOGGLE_LABEL.EXPAND : SIDEBAR_TOGGLE_LABEL.COLLAPSE;
-}
-
-function DashboardIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="size-4 shrink-0"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <rect x="1.75" y="1.75" width="5" height="5" rx="1" />
-      <rect x="9.25" y="1.75" width="5" height="5" rx="1" />
-      <rect x="1.75" y="9.25" width="5" height="5" rx="1" />
-      <rect x="9.25" y="9.25" width="5" height="5" rx="1" />
-    </svg>
-  );
-}
-
-function CostIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="size-4 shrink-0"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.25" />
-      <path d="M10 5.9c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.5 0 2 4 1 4 3 0 .9-.8 1.5-2 1.5-.9 0-1.6-.3-2-.9M8 3.9V5M8 11v1.1" />
-    </svg>
-  );
-}
-
-/** A workspace as a stack of shared layers, apart from the Users glyph's one person. */
-function WorkspacesIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="size-4 shrink-0"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8 1.9 14.1 5 8 8.1 1.9 5 8 1.9Z" />
-      <path d="M1.9 8 8 11.1 14.1 8" />
-      <path d="M1.9 11 8 14.1 14.1 11" />
-    </svg>
-  );
-}
-
-/** A pulse line across the glyph: the service's health over time. */
-function ReliabilityIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="size-4 shrink-0"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M1.5 8.5h3l1.75-4.5 3.5 8 1.75-3.5h3" />
-    </svg>
-  );
-}
-
-function UsersIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="size-4 shrink-0"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="6" cy="5.1" r="2.35" />
-      <path d="M1.9 13.4c.6-2.4 2.2-3.7 4.1-3.7s3.5 1.3 4.1 3.7" />
-      <path d="M10.6 3a2.35 2.35 0 0 1 0 4.2" />
-      <path d="M11.8 10c1.3.5 2 1.6 2.3 3.4" />
-    </svg>
-  );
-}
-
-/** Luke's own face, traced from `FACE_ART` onto the sidebar's 16-unit grid. */
-function AnimationsIcon(): React.JSX.Element {
-  return (
-    <svg className="size-4 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <g transform="rotate(-8 8 8)">
-        <path
-          d="M 6.5 4.6 V 10.2 Q 6.5 11.4 7.7 11.4 Q 9.6 11.4 12 9.5"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="4.3" cy="5.25" r="1.05" fill="currentColor" />
-        <circle cx="11.5" cy="5.25" r="1.05" fill="currentColor" />
-      </g>
-    </svg>
-  );
-}
-
-/** Points at the sidebar's own edge: left to fold it away, right to bring it back. */
-function CollapseIcon({ collapsed }: { collapsed: boolean }): React.JSX.Element {
-  return (
-    <svg
-      className="size-4 shrink-0"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {collapsed ? <path d="M6 3.5 10.5 8 6 12.5" /> : <path d="M10 3.5 5.5 8l4.5 4.5" />}
-    </svg>
-  );
-}
-
-/**
- * The page's one navigation, wearing the brand the headers used to carry.
- * Each tab is a real anchor to its own address, so a modified click still
- * gets the browser's own gesture. The metrics stand in the main list;
- * Animations, a design reference rather than a measure, stands muted in the
- * rail's footer under a rule, its address unchanged. On a phone the rail
- * would eat a fifth of the width for two links, so below the page's
- * breakpoint the metrics stand as a compact top bar instead, its labels left
- * to the icons' accessible names on the narrowest screens; the reference,
- * drawn for a wide screen, is left to its address there.
+ * sidebar.tsx -- the admin dashboard's shell: the app's sidebar beside the open view, its toggle in the title bar's row, and the account at its foot.
  *
- * The fold is a single width transition on the rail, whose column keeps one
- * inset in both states: the rows narrow with it until each is its glyph's
- * pill alone, the icon never moving off the rail's centre, and the names give
- * way as the row narrows rather than leaving the tree, so a reader still hears
- * them; collapsed, each row keeps its name on a `title` as well. The brand
- * and the toggle stand on the same inset, the toggle at the column's end, so
- * collapsed it too is centred on the rail.
+ * The shell is the app's own (`@luke/panel`'s `shell.css`, which the panel
+ * lays for its window): the same two columns, the sidebar's ground, insets,
+ * and width, Luke's head over its rows, and the toggle standing at the
+ * column's top-left whichever way the sidebar is. Hiding the sidebar slides
+ * it off the left edge on the pane's motion while the view takes the room at
+ * once, and the choice is remembered (`prefs.ts`). A narrow room's sidebar,
+ * a phone's, is a drawer over the view instead, opened by the same toggle
+ * and put away by a choice in it, Escape, or a press outside it, the view
+ * inert while it stands, as the app's is (`stage-room.ts` measures the room).
+ *
+ * The account stands at the sidebar's foot, as the app's does: its face and
+ * name, raising its menu above it, whose one act is Log out, asked first.
  */
-export function AdminSidebar({
+
+import "@luke/panel/styles/shell.css";
+import { LukeIdentity } from "@luke/panel/desktop/luke-identity";
+import { SHELL_ROOM } from "@luke/panel/shell-room";
+import { useStageRoom } from "@luke/panel/stage-room";
+import {
+  AVATAR_SIZE,
+  ConfirmDialog,
+  DIALOG_TONE,
+  IconButton,
+  Menu,
+  NAV_CURRENT,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  NavItemLink,
+  riseAbove,
+  ScrollArea,
+  SidebarIcon,
+  TEXT_TONE,
+  Text,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
+import { accountLabel } from "@luke/ui/account-initials";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import {
+  ActivityIcon,
+  CircleDollarSignIcon,
+  LayersIcon,
+  LayoutDashboardIcon,
+  LogOutIcon,
+  SmileIcon,
+  UsersIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type AdminTab, plainLeftClick, tabHref } from "../routing";
+import { AccountAvatar, type ViewerAccount } from "./page-header";
+
+/** What the toggle names for a reader: the sidebar's way back, or its way away. */
+const SIDEBAR_TOGGLE_LABEL = {
+  SHOW: "Show sidebar",
+  HIDE: "Hide sidebar",
+} as const;
+
+/**
+ * How the sidebar stands over the view while it stands out of the columns,
+ * in the attribute the shared sheet reads (`shell.css`'s
+ * `data-sidebar-overlay`): away, or open over it as a narrow room's drawer.
+ */
+const SIDEBAR_OVERLAY = {
+  CLOSED: "closed",
+  OPEN: "open",
+} as const;
+
+type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
+
+/** What the Log out dialog says where signing out failed, in the app's words. */
+const LOG_OUT_REFUSED = "Luke could not log out. Try again.";
+
+/** The sidebar's places, in the order it lists them: the measures, then the face's reference last. */
+const ADMIN_PLACES: readonly { tab: AdminTab; label: string; icon: React.ReactNode }[] = [
+  { tab: "dashboard", label: "Overview", icon: <LayoutDashboardIcon /> },
+  { tab: "cost", label: "Cost", icon: <CircleDollarSignIcon /> },
+  { tab: "reliability", label: "Reliability", icon: <ActivityIcon /> },
+  { tab: "workspaces", label: "Workspaces", icon: <LayersIcon /> },
+  { tab: "users", label: "Users", icon: <UsersIcon /> },
+  { tab: "animations", label: "Animations", icon: <SmileIcon /> },
+];
+
+/**
+ * The foot's account: the signed-in account's face and name, raising its
+ * menu over the column, whose heading says whose account it is over Log out.
+ * Log out asks first, as the app's does: getting back in costs a whole trip
+ * through the provider's sign-in.
+ */
+function AccountFoot({
+  account,
+  shown,
+  onLogOut,
+}: {
+  account: ViewerAccount;
+  /** Whether the sidebar is in sight; hidden, nothing it raised stands over the page. */
+  shown: boolean;
+  onLogOut: () => Promise<void>;
+}): React.JSX.Element {
+  const menu = useMenu(shown);
+  const logOut = useConfirmDialog(
+    { subject: true, surfaceOpen: shown },
+    async (): Promise<ActionResult> => {
+      try {
+        await onLogOut();
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+      } catch {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: LOG_OUT_REFUSED };
+      }
+    },
+  );
+  return (
+    <>
+      <NavItem
+        variant={NAV_ITEM_VARIANT.IDENTITY}
+        icon={<AccountAvatar account={account} size={AVATAR_SIZE.ACCOUNT} />}
+        menu={menu.trigger(riseAbove)}
+      >
+        {accountLabel(account)}
+      </NavItem>
+      {menu.drawn === undefined ? null : (
+        <Menu
+          label="Account"
+          menu={menu.drawn}
+          heading={
+            <>
+              <Text>{account.name}</Text>
+              <Text tone={TEXT_TONE.MUTED}>{account.email}</Text>
+            </>
+          }
+          groups={[[{ label: "Log out", icon: <LogOutIcon />, onSelect: logOut.ask }]]}
+          onClose={menu.close}
+        />
+      )}
+      <ConfirmDialog
+        confirm={logOut}
+        question={{
+          title: `Log out of ${account.email}?`,
+          verb: "Log out",
+          running: "Logging out",
+          tone: DIALOG_TONE.PRIMARY,
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * The column itself: the title bar's row the toggle stands over, Luke's head
+ * named for the dashboard, the places as the app's sidebar lists its own,
+ * each a real anchor to its own address so a modified click still gets the
+ * browser's own gesture, and the account at the foot.
+ */
+function AdminSidebar({
   active,
-  collapsed,
-  onToggle,
+  inSight,
+  account,
   onNavigate,
+  onLogOut,
+  ref,
 }: {
   active: AdminTab;
-  collapsed: boolean;
-  onToggle: () => void;
+  inSight: boolean;
+  account: ViewerAccount | undefined;
   onNavigate: (tab: AdminTab) => void;
+  onLogOut: () => Promise<void>;
+  ref: React.Ref<HTMLElement>;
 }): React.JSX.Element {
   const go = (tab: AdminTab) => (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!plainLeftClick(event)) return;
     event.preventDefault();
     onNavigate(tab);
   };
-
-  const current = (tab: AdminTab) => (active === tab ? NAV_CURRENT.PAGE : undefined);
-
-  const item = (tab: AdminTab, label: string, icon: React.ReactNode) => (
-    <NavItemLink
-      href={tabHref(tab)}
-      icon={icon}
-      current={current(tab)}
-      title={collapsed ? label : undefined}
-      onClick={go(tab)}
-    >
-      {label}
-    </NavItemLink>
+  return (
+    <aside ref={ref} className="desktop-sidebar" inert={!inSight}>
+      <div className="desktop-drag-strip" />
+      <LukeIdentity qualifier="Admin" />
+      <nav aria-label="Admin sections" className="sidebar-places">
+        {ADMIN_PLACES.map(({ tab, label, icon }) => (
+          <NavItemLink
+            key={tab}
+            href={tabHref(tab)}
+            icon={icon}
+            current={active === tab ? NAV_CURRENT.PAGE : undefined}
+            onClick={go(tab)}
+          >
+            {label}
+          </NavItemLink>
+        ))}
+      </nav>
+      <div className="min-h-0 flex-1" />
+      <div className="sidebar-foot">
+        <div className="sidebar-account-row">
+          {account === undefined ? null : (
+            <AccountFoot account={account} shown={inSight} onLogOut={onLogOut} />
+          )}
+        </div>
+      </div>
+    </aside>
   );
+}
 
-  // Note that the bar's icon rides in the name, not the glyph's cell, so
-  // with its label hidden on the narrowest screens it stands centred in its pill.
-  const barItem = (tab: AdminTab, label: string, icon: React.ReactNode) => (
-    <span className="min-w-0 justify-self-center">
-      <NavItemLink href={tabHref(tab)} aria-label={label} current={current(tab)} onClick={go(tab)}>
-        <span className="flex items-center gap-2">
-          {icon}
-          <span className="hidden min-[520px]:inline">{label}</span>
-        </span>
-      </NavItemLink>
-    </span>
-  );
+/**
+ * The drawer's own dismissals while it stands over a narrow room's view: a
+ * press anywhere but the drawer and the toggle, and Escape, which hands the
+ * keyboard back to the toggle. Opened, it takes the keyboard to the place
+ * shown, as the app's drawer does.
+ */
+function useDrawerDismiss(
+  open: boolean,
+  drawer: React.RefObject<HTMLElement | null>,
+  toggle: React.RefObject<HTMLButtonElement | null>,
+  onClose: () => void,
+): void {
+  useEffect(() => {
+    if (!open) return undefined;
+    drawer.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
+    const press = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (drawer.current?.contains(target) || toggle.current?.contains(target)) return;
+      onClose();
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      onClose();
+      toggle.current?.focus();
+    };
+    document.addEventListener("pointerdown", press);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", press);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open, drawer, toggle, onClose]);
+}
+
+/**
+ * Every view past the gate stands in this shell: the sidebar marking
+ * `active`, the view beside it, and the toggle over the sidebar's top-left.
+ * Hidden or in a narrow room, the view leads with the title bar's row, so
+ * the toggle standing over it covers none of the page.
+ */
+export function AdminShell({
+  active,
+  hidden,
+  account,
+  onToggleHidden,
+  onNavigate,
+  onLogOut,
+  children,
+}: {
+  active: AdminTab;
+  /** Whether the reader hid the sidebar, which a narrow room's drawer leaves as it was. */
+  hidden: boolean;
+  account: ViewerAccount | undefined;
+  onToggleHidden: () => void;
+  onNavigate: (tab: AdminTab) => void;
+  onLogOut: () => Promise<void>;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const stage = useStageRoom();
+  const narrow = stage.room === SHELL_ROOM.NARROW;
+  const [overlay, setOverlay] = useState<SidebarOverlay>(SIDEBAR_OVERLAY.CLOSED);
+  // Note that a drawer left open as the room widens is put away, so the room
+  // narrowing again opens on the view rather than on the drawer.
+  if (!narrow && overlay === SIDEBAR_OVERLAY.OPEN) setOverlay(SIDEBAR_OVERLAY.CLOSED);
+  const drawerOpen = overlay === SIDEBAR_OVERLAY.OPEN;
+  const collapsed = hidden || narrow;
+  const inSight = !collapsed || drawerOpen;
+  const sidebar = useRef<HTMLElement | null>(null);
+  const toggle = useRef<HTMLButtonElement | null>(null);
+  const closeDrawer = useCallback(() => setOverlay(SIDEBAR_OVERLAY.CLOSED), []);
+  useDrawerDismiss(drawerOpen, sidebar, toggle, closeDrawer);
+
+  const onToggle = () => {
+    if (!narrow) {
+      onToggleHidden();
+      return;
+    }
+    setOverlay(drawerOpen ? SIDEBAR_OVERLAY.CLOSED : SIDEBAR_OVERLAY.OPEN);
+  };
+  const navigate = (tab: AdminTab) => {
+    closeDrawer();
+    onNavigate(tab);
+  };
+  const label = inSight ? SIDEBAR_TOGGLE_LABEL.HIDE : SIDEBAR_TOGGLE_LABEL.SHOW;
 
   return (
-    <>
-      <nav
-        aria-label="Admin sections"
-        className="grid grid-cols-[auto_repeat(5,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
+    <div ref={stage.ref} className="relative h-dvh">
+      <div
+        className="desktop-shell"
+        data-room={stage.room}
+        data-sidebar-collapsed={String(collapsed)}
+        data-sidebar-overlay={overlay}
       >
-        <span className="mr-1 inline-flex w-6 shrink-0 text-(--luke-color-text)" aria-hidden="true">
-          <LukeMark className="h-auto w-full" />
-        </span>
-        {barItem("dashboard", "Overview", <DashboardIcon />)}
-        {barItem("cost", "Cost", <CostIcon />)}
-        {barItem("reliability", "Reliability", <ReliabilityIcon />)}
-        {barItem("workspaces", "Workspaces", <WorkspacesIcon />)}
-        {barItem("users", "Users", <UsersIcon />)}
-      </nav>
-      <nav
-        aria-label="Admin sections"
-        style={{ width: sidebarRailWidth(collapsed) }}
-        className="hidden h-full shrink-0 flex-col overflow-hidden border-r border-(--luke-color-border) bg-(--luke-color-surface) py-5 transition-[width] duration-150 ease-out min-[720px]:flex motion-reduce:transition-none"
-      >
-        <div className="flex items-center gap-2 px-4">
-          <span
-            className="flex w-8 shrink-0 justify-center text-(--luke-color-text)"
-            aria-hidden="true"
-          >
-            <span className="inline-flex w-6">
-              <LukeMark className="h-auto w-full" />
-            </span>
-          </span>
-          <span className={`min-w-0 overflow-hidden whitespace-nowrap ${WORDMARK}`}>
-            Luke admin
-          </span>
-        </div>
-        <div className="mt-8 grid gap-1 px-4">
-          {item("dashboard", "Overview", <DashboardIcon />)}
-          {item("cost", "Cost", <CostIcon />)}
-          {item("reliability", "Reliability", <ReliabilityIcon />)}
-          {item("workspaces", "Workspaces", <WorkspacesIcon />)}
-          {item("users", "Users", <UsersIcon />)}
-        </div>
-        <div className="flex-1" />
-        <div className="mx-4 border-t border-(--luke-color-border)" />
-        {/* Note that the footer's entry is muted until it is the page shown or
-        under the pointer, because it is a reference, not one of the measures. */}
+        <AdminSidebar
+          ref={sidebar}
+          active={active}
+          inSight={inSight}
+          account={account}
+          onNavigate={navigate}
+          onLogOut={onLogOut}
+        />
+        {/* The content region is a div because the `main` landmark is the
+            page's own; a page owns its scroll, so the region only fills. */}
         <div
-          className="mt-3 grid gap-1 px-4 opacity-60 transition-opacity hover:opacity-100 focus-within:opacity-100 data-[current=true]:opacity-100"
-          data-current={active === "animations"}
+          className={`flex min-h-0 min-w-0 flex-col ${collapsed ? "pt-(--desktop-bar-height)" : ""}`}
+          inert={drawerOpen}
         >
-          {item("animations", "Animations", <AnimationsIcon />)}
+          <ScrollArea>
+            <div className="flex h-full flex-col">{children}</div>
+          </ScrollArea>
         </div>
-        <div className="mt-3 flex justify-end px-4">
+        <div className="title-bar-controls">
           <IconButton
-            icon={<CollapseIcon collapsed={collapsed} />}
-            label={sidebarToggleLabel(collapsed)}
+            ref={toggle}
+            icon={<SidebarIcon />}
+            label={label}
+            aria-expanded={narrow ? drawerOpen : undefined}
             onClick={onToggle}
           />
         </div>
-      </nav>
-    </>
+      </div>
+    </div>
   );
 }

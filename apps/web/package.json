@@ -47,6 +47,7 @@
     "better-auth": "1.7.7",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "lucide-react": "1.53.0",
     "marked": "18.0.9",
     "pg": "8.23.0",
     "posthog-js": "1.418.3",
