@@ -15,21 +15,46 @@
  * case, never across a line.
  */
 
-import { plainWords } from "./tool-call-model.js";
+import type { Nodes } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
+import { gfm } from "micromark-extension-gfm";
 
 /** The characters a query's text is escaped of, to be matched as typed. */
 const PATTERN_SYNTAX = /[.*+?^${}()|[\]\\/]/g;
 
+/** The nodes whose children run on inside one line of a card's text; every other parent's children are blocks, each on a line of its own. */
+const PHRASING_PARENTS: ReadonlySet<Nodes["type"]> = new Set([
+  "paragraph",
+  "heading",
+  "emphasis",
+  "strong",
+  "delete",
+  "link",
+  "linkReference",
+  "tableCell",
+]);
+
+/** A parsed note's words as its card draws them: text and code as written, a link by its words alone, a block's apart from the next. */
+function shownWords(node: Nodes): string {
+  if (node.type === "text" || node.type === "inlineCode" || node.type === "code") return node.value;
+  if (node.type === "break") return "\n";
+  if (!("children" in node)) return "";
+  const words = node.children.map((child) => shownWords(child));
+  return PHRASING_PARENTS.has(node.type) ? words.join("") : words.join("\n");
+}
+
 /**
- * A note's Markdown as its card shows it, as a find reads it: each line's
- * words without their marks, a link by its name and never its destination,
- * fences left out, a line apiece, so no match runs from one into the next.
+ * A note's Markdown as its card shows it, as a find reads it: read by the
+ * parser the card is drawn with, so its marks are left out, a link is read
+ * by its words and never its destination, a code span's words stay as
+ * written, and each block stands on a line of its own, so no match runs
+ * from one into the next.
  */
 export function noteFindWords(markdown: string): string {
-  return markdown
-    .split("\n")
-    .map((line) => plainWords(line))
-    .join("\n");
+  return shownWords(
+    fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] }),
+  );
 }
 
 /** A note's words as a find reads them (`noteFindWords`): its key, the line it stands under, and its words, a line of the card apiece. */

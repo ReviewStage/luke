@@ -34,7 +34,9 @@ test("a find starts at the first match on or after a line, or the first of all p
 });
 
 test("a note is read as its card shows it: a link by its name and never its destination, its marks left out, no match across its lines", () => {
-  const words = noteFindWords("**Seats** first, [read more](https://example.com/seats)\nsea\nts");
+  const words = noteFindWords(
+    "**Seats** first, [read more](https://example.com/seats)\n\nsea\n\nts",
+  );
   const notes = [{ key: "call-1", line: 1, words }];
   assert.deepEqual(fileMatches(["const a = 1;"], notes, "seats"), [
     { line: 1, note: "call-1", nth: 0 },
@@ -42,4 +44,11 @@ test("a note is read as its card shows it: a link by its name and never its dest
   assert.deepEqual(fileMatches(["const a = 1;"], notes, "read more"), [
     { line: 1, note: "call-1", nth: 0 },
   ]);
+});
+
+test("a note's code is read as written: a code span's marks and a fence's lines stay, as the card draws them", () => {
+  const words = noteFindWords("Use `a**b` here\n\n```ts\nconst seats = 1;\n```");
+  const notes = [{ key: "call-1", line: 1, words }];
+  assert.deepEqual(fileMatches(["x"], notes, "a**b"), [{ line: 1, note: "call-1", nth: 0 }]);
+  assert.deepEqual(fileMatches(["x"], notes, "const seats"), [{ line: 1, note: "call-1", nth: 0 }]);
 });
