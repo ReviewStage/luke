@@ -1253,7 +1253,7 @@ it.effect(
 );
 
 it.effect(
-  "a sent message is confirmed once its row's transaction reached the transcript a window follows, and at once where none follows it",
+  "a sent message is confirmed once its row's transaction reached the transcript a window follows, and at once where none follows it now",
   () =>
     Effect.gen(function* () {
       const { call, sealTranscript, pageNow: script, sendTxid, realtime } = yield* subject();
@@ -1266,6 +1266,12 @@ it.effect(
 
       script(pageNow("1:0", { holds: true }));
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send), { agent: AGENT });
+      assert.deepEqual(realtime.awaited, ["capability-messages:742"]);
+
+      // Once the window lets the transcript go, a send waits on nothing, though its subscription is kept a while.
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send), { agent: AGENT });
       assert.deepEqual(realtime.awaited, ["capability-messages:742"]);

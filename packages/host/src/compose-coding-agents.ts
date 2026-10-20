@@ -445,13 +445,10 @@ function composed(
         );
         const answer = yield* asked(client.message(agentId, request));
         if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
-        // The send is confirmed once its row reached the transcript a window follows, so the line never flickers.
-        if (answer.txid !== undefined) {
-          yield* awaitTranscriptTxId(
-            transcripts,
-            new TranscriptKey({ agentId, callId: undefined }),
-            answer.txid,
-          );
+        // The send is confirmed once its row reached the transcript a window follows now, and at once where none does.
+        const key = new TranscriptKey({ agentId, callId: undefined });
+        if (answer.txid !== undefined && (yield* FiberMap.has(followed, key))) {
+          yield* awaitTranscriptTxId(transcripts, key, answer.txid);
         }
         return carried<CodingAgentAgentAnswer>({ agent: answer.agent });
       }),
