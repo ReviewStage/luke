@@ -45,6 +45,7 @@ import {
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
+  PREPARING_IMAGE,
   RENAME_FAILED,
   SERVERS_FAILED,
   START_ARCHIVED,
@@ -56,6 +57,7 @@ import {
   withAgentRun,
 } from "./coding-agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
+import { untilImagePrepared } from "./image-preparing.js";
 import {
   type ByPullRequestTab,
   pullRequestAsked,
@@ -695,12 +697,19 @@ export function useCodingAgents(input: {
     asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
   ): Promise<CodingAgentAgentAnswer> => {
     setStarting(true);
-    return act(ACT_KIND.CODING_AGENTS_START, { taskId: on, ...asked })
-      .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
-      .then((answer) => {
-        setStarting(false);
-        return answer;
-      });
+    // An image still being prepared is said beside Start, and the same Start asked again under its key.
+    return untilImagePrepared(
+      () =>
+        act(ACT_KIND.CODING_AGENTS_START, { taskId: on, ...asked }).catch(
+          (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+        ),
+      () => setNote({ taskId: on, note: { reason: FAILURE_REASON.OTHER, text: PREPARING_IMAGE } }),
+    ).then((answer) => {
+      setStarting(false);
+      // The word that the image was being prepared goes once the Start is answered; a refusal says its own.
+      setNote((was) => (was?.taskId === on && was.note.text === PREPARING_IMAGE ? undefined : was));
+      return answer;
+    });
   };
 
   /** A Start that landed: the agent joins the list and its tab opens. Note that one landing after the developer left the task opens no tab on the task now open. */
@@ -1005,12 +1014,19 @@ export function useCodingAgents(input: {
 
   const onMessage = useCallback<MessageSender>(
     async (agentId, text, clientKey, attachments) => {
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
-        agentId,
-        text,
-        clientKey,
-        ...(attachments.length === 0 ? undefined : { attachments }),
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      // A message that opens the agent's sandbox anew may wait on its image, and is asked again under its key.
+      const answer: CodingAgentAgentAnswer = await untilImagePrepared(
+        () =>
+          act(ACT_KIND.CODING_AGENTS_MESSAGE, {
+            agentId,
+            text,
+            clientKey,
+            ...(attachments.length === 0 ? undefined : { attachments }),
+          }).catch(
+            (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+          ),
+        () => undefined,
+      );
       if (!("failure" in answer)) {
         setList((was) =>
           was.agents === undefined

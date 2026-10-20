@@ -188,8 +188,17 @@ const MessageLineSchema = Schema.Struct({
   uuid: Schema.optionalKey(UuidSchema),
   content: Schema.Array(ContentBlockSchema),
 });
-/** Stop the running turn. */
-const StopLineSchema = Schema.Struct({ type: Schema.Literal(INPUT_LINE.STOP) });
+/**
+ * Stop the running turn. `launch` names the launch the stop is for by its
+ * first event number (its config's `firstSequence`): one launch runs one of
+ * Luke's turns, so a stop Luke meant for an earlier launch's turn, delayed
+ * past it, is skipped by the launch that replaced it rather than
+ * interrupting its turn. A stop that names none is taken by any launch.
+ */
+const StopLineSchema = Schema.Struct({
+  type: Schema.Literal(INPUT_LINE.STOP),
+  launch: Schema.optionalKey(SequenceSchema),
+});
 /**
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not

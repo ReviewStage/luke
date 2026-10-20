@@ -22,6 +22,7 @@ import {
   saveProviderKey,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
@@ -34,6 +35,7 @@ import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
@@ -47,6 +49,7 @@ import {
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, runnerBearerDigest, runnerEnded } from "./runner-sessions.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Codex, against a fake of Vercel Sandbox's
@@ -205,6 +208,18 @@ const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   ...(lineId === undefined ? undefined : { lineId }),
 });
 
+/** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
+const turnUnderWay = (userId: string, agent: CodingAgent) =>
+  Effect.gen(function* () {
+    const turnId = randomUUID();
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    yield* writer.enqueueTurn(
+      { userId, conversationId: agent.conversationId },
+      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+    );
+    return turnId;
+  });
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
@@ -225,7 +240,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations.", lineId));
 
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.match(opened.sessionId, /^luke-codex-[0-9a-f-]{36}$/u);
+        assert.match(opened.sessionId, /^luke-codex-[0-9a-f]{12}-[0-9a-f-]{36}$/u);
         const [sandbox] = api.sandboxes;
         assert.equal(sandbox?.tags.sessionId, opened.sessionId);
         // A token with an hour left is launched on as it stands.
@@ -366,14 +381,17 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         });
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
-        const cancelled = yield* sessions.cancel(opened.sessionId, "turn_0");
+        const cancelled = yield* sessions.cancel(
+          opened.sessionId,
+          yield* turnUnderWay(userId, agent),
+        );
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
         const lines = linesOf(api.commands[0]).slice(2) as InputLine[];
         assert.deepEqual(lines[0], { type: INPUT_LINE.MODEL, model: "gpt-4.1", effort: "low" });
         assert.equal(lines[1]?.type, INPUT_LINE.MESSAGE);
-        assert.deepEqual(lines[2], { type: INPUT_LINE.STOP });
+        assert.deepEqual(lines[2], { type: INPUT_LINE.STOP, launch: 0 });
 
         const reset = yield* sessions.reset(opened.sessionId);
 

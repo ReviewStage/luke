@@ -21,6 +21,7 @@ import type { Route } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { waitUntil } from "@vercel/functions";
 import { type Context, Effect } from "effect";
+import { withNativeAgents } from "./native-agents.js";
 import { runWeb } from "./runtime.js";
 
 /**
@@ -43,14 +44,18 @@ import { runWeb } from "./runtime.js";
  * else thrown on to the platform, is captured as it is thrown, and what a
  * request queued is sent under Vercel's `waitUntil` after the answer has left.
  */
-export function routeFromHostedFetch(answer: HostedFetch): Route {
+export function routeFromHostedFetch(
+  answer: HostedFetch,
+  readServices: () => Promise<Context.Context<WebServices>> = () =>
+    runWeb(Effect.context<WebServices>()),
+): Route {
   const refuseCrossSite = cookieOriginGuard(process.env);
   let reading: Promise<Context.Context<WebServices>> | undefined;
   return {
     fetch: sentryReportedFetch(async (request) => {
       const refusal = refuseCrossSite(request);
       if (refusal !== undefined) return refusal;
-      reading ??= runWeb(Effect.context<WebServices>());
+      reading ??= readServices();
       const attempt = reading;
       let services: Context.Context<WebServices>;
       try {
@@ -80,4 +85,8 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
 };
 
 /** The deployment's hosted oRPC route. */
-export const orpcRoute: Route = routeFromHostedFetch(hostedFetch(hostedRouter(DEPLOYMENT_SEAMS)));
+/** The deployment's hosted oRPC route, with the native harnesses its agent procedures reach (`native-agents.ts`). */
+export const orpcRoute: Route = routeFromHostedFetch(
+  hostedFetch(hostedRouter(DEPLOYMENT_SEAMS)),
+  withNativeAgents,
+);

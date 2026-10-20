@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { getTestDB } from "@luke/database/testing";
 import { noNetwork } from "@luke/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -37,38 +38,42 @@ function eveRetiring(hanging: ReadonlySet<string>) {
   return { eveAt, retired };
 }
 
-it.effect(
-  "a large account's retires end a minute in, however many eve leaves waiting, so the erase behind them runs",
-  () =>
-    Effect.gen(function* () {
-      // Twelve sessions eve never answers: each alone would give up at thirty-five seconds, four
-      // at a time, so the three rounds without a budget would run to a hundred and five.
-      const hung = sessionsNamed(12, "hung");
-      const { eveAt } = eveRetiring(new Set(hung.map(({ sessionId }) => sessionId)));
-      const retiring = yield* Effect.forkChild(retireSessions(eveAt, hung));
+// A coding agent's session is answered by the runtime its conversation runs on, read from the store
+// (`runtime-sessions.ts`); these conversations are no native agent's, so every call reaches eve.
+it.layer(getTestDB())("sessions retired", (it) => {
+  it.effect(
+    "a large account's retires end a minute in, however many eve leaves waiting, so the erase behind them runs",
+    () =>
+      Effect.gen(function* () {
+        // Twelve sessions eve never answers: each alone would give up at thirty-five seconds, four
+        // at a time, so the three rounds without a budget would run to a hundred and five.
+        const hung = sessionsNamed(12, "hung");
+        const { eveAt } = eveRetiring(new Set(hung.map(({ sessionId }) => sessionId)));
+        const retiring = yield* Effect.forkChild(retireSessions(eveAt, hung));
 
-      yield* TestClock.adjust(Duration.seconds(59));
-      assert.equal(retiring.pollUnsafe(), undefined, "still retiring before the minute");
-      yield* TestClock.adjust(Duration.seconds(1));
-      assert.notEqual(retiring.pollUnsafe(), undefined, "done at the minute");
-    }).pipe(Effect.provide(noNetwork)),
-);
+        yield* TestClock.adjust(Duration.seconds(59));
+        assert.equal(retiring.pollUnsafe(), undefined, "still retiring before the minute");
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.notEqual(retiring.pollUnsafe(), undefined, "done at the minute");
+      }).pipe(Effect.provide(noNetwork)),
+  );
 
-it.effect(
-  "the sessions eve answers within the budget are retired, beside one it never answers",
-  () =>
-    Effect.gen(function* () {
-      const answered = sessionsNamed(5, "answered");
-      const { eveAt, retired } = eveRetiring(new Set(["hung-0"]));
-      const retiring = yield* Effect.forkChild(
-        retireSessions(eveAt, [...sessionsNamed(1, "hung"), ...answered]),
-      );
+  it.effect(
+    "the sessions eve answers within the budget are retired, beside one it never answers",
+    () =>
+      Effect.gen(function* () {
+        const answered = sessionsNamed(5, "answered");
+        const { eveAt, retired } = eveRetiring(new Set(["hung-0"]));
+        const retiring = yield* Effect.forkChild(
+          retireSessions(eveAt, [...sessionsNamed(1, "hung"), ...answered]),
+        );
 
-      yield* TestClock.adjust(Duration.seconds(60));
-      yield* Fiber.join(retiring);
-      assert.deepEqual(
-        [...retired].sort(),
-        answered.map(({ sessionId }) => sessionId),
-      );
-    }).pipe(Effect.provide(noNetwork)),
-);
+        yield* TestClock.adjust(Duration.seconds(60));
+        yield* Fiber.join(retiring);
+        assert.deepEqual(
+          [...retired].sort(),
+          answered.map(({ sessionId }) => sessionId),
+        );
+      }).pipe(Effect.provide(noNetwork)),
+  );
+});

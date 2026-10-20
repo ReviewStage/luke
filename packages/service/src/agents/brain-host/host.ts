@@ -37,6 +37,7 @@ import { standingContext } from "../agent-runtime/standing-context.js";
 import { CHAT_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../coder-host/plan-edit.js";
+import { sessionsRouter } from "../coder-host/runtime-sessions.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { AGENT_CALLER } from "../coding-agent-tools.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
@@ -505,16 +506,24 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const secret = seams.deploymentSecret();
         const origin = seams.eveOrigin();
         const eve = yield* eveSessionsComposer;
+        // Each coding agent is answered by the runtime its conversation runs on (`coder-host/runtime-sessions.ts`).
+        const route = yield* sessionsRouter;
         const coder =
           secret === undefined || origin === undefined
             ? undefined
-            : eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER });
+            : route(
+                eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER }),
+                caller,
+              );
         // A chat notice reaches an agent's session as the deployment acting for the account that
         // started it, each notice minted for that starter; nothing where the deployment reaches no eve.
         const eveFor = (starter: string) =>
           secret === undefined || origin === undefined
             ? undefined
-            : eve({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+            : route(
+                eve({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER }),
+                starter,
+              );
         return yield* runBrainTool(
           name,
           task === undefined

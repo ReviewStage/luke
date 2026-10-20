@@ -102,6 +102,7 @@ import {
   type PullRequestToolResult,
   pullRequestRejected,
 } from "./pull-request.js";
+import { sessionsRouter } from "./runtime-sessions.js";
 import { runShowImage } from "./show-image.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -372,10 +373,15 @@ export function runAgentChat(
     const secret = seams.deploymentSecret();
     const origin = seams.eveOrigin();
     const compose = yield* eveSessionsComposer;
+    // Each agent's session is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
+    const route = yield* sessionsRouter;
     const eveFor = (starter: string) =>
       secret === undefined || origin === undefined
         ? EVE_UNREACHED
-        : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+        : route(
+            compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER }),
+            starter,
+          );
     const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
     const { clientKey, postsInTurn, sandbox } = call;
     return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
@@ -414,14 +420,19 @@ export function runAgentTools(
     const secret = seams.deploymentSecret();
     const origin = seams.eveOrigin();
     const compose = yield* eveSessionsComposer;
+    // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
+    const route = yield* sessionsRouter;
     const eve =
       secret === undefined || origin === undefined
         ? undefined
-        : compose({
-            origin,
-            caller: { secret, account: sender.userId },
-            mount: EVE_MOUNT.CODER,
-          });
+        : route(
+            compose({
+              origin,
+              caller: { secret, account: sender.userId },
+              mount: EVE_MOUNT.CODER,
+            }),
+            sender.userId,
+          );
     const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
     const toolCall = {
       caller,

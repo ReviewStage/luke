@@ -172,6 +172,8 @@ interface Launch {
   readonly unanswered: Ref.Ref<ReadonlySet<string>>;
   readonly stopping: Ref.Ref<boolean>;
   readonly ended: Deferred.Deferred<RunnerEnd>;
+  /** The launch's first event number, which a turn-scoped stop names. */
+  readonly firstSequence: number;
 }
 
 /** Calls one of the session's control requests, reporting a failure rather than ending the launch on it. */
@@ -202,6 +204,10 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
       return;
     }
     case INPUT_LINE.STOP: {
+      // A stop for another launch's turn is not this launch's to take.
+      if (value.launch !== undefined && value.launch !== launch.firstSequence) {
+        return yield* Effect.logWarning("agent-runner: skipped a stop for another launch");
+      }
       // A stop with no turn running has nothing to interrupt: the launch,
       // waiting or idle, ends here.
       if (!(yield* Ref.get(launch.turnRunning))) {
@@ -325,6 +331,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
     stopping: yield* Ref.make(false),
     ended: yield* Deferred.make<RunnerEnd>(),
+    firstSequence: config.firstSequence,
   };
 
   // Luke closing stdin ends the prompt stream, and the CLI ends once it has

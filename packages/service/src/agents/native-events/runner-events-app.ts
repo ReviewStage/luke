@@ -206,6 +206,8 @@ function landWrite(
       return Effect.flatMap(
         writer.enqueueTurn(target, {
           turnId: write.turnId,
+          // A native turn's id is the one a Stop names it by (`coder-host/stop.ts`), since no runtime mints another.
+          eveTurnId: write.turnId,
           origin: TURN_ORIGIN.TYPED,
           model: applying.model,
           reasoningEffort: applying.reasoningEffort,

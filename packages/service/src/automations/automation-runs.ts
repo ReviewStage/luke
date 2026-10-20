@@ -116,7 +116,11 @@ const WORKING: ReadonlySet<CodingAgentStatus> = new Set([
 /** eve's coding-agent service as the deployment acting for one account, or the refusal where this deployment cannot reach it. */
 export type EveForAccount = (
   userId: string,
-) => Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<
+  AgentSessions<EveTypedTurn>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+>;
 
 /** Each GitHub event as the agent's prompt names it. */
 const GITHUB_EVENT_WORDS = {

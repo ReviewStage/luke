@@ -77,6 +77,7 @@ import {
   offeredToAccount,
   validateModelChoice,
 } from "../../providers/model-catalog.js";
+import { admitsPlanWriter } from "../agent-reach.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -89,6 +90,7 @@ import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
+import { agentRuntimeChoice } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import { type FittedReplay, replayOf, type StartFrom, startFromOf } from "./replay.js";
@@ -105,6 +107,7 @@ import {
   summarizeSteps,
   withinWindow,
 } from "./replay-summary.js";
+import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentSummary, summaryAccounts } from "./status.js";
 import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -725,7 +728,11 @@ function continuedTitle(source: string | null): string | undefined {
  * not be stopped is logged, since the new agent stands either way.
  */
 const stoppedSource = (
-  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<
+    AgentSessions<EveTypedTurn>,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
   source: CodingAgent,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
@@ -736,7 +743,11 @@ const stoppedSource = (
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
-  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<
+    AgentSessions<EveTypedTurn>,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
@@ -753,6 +764,11 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     ask.taskId === null || ask.from === undefined
       ? undefined
       : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? [], ask.idempotencyKey);
+  // A continue stops its source, so a source its starter's plan pays for is continued by those the
+  // plan's policy admits; a fork leaves its source running and runs on the forker's own payer.
+  if (from !== undefined && from.told.messageId === undefined) {
+    yield* admitsPlanWriter(userId, from.source);
+  }
   // An agent started from another runs on that agent's choice unless the Start names one.
   const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
   // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
@@ -813,6 +829,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // A continue is named after its source where the ask names nothing; a fork is named as it starts.
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
+  // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
+  const runtime = yield* hostedStoreOrUnavailable(agentRuntimeChoice(userId, choice.model));
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
@@ -825,6 +843,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
+      runtime: runtime.runtime,
+      payer: runtime.payer,
       githubAccess: reached?.access,
       startBranch: branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
@@ -864,7 +884,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       );
     if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
       yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
-      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      // An image still being prepared is answered by name, so the Start is made again under its key.
+      return yield* Effect.fail(
+        opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened),
+      );
     }
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
@@ -931,7 +954,11 @@ export interface RequestedStart {
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<
+    AgentSessions<EveTypedTurn>,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
   userId: string,
   taskId: string,
   request: CodingAgentStartRequest,
