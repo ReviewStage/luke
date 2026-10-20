@@ -50,6 +50,7 @@ import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { FadingWords } from "../fading-words.js";
 import { FoldingButton } from "../folding-button.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -160,7 +161,7 @@ function OwnerCell({
     <Tooltip label={name}>
       <span className="automation-owner" data-owner={owner}>
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
-        <span className="automation-owner-name">{name}</span>
+        <FadingWords className="automation-owner-name" words={name} />
       </span>
     </Tooltip>
   );

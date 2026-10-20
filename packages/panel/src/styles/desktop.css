@@ -379,7 +379,6 @@ body,
 .workspace-ref-name {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1007,7 +1006,6 @@ ul.actor-stack {
   overflow: hidden;
   margin-right: var(--luke-space-6);
   color: var(--luke-color-text-subtle);
-  text-overflow: ellipsis;
   vertical-align: bottom;
   white-space: nowrap;
 }
@@ -2101,7 +2099,6 @@ ul.actor-stack {
 .agent-origin-subject {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Or its chip, as the transcript draws one, which cuts its own name to the
@@ -2743,7 +2740,6 @@ ul.actor-stack {
 .integration-tool-title {
   overflow: hidden;
   flex: 0 1 auto;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2761,7 +2757,6 @@ ul.actor-stack {
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2811,7 +2806,6 @@ ul.actor-stack {
   font-size: var(--luke-type-section-size);
   line-height: var(--luke-type-section-leading);
   font-weight: var(--luke-weight-semibold);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2822,7 +2816,6 @@ ul.actor-stack {
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
   white-space: nowrap;
   user-select: text;
 }
@@ -3699,10 +3692,9 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-.inbox-next-words > :last-child {
+.inbox-next-title {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .inbox-next-lead {
@@ -4597,7 +4589,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .automation-owner-name {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* When it runs next, in a column of its own set against the switch, wide
@@ -4738,7 +4729,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-semibold);
   line-height: var(--luke-type-dialog-leading);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -5059,7 +5049,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-byline-where {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -5277,7 +5266,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -5515,7 +5503,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   font-size: var(--luke-type-label-size);
   font-weight: var(--luke-weight-medium);
   line-height: var(--luke-type-label-leading);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -5582,6 +5569,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin: var(--luke-space-8) 0;
   padding: var(--luke-space-6) var(--row-inset);
   white-space: nowrap;
+}
+
+/* Who wrote it stands as a box of its own over a revision's sections, a
+   flex item there and a block inside the press that opens where it was
+   written, so it is its own box that cuts the name and fades it
+   (`fading-words.tsx`), never the press's ellipsis around an inline line. */
+.version-sections-head .version-row-author {
+  display: block;
 }
 
 /* The list's foot, a row in the caption's type whose failure wraps under
@@ -6672,14 +6667,33 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A label cut short fades out over its last `--label-fade` rather than
    ending in an ellipsis, as a browser's tab does, and so does a subagent's
-   job. Only a label measured cut short (use-clipped.ts) fades, so
-   a short one ends on its last letter. The mask fades the words themselves,
-   so it reads alike over every fill a tab or a row wears, at rest, hovered,
-   chosen, or dragged. */
+   job, and every name, title, and place the shell and the sidebar cut to
+   their line (`fading-words.tsx`). Only a label measured cut short
+   (use-clipped.ts) fades, so a short one ends on its last letter. The mask
+   fades the words themselves, so it reads alike over every fill a tab or a
+   row wears, at rest, hovered, chosen, or dragged. A toolbar's title not
+   measured, a fixed word or a date, keeps its ellipsis (shell.css). */
 .tab-label[data-overflow="true"],
 .task-summary-label[data-overflow="true"],
-.subagent-job[data-overflow="true"] {
+.subagent-job[data-overflow="true"],
+.desktop-toolbar-title[data-overflow="true"],
+.workspace-ref-name[data-overflow="true"],
+.sidebar-task-repository[data-overflow="true"],
+.home-row-context[data-overflow="true"],
+.inbox-next-title[data-overflow="true"],
+.agent-origin-subject[data-overflow="true"],
+.integration-tool-title[data-overflow="true"],
+.integration-tool-id[data-overflow="true"],
+.integration-tool-detail-title[data-overflow="true"],
+.integration-tool-detail-name[data-overflow="true"],
+.automation-owner-name[data-overflow="true"],
+.automation-crumb[data-overflow="true"],
+.chat-byline-where[data-overflow="true"],
+.chat-notice-place[data-overflow="true"],
+.version-row-author[data-overflow="true"],
+.new-task-issue-title[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  text-overflow: clip;
 }
 
 /* A card's corner leading with a pull request's mark sets it inline, so the
@@ -7303,7 +7317,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex: 1;
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -7641,7 +7654,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

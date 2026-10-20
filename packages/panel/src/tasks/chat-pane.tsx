@@ -45,6 +45,7 @@ import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
+import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
@@ -270,7 +271,7 @@ function Byline({
           <ActorRef actor={actor} nameOnly />
         )}
       </span>
-      {where === undefined ? null : <span className="chat-byline-where">{where}</span>}
+      {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
       <RelativeTime at={at} now={now} />
       {action}
     </div>
