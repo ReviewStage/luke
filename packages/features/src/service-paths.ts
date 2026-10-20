@@ -331,42 +331,9 @@ export function planAttachmentPath(taskId: string, attachmentId: string): string
   return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
-/**
- * One task's inbox: every item its coding agents posted for the developer,
- * past a cursor (GET), held open while nothing changed, as an agent's
- * transcript is. `inbox-wire.ts` declares the answer.
- */
-export function taskInboxPath(taskId: string, after?: string): string {
-  const path = `${taskPath(taskId)}/inbox`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `taskInboxPath`'s read. */
-export function agentInboxPath(agentId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
-}
-
-/** One item of a task's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
-export function inboxItemPath(itemId: string): string {
+/** One item of a task's inbox, which its attachments are under. */
+function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
-}
-
-/** One item closed by a member without an answer (POST) against the revision they saw; `inbox-wire.ts` declares the request, and it answers as an answer does. */
-export function inboxClosePath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/close`;
-}
-
-/** One item's thread, a member's message written on it (POST), open or settled; `inbox-wire.ts` declares the request and the answer. */
-export function inboxMessagesPath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/messages`;
-}
-
-/** One item's read state for the asking member: marked read (PUT), as opening it does, or unread (DELETE); `inbox-wire.ts` declares the answer. */
-export function inboxItemReadPath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/read`;
 }
 
 /** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */

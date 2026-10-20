@@ -221,6 +221,7 @@ import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
+import { inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   answerInboxItem,
   closeInboxItem,
@@ -310,7 +311,7 @@ const ORIGIN = "https://luke.test";
 const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
-const AGENT_INBOX = "/api/agents/inbox";
+const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 const AGENT_OVERVIEW = [
@@ -318,6 +319,8 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
+/** The public paths the inbox's procedures answer on the hosted oRPC router, its attachment's bytes aside. */
+const INBOX_PROCEDURE_PATH = /^\/api\/(?:inbox(?:\/.*)?|(?:plans|agents)\/[^/]+\/inbox)$/u;
 /** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
 const TASKS = "/api/plans";
 /** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
@@ -632,6 +635,7 @@ const standing = (
         ...shared,
         sandbox: Layer.effect(AgentSandbox, Effect.die("the agents routes reach no sandbox")),
       }),
+      inbox: inboxProcedures(seams),
       messages: messagesProcedures(seams),
       plans: tasksProcedures(seams),
     });
@@ -642,13 +646,16 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), chatPictures.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its Pull request tab, and the chat land on the hosted oRPC router. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its Pull request tab, the chat, and the inbox land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const procedure = publicRequest(request);
         if (procedure !== undefined) return routed(procedure, webServices);
         const url = new URL(request.url);
         const { pathname } = url;
+        if (pathname !== INBOX_ATTACHMENT && INBOX_PROCEDURE_PATH.test(pathname)) {
+          return routed(request, webServices);
+        }
         const id = url.searchParams.get("id");
         if (pathname === AGENT_MESSAGES && id !== null) {
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
@@ -672,6 +679,9 @@ const standing = (
     return { ask, fetch };
   });
 
+/** Where a path the hosted oRPC router answers names its id. */
+const ID_SEGMENT = "{id}";
+
 function request(
   path: string,
   bearer: string | undefined,
@@ -690,8 +700,13 @@ function request(
     cookie?: string;
   } = {},
 ): Request {
-  const url = new URL(path, ORIGIN);
-  if (init.id !== undefined) url.searchParams.set("id", init.id);
+  // A path the hosted oRPC router answers names its id as a segment; an old group's reads it from the query.
+  const named = path.includes(ID_SEGMENT);
+  const url = new URL(
+    named && init.id !== undefined ? path.replace(ID_SEGMENT, encodeURIComponent(init.id)) : path,
+    ORIGIN,
+  );
+  if (init.id !== undefined && !named) url.searchParams.set("id", init.id);
   if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
@@ -704,8 +719,6 @@ function request(
   // Every client of the service names its JSON body so, which the hosted oRPC router reads a body by.
   if (init.body !== undefined) headers.set("content-type", "application/json");
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
-  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
-  if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
     headers,
@@ -5019,12 +5032,13 @@ function startAs(bearer: string | undefined, taskId: string, body: WireBoundaryI
   return request(TASK_AGENTS, bearer, { method: "POST", id: taskId, body });
 }
 
-const TASK_INBOX = "/api/plans/inbox";
-const INBOX_ITEM = "/api/inbox/item";
+const TASK_INBOX = "/api/plans/{id}/inbox";
+const INBOX_ITEM = "/api/inbox/{id}";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
-const INBOX_MESSAGES = "/api/inbox/messages";
-const INBOX_CLOSE = "/api/inbox/close";
+const INBOX_MESSAGES = "/api/inbox/{id}/messages";
+const INBOX_ITEM_READ = "/api/inbox/{id}/read";
+const INBOX_CLOSE = "/api/inbox/{id}/close";
 const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
@@ -5891,7 +5905,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const unread = () =>
           Effect.map(read(), (page) => page.items.find((item) => item.id === id)?.unread);
         const mark = (method: string, bearer = owner) =>
-          ask(request(INBOX_READ, bearer, { method, id }));
+          ask(request(INBOX_ITEM_READ, bearer, { method, id }));
         assert.equal(yield* unread(), true, "a new item is unread");
         assert.deepEqual(
           (yield* waiting()).items.map((entry) => [entry.id, entry.unread]),
@@ -5942,6 +5956,171 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
           marked: 0,
         });
+      }),
+  );
+
+  /**
+   * Held reads driven to their answers a poll at a time, each step taken
+   * only after a round trip to the test's database (`drivenWhileStarting`
+   * says why), with how long each was held on the test's clock when it was
+   * first seen answered. The bound is past any hold, so a read that never
+   * lets go fails the test rather than hanging it.
+   */
+  const drivenToAnswers = (fibers: readonly Fiber.Fiber<unknown, unknown>[]) =>
+    Effect.gen(function* () {
+      const startedAt = yield* Clock.currentTimeMillis;
+      const heldFor: (number | undefined)[] = fibers.map(() => undefined);
+      const bound =
+        2 * (Duration.toMillis(CODER.MESSAGES_HOLD) / Duration.toMillis(CODER.MESSAGES_POLL));
+      for (let step = 0; step < bound && heldFor.includes(undefined); step += 1) {
+        yield* Effect.orDie(
+          Database.use((db) => db.select({ id: conversations.id }).from(conversations).limit(1)),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        yield* Effect.yieldNow;
+        const now = yield* Clock.currentTimeMillis;
+        fibers.forEach((fiber, index) => {
+          if (heldFor[index] === undefined && fiber.pollUnsafe() !== undefined) {
+            heldFor[index] = now - startedAt;
+          }
+        });
+      }
+      return { heldFor };
+    });
+
+  it.effect(
+    "a held inbox read answers the moment an item lands past its cursor, a task's and the account's alike",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, waiting } = yield* openInbox();
+        const task = yield* read();
+        const account = yield* waiting();
+        const heldTask = yield* Effect.forkChild(read(task.cursor));
+        const heldAccount = yield* Effect.forkChild(waiting(account.cursor));
+
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const { heldFor } = yield* drivenToAnswers([heldTask, heldAccount]);
+        const movedTask = yield* Fiber.join(heldTask);
+        const movedAccount = yield* Fiber.join(heldAccount);
+
+        assert.deepEqual(
+          movedTask.items.map((item) => item.id),
+          [posted.success.id],
+        );
+        assert.notEqual(movedTask.cursor, task.cursor);
+        assert.deepEqual(
+          movedAccount.items.map((entry) => entry.id),
+          [posted.success.id],
+        );
+        assert.notEqual(movedAccount.cursor, account.cursor);
+        for (const held of heldFor) {
+          assert.ok(
+            held !== undefined && held < Duration.toMillis(CODER.MESSAGES_HOLD),
+            `answered on the change, before the hold ends (held ${held} ms)`,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "a held inbox read lets go at the hold with the inbox unchanged, a task's and the account's alike, and not a poll before",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, waiting } = yield* openInbox();
+        assert.ok(Result.isSuccess(yield* post(QUESTION)));
+        const task = yield* read();
+        const account = yield* waiting();
+        const heldTask = yield* Effect.forkChild(read(task.cursor));
+        const heldAccount = yield* Effect.forkChild(waiting(account.cursor));
+
+        const { heldFor } = yield* drivenToAnswers([heldTask, heldAccount]);
+        const lapsedTask = yield* Fiber.join(heldTask);
+        const lapsedAccount = yield* Fiber.join(heldAccount);
+
+        assert.deepEqual(lapsedTask, task);
+        assert.deepEqual(
+          [lapsedAccount.items, lapsedAccount.cursor],
+          [account.items, account.cursor],
+        );
+        for (const held of heldFor) {
+          assert.ok(
+            held !== undefined && held >= Duration.toMillis(CODER.MESSAGES_HOLD),
+            `held until the hold ends (held ${held} ms)`,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "the inbox's refusals answer the old groups' bytes through the hosted oRPC route: the caller first, then the body's bound and shape, then the item",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, fetch, post } = yield* openInbox();
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const bytes = (sent: Request) =>
+          Effect.gen(function* () {
+            const response = yield* fetch(sent);
+            return {
+              status: response.status,
+              contentType: response.headers.get("content-type"),
+              cacheControl: response.headers.get("cache-control"),
+              text: yield* Effect.promise(() => response.text()),
+            };
+          });
+        const refused = (status: number, error: string) => ({
+          status,
+          contentType: "application/json",
+          cacheControl: null,
+          text: JSON.stringify({ error }),
+        });
+        const answering = (bearer: string | undefined, id: string, body: WireBoundaryInput) =>
+          request(INBOX_ITEM, bearer, { method: "POST", id, body });
+
+        assert.deepEqual(
+          yield* bytes(answering(undefined, posted.success.id, { malformed: true })),
+          refused(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+          "an unsigned caller is refused before its body is read",
+        );
+        const oversized = answering(owner, posted.success.id, { malformed: true });
+        oversized.headers.set("content-length", String(64 * 1024 * 1024));
+        assert.deepEqual(
+          yield* bytes(oversized),
+          refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+        assert.deepEqual(
+          yield* bytes(answering(owner, posted.success.id, { malformed: true })),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const answer = {
+          revision: posted.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+        };
+        assert.deepEqual(
+          yield* bytes(answering(owner, posted.success.id, { ...answer, unknown: 1 })),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a key the body does not declare is refused, as the old group refused it",
+        );
+        assert.deepEqual(
+          yield* bytes(answering(owner, randomUUID(), answer)),
+          refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* bytes(answering(owner, "not-a-uuid", answer)),
+          refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* bytes(request(TASK_INBOX, owner, { id: task.id, after: "" })),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a cursor outside its shape is refused",
+        );
+        assert.deepEqual(
+          yield* bytes(request(TASK_INBOX, owner, { id: randomUUID() })),
+          refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 
