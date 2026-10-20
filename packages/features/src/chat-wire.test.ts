@@ -17,10 +17,13 @@ import {
   chatNoticeWords,
   chatTargetSchema,
   chatWriteRequestSchema,
-  mentionedHandles,
   postChatAskInputSchema,
   postChatInputSchema,
 } from "./chat-wire.js";
+
+/** An agent's mention link's address, as a `to` names its DM. */
+const AGENT_LINK =
+  "https://tryluke.dev/acme/plan/66666666-7777-4888-9999-aaaaaaaaaaaa/agent/11111111-2222-4333-8444-555555555555";
 
 /** Whether the schema takes the value as the wire hands it in. */
 function takes(schema: Schema.Codec<unknown, unknown>, value: WireBoundaryInput): boolean {
@@ -62,14 +65,29 @@ test("a channel's name is the inbox key's slug, bounded; a sigil, a capital, or 
   }
 });
 
-test("a post goes to `#name` or `@handle` alone, and refuses a key it does not name", () => {
+test("a post goes to `#name` or a member's mention link, whole or bare, alone, and refuses a handle and a key it does not name", () => {
   assert.equal(takes(chatTargetSchema, "#billing-export"), true);
-  assert.equal(takes(chatTargetSchema, "@agent-2"), true);
-  assert.equal(takes(chatTargetSchema, `@${"a".repeat(CHAT_BOUNDS.MAX_HANDLE_CHARS)}`), true);
-  assert.equal(takes(chatTargetSchema, `@${"a".repeat(CHAT_BOUNDS.MAX_HANDLE_CHARS + 1)}`), false);
+  assert.equal(takes(chatTargetSchema, `[@Invite emails](${AGENT_LINK})`), true);
+  assert.equal(
+    takes(chatTargetSchema, "[@Ada \\[ops\\]](https://tryluke.dev/acme/person/u1)"),
+    true,
+  );
+  assert.equal(takes(chatTargetSchema, AGENT_LINK), true);
   assert.equal(takes(chatTargetSchema, `#${"a".repeat(CHAT_BOUNDS.MAX_KEY_CHARS)}`), true);
   assert.equal(takes(chatTargetSchema, `#${"a".repeat(CHAT_BOUNDS.MAX_KEY_CHARS + 1)}`), false);
-  for (const to of ["billing-export", "@2", "#", "@", "#Billing", "@agent 2", "#a #b"]) {
+  const long = `[@${"a".repeat(CHAT_BOUNDS.MAX_TARGET_CHARS)}](${AGENT_LINK})`;
+  assert.equal(takes(chatTargetSchema, long), false);
+  for (const to of [
+    "billing-export",
+    "@agent-2",
+    "@luke",
+    "#",
+    "@",
+    "#Billing",
+    "#a #b",
+    "[@Ada](https://tryluke.dev/acme/person/u1) too",
+    "[Ada](https://tryluke.dev/acme/person/u1)",
+  ]) {
     assert.equal(takes(chatTargetSchema, to), false, to);
   }
   assert.equal(takes(postChatInputSchema, { text: "Taking the table.", to: "#general" }), true);
@@ -99,7 +117,7 @@ test("a post goes to `#name` or `@handle` alone, and refuses a key it does not n
   assert.equal(takes(postChatInputSchema, { text: "Agreed.", replyTo: 41 }), true);
   assert.equal(takes(postChatInputSchema, { text: "Agreed.", replyTo: 41, to: "#general" }), false);
   assert.equal(
-    takes(postChatAskInputSchema, { text: "Agreed.", replyTo: 41, to: "@agent-2" }),
+    takes(postChatAskInputSchema, { text: "Agreed.", replyTo: 41, to: AGENT_LINK }),
     false,
   );
 });
@@ -126,19 +144,6 @@ test("every kind of ask a post may carry is taken under its key, a task's among 
   );
 });
 
-test("the handles a post mentions are each named once, in order, and an address or a glued @ is none", () => {
-  assert.deepEqual(
-    mentionedHandles("@agent-2 and @luke: see @agent-2's note; mail me@example.com or a@@b"),
-    ["agent-2", "luke"],
-  );
-  assert.deepEqual(mentionedHandles("(@charles) done."), ["charles"]);
-  assert.deepEqual(mentionedHandles("@luke: yes, and @agent-2's too"), ["luke", "agent-2"]);
-  assert.deepEqual(mentionedHandles("ask @agent_2 or @Luke or @team.lead or @x@y"), []);
-  assert.deepEqual(mentionedHandles("nobody here"), []);
-  // A handle glued to more words is no handle, rather than the handle before its last hyphen.
-  assert.deepEqual(mentionedHandles("@agent-2-TEAM and @agent-2-Ops"), []);
-});
-
 test("a window's write is a post with its words one way and one place, an answer, a resolve, or a read, and refuses anything between", () => {
   const key = "send-1";
   const link = {
@@ -148,9 +153,13 @@ test("a window's write is a post with its words one way and one place, an answer
   };
   for (const write of [
     { text: "Morning.", clientKey: key },
-    { text: "@agent-2 take the table.", to: "#billing-export", clientKey: key },
+    {
+      text: `[@Invite emails](${AGENT_LINK}) take the table.`,
+      to: "#billing-export",
+      clientKey: key,
+    },
     { text: "On it.", replyTo: 41, clientKey: key },
-    { blocks: [link], to: "@agent-2", clientKey: key },
+    { blocks: [link], to: AGENT_LINK, clientKey: key },
     { answer: { seq: 41, revision: 2, reply: { reply: CHAT_REPLY.APPROVED } }, clientKey: key },
     { resolve: { seq: 41, reason: "Settled in the call." } },
     { readTo: 41 },
@@ -207,7 +216,7 @@ test("a window's post may carry pictures under its words or alone, PNG, JPEG, or
 test("a notice's words as a person reads them keep the message alone, without the head the card says or the closing lines telling the agent how to answer, keep a message that itself opens as a closing does, and leave any other text as it is", () => {
   const notice = (words: string, asks?: string) =>
     [
-      `${CHAT_NOTICE_LEAD} · @billing-agent in #invoices (m 41):`,
+      `${CHAT_NOTICE_LEAD} · [@Billing agent](${AGENT_LINK}) in #invoices (m 41):`,
       words,
       ...(asks === undefined ? [] : [chatNoticeAsksLine(asks)]),
       chatNoticeReplyLine(41),
@@ -225,6 +234,17 @@ test("a notice's words as a person reads them keep the message alone, without th
     "Check this.\n\nIt asks you nothing, really.",
   );
   assert.equal(chatNoticeWords("Reply with care."), "Reply with care.");
+  // A sender no link names is named plainly, and a DM's thread is said to the reader.
+  assert.equal(
+    chatNoticeWords(
+      [
+        `${CHAT_NOTICE_LEAD} · Former agent to you, in a thread (m 7):`,
+        "Done.",
+        chatNoticeReplyLine(7),
+      ].join("\n\n"),
+    ),
+    "Done.",
+  );
 });
 
 test("a topic's purpose is one line within its bound, as an open, an edit, and an agent's post write it, and an edit may clear it", () => {
