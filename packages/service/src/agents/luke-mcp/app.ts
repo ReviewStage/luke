@@ -42,7 +42,6 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
-import type { CoderHost } from "../coder-host/host.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { LUKE_MCP_TOOLS, type LukeMcpToolResult, refusedByDoor } from "./tools.js";
 
@@ -180,7 +179,6 @@ const DOOR_FAILED_RESULT: McpToolCallResult = {
 
 /** One `tools/call` run through the tool's door as the admitted conversation. */
 function callTool(
-  host: CoderHost,
   admitted: AdmittedConversation,
   params: UnparsedWireValue,
 ): Effect.Effect<RpcAnswer, never, DatabaseServices> {
@@ -194,7 +192,7 @@ function callTool(
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, `Unknown tool: ${name}`));
   }
   const input = fieldOf(params, "arguments") ?? {};
-  return tool.run(host, admitted, input).pipe(
+  return tool.run(admitted, input).pipe(
     Effect.map((result) => Result.succeed(toolResult(result))),
     Effect.catchCause((cause) =>
       Effect.as(
@@ -207,7 +205,6 @@ function callTool(
 
 /** One request's answer, by its method. */
 function answerRequest(
-  host: CoderHost,
   admitted: AdmittedConversation,
   method: string,
   params: UnparsedWireValue,
@@ -241,7 +238,7 @@ function answerRequest(
         }),
       );
     case MCP_METHOD.TOOLS_CALL:
-      return callTool(host, admitted, params);
+      return callTool(admitted, params);
     default:
       return Effect.succeed(
         rpcFailure(JSON_RPC_ERROR.METHOD_NOT_FOUND, `Method not found: ${method}`),
@@ -251,7 +248,6 @@ function answerRequest(
 
 /** One message answered: a request with its response, anything else taken with 202 and no body. */
 function answerMessage(
-  host: CoderHost,
   admitted: AdmittedConversation,
   message: Message,
   raw: UnparsedWireValue,
@@ -260,7 +256,7 @@ function answerMessage(
   if (id === undefined || method === undefined) {
     return Effect.succeed(HttpServerResponse.empty({ status: HOSTED_HTTP_STATUS.ACCEPTED }));
   }
-  return Effect.map(answerRequest(host, admitted, method, fieldOf(raw, "params") ?? {}), (answer) =>
+  return Effect.map(answerRequest(admitted, method, fieldOf(raw, "params") ?? {}), (answer) =>
     rpcResponse(id, answer),
   );
 }
@@ -274,9 +270,7 @@ function bearerRefused(): HttpServerResponse.HttpServerResponse {
 }
 
 /** POST: one JSON-RPC message, admitted on the runner's bearer. */
-const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
-  host: () => CoderHost,
-): Effect.fn.Return<
+const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | DatabaseServices
@@ -312,17 +306,13 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
   if (Result.isFailure(message)) {
     return rpcResponse(null, rpcFailure(JSON_RPC_ERROR.INVALID_REQUEST, "Invalid Request"));
   }
-  return yield* answerMessage(host(), admitted.value, message.success, parsed.success);
+  return yield* answerMessage(admitted.value, message.success, parsed.success);
 });
 
-/**
- * The group: the one MCP path over the coder host the edge builds, handed
- * as a thunk so the host is composed on the first call rather than as the
- * route is loaded; and the hosted vocabulary's own refusal for any other.
- */
-export function lukeMcpApp(host: () => CoderHost): WebRoutes<DatabaseServices> {
+/** The group: the one MCP path, and the hosted vocabulary's own refusal for any other. */
+export function lukeMcpApp(): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint(host))),
+    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint())),
     hostedNotFoundRoute,
   );
 }

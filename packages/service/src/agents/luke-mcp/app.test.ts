@@ -6,7 +6,6 @@ import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
-import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
@@ -16,14 +15,11 @@ import type { WireBoundaryInput } from "@luke/wire";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import { type CoderHost, coderHost } from "../coder-host/host.js";
 import { postToInbox } from "../coder-host/inbox.js";
-import type { CoderHostSeams } from "../coder-host/production.js";
-import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { LUKE_MCP_PATH, LUKE_MCP_PROTOCOL_VERSIONS, lukeMcpApp } from "./app.js";
 import { runnerTokenDigest } from "./bearer.js";
 
@@ -32,7 +28,7 @@ import { runnerTokenDigest } from "./bearer.js";
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
  * server lists `read_inbox` and runs it through the coder host's inbox door
- * as the agent's starter, and a wrong bearer, a missing one, and a retired
+ * as the agent's starter, the door eve's tool reaches through the coder host, and a wrong bearer, a missing one, and a retired
  * one are each refused before anything is read. Synthetic accounts and
  * words throughout.
  *
@@ -43,32 +39,6 @@ import { runnerTokenDigest } from "./bearer.js";
 
 const ORIGIN = "https://luke.test";
 
-/** The coder host over the test's own store; the seams the inbox door never reads answer nothing. */
-const hostOverStore = Effect.gen(function* () {
-  const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-  const seams: CoderHostSeams = {
-    writer: () => Effect.succeed(writer),
-    userInfo: () => Effect.succeed(undefined),
-    ownership: {
-      reachesSession: () => Promise.resolve(false),
-      reachesConversation: () => Promise.resolve(false),
-    },
-    deploymentSecret: () => undefined,
-    eveOrigin: () => undefined,
-    keys: () =>
-      Effect.succeed({
-        anthropic: { key: Redacted.make("sk-ant-fixture") },
-        openAi: { key: Redacted.make("sk-openai-fixture") },
-      }),
-    fastRefused: async () => undefined,
-    titleModel: () => undefined,
-    research: () => ({ openAi: undefined, spend: Effect.void }),
-    scriptedModel: () => false,
-    now: () => 0,
-  };
-  return coderHost(seams);
-});
-
 /** The server's group over the test's database, as a fetch a client is handed. */
 const standing = Effect.gen(function* () {
   const services = Layer.mergeAll(
@@ -76,11 +46,9 @@ const standing = Effect.gen(function* () {
     Layer.succeed(Database, yield* Database),
     Layer.succeed(Clock.Clock, yield* Clock.Clock),
   );
-  const host: CoderHost = yield* hostOverStore;
-  const web = HttpRouter.toWebHandler(
-    lukeMcpApp(() => host).pipe(HttpRouter.provideRequest(services)),
-    { disableLogger: true },
-  );
+  const web = HttpRouter.toWebHandler(lukeMcpApp().pipe(HttpRouter.provideRequest(services)), {
+    disableLogger: true,
+  });
   yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
   return (input: string | URL | Request, init?: RequestInit) =>
     web.handler(new Request(input, init));
