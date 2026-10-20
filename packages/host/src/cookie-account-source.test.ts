@@ -554,6 +554,70 @@ describe("the cookie account source", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("closes the gate for a departure however many empty reads follow it", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      const release = yield* Deferred.make<void>();
+      holdOpening(Deferred.await(release));
+      const reads = () => sent("/api/auth/get-session").length;
+      const reread = Effect.gen(function* () {
+        const before = reads();
+        yield* session.token.refreshAccount();
+        while (reads() === before) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+      });
+
+      // The person is shown and their gate is still opening when the session ends elsewhere.
+      state.user = { ...USER };
+      yield* reread;
+      assert.equal(signedInEmail(session.snapshot()), USER.email);
+      state.user = undefined;
+      yield* reread;
+      // A second read finds nobody again before the closing had its turn.
+      yield* reread;
+      yield* Deferred.succeed(release, undefined);
+      yield* turns(10);
+
+      assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+      assert.equal(gate.at(-1), "close");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "closes the gate for the person a switch left even once a later read passed it over",
+    () =>
+      Effect.gen(function* () {
+        const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+        const session = yield* open;
+        yield* session.initialize;
+        const release = yield* Deferred.make<void>();
+        holdOpening(Deferred.await(release));
+        const reads = () => sent("/api/auth/get-session").length;
+        const reread = Effect.gen(function* () {
+          const before = reads();
+          yield* session.token.refreshAccount();
+          while (reads() === before) yield* Effect.promise(() => nextTurn());
+          yield* turns(5);
+        });
+
+        // The first person's gate is still opening when another person's session is read, then ends.
+        state.user = { ...USER };
+        yield* reread;
+        state.user = { ...USER, id: "user-2", email: "other@example.com" };
+        yield* reread;
+        state.user = undefined;
+        yield* reread;
+        yield* Deferred.succeed(release, undefined);
+        yield* turns(10);
+
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        assert.equal(gate.at(-1), "close");
+        assert.ok(!gate.includes("settle other@example.com"));
+      }).pipe(Effect.scoped),
+  );
+
   it.effect("shows no arrival a read naming nobody overtook while the gate closed", () =>
     Effect.gen(function* () {
       const { open, state, gate, holdClosing } = scene();
@@ -600,6 +664,107 @@ describe("the cookie account source", () => {
 
       assert.deepEqual(gate, [`settle ${USER.email}`]);
     }),
+  );
+
+  it.effect("closes the first person's gate before a third person opens it", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      const release = yield* Deferred.make<void>();
+      holdOpening(Deferred.await(release));
+      const reads = () => sent("/api/auth/get-session").length;
+      const reread = Effect.gen(function* () {
+        const before = reads();
+        yield* session.token.refreshAccount();
+        while (reads() === before) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+      });
+
+      // The first person's gate is still opening as a second, then a third, session is read.
+      state.user = { ...USER };
+      yield* reread;
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* reread;
+      state.user = { ...USER, id: "user-3", email: "third@example.com" };
+      yield* reread;
+      holdOpening(Effect.void);
+      yield* Deferred.succeed(release, undefined);
+      while (gate.at(-1) !== "open" || !gate.includes("settle third@example.com")) {
+        yield* Effect.promise(() => nextTurn());
+      }
+
+      assert.equal(signedInEmail(session.snapshot()), "third@example.com");
+      const third = gate.indexOf("settle third@example.com");
+      assert.equal(gate.lastIndexOf("close", third) > gate.indexOf("open"), true);
+      assert.ok(!gate.includes("settle other@example.com"));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "closes the gate for a sign-out pressed while an opening ran, a later read passing it",
+    () =>
+      Effect.gen(function* () {
+        const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+        const session = yield* open;
+        yield* session.initialize;
+        const release = yield* Deferred.make<void>();
+        holdOpening(Deferred.await(release));
+
+        // The person's gate is still opening when they sign out, and a read then finds nobody.
+        state.user = { ...USER };
+        yield* session.token.refreshAccount();
+        yield* turns(5);
+        const signedOut = yield* Effect.forkChild(session.signOut({ revokeRemote: true }));
+        while (sent("/api/auth/sign-out").length === 0) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+        yield* session.token.refreshAccount();
+        yield* turns(5);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(signedOut);
+
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        assert.equal(gate.at(-1), "close");
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("answers the launch with the person a re-read during it settled on", () =>
+    Effect.gen(function* () {
+      const { held, release } = heldAnswer();
+      const { open, state, sent } = scene({ user: undefined, heldRead: held });
+      const session = yield* open;
+
+      // The launch's read is held; a refused call's re-read meanwhile finds the session.
+      const launched = yield* Effect.forkChild(session.initialize);
+      while (sent("/api/auth/get-session").length === 0) yield* Effect.promise(() => nextTurn());
+      state.user = { ...USER };
+      yield* session.token.refreshAccount();
+      yield* Effect.sync(release);
+
+      assert.equal(signedInEmail(yield* Fiber.join(launched)), USER.email);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reads once for returns to the tab that come together, and again for a later one", () =>
+    Effect.gen(function* () {
+      const { open, revisit, sent } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+      const reads = () => sent("/api/auth/get-session").length;
+
+      // The tab is shown again and focused at once: one return.
+      yield* revisit;
+      yield* turns(5);
+      yield* revisit;
+      yield* turns(5);
+      assert.equal(reads(), 2);
+
+      // A return a while later reads again.
+      yield* TestClock.adjust("2 seconds");
+      yield* revisit;
+      yield* turns(5);
+      assert.equal(reads(), 3);
+    }).pipe(Effect.scoped),
   );
 
   it.effect("piles up no reads for returns to the tab during an outage", () =>
@@ -865,9 +1030,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal(stale.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(stale.reason, EXPERIMENT_ACCOUNT_CHANGED);
     assert.equal(state.experiments[EXPERIMENT.BROWSER], undefined);
-    // The new person is settled on once the previous person's capabilities stopped.
-    const accountKey = () => account.token.readAccountKey?.() ?? Effect.succeed(undefined);
-    yield* until(() => Effect.map(accountKey(), (key) => key === "other@example.com"));
+    assert.equal(yield* account.token.readAccountKey?.() ?? Effect.void, "other@example.com");
     // The first account's choices are no longer drawn for the one now signed in.
     assert.equal((yield* experiments)[EXPERIMENT.FACTORY], undefined);
     assert.equal(yield* voice, undefined);

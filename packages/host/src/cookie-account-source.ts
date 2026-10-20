@@ -205,7 +205,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   let account: AccountSnapshot = SIGNED_OUT;
   /**
    * Moved by every change of the account, a press's or a read's, so a read
-   * begun before one settles nothing and a gate move made for one is passed
+   * begun before one settles nothing and an opening made for one is passed
    * over once a later change stands.
    */
   let generation = 0;
@@ -242,18 +242,17 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     });
 
   /**
-   * One move of the capability gate, taken in turn with every other, and
-   * passed over where a later change of the account superseded it, so a
-   * slow opening can never land after the closing a sign-out made.
+   * One move of the capability gate, taken in turn with every other, so a
+   * slow opening can never land after the closing a sign-out made. Note that
+   * a closing always runs, however many changes came after it, because no
+   * later move closes what it would have; only an opening checks that no
+   * later change passed it over (`arrive`).
    */
-  const moveGate = (asOf: number, move: Effect.Effect<void>): Effect.Effect<void> =>
-    gateMoves.withPermits(1)(
-      Effect.suspend(() => (asOf === generation && !closed ? move : Effect.void)),
-    );
+  const moveGate = (move: Effect.Effect<void>): Effect.Effect<void> =>
+    gateMoves.withPermits(1)(Effect.suspend(() => (closed ? Effect.void : move)));
 
   /** A gate move forked into the session's own scope, so it ends with the session. */
-  const forkMove = (asOf: number, move: Effect.Effect<void>) =>
-    Effect.forkIn(moveGate(asOf, move), sessionScope);
+  const forkMove = (move: Effect.Effect<void>) => Effect.forkIn(moveGate(move), sessionScope);
 
   /** A settings step of an account change, whose failure is reported and never holds the change up. */
   const settingsStep = (step: Effect.Effect<unknown, Error>, what: string): Effect.Effect<void> =>
@@ -303,7 +302,8 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
    * stopped first where someone did, so the arrival is never drawn over the
    * previous person's tasks, terminals or agents; then the settings settled
    * on the arrival, the arrival shown, which settles `shown`, and its
-   * capabilities started. Each step is passed over once a later change stands.
+   * capabilities started. The stop always runs; each step after it is passed
+   * over once a later change stands.
    */
   const arrive = (
     asOf: number,
@@ -378,10 +378,10 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         const standing = signedInId(account);
         if (!read.signedIn) {
           if (standing === undefined) return yield* Effect.as(settleNobody, undefined);
-          const asOf = ++generation;
+          generation += 1;
           yield* settleOn(SIGNED_OUT);
           yield* forgetDeparted;
-          return yield* forkMove(asOf, host.stopCapabilities);
+          return yield* forkMove(host.stopCapabilities);
         }
         // The same person, drawn anew where anything of them changed.
         if (standing !== undefined && standing === signedInId(read.account)) {
@@ -400,7 +400,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         arrival = { asOf, shown };
         return yield* Effect.forkIn(
           Effect.ensuring(
-            moveGate(asOf, arrive(asOf, read.account, standing !== undefined, shown)),
+            moveGate(arrive(asOf, read.account, standing !== undefined, shown)),
             Deferred.succeed(shown, undefined),
           ),
           sessionScope,
@@ -465,10 +465,10 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
    */
   const leave: Effect.Effect<void> = Effect.uninterruptible(
     Effect.gen(function* () {
-      const asOf = ++generation;
+      generation += 1;
       yield* settleOn(SIGNED_OUT);
       yield* forgetDeparted;
-      yield* moveGate(asOf, host.stopCapabilities);
+      yield* moveGate(host.stopCapabilities);
     }),
   );
 
