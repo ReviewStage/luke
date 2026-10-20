@@ -781,21 +781,17 @@ export function DesktopShell({
                   <FACTORY.Route tasks={tasks} />
                 </Suspense>
               </PageFind>
+            ) : boardOpen && inboxFirst ? (
+              // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
+              <Suspense fallback={<BoardLoading title="Tasks" onExit={tasks.boardView.onClose} />}>
+                <TasksPage tasks={tasks} room={room} />
+              </Suspense>
             ) : boardOpen ? (
               <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
                 <Suspense
-                  fallback={
-                    <BoardLoading
-                      title={inboxFirst ? "Tasks" : "Board"}
-                      onExit={tasks.boardView.onClose}
-                    />
-                  }
+                  fallback={<BoardLoading title="Board" onExit={tasks.boardView.onClose} />}
                 >
-                  {inboxFirst ? (
-                    <TasksPage tasks={tasks} room={room} />
-                  ) : (
-                    <TasksBoard tasks={tasks} room={room} />
-                  )}
+                  <TasksBoard tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : automationsOpen ? (

@@ -47,6 +47,7 @@ import { FolderIcon, ListTodoIcon, PinIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import type { ShellRoom } from "../shell-room.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
@@ -152,10 +153,15 @@ export function TasksPage({
     writeKept(VIEW_KEY, storedView, next);
   };
   const switcher = <ViewSwitch view={view} onView={choose} />;
-  return view === TASKS_VIEW.BOARD ? (
-    <TasksBoard tasks={tasks} room={room} title={TASKS} switcher={switcher} />
-  ) : (
-    <TasksList tasks={tasks} switcher={switcher} />
+  // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
+  return (
+    <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
+      {view === TASKS_VIEW.BOARD ? (
+        <TasksBoard tasks={tasks} room={room} title={TASKS} switcher={switcher} />
+      ) : (
+        <TasksList tasks={tasks} switcher={switcher} />
+      )}
+    </PageFind>
   );
 }
 
@@ -222,7 +228,21 @@ function TaskListRow({
           {task.status === undefined ? null : <TaskStatusMark status={task.status} />}
         </span>
       }
-      title={task.name}
+      title={
+        <>
+          {task.name}
+          {/* Note that the leading marks are decoration to a screen reader, so the key and status are said here. */}
+          <span className="visually-hidden">
+            {[
+              task.number === undefined ? undefined : taskKey(workspaceName, task.number),
+              task.status === undefined ? undefined : TASK_STATUS_WORDS[task.status],
+            ]
+              .filter((each) => each !== undefined)
+              .map((each) => `, ${each}`)
+              .join("")}
+          </span>
+        </>
+      }
       meta={
         <span className="home-row-meta">
           {waiting === 0 ? null : (

@@ -230,3 +230,19 @@ test("Escape closes the page from the List as from the Board", async () => {
   });
   assert.equal(closed, 1);
 });
+
+test("a row says its key and status to a screen reader, its leading marks being decoration", async () => {
+  const page = await mountPage();
+  const press = rowOf(page, "ACME-44").querySelector("button");
+  assert.match(press?.textContent ?? "", /Teammate invitations, ACME-44, In progress/u);
+});
+
+test("find opened in the List is let go as the Board is chosen", async () => {
+  const page = await mountPage();
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.FIND), "the List offers find");
+  });
+  assert.ok(page.querySelector("search[aria-label='Find']"), "the List's find bar stands");
+  act(() => buttonNamed(page, "Board").click());
+  assert.equal(page.querySelector("search[aria-label='Find']"), null);
+});
