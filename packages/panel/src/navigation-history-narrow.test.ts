@@ -24,7 +24,7 @@ import {
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import type { SidePanelTab } from "./tasks/use-side-panel.js";
-import type { InboxChoice, TasksControl } from "./tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
@@ -35,7 +35,7 @@ import { tasksControl } from "./testing/tasks-control.js";
  * navigation-history-narrow.test.ts -- on a stage as narrow as a phone's,
  * each pane opened over another is a step of its own: the side panel over
  * the plan, an Inbox item, a Settings page, a version, and a Chat place over
- * their lists. Back returns to the pane before, Forward opens it again, the
+ * their lists, and an automation's runs over its setup. Back returns to the pane before, Forward opens it again, the
  * screens' own ways back go through the history, and each step's address is
  * the link Copy link copies there. On the desktop's width none of them is a
  * step. The window's plans tab and Settings are a fake holding only where the
@@ -64,6 +64,9 @@ const AGENT = "agent-1";
 /** A channel of Acme's chat. */
 const CHANNEL: ChatPlace = { kind: CHAT_PLACE.CHANNEL, channelId: "channel-1" };
 
+/** An automation of Acme's, whose page stands over the plan. */
+const AUTOMATION = "automation-1";
+
 /** Where the window stands, as the Tasks tab and Settings hold it. */
 interface Standing {
   readonly tab: PanelTab;
@@ -82,6 +85,10 @@ interface Standing {
   };
   /** The coding agent whose page stands, while one does. */
   readonly agent: string | undefined;
+  /** Whether the automation's page stands, and its runs alone over its setup. */
+  readonly automation?: { readonly open: boolean; readonly runs: boolean } | undefined;
+  /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
+  readonly unsaved?: boolean | undefined;
 }
 
 /** The window on the task, every pane over it shut. */
@@ -139,6 +146,22 @@ function tasksTab(
     back: () => {
       if (at.panel.open) shut();
       return true;
+    },
+    // As the window's own guard does while a page holds unsaved work, every way out guarded asks, and here is refused.
+    leaveGuard:
+      at.unsaved === true ? { ...base.leaveGuard, guard: () => () => undefined } : base.leaveGuard,
+    automationsView: {
+      ...base.automationsView,
+      open: at.automation?.open === true,
+      place:
+        at.automation?.open === true
+          ? { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION }
+          : { kind: AUTOMATIONS_PAGE.LIST },
+      runs: at.automation?.runs === true,
+      onOpen: (_place, runs) =>
+        patch((held) => ({ ...held, automation: { open: true, runs: runs === true } })),
+      onRuns: (runs) => patch((held) => ({ ...held, automation: { open: true, runs } })),
+      onClose: () => patch((held) => ({ ...held, automation: undefined })),
     },
     agentView: {
       ...base.agentView,
@@ -580,4 +603,49 @@ test("a window whose history already stands on a step when it opens, as a reload
   );
   assert.deepEqual(reloaded.addresses(), [TASK_PATH, `${TASK_PATH}/page/page-1`]);
   assert.equal(reloaded.history().canGoBack, true);
+});
+
+/** The window on the automation's page over the task, its setup standing, with unsaved work in it. */
+const ON_AUTOMATION: Standing = {
+  ...ON_TASK,
+  automation: { open: true, runs: false },
+  unsaved: true,
+};
+
+test("on a narrow stage an automation's runs chosen from its setup are a step, whose way back steps back to the setup without asking to leave its unsaved work", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
+  window.press(() => window.shown().automationsView.onRuns(true));
+  assert.equal(window.addresses().length, 2);
+  const runsAlone = (at: Standing) => at.automation?.runs;
+  backAndForth(window, runsAlone, false, true);
+
+  window.press(() => window.shown().automationsView.onRuns(false));
+  assert.equal(runsAlone(window.at()), false);
+  assert.equal(window.addresses().length, 2, "the way back added no step");
+  assert.equal(window.history().canGoForward, true, "the way back was a step back");
+});
+
+test("on a narrow stage a move the history makes by itself back from an automation's runs stands its setup without asking to leave its unsaved work", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
+  window.press(() => window.shown().automationsView.onRuns(true));
+  window.moveHistory(-1);
+  assert.deepEqual(window.at().automation, { open: true, runs: false });
+  assert.equal(window.history().canGoForward, true);
+});
+
+test("on a narrow stage an automation opened on its runs, as a run's link opens it, has no setup behind it, so the way back stands the setup in the runs' step", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  window.move((held) => ({ ...held, automation: { open: true, runs: true } }));
+  assert.equal(window.addresses().length, 2);
+
+  window.press(() => window.shown().automationsView.onRuns(false));
+  assert.deepEqual(window.at().automation, { open: true, runs: false });
+  assert.equal(window.addresses().length, 2, "the setup took the runs' step");
+  assert.equal(window.history().canGoForward, false);
+});
+
+test("on the desktop's width an automation's runs are no step", () => {
+  const window = mount(SHELL_ROOM.WIDE, ON_AUTOMATION);
+  window.press(() => window.shown().automationsView.onRuns(true));
+  assert.equal(window.addresses().length, 1);
 });

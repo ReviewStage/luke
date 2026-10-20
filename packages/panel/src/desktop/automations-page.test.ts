@@ -55,7 +55,7 @@ import {
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { layContainersAt } from "../testing/container-width.js";
+import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -2638,4 +2638,110 @@ test("a new automation started from the Code review suggestion is made on pull r
     "the settings open the task the agent is handed",
   );
   assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
+});
+
+/**
+ * The Automations pages on a narrow stage, a phone's, standing on `start`,
+ * with the window's stylesheets laid: the page and whether its runs stand
+ * alone held as the Plans tab holds them, its runs' screen shown and left
+ * by their own presses.
+ */
+function mountNarrow(start: AutomationsPlace): HTMLElement {
+  function Pages() {
+    const [place, setPlace] = useState(start);
+    // As the Plans tab does, a page opened on a run's link stands its runs.
+    const [runsShown, setRunsShown] = useState(
+      start.kind === AUTOMATIONS_PAGE.EDIT && start.runId !== undefined,
+    );
+    const tasks = tasksControl({
+      workspace: WORKSPACE,
+      workspaces: [PERSONAL, WORKSPACE],
+      automationsView: {
+        ...tasksControl().automationsView,
+        open: true,
+        place,
+        runs: runsShown,
+        onOpen: (next: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) => setPlace(next),
+        onRuns: setRunsShown,
+      },
+    });
+    return createElement(
+      "div",
+      { className: "desktop-shell", "data-room": SHELL_ROOM.NARROW },
+      createElement(AutomationsPage, { tasks, room: SHELL_ROOM.NARROW }),
+    );
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  registry = AtomRegistry.make();
+  act(() => root?.render(onRegistry(registry, createElement(Pages))));
+  return container;
+}
+
+/** Which of an automation's two screens are on screen: its setup, and its runs. */
+function screensShown(page: HTMLElement): string[] {
+  const setup = page.querySelector(".automation-editor-screen") ?? assert.fail("no setup");
+  const runsScreen = page.querySelector("section[aria-label='Runs']") ?? assert.fail("no runs");
+  return [...(shown(setup) ? ["setup"] : []), ...(shown(runsScreen) ? ["runs"] : [])];
+}
+
+test("on a narrow stage an automation's setup stands the whole width with its runs hidden, until Runs stands them alone under a way back that returns to the setup", async () => {
+  window.localStorage.clear();
+  runs = [SWEEP_RUN];
+  const sheets = layContainersAt({});
+  try {
+    const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+    await settle();
+    assert.deepEqual(screensShown(page), ["setup"]);
+    assert.equal(
+      page.querySelector(".automation-runs-pane"),
+      null,
+      "no Runs panel stands beside the setup, kept open or not",
+    );
+
+    act(() => button("Runs").click());
+    assert.deepEqual(screensShown(page), ["runs"]);
+    const runsScreen = page.querySelector("section[aria-label='Runs']");
+    assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
+
+    act(() => button(SWEEP.name).click());
+    assert.deepEqual(screensShown(page), ["setup"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("on a narrow stage Runs takes the focus to the runs' way back, and the way back hands it to Runs", async () => {
+  window.localStorage.clear();
+  mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const runsButton = button("Runs");
+  act(() => {
+    runsButton.focus();
+    runsButton.click();
+  });
+  const back = button(SWEEP.name);
+  assert.ok(document.activeElement === back, "the way back to the setup");
+
+  act(() => {
+    back.focus();
+    back.click();
+  });
+  assert.ok(document.activeElement === button("Runs"), "the setup's Runs");
+});
+
+test("on a narrow stage a link to a run opens on its runs, with the run marked and the way back to the setup", async () => {
+  runs = [SWEEP_RUN];
+  const page = mountNarrow({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: SWEEP.id,
+    runId: SWEEP_RUN.id,
+  });
+  await settle();
+  assert.equal(page.querySelector(".automation-editor-screen")?.hasAttribute("hidden"), true);
+  const runsScreen = page.querySelector("section[aria-label='Runs']");
+  assert.equal(runsScreen?.hasAttribute("hidden"), false);
+  assert.ok(runsScreen?.querySelector("[aria-current]"), "the run the link named is marked");
+  assert.ok(document.activeElement === button(SWEEP.name), "the focus on the way back");
 });
