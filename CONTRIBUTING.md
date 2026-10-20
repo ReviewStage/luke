@@ -96,8 +96,8 @@ package's `package.json` `description` says what it holds.
 
 ## Make the change
 
-[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped issue
-through the evidence in the pull request.
+[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped task
+to the merge.
 
 Keep Electron main and preload code thin, keep the renderer sandboxed, and put
 platform-independent behavior in a package (see Repository layout above).
@@ -109,8 +109,8 @@ The canonical commands and when each one is required are the command table in
 
 ## Open the pull request
 
-What the description has to carry is step 5 of
-[docs/WORKFLOW.md](docs/WORKFLOW.md).
+Open it ready for review, not as a draft, with a short summary of what changed
+and why; root [AGENTS.md](AGENTS.md)'s "Merging" says how it merges.
 
 ## Reporting problems
 
