@@ -81,6 +81,7 @@ test("a laid-out stage that then measures a zero width keeps the reading it had"
 /** Answers the device's pointer as a finger's, as a phone's browser does. */
 function onTouchScreen(): void {
   vi.spyOn(window, "matchMedia").mockImplementation(
+    // SAFETY: the room reads `matches` alone, which this answers for every query.
     (query) =>
       ({
         matches: query === "(pointer: coarse)",
