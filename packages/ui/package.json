@@ -24,6 +24,7 @@
     "./sort-direction": "./src/sort-direction.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",
+    "./tasks-page-model": "./src/tasks-page-model.js",
     "./task-sections-model": "./src/task-sections-model.js",
     "./section-icon-model": "./src/section-icon-model.js",
     "./integration-search": "./src/integration-search.js",

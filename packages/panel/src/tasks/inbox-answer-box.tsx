@@ -46,6 +46,7 @@ import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import {
+  acknowledgedOnOpen,
   attachedAnswers,
   awaitsNod,
   type InboxDraft,
@@ -88,7 +89,9 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * and while they are read the answer waits for them. Every item is sent
  * by the one Send at the foot's right, its pick made in the controls over the note;
  * a note's reads "Got it" while the box holds nothing, and "Send" once it
- * does. Unlike the agent's box, the field never takes the
+ * does, save on a note opening acknowledges (`inbox-model.ts`'s
+ * `acknowledgedOnOpen`), whose Send stands held until it holds something,
+ * since there is nothing left to nod to. Unlike the agent's box, the field never takes the
  * caret as an item opens, because K and J step the list while the caret
  * is elsewhere.
  *
@@ -127,11 +130,19 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * over the note, which then stands picked and needs no words beside it;
  * pressing the answer again takes it off. The reply carries the answer
  * with the reader's words and files. A thread that asks nothing while it
- * stands open, a notice, waits on the reader's nod: its button reads Got
- * it while the box holds nothing, which settles it without messaging the
- * agent, and Reply once it holds words or files, which settles it as the
- * reply reaches the agent.
+ * stands open, a notice, waits on the reader's nod. Opening the reader's own
+ * notice gives it (`use-inbox-read-marks.ts`'s `useNodOnOpen`), so its
+ * button reads Reply alone, held while the box holds nothing; a notice
+ * opening leaves alone, one shown while its holder's held read has failed, a teammate's or one whose agent asked to hear back,
+ * reads Got it while the box holds nothing, which settles it without
+ * messaging the agent. Either reads Reply once it holds words or files,
+ * which settles it as the reply reaches the agent.
  */
+
+/** Whether the box holds neither words nor files. */
+function emptyBox(draft: InboxDraft): boolean {
+  return draft.note.trim() === "" && draft.attachments.length === 0;
+}
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
 const NOTE_PLACEHOLDER = {
@@ -228,7 +239,7 @@ function openQuietLine(
   return item.needsReply ? undefined : { line: quietLine(draft), wanting: false };
 }
 
-/** What a note's Send says while no word is written, the nod that answers it, and once one is. */
+/** What a note's Send says while no word is written, the nod that answers it where opening it did not, and once one is. */
 const NOTE_SEND = {
   NOD: "Got it",
   WORDS: "Send",
@@ -237,33 +248,37 @@ const NOTE_SEND = {
 /**
  * The Send that ends every open item's box: the round send of words, a
  * choice, a form, an approval, and a to-do, held while the answer lacks
- * something, since its Enter says what; a note's, which it always takes,
- * in words, "Got it" while the box holds nothing and "Send" once it does.
+ * something, since its Enter says what; a note's, in words, "Got it" while
+ * the box holds nothing and "Send" once it does, or, where opening the note
+ * acknowledged it, "Send" alone, held until the box holds something.
  */
 function AnswerSend({
   item,
   draft,
   sending,
   reading,
+  nodded,
 }: {
   item: InboxItem;
   draft: InboxDraft;
   sending: boolean;
   /** Whether files handed to the box are still being read, which the answer waits for. */
   reading: boolean;
+  /** Whether opening the item acknowledges it, so no Got it stands. */
+  nodded: boolean;
 }): React.JSX.Element {
   const held = sending || reading;
   if (item.response.type === INBOX_RESPONSE.NONE) {
-    const said = draft.note.trim() === "" && draft.attachments.length === 0;
+    const bare = emptyBox(draft);
     return (
       <Button
         type={BUTTON_TYPE.SUBMIT}
         variant={BUTTON_VARIANT.PRIMARY}
         busy={sending}
         busyLabel="Sending"
-        disabled={held}
+        disabled={held || (bare && nodded)}
       >
-        {said ? NOTE_SEND.NOD : NOTE_SEND.WORDS}
+        {bare && !nodded ? NOTE_SEND.NOD : NOTE_SEND.WORDS}
       </Button>
     );
   }
@@ -290,6 +305,8 @@ function placeholderOf(response: InboxReadResponse): string {
 /** What an item's box is drawn with, beside where the account's servers stand. */
 interface AnswerBoxProps {
   item: InboxItem;
+  /** The account reading the Inbox, whose own notice opening acknowledges; none before it is known. */
+  readerId: string | undefined;
   control: TaskInboxControl;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands. */
   agent: CodingAgentSummary | undefined;
@@ -314,6 +331,7 @@ interface AnswerBoxProps {
 /** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
 function AnswerCard({
   item,
+  readerId,
   control,
   agent,
   agentName,
@@ -347,7 +365,9 @@ function AnswerCard({
   const asking = thread === undefined ? undefined : openAskOf(thread);
   const attached = asking === undefined ? undefined : attachedAnswers(asking, draft);
   const notice = thread !== undefined && awaitsNod(item, thread);
-  const nod = notice && draft.note.trim() === "" && draft.attachments.length === 0;
+  // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
+  const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
+  const nod = notice && emptyBox(draft) && !nodded;
   // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end, as a thread's Reply is.
   const namedSend =
     thread !== undefined || (answering && item.response.type === INBOX_RESPONSE.NONE);
@@ -399,6 +419,7 @@ function AnswerCard({
   };
   // A send of an answer that lacks something goes nowhere: it says what, and takes the keyboard there.
   const send = () => {
+    if (nodded && emptyBox(draft)) return;
     const missing = inboxReply(item, draft) === undefined ? inboxMissing(item, draft) : undefined;
     if (missing === undefined) {
       answer();
@@ -563,7 +584,13 @@ function AnswerCard({
                 <div className="inbox-answer-actions">
                   <DictateButton dictation={dictation} disabled={module === undefined} />
                   {answering ? (
-                    <AnswerSend item={item} draft={draft} sending={sending} reading={reading > 0} />
+                    <AnswerSend
+                      item={item}
+                      draft={draft}
+                      sending={sending}
+                      reading={reading > 0}
+                      nodded={nodded}
+                    />
                   ) : thread !== undefined ? (
                     <Button
                       type={BUTTON_TYPE.SUBMIT}

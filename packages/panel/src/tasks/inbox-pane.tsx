@@ -54,8 +54,7 @@ import {
   FormField,
   GAP,
   IconButton,
-  SCROLL_FADE,
-  ScrollArea,
+  ONE_LINE_END,
   Stack,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -73,8 +72,13 @@ import {
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
 import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon, Undo2Icon } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -107,6 +111,7 @@ import {
   decideButtons,
   decidedOf,
   decisionsOf,
+  doDecision,
   fieldValueOf,
   INBOX_HOLDER,
   INBOX_MISSING,
@@ -136,6 +141,7 @@ import {
   threadCut,
   threadEntries,
   withDecision,
+  withDoPress,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -213,9 +219,13 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * answer's are; a thread read cut to its latest says the earlier ones are
  * in the agent's tab. The draft reply ends a settled item's thread too,
  * where it writes a message on the thread rather than an answer, the next
- * item that needs the developer docked under the board, and the reader's
- * own message is scrolled into view inside the board as it lands, the
- * draft under it. A block or a response of a type
+ * item that needs the developer docked under the board. The board is a
+ * log, as an agent's transcript is: each item opens at its newest message,
+ * the draft reply just over the board's foot, and keeps to it as messages
+ * land while the reader is there; scrolled up, the transcript's way back
+ * to the newest line floats over the foot; and the reader's own message,
+ * sent while scrolled up, is scrolled into view as it lands, the draft
+ * under it. A block or a response of a type
  * this build does not know, one a newer service wrote, is drawn as a line
  * naming a newer Luke, so the rest still reads. The pane's bar is its
  * path, task › agent, each crumb drawn as its tab in the task's column,
@@ -1665,7 +1675,12 @@ function footPadding(scroller: HTMLElement): number {
  * be sliding in (`AGENTS.md`'s panel motion): far enough that the draft
  * reply under it, the box written in again, stands whole over the board's
  * foot, and no further than the message's head. A message another wrote,
- * or another item opened, scrolls nothing.
+ * or another item opened, scrolls nothing. Note that a reader already at
+ * the thread's end is kept there by the log itself (`Conversation`), whose
+ * observer has the last word once the thread's new height is reported, so
+ * this is what brings the message in for a reader scrolled up, whom the
+ * log leaves where they are; the two never pull different ways for long,
+ * since a scroll that lands at the end hands the thread back to the log.
  */
 function useScrollToOwnMessage(
   board: React.RefObject<HTMLDivElement | null>,
@@ -1692,49 +1707,6 @@ function useScrollToOwnMessage(
     const under = foot - (room.bottom - footPadding(scroller));
     if (under > 0) scroller.scrollTop += Math.min(under, head - room.top);
   }, [board, item.id, last, own]);
-}
-
-/** Scrolls `scroller` so `reply` stands just over its foot, the end of the thread, or its top in view where it is taller than the room. */
-function standOverFoot(scroller: HTMLElement, reply: Element): void {
-  const room = scroller.getBoundingClientRect();
-  const box = reply.getBoundingClientRect();
-  const under = box.bottom - (room.bottom - footPadding(scroller));
-  if (under !== 0) scroller.scrollTop += Math.min(under, box.top - room.top);
-}
-
-/** The reader's own ways of moving a thread, after any of which the pane leaves where it stands to them. */
-const READER_MOVES = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
-
-/**
- * Opens each item at its thread's top, rather than where the last item was
- * scrolled, as the pane stands for every item in turn; but an item whose
- * question waits on an answer opens at the thread's end instead, on the
- * draft reply that holds the question's controls, standing just over the
- * board's foot, where they would otherwise wait out of sight. While what
- * stands above it still lands, a picture read late, it is stood there
- * again, until the reader moves the thread themselves.
- */
-function useOpenOnAsk(board: React.RefObject<HTMLDivElement | null>, itemId: string): void {
-  useLayoutEffect(() => {
-    const scroller = board.current;
-    if (scroller === null) return undefined;
-    scroller.scrollTop = 0;
-    if (scroller.querySelector("[data-inbox-draft-ask]") === null) return undefined;
-    const stand = () => {
-      const reply = draftReplyOf(scroller);
-      if (reply !== null) standOverFoot(scroller, reply);
-    };
-    stand();
-    const content = scroller.querySelector(".inbox-board");
-    const observer = new ResizeObserver(stand);
-    if (content !== null) observer.observe(content);
-    const letGo = () => {
-      observer.disconnect();
-      for (const move of READER_MOVES) scroller.removeEventListener(move, letGo);
-    };
-    for (const move of READER_MOVES) scroller.addEventListener(move, letGo, { passive: true });
-    return letGo;
-  }, [board, itemId]);
 }
 
 /** What an ask's box says where its type is one this build does not know. */
@@ -1878,6 +1850,7 @@ function AskControls({
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
       const ticked = new Set(shownTicks(ask, draft));
+      const decision = doDecision(ask, draft);
       return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
@@ -1897,16 +1870,16 @@ function AskControls({
           <div className="inbox-ask-presses">
             <AskPress
               label={ASK_PRESS.DONE}
-              pressed={draft.press === INBOX_REPLY.DONE}
+              pressed={decision === INBOX_REPLY.DONE}
               disabled={disabled}
-              onPress={() => press(INBOX_REPLY.DONE)}
+              onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.DONE))}
             />
             <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
-              pressed={draft.press === INBOX_REPLY.NOT_DONE}
+              pressed={decision === INBOX_REPLY.NOT_DONE}
               disabled={disabled}
-              onPress={() => press(INBOX_REPLY.NOT_DONE)}
+              onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.NOT_DONE))}
             />
           </div>
         </>
@@ -1980,8 +1953,8 @@ function AnsweredPress({
 
 /**
  * The ask a member's reply answered, at the head of that reply under their
- * face and name, in the reply's stamp's place: the ask's card with no head
- * of its own, its controls as the answer left them, in the look they had
+ * face and name, in the reply's stamp's place: the ask's controls alone,
+ * standing in the reply with no card around them, as the answer left them, in the look they had
  * while it waited and taking nothing, which say how it was answered: a
  * `decide`'s options with the picks checked, or its two small buttons with
  * the one pressed marked; a `do`'s steps ticked as they were sent, over
@@ -2002,10 +1975,9 @@ function AnsweredCard({
 }): React.JSX.Element | null {
   const draft = answeredDraft(ask, answers);
   const body = (controls: React.ReactNode) => (
-    <div className="inbox-ask" data-inbox-ask={INBOX_ASK_STATUS.ANSWERED}>
-      <div className="inbox-ask-answered" data-inbox-answered="">
-        {controls}
-      </div>
+    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
+    <div className="inbox-ask-answered" data-inbox-answered="">
+      {controls}
     </div>
   );
   switch (ask.type) {
@@ -2437,14 +2409,60 @@ const ARCHIVED_ITEM_NOTE = "Unarchive the task to answer or reply";
  * The thread's subject, as a plan or a pull request leads with one: the
  * item's title alone, the thread under it.
  */
-function Subject({ item }: { item: InboxItem }): React.JSX.Element {
+function Subject({
+  item,
+  heading,
+}: {
+  item: InboxItem;
+  /** Takes the title's heading, which the bar watches scroll away (`useHeadingAway`). */
+  heading: (element: HTMLElement | null) => void;
+}): React.JSX.Element {
   return (
     <header className="inbox-subject">
-      <h2 className="inbox-subject-title" data-inbox-title="">
+      <h2 ref={heading} className="inbox-subject-title" data-inbox-title="">
         {cardTitle(item.title)}
       </h2>
     </header>
   );
+}
+
+/**
+ * Whether the item's heading has scrolled up out of the thread's view, as
+ * the thread's scroller reports it, so the bar names the item in its place.
+ * Note that a heading the pane does not draw, its list standing alone in its
+ * place, has not scrolled away, and that another item opens with its own
+ * heading in view until its scroller says otherwise.
+ */
+function useHeadingAway(
+  board: React.RefObject<HTMLElement | null>,
+  heading: HTMLElement | null,
+  itemId: string,
+): boolean {
+  const [away, setAway] = useState<{ readonly itemId: string; readonly away: boolean }>({
+    itemId,
+    away: false,
+  });
+  useEffect(() => {
+    const scroller = board.current;
+    if (scroller === null || heading === null || typeof IntersectionObserver === "undefined") {
+      return undefined;
+    }
+    const seen = new IntersectionObserver(
+      (entries) => {
+        const entry = entries.at(-1);
+        if (entry === undefined) return;
+        const top = entry.rootBounds?.top ?? 0;
+        setAway({
+          itemId,
+          away: !entry.isIntersecting && entry.boundingClientRect.bottom <= top,
+        });
+      },
+      { root: scroller },
+    );
+    seen.observe(heading);
+    return () => seen.disconnect();
+  }, [board, heading, itemId]);
+  return away.itemId === itemId && away.away;
 }
 
 /** The box's mentions where the pane is handed them; the page's own where it is not. */
@@ -2525,15 +2543,26 @@ function useAutomationCrumb(
  * card and open the automation's page where that can be opened, and are
  * words alone where it cannot. An agent this window does not list, one
  * started on another Mac, hangs a card saying so and still opens its tab.
+ * Once the thread's heading has scrolled away, the item's title joins the
+ * path as its last words, in the text's own ink, so the bar still says what
+ * is read; it fades in as it comes and out as the heading comes back, so the
+ * title never stands twice. A narrow bar cuts the task's crumb short first,
+ * then the title, which ends in an ellipsis, and the agent's keeps its size.
  */
 function Crumbs({
   holder,
   by,
   doors,
+  title,
+  titleShown,
 }: {
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
+  /** The item's title, as its heading reads it. */
+  title: string;
+  /** Whether the heading has scrolled away, so the path names the item. */
+  titleShown: boolean;
 }): React.JSX.Element {
   const { name, agent } = by.subject;
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
@@ -2557,6 +2586,7 @@ function Crumbs({
       card: <AgentCard subject={by.subject} models={by.models} />,
       onPress: () => by.onOpen(),
     },
+    { label: title, current: true, shown: titleShown, end: ONE_LINE_END.ELLIPSIS },
   ].filter((crumb) => crumb !== undefined);
   return (
     <div className="inbox-crumbs">
@@ -2616,10 +2646,11 @@ export function InboxPane({
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
-  useOpenOnAsk(board, item.id);
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;
   useScrollToOwnMessage(board, item, readerId);
+  const [heading, setHeading] = useState<HTMLElement | null>(null);
+  const headingAway = useHeadingAway(board, heading, item.id);
   // An open ask waits on whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : item.startedBy;
   const by: ItemAgent = {
@@ -2686,6 +2717,7 @@ export function InboxPane({
       <DraftReply readerId={readerId}>
         <InboxAnswerBox
           item={item}
+          readerId={readerId}
           control={control}
           agent={by.subject.agent}
           agentName={by.subject.name}
@@ -2711,7 +2743,13 @@ export function InboxPane({
         {onBack === undefined ? null : (
           <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
         )}
-        <Crumbs holder={holder} by={by} doors={doors} />
+        <Crumbs
+          holder={holder}
+          by={by}
+          doors={doors}
+          title={cardTitle(item.title)}
+          titleShown={headingAway}
+        />
         {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
         <div className="desktop-toolbar-actions inbox-item-actions">
           {pager === undefined ||
@@ -2729,16 +2767,16 @@ export function InboxPane({
         </div>
       </header>
       <div className="desktop-inbox">
-        {/* The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there. */}
-        <ScrollArea fade={SCROLL_FADE.BOTH} data-item-id={item.id} ref={board}>
-          <div className="inbox-board agent-log-over-composer ph-no-capture">
+        {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
+        <Conversation subject={item.id} list={board}>
+          <ConversationContent className="inbox-board agent-log-over-composer ph-no-capture">
             <WordsWorkspace value={workspaceId}>
               {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
               <InboxPictures itemId={item.id} control={control}>
                 <LoneLinkCards doors={cardDoors}>
                   {thread === undefined ? (
                     <>
-                      <Subject item={item} />
+                      <Subject item={item} heading={setHeading} />
                       <ol className="inbox-thread" aria-label="Thread">
                         <Comment
                           kind={COMMENT.ASKED}
@@ -2772,7 +2810,7 @@ export function InboxPane({
                     </>
                   ) : (
                     <>
-                      <Subject item={item} />
+                      <Subject item={item} heading={setHeading} />
                       <AnswerMentions value={mentions}>
                         <ol className="inbox-thread" aria-label="Thread">
                           {thread.map((message, at) => (
@@ -2808,8 +2846,9 @@ export function InboxPane({
             {control.failed ? (
               <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
             ) : null}
-          </div>
-        </ScrollArea>
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
         {open || archived || next === undefined ? null : <InboxNextUp next={next} />}
         {archived && doors.onUnarchive !== undefined ? (
           <ArchivedComposerNote onUnarchive={doors.onUnarchive} words={ARCHIVED_ITEM_NOTE} />

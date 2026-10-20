@@ -186,7 +186,7 @@ async function mount(input: {
   };
 }
 
-/** The picker, while it stands: what its field asks, and its rows' names, details, and which is chosen. */
+/** The picker, while it stands: what its field asks, and its rows' names, details, whether their glyph wears the working mark, and which is chosen. */
 function picker() {
   const dialog = document.querySelector('[role="dialog"].terminal-picker');
   if (dialog === null) return undefined;
@@ -195,6 +195,7 @@ function picker() {
     rows: [...dialog.querySelectorAll('[role="option"]')].map((row) => ({
       name: row.querySelector(".luke-combobox-option-label")?.textContent,
       detail: row.querySelector(".luke-combobox-option-detail")?.textContent,
+      working: row.querySelector('[role="img"][aria-label="Working"]') !== null,
       chosen: row.getAttribute("aria-selected") === "true",
     })),
     choose: async (name: string) => {
@@ -238,8 +239,8 @@ test("with several agents, ⌘J shows the terminal used last, and New terminal a
   const asked = picker();
   assert.equal(asked?.question, "New terminal in which agent’s sandbox?");
   assert.deepEqual(asked?.rows, [
-    { name: "Invite flow", detail: "Working · sandbox running", chosen: false },
-    { name: "Expiry job", detail: "Idle · sandbox stopped · last used", chosen: true },
+    { name: "Invite flow", detail: "sandbox running", working: true, chosen: false },
+    { name: "Expiry job", detail: "sandbox stopped · last used", working: false, chosen: true },
   ]);
   await asked?.choose("Invite flow");
   assert.deepEqual(task.shown.at(-1), { terminal: WORKING.id });
@@ -261,7 +262,7 @@ test("with no agent on the plan, the picker offers to start one", async () => {
   const task = await mount({ agents: [], started: () => (started += 1) });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
-    { name: "Start a coding agent", detail: undefined, chosen: true },
+    { name: "Start a coding agent", detail: undefined, working: false, chosen: true },
   ]);
   await picker()?.choose("Start a coding agent");
   assert.equal(started, 1);
@@ -433,7 +434,12 @@ test("where no agent can start, the picker says why beside the offer and starts 
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
-    { name: "Start a coding agent", detail: "Choose a repository first", chosen: false },
+    {
+      name: "Start a coding agent",
+      detail: "Choose a repository first",
+      working: false,
+      chosen: false,
+    },
   ]);
   await picker()?.choose("Start a coding agent");
   assert.equal(started, 0);
