@@ -753,13 +753,13 @@ const stoppedSource = (
     ),
   );
 
-/** The place an agent stands in, which a Start from it puts the new agent in: its task, or its workspace and repository where it has none. */
+/** The place an agent stands in, which a Start from it puts the new agent in: its task, or its workspace and repository where it has none; none for an agent with neither, which no checkout could go on from. */
 export function placeOfAgent(
   agent: Pick<CodingAgent, "taskId" | "organizationId" | "repository">,
-): StartWhere {
-  return agent.taskId === null
-    ? { taskId: null, organizationId: agent.organizationId, repository: agent.repository }
-    : { taskId: agent.taskId };
+): StartWhere | undefined {
+  if (agent.taskId !== null) return { taskId: agent.taskId };
+  if (agent.repository === null) return undefined;
+  return { taskId: null, organizationId: agent.organizationId, repository: agent.repository };
 }
 
 /** The place alone, as a Start from another agent reads its source against it. */

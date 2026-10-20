@@ -1273,7 +1273,7 @@ test("start_agent continues a teammate's agent on no task in its own workspace, 
   assert.ok(forkWords.includes("shared temp dir") && !forkWords.includes("a clock read"));
 });
 
-test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt, a branch, or a new task beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, and a task named beside a source on no task", async () => {
+test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt, a branch, or a new task beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, a task named beside a source on no task, and a source on no task in no repository", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1315,6 +1315,17 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   const sweeper = await tasklessAgentOn(teammates.userId, workspaceId);
   await saidTurnOn(sweeper, "Swept.");
   await refused({ from: { agentId: sweeper.id }, taskId: tasks.invitations }, R.SOURCE_OTHER_TASK);
+  const bare = await claimed(teammates.userId, {
+    ...AGENT_CHOICE,
+    repository: null,
+    idempotencyKey: randomUUID(),
+    taskId: null,
+    organizationId: workspaceId,
+    planSnapshot: null,
+    prompt: "Talk the release through.",
+  });
+  await saidTurnOn(bare, "Talked it through.");
+  await refused({ from: { agentId: bare.id } }, R.SOURCE_NO_REPOSITORY);
   assert.equal(eve.sent.length, 0, "no refusal opens a session");
 });
 

@@ -402,6 +402,9 @@ export const START_CODING_AGENT_REFUSAL = {
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
+  SOURCE_NO_REPOSITORY:
+    "Not started: that agent works on no task and in no GitHub repository, so there is no " +
+    "checkout to go on from; start a new agent with a prompt instead.",
   NO_BRANCH:
     "Not started: the task's repository has no such branch on GitHub. Push it first, or name a " +
     "branch that exists there, such as the head branch of the pull request to build on; leave " +
@@ -1617,6 +1620,7 @@ const sourceLanding = (
     if (task.task?.archived === true) return Result.fail(START_CODING_AGENT_REFUSAL.ARCHIVED);
     // An agent with no task is started from in its own workspace, on the repository it cloned.
     const place = placeOfAgent(source);
+    if (place === undefined) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
     // A fork names one of the source's own messages, and leaves the source going on beside it.
     if (from.messageId !== undefined) {
       const { userId, conversationId } = source;

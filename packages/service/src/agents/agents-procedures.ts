@@ -306,10 +306,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
+      const place = placeOfAgent(source);
+      if (place === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
       const started = yield* startRequestedAgent(
         eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
-        placeOfAgent(source),
+        place,
         input.body,
         yield* summaryModelOf,
       );
