@@ -24,6 +24,7 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
@@ -478,6 +479,8 @@ export interface TasksDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
+  /** The account signed in now, by its id, which every live read names; none where nobody is. */
+  accountId: () => string | undefined;
   /** Realtime's client at an address, which the open task's board is followed over; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
@@ -1145,10 +1148,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function followBoard(taskId: string) {
     const following = () => gate() && view.activeTaskId === taskId;
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
     const seal = (poll = false, after?: string) =>
-      Effect.map(served(client.boardLive(taskId, poll, after)), (sealed) =>
-        sealed.ok ? sealed.answer : { failure: sealed.failure },
-      );
+      userId === undefined
+        ? Effect.succeed(LIVE_SIGNED_OUT)
+        : Effect.map(served(client.boardLive(taskId, userId, poll, after)), (sealed) =>
+            sealed.ok ? sealed.answer : { failure: sealed.failure },
+          );
     // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
     const sealedFor = (poll: boolean, after?: string) =>
       following()
@@ -1186,7 +1193,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.retry({
         schedule: BOARD_BACKOFF,
         while: (why) =>
-          why !== TASK_CALL_FAILURE.NOT_FOUND && why !== BOARD_FOLLOW_ENDED && following(),
+          why !== TASK_CALL_FAILURE.NOT_FOUND &&
+          why !== LIVE_SIGNED_OUT.failure &&
+          why !== BOARD_FOLLOW_ENDED &&
+          following(),
       }),
       Effect.option,
     );
