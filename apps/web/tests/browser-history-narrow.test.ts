@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 it.effect(
-  "on a phone's width the browser's Back shuts the side panel opened over the plan, and Forward opens it again",
+  "on a phone's width Close and the browser's Back each shut the side panel opened over the plan, as Escape does, without a step of their own, and Forward opens it again",
   () =>
     Effect.gen(function* () {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
@@ -45,11 +45,22 @@ it.effect(
       yield* appStateFirstRead;
       yield* Effect.promise(async () => {
         const panel = await drawPanel();
-        await panel.press("Close");
+        const loaded = window.history.length;
+        // The panel the tab opened with has no shut step behind it, so Close takes its step in place.
+        await panel.press("Close panel");
         assert.equal(addressBar(), FIXTURE_TASK_PATH);
+        assert.equal(window.history.length, loaded, "Close pushes nothing");
         await panel.press("Show panel");
         const shown = addressBar();
         const entries = window.history.length;
+
+        // Close steps back to the plan, as Back does, so Back then has no panel to open.
+        await panel.press("Close panel");
+        assert.ok(panel.offers("Show panel"), "Close shuts the side panel");
+        assert.equal(addressBar(), FIXTURE_TASK_PATH);
+        assert.equal(window.history.length, entries, "and pushes nothing");
+        await travel(() => window.history.forward());
+        assert.equal(addressBar(), shown, "Forward opens it again");
 
         await travel(() => window.history.back());
         assert.ok(panel.offers("Show panel"), "Back shuts the side panel");
@@ -59,6 +70,12 @@ it.effect(
         await travel(() => window.history.forward());
         assert.ok(!panel.offers("Show panel"), "Forward opens it again");
         assert.equal(addressBar(), shown);
+
+        // Escape is one more way out, which steps back the same way.
+        await travel(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+        assert.ok(panel.offers("Show panel"), "Escape shuts the side panel");
+        assert.equal(addressBar(), FIXTURE_TASK_PATH);
+        assert.equal(window.history.length, entries, "and pushes nothing");
       });
     }),
 );

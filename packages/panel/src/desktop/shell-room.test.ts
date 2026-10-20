@@ -246,12 +246,12 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
-test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, and its toggle reads Close", () => {
+test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, and its toggle reads Close panel", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
   // A first launch opens the panel, which the narrow stage holds full screen.
   assert.deepEqual(panelOf(page), { fullScreen: true, resizable: false, fullScreenButton: false });
-  assert.equal(panelToggle(page).getAttribute("aria-label"), "Close");
+  assert.equal(panelToggle(page).getAttribute("aria-label"), "Close panel");
 
   resizeStage(WIDE);
   assert.deepEqual(

@@ -51,7 +51,9 @@
  * browser's Back does, lands on the screen the step was. The screens' own
  * ways back to their lists step back where the list is the step behind, and
  * otherwise take the step standing in place, as a link opened on an item
- * leaves no list behind it to go back to.
+ * leaves no list behind it to go back to. The side panel's ways out do the
+ * same, so shutting a panel opened over the plan steps back to the plan
+ * rather than adding a step that Back would open the panel again from.
  */
 
 import { linkOf, type ReadLink } from "@luke/features/luke-link";
@@ -60,6 +62,7 @@ import type { SettingsView } from "@luke/settings/settings-views";
 import { CHAT_PLACE, type ChatPlace } from "@luke/ui/chat-model";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
 import { sameTab } from "@luke/ui/tab-strip-model";
+import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import {
   useCallback,
   useEffect,
@@ -249,11 +252,9 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
-function sameStep(one: Place | undefined, other: Place): boolean {
-  if (one === undefined || one.kind !== other.kind) return false;
-  // A narrow room's pane opened over another is a step of its own.
-  if (!sameSubStep(one, other)) return false;
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
+function samePage(one: Place, other: Place): boolean {
+  if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
     return sameAutomationsPage(one.page, other.page);
   }
@@ -267,6 +268,11 @@ function sameStep(one: Place | undefined, other: Place): boolean {
   }
   if ("workspaceId" in one && "workspaceId" in other) return one.workspaceId === other.workspaceId;
   return true;
+}
+
+/** Whether two places are one step of the history: one page, on one sub-step, since a narrow room's pane opened over another is a step of its own. */
+function sameStep(one: Place | undefined, other: Place): boolean {
+  return one !== undefined && samePage(one, other) && sameSubStep(one, other);
 }
 
 /** Whether a version history stands where it stood: on the same version, with the same sections open. */
@@ -389,6 +395,8 @@ export interface ListBacks {
   readonly chat: () => void;
   /** Stands the Inbox's list alone, or its item. */
   readonly inbox: (listed: boolean) => void;
+  /** Shuts the side panel standing over the plan, the whole pane. */
+  readonly panel: () => void;
 }
 
 /** The window's history, with the way a restore leaves a plan's version history. */
@@ -402,10 +410,32 @@ export interface WindowHistoryLists extends WindowHistory {
   readonly lists: ListBacks;
 }
 
-/** The Tasks tab with its screens' ways back to their lists through the history, as the shell draws them. */
+/**
+ * The Tasks tab with its screens' ways back to their lists through the
+ * history, as the shell draws them. A side panel standing only full screen,
+ * a narrow room's, is shut the same way by each of its ways out: its
+ * toggle, which reads Close panel, leaving full screen, the window's Escape,
+ * and closing the last tab its strip draws, which closes the tab as ever and
+ * then shuts the panel through the history rather than as a step of its own.
+ */
 export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksControl {
+  const { sidePanel } = tasks;
+  const shutsWhole = sidePanel.fullScreenOnly;
+  const onClose = (tab: SidePanelTab) => {
+    const last = sidePanel.strip.length === 1 && sidePanel.strip.some((one) => sameTab(one, tab));
+    sidePanel.onClose(tab);
+    if (last) lists.panel();
+  };
   return {
     ...tasks,
+    sidePanel: shutsWhole
+      ? { ...sidePanel, onToggle: lists.panel, onToggleFullScreen: lists.panel, onClose }
+      : sidePanel,
+    back: () => {
+      if (!shutsWhole || tasks.page !== TASKS_PAGE.DOCUMENT) return tasks.back();
+      lists.panel();
+      return true;
+    },
     history: { ...tasks.history, onList: lists.versions },
     chatView: { ...tasks.chatView, onList: lists.chat },
     inboxView: { ...tasks.inboxView, onListed: lists.inbox },
@@ -470,11 +500,11 @@ function useHistory(input: {
   const trail = useSyncExternalStore(history.subscribe, history.current);
   // Note that the presses read the trail from the adapter as they land, because a
   // key can land between a move and the render that shows it, and the latest
-  // `reachable`, `go`, and `guard` through a ref, so a press stays the same
+  // `place`, `reachable`, `go`, and `guard` through a ref, so a press stays the same
   // function across renders.
-  const latest = useRef({ reachable, go: input.go, guard });
+  const latest = useRef({ place, reachable, go: input.go, guard });
   useLayoutEffect(() => {
-    latest.current = { reachable, go: input.go, guard };
+    latest.current = { place, reachable, go: input.go, guard };
   });
   // The list a narrow screen went up to with no step behind, which the next visit takes in place.
   const wentUp = useRef<Place | undefined>(undefined);
@@ -580,8 +610,16 @@ function useHistory(input: {
     return true;
   };
 
-  // Up to `to` from an item over it: a step back where it is the step behind, else `stand` taking the step in place.
+  // Up to `to` from an item over it: a step back where it is the step behind, else
+  // `stand` taking the step in place. Note that a window on no item over `to` only
+  // stands, as `stand` then moves it to no new step, so a step behind is never
+  // gone back to and no visit later takes another's step in place.
   const upTo = (to: Place, stand: () => void) => {
+    const here = latest.current.place;
+    if (here === undefined || !samePage(here, to) || sameSubStep(here, to)) {
+      stand();
+      return;
+    }
     if (backTo(to)) return;
     wentUp.current = to;
     stand();
@@ -891,6 +929,17 @@ export function useWindowHistory(input: {
         listed
           ? up({ kind: PLACE_KIND.INBOX, listed: true }, () => tasks.inboxView.onListed(true))
           : tasks.inboxView.onListed(false),
+      panel: () => {
+        const shut = () => tasks.sidePanel.onSetOpen(false);
+        if (boundFor === undefined) {
+          shut();
+          return;
+        }
+        up(
+          { kind: PLACE_KIND.TASK, taskId: boundFor, panel: { open: false, tab: undefined } },
+          shut,
+        );
+      },
     },
   };
 }

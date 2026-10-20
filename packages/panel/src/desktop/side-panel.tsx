@@ -1633,7 +1633,7 @@ function TabContent({
  * traffic lights: one button in one place whether the panel is hidden,
  * beside the document, full screen, or still sliding, so a press lands on
  * it however fast the presses come. Where the room holds the panel only full
- * screen, a narrow one's, it reads Close while the panel is open, since the
+ * screen, a narrow one's, it reads Close panel while the panel is open, since the
  * panel covers everything else. It stands on every task's page, so it
  * is also what offers the panel's shortcut. ⌘T is the task's page's, which hands it to the column
  * holding the window's focus (desktop-tasks.tsx). While the task is not
@@ -1648,7 +1648,7 @@ export function SidePanelToggle({
 }): React.JSX.Element {
   // A panel standing only full screen covers the whole window, so its toggle is the way out of it.
   const closes = panel.open && panel.fullScreenOnly;
-  const label = closes ? "Close" : panel.open ? "Hide panel" : "Show panel";
+  const label = closes ? "Close panel" : panel.open ? "Hide panel" : "Show panel";
   const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   return (
