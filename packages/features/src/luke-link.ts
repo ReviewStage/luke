@@ -32,6 +32,8 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - Factory, `/factory`, and a page of Settings, `/settings[/<page>]`;
+ * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
+ *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
  *   someone who left, by the account id the service names them by.
  *
@@ -76,6 +78,8 @@ export const LINK_PLACE = {
   FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
+  /** Chat, on For you, or on one of its channels by the id the service mints it. */
+  CHAT: "chat",
 } as const;
 
 /** Which of a Pull request tab's views a review thread's link opens it in: its Conversation, or Files changed, on its line. */
@@ -110,6 +114,7 @@ const STEP = {
   FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
+  CHAT: "chat",
 } as const;
 
 /** The query a task's link names one of its comment threads under. */
@@ -228,6 +233,10 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.FACTORY) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.CHAT),
+    channelId: EffectSchema.optionalKey(idSchema),
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
@@ -383,6 +392,11 @@ function placeFields(steps: readonly string[]) {
       return id === undefined
         ? { kind: LINK_PLACE.SETTINGS }
         : { kind: LINK_PLACE.SETTINGS, page: id };
+    case STEP.CHAT:
+      if (rest.length > 0) return undefined;
+      return id === undefined
+        ? { kind: LINK_PLACE.CHAT }
+        : { kind: LINK_PLACE.CHAT, channelId: id };
     default:
       return undefined;
   }
@@ -461,6 +475,8 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.PERSON, place.userId];
     case LINK_PLACE.SETTINGS:
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
+    case LINK_PLACE.CHAT:
+      return place.channelId === undefined ? [STEP.CHAT] : [STEP.CHAT, place.channelId];
   }
 }
 

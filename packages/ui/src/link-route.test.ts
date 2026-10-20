@@ -20,7 +20,7 @@ const ACME = {
   github: null,
 };
 
-const WINDOW = { workspaces: [ACME], factoryOn: false };
+const WINDOW = { workspaces: [ACME], factoryOn: false, chatOn: false };
 
 test("a link to a page of Settings opens it on the workspace its slug names, where the account is in it", () => {
   assert.deepEqual(
@@ -63,6 +63,20 @@ test("a place of an experiment the account has off opens nowhere, and an automat
   assert.deepEqual(linkRoute({ workspace: "acme", place: automation }, WINDOW), {
     kind: LINK_ROUTE.TASKS,
   });
+});
+
+test("a link to Chat or one of its channels opens nowhere while the account has Chat off, and on the Plans tab once it is on", () => {
+  for (const place of [
+    { kind: LINK_PLACE.CHAT },
+    { kind: LINK_PLACE.CHAT, channelId: "c1" },
+  ] as const) {
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
+      kind: LINK_ROUTE.EXPERIMENT_OFF,
+    });
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, { ...WINDOW, chatOn: true }), {
+      kind: LINK_ROUTE.TASKS,
+    });
+  }
 });
 
 test("a task, an agent, or an Inbox item opens on the Plans tab, whatever workspace its slug names", () => {

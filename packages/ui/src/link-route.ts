@@ -13,10 +13,10 @@ import {
  * names where the account is in it, so a teammate's link to their
  * workspace's members lands on the reader's own copy of that page, or on
  * the reader's own Workspace page where they are not in it; a page the
- * window does not know opens Settings on its first. Factory's place
- * stands nowhere while its experiment is off, as every other door to it
- * does (`renderer/CLAUDE.md`'s "Experiments"), so a link to it says how to
- * turn it on instead. Every other place opens on
+ * window does not know opens Settings on its first. Factory's place, and
+ * Chat's, stand nowhere while their experiment is off, as every other door
+ * to them does (`renderer/CLAUDE.md`'s "Experiments"), so a link to either
+ * says how to turn it on instead. Every other place opens on
  * the Plans tab, whose own door checks nothing: a place the reader may not
  * read is read all the same, and its read says it is not there.
  */
@@ -43,6 +43,7 @@ export function linkRoute(
   window: {
     readonly workspaces: readonly Workspace[];
     readonly factoryOn: boolean;
+    readonly chatOn: boolean;
   },
 ): LinkRoute {
   switch (place.kind) {
@@ -63,6 +64,8 @@ export function linkRoute(
     }
     case LINK_PLACE.FACTORY:
       return window.factoryOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
+    case LINK_PLACE.CHAT:
+      return window.chatOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     default:
       return { kind: LINK_ROUTE.TASKS };
   }

@@ -2,6 +2,7 @@ import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/feature
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { CHAT_PLACE } from "@luke/ui/chat-model";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -20,7 +21,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * fills the window, else the
  * work column's agent, then the side panel's tab, then the task under them;
  * what stands in the plan's place (an agent's page, the Inbox on an item,
- * an automation, Factory) before the list it is in; and a page of Settings
+ * an automation, Factory, a channel of Chat) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
@@ -34,13 +35,14 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
  * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, Factory, or a page of Settings. The history
+ * automation or the list, Factory, Chat, or a page of Settings. The history
  * writes that link as the step's address, so the address and Copy link
- * never disagree. Chat, the Board, a new automation's page, and the home
- * page have none. A narrow room, which shows one pane at a time,
- * names the pane it shows as the step: the side panel's tab over the plan,
- * where the tab has a link, the Inbox's item standing alone, and Settings'
- * page list, whose link names no page.
+ * never disagree. Chat names its channel shown, or itself on For you. The
+ * Board, a new automation's page, and the home page have none. A narrow
+ * room, which shows one pane at a time, names the pane it shows as the
+ * step: the side panel's tab over the plan, where the tab has a link, the
+ * Inbox's item standing alone, Settings' page list, whose link names no
+ * page, and Chat's rail, whose link names no channel.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -62,6 +64,8 @@ const LINK_THING = {
   FACTORY: "Factory",
   SETTINGS: "settings page",
   PERSON: "profile",
+  CHAT: "Chat",
+  CHANNEL: "channel",
 } as const;
 
 type LinkThing = (typeof LINK_THING)[keyof typeof LINK_THING];
@@ -271,8 +275,15 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     return [at_(list, LINK_THING.AUTOMATIONS)];
   }
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
-  // Chat has no link of its own, and the task it stands over is not in sight, so it offers none.
-  if (tasks.chatView.open) return [];
+  if (tasks.chatView.open) {
+    const root = { kind: LINK_PLACE.CHAT } as const;
+    const { place } = tasks.chatView;
+    if (place.kind !== CHAT_PLACE.CHANNEL) return [at_(root, LINK_THING.CHAT)];
+    // A narrow room's rail stands alone over the channel it hides, so the rail is the step, at Chat's own link.
+    if (at.narrow === true && tasks.chatView.listed) return [at_(root, LINK_THING.CHAT)];
+    const channel: LinkPlace = { kind: LINK_PLACE.CHAT, channelId: place.channelId };
+    return [at_(channel, LINK_THING.CHANNEL), within(root, LINK_THING.CHAT)];
+  }
   // The Board has no link of its own either, on the same terms.
   if (tasks.boardView.open) return [];
   return taskLinks(tasks, at);

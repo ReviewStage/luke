@@ -56,6 +56,7 @@ import {
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
+  placeChannel,
 } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
@@ -1385,6 +1386,15 @@ export function useTasksTab(input: {
       ? undefined
       : { answer: liveChat.chat, agents: [] }
     : chat;
+  // A channel the chat as read does not hold, as a stale link's, shows Chat on For you, its root; one not read yet is still the channel.
+  const chatPlace: ChatPlace =
+    standIn?.kind !== STAND_IN.CHAT
+      ? FOR_YOU
+      : shownChat !== undefined &&
+          standIn.place.kind === CHAT_PLACE.CHANNEL &&
+          placeChannel(shownChat.answer, standIn.place) === undefined
+        ? FOR_YOU
+        : standIn.place;
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -2770,6 +2780,20 @@ export function useTasksTab(input: {
       case LINK_PLACE.FACTORY:
         standInFor({ kind: STAND_IN.FACTORY });
         return;
+      // A link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace the link names,
+      // which is the chat's own at once, so listing it first does not put Chat back on For you.
+      case LINK_PLACE.CHAT:
+        setChatWorkspace(listLinked(workspace));
+        standInFor(
+          place.channelId === undefined
+            ? { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true }
+            : {
+                kind: STAND_IN.CHAT,
+                place: { kind: CHAT_PLACE.CHANNEL, channelId: place.channelId },
+                listed: false,
+              },
+        );
+        return;
       // Settings is the window's, not the Plans tab's, so its link is opened there.
       case LINK_PLACE.SETTINGS:
         return;
@@ -3123,7 +3147,7 @@ export function useTasksTab(input: {
       chat: shownChat,
       failed: liveRun && liveChat.failed,
       onRetry: liveChat.onRetry,
-      place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
+      place: chatPlace,
       listed: standIn?.kind === STAND_IN.CHAT ? standIn.listed : true,
       onList: () =>
         setStandIn((held) => (held?.kind === STAND_IN.CHAT ? { ...held, listed: true } : held)),

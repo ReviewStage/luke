@@ -1138,6 +1138,32 @@ test("a Luke link to a person opens their page in the workspace its slug names, 
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
 });
 
+test("a Luke link to a channel opens Chat on it in the workspace its slug names, and one to Chat opens it on For you, as its sidebar row does", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const channelId = "7f3a4b5c-6d7e-4f8a-9b02-a3b4c5d6e7f8";
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+
+  act(() =>
+    tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.CHAT, channelId } }),
+  );
+  const onChannel = {
+    workspace: tab.control().workspace?.id,
+    open: tab.control().chatView.open,
+    place: tab.control().chatView.place,
+    listed: tab.control().chatView.listed,
+  };
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.CHAT } }));
+
+  assert.deepEqual(onChannel, {
+    workspace: ACME.id,
+    open: true,
+    place: { kind: CHAT_PLACE.CHANNEL, channelId },
+    listed: false,
+  });
+  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
+  assert.equal(tab.control().chatView.listed, true);
+});
+
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;

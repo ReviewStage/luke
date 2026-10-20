@@ -71,6 +71,7 @@ import { settingsRowsInput } from "./settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
+import { useChatOn } from "./tasks/chat-gate.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
@@ -372,6 +373,7 @@ export function App(): React.JSX.Element {
   useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const chatOn = useChatOn();
   const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = useMemo(
@@ -382,6 +384,7 @@ export function App(): React.JSX.Element {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
+      chatOn,
     });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);

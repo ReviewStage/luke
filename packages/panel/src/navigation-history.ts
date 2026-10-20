@@ -320,8 +320,8 @@ function samePlace(one: Place, other: Place): boolean {
 }
 
 /**
- * The address of a place with no link: the home page, Chat, the Board, a
- * new automation's page.
+ * The address of a place with no link: the home page, the Board, a new
+ * automation's page.
  * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
  * so it names no workspace's place.
  */
