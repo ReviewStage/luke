@@ -19,6 +19,7 @@
     "./credential-redaction": "./src/credential-redaction.js",
     "./sentry-addresses": "./src/sentry-addresses.js",
     "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",
+    "./sentry-early-reports": "./src/sentry-early-reports.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
     "./live-wire": "./src/live-wire.js",
