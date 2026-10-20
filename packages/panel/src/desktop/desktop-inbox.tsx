@@ -204,10 +204,12 @@ function InboxShown({
     !paneOnly,
     { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
   );
-  // Note that the item standing alone is told as one column is, so the window's history and its link step to the item shown rather than the Inbox, whatever the room's width.
+  // Note that an item standing alone is told as one column is, so the window's history and its link step to the item shown rather than the Inbox, whatever the room's width;
+  // before one stands there is no list step to tell, the list being the sidebar's, so the Inbox is no column of its own until then.
+  const itemStands = chosen !== undefined;
   useLayoutEffect(() => {
-    if (paneOnly) onSingle?.(true);
-  }, [paneOnly, onSingle]);
+    if (paneOnly) onSingle?.(itemStands);
+  }, [paneOnly, onSingle, itemStands]);
   // Note that with the list in the sidebar the place shows the item alone, measured by nothing, with no way back to a list that stays in sight.
   const columns = paneOnly
     ? { ...pageColumns, ref: undefined, shown: INBOX_COLUMNS.ITEM, onBack: undefined }

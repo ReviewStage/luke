@@ -697,3 +697,32 @@ test("a workspace's slug read after the visit moves the standing step to its add
   assert.deepEqual(window.addresses(), [`/acme/plan/${DOCUMENT_TASK.id}`]);
   assert.equal(window.history().canGoBack, false);
 });
+
+test("an Inbox told no column of its own until an item stands alone in it takes that item's step, so Back from the item leaves the Inbox rather than landing on a list no column shows", async () => {
+  const ITEM = {
+    taskId: "3c4d5e6f-0000-4000-8000-0000000000a1",
+    itemId: "3c4d5e6f-0000-4000-8000-0000000000b2",
+  };
+  const base = tasksControl({ workspace: ACME, workspaces: [ACME] });
+  const inbox = (chosen: typeof ITEM | undefined) =>
+    tasksControl({
+      workspace: ACME,
+      workspaces: [ACME],
+      inboxView: {
+        ...base.inboxView,
+        open: true,
+        chosen,
+        single: chosen !== undefined,
+        listed: false,
+      },
+    });
+  const window = mount(base);
+  await settle();
+  window.stand(inbox(undefined));
+  await settle();
+  window.stand(inbox(ITEM));
+  await settle();
+  const addresses = window.addresses();
+  assert.equal(addresses.length, 2, "the Inbox and its first item are one step");
+  assert.match(addresses.at(-1) ?? "", new RegExp(ITEM.itemId, "u"));
+});
