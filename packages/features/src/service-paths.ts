@@ -86,6 +86,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_INBOX: "/api/live/inbox",
   /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
   LIVE_TASK_BOARD: "/api/live/task-board",
+  /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_RECORD: "/api/live/task-record",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
   /**
