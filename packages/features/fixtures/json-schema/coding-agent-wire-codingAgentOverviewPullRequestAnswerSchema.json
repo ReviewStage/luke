@@ -36,6 +36,10 @@
               "type": "string",
               "maxLength": 255
             },
+            "headOwner": {
+              "type": "string",
+              "maxLength": 255
+            },
             "createdAt": {
               "type": "number",
               "minimum": 0
