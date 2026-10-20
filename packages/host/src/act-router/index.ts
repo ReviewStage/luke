@@ -5,6 +5,10 @@ import { ActRefused, type ActRouter, type ActRows, createActRouter } from "./rou
 
 export type { HostActDependencies } from "./host-act-rows.js";
 export {
+  type IssueFollowActKind,
+  issueFollowActRows,
+} from "./issue-follow-acts.js";
+export {
   ActRefused,
   type ActRouter,
   type ActRows,

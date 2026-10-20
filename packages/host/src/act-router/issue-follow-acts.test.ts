@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { IssueFollow, IssuesFollowed } from "@luke/features/issue-view";
-import type { ActSender } from "@luke/host/act-router";
-import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
-import { issueFollowActRows } from "./issue-follow-acts";
+import { ACT_KIND } from "../acts.js";
+import { issueFollowActRows } from "./issue-follow-acts.js";
+import type { ActSender } from "./router.js";
 
 /**
  * A workspace's issues followed for the panels that draw them, as main
@@ -19,9 +18,15 @@ const SCOPE: IssueFollow = { workspaceId: "workspace-1" };
 
 const CHANGED: IssuesFollowed = { workspaceId: SCOPE.workspaceId, view: { issues: [] } };
 
-// SAFETY: the rows read a sender by identity alone; one inert object is one window.
-const panelOf = (): ActSender<WebContents> => ({
-  sender: {} as WebContents,
+/** A panel, as the rows read one: by identity alone. */
+interface Panel {
+  readonly id: number;
+}
+
+let panels = 0;
+
+const panelOf = (): ActSender<Panel> => ({
+  sender: { id: ++panels },
   panel: true,
   voice: false,
   call: false,
@@ -33,10 +38,10 @@ const answered = <E>(answer: Effect.Effect<void, E> | Promise<void> | void) =>
 
 function fixture() {
   const host: string[] = [];
-  const delivered: [WebContents, IssuesFollowed][] = [];
-  const gone = new Map<WebContents, () => void>();
+  const delivered: [Panel, IssuesFollowed][] = [];
+  const gone = new Map<Panel, () => void>();
   let publish: (changed: IssuesFollowed) => void = () => undefined;
-  const rows = issueFollowActRows({
+  const rows = issueFollowActRows<Panel>({
     host: {
       issuesFollow: () => Effect.sync(() => void host.push("follow")),
       issuesUnfollow: () => Effect.sync(() => void host.push("unfollow")),
@@ -49,9 +54,8 @@ function fixture() {
     whenGone: (sender, then) => void gone.set(sender, then),
     run: Effect.runPromise,
   });
-  const follow = (panel: ActSender<WebContents>) =>
-    answered(rows[ACT_KIND.ISSUES_FOLLOW](SCOPE, panel));
-  const unfollow = (panel: ActSender<WebContents>) =>
+  const follow = (panel: ActSender<Panel>) => answered(rows[ACT_KIND.ISSUES_FOLLOW](SCOPE, panel));
+  const unfollow = (panel: ActSender<Panel>) =>
     answered(rows[ACT_KIND.ISSUES_UNFOLLOW](SCOPE, panel));
   return {
     host,
@@ -59,7 +63,7 @@ function fixture() {
     follow,
     unfollow,
     publish: (changed: IssuesFollowed) => publish(changed),
-    pageGone: (panel: ActSender<WebContents>) => gone.get(panel.sender)?.(),
+    pageGone: (panel: ActSender<Panel>) => gone.get(panel.sender)?.(),
   };
 }
 

@@ -24,6 +24,7 @@ type InProcessEventMethod = Extract<
   | "onRunFailed"
   | "onChatMessageWaiting"
   | "onShowLink"
+  | "onIssues"
 >;
 
 /** Where the shell says each one-shot event, to every subscription standing in the page. */
@@ -150,6 +151,7 @@ export function createInProcessBridge<Sender = unknown>(
       onRunFailed: listeners(report),
       onChatMessageWaiting: listeners(report),
       onShowLink: listeners(report),
+      onIssues: listeners(report),
     };
     // A page whose bridge is closed hears nothing more, whoever still holds `events`.
     yield* Effect.addFinalizer(() =>
@@ -174,6 +176,7 @@ export function createInProcessBridge<Sender = unknown>(
       onRunFailed: said.onRunFailed.subscribe,
       onChatMessageWaiting: said.onChatMessageWaiting.subscribe,
       onShowLink: said.onShowLink.subscribe,
+      onIssues: said.onIssues.subscribe,
       reportVoiceView: dropped,
       setShortcutCapturing: dropped,
       recordAgentTrace: dropped,
@@ -195,8 +198,6 @@ export function createInProcessBridge<Sender = unknown>(
       onBrowserState: neverDelivered,
       onBrowserKey: neverDelivered,
       onBrowserFocus: neverDelivered,
-      // A tab is pushed nothing: it follows no issues over Neon Realtime, and reads them once.
-      onIssues: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,
@@ -209,6 +210,7 @@ export function createInProcessBridge<Sender = unknown>(
       onRunFailed: said.onRunFailed.emit,
       onChatMessageWaiting: said.onChatMessageWaiting.emit,
       onShowLink: said.onShowLink.emit,
+      onIssues: said.onIssues.emit,
     };
     return { bridge, events };
   });

@@ -1,5 +1,5 @@
 /**
- * issue-follow-acts.ts -- a workspace's standing issues followed for the panels that draw them, and each change pushed to those panels alone.
+ * issue-follow-acts.ts -- a workspace's standing issues followed for the panels that draw them, and each change pushed to those panels alone, on whichever platform holds them.
  *
  * A panel says which workspace's issues it draws, one follow per list, and
  * lets each go when it stops; the host follows each while any panel does
@@ -17,43 +17,42 @@
  */
 
 import type { IssueFollow, IssuesFollowed } from "@luke/features/issue-view";
-import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
-import { ACT, ACT_KIND } from "@luke/host/acts";
-import type { HostOperator } from "@luke/host/host-operator";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
+import { ACT, ACT_KIND } from "../acts.js";
+import type { HostOperator } from "../host-operator.js";
+import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
-type FollowActKind = typeof ACT_KIND.ISSUES_FOLLOW | typeof ACT_KIND.ISSUES_UNFOLLOW;
+export type IssueFollowActKind = typeof ACT_KIND.ISSUES_FOLLOW | typeof ACT_KIND.ISSUES_UNFOLLOW;
 
-export interface IssueFollowActsDependencies {
+export interface IssueFollowActsDependencies<Panel> {
   host: Pick<HostOperator, "issuesFollow" | "issuesUnfollow" | "onIssuesChanged">;
   /** Sends one panel what it follows as it now stands. */
-  deliver: (sender: WebContents, changed: IssuesFollowed) => void;
+  deliver: (sender: Panel, changed: IssuesFollowed) => void;
   /** Calls `then` once, when the panel's page is gone. */
-  whenGone: (sender: WebContents, then: () => void) => void;
+  whenGone: (sender: Panel, then: () => void) => void;
   /** Runs what a page's end asks of the host, from the page's own callback. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
 }
 
 /** One followed list: how many follows each panel holds of it, and its last word, once there is one. */
-interface Followed {
-  readonly panels: Map<WebContents, number>;
+interface Followed<Panel> {
+  readonly panels: Map<Panel, number>;
   last: IssuesFollowed | undefined;
 }
 
 /** The refusal a window that draws no Issues page hears, in its kind's own words. */
-function refuseUnlessPanel(kind: FollowActKind, sender: ActSender<WebContents>): void {
+function refuseUnlessPanel<Panel>(kind: IssueFollowActKind, sender: ActSender<Panel>): void {
   if (!sender.panel) throw new ActRefused({ message: ACT[kind].refusal });
 }
 
-export function issueFollowActRows(
-  dependencies: IssueFollowActsDependencies,
-): Pick<ActRows<WebContents>, FollowActKind> {
+export function issueFollowActRows<Panel>(
+  dependencies: IssueFollowActsDependencies<Panel>,
+): Pick<ActRows<Panel>, IssueFollowActKind> {
   const { host, deliver, whenGone, run } = dependencies;
   /** Everything followed, by its workspace. */
-  const followed = new Map<string, Followed>();
+  const followed = new Map<string, Followed<Panel>>();
   /** The panels whose page's end is watched, so it is watched once. */
-  const watched = new Set<WebContents>();
+  const watched = new Set<Panel>();
 
   host.onIssuesChanged((changed) => {
     const held = followed.get(changed.workspaceId);
@@ -63,7 +62,7 @@ export function issueFollowActRows(
   });
 
   /** One follow of the panel's let go, and the host's let go once no panel holds one. */
-  const release = (scope: IssueFollow, panel: WebContents, all: boolean) =>
+  const release = (scope: IssueFollow, panel: Panel, all: boolean) =>
     Effect.suspend(() => {
       const held = followed.get(scope.workspaceId);
       const count = held?.panels.get(panel);
@@ -76,7 +75,7 @@ export function issueFollowActRows(
     });
 
   /** Everything the panel followed let go, as its page is gone. */
-  const gone = (panel: WebContents) => {
+  const gone = (panel: Panel) => {
     watched.delete(panel);
     const scopes = [...followed.entries()].flatMap(([workspaceId, held]) =>
       held.panels.has(panel) ? [{ workspaceId }] : [],

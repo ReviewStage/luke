@@ -32,6 +32,8 @@ import {
 import {
   createHostActRouter,
   type HostActDependencies,
+  type IssueFollowActKind,
+  issueFollowActRows,
   type PlatformActRows,
   refusedRows,
 } from "@luke/host/act-router";
@@ -251,6 +253,7 @@ const noticeDoors = (
 function platformRows(
   http: HttpClient.HttpClient,
   doors: WebNoticeDoors,
+  follows: Pick<PlatformActRows<WebSender>, IssueFollowActKind>,
 ): PlatformActRows<WebSender> {
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
   return {
@@ -264,9 +267,7 @@ function platformRows(
     [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
       Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
-    // A tab is pushed no issues: it follows none over Neon Realtime, and reads them once.
-    [ACT_KIND.ISSUES_FOLLOW]: () => undefined,
-    [ACT_KIND.ISSUES_UNFOLLOW]: () => undefined,
+    ...follows,
   };
 }
 
@@ -437,7 +438,21 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
         routerFor: () =>
-          createHostActRouter(hostRowDependencies(operator), platformRows(http, doors)),
+          createHostActRouter(
+            hostRowDependencies(operator),
+            platformRows(
+              http,
+              doors,
+              // The tab's issues are followed at the host and each change said to the page, which is
+              // the tab's one panel and is gone only with the host.
+              issueFollowActRows<WebSender>({
+                host: operator.host,
+                deliver: (_page, changed) => events?.onIssues(changed),
+                whenGone: () => undefined,
+                run,
+              }),
+            ),
+          ),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),
