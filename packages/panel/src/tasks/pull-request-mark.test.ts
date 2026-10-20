@@ -12,9 +12,9 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
-import { ChangesCard } from "./agent-changes-tab.js";
 import { PublishedRow } from "./agent-published.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { ChangesCard } from "./changes-card.js";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the

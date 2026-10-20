@@ -646,6 +646,52 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.deepEqual(closed, ["closed"]);
 });
 
+test("while Factory's chunk is still loading its frame stands under its title, Escape closes Factory, and the line stands once the chunk lands", async () => {
+  const closed: string[] = [];
+  const factoryView = { open: true, onOpen: ignore, onClose: () => closed.push("closed") };
+  const registry = AtomRegistry.make();
+  handState(experimentsOn(EXPERIMENT.FACTORY));
+  mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME },
+    PANEL_TAB.TASKS,
+    ignore,
+    {},
+    registry,
+  );
+  await settle();
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  // Note that the window's state has landed in the registry, so Factory opens within one render, before its chunk can.
+  const page = mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME, factoryView },
+    PANEL_TAB.TASKS,
+    ignore,
+    {},
+    registry,
+  );
+  const loading = page.querySelector("section[aria-label=Factory]");
+  assert.ok(loading, "Factory's frame stands");
+  assert.equal(loading.querySelector("h1")?.textContent, "Factory");
+  assert.equal(loading.querySelector("[role=status]")?.textContent, "Reading tasks…");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_FACTORY), "Factory's way out is offered");
+  });
+  assert.deepEqual(closed, ["closed"]);
+
+  await import("./desktop-factory.js");
+  await settle();
+  assert.equal(
+    page.querySelector("section[aria-label=Factory] [role=status]"),
+    null,
+    "the line stands in the frame's place",
+  );
+});
+
 test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
   const closed: string[] = [];
   const automationsView = {
@@ -796,11 +842,17 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
 
 /**
  * The bridge as the window meets it, every act written down, with Factory
- * on, and Settings' chunk already loaded, as it is
- * once Settings has opened once, so it stands within a settle.
+ * on, and the chunks of Settings and of the pages drawn on demand
+ * (`pages-on-demand.ts`) already loaded, as each is once it has opened once,
+ * so each stands within a settle.
  */
 async function handBridge(): Promise<void> {
-  await import("./desktop-settings.js");
+  await Promise.all([
+    import("./desktop-settings.js"),
+    import("./desktop-factory.js"),
+    import("./desktop-version-history.js"),
+    import("./person-page.js"),
+  ]);
   handState(experimentsOn(EXPERIMENT.FACTORY));
   sentActs = [];
   const bridge = appBridge();
