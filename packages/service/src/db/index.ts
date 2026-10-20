@@ -19,7 +19,7 @@ const ALIASED_SSL_MODE = /(^|&)sslmode=(?:prefer|require|verify-ca)(?=&|$)/;
  * connection. A string asking for `uselibpqcompat=true` has chosen libpq's
  * own semantics, which are weaker, so it is left as it is.
  */
-export function withExplicitSslMode(connectionString: string): string {
+function withExplicitSslMode(connectionString: string): string {
   const queryAt = connectionString.indexOf("?");
   if (queryAt === -1) {
     return connectionString;
