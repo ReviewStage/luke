@@ -34,6 +34,7 @@ export const SETTINGS_SEARCH_ROW = {
   CODING_AGENT_MODEL: "coding-agent-model",
   CODING_AGENT_EFFORT: "coding-agent-effort",
   CODING_AGENT_FAST: "coding-agent-fast",
+  CHAPTERS_MODEL: "chapters-model",
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
 } as const;

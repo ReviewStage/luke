@@ -184,11 +184,14 @@ export const BROWSER_ACT_KIND = {
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
  * read as its workspace keeps them, and generated for its head on Luke's own
  * model key when the developer presses Generate, the generation answered
- * once it lands, which may take minutes.
+ * once it lands, which may take minutes; and Settings' choice of the Claude
+ * model the member's Generate runs on, read and written.
  */
 export const CHAPTERS_ACT_KIND = {
   CHAPTERS_READ: "chapters.read",
   CHAPTERS_GENERATE: "chapters.generate",
+  CHAPTERS_MODEL_READ: "chapters.modelRead",
+  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
 /** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */

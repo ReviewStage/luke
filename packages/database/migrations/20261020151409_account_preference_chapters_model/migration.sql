@@ -1,0 +1,1 @@
+ALTER TABLE "account_preference" ADD COLUMN "chapters_model" text;

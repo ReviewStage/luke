@@ -15,6 +15,7 @@ import {
 } from "./account-call.js";
 import { ACCOUNT_INBOX_ARCHIVED } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
+import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import {
   CHAT_ATTACHMENT_QUERY,
   CHAT_QUERY,
@@ -108,6 +109,7 @@ import {
 import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
 import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
 import {
+  type ChaptersModelAnswerView,
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "./pull-request-chapters-view.js";
@@ -335,6 +337,26 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): CodingAgentDefa
   return choice === undefined ? UNANSWERED : { choice };
 }
 
+/** The chapters model as nothing the window can show: the call never answered, or answered no model this build offers. */
+const CHAPTERS_MODEL_UNANSWERED = {
+  failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
+} as const;
+
+/** The chapters model read off the preferences snapshot, or unanswered where it carries none this build offers. */
+function chaptersModelAnswerOf(
+  asked: Effect.Effect<AccountPreferencesAnswerWire, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
+  return Effect.match(asked, {
+    onFailure: () => CHAPTERS_MODEL_UNANSWERED,
+    onSuccess: (read) => {
+      const model = Option.getOrUndefined(
+        Schema.decodeUnknownOption(chaptersModelSchema)(read.chaptersModel),
+      );
+      return model === undefined ? CHAPTERS_MODEL_UNANSWERED : { model };
+    },
+  });
+}
+
 /**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
@@ -386,6 +408,20 @@ export class HostedCodingAgentClient {
     return Effect.map(
       hostedAnswer(askHosted(this.#hosted.account.writePreferences, admitted), DEFAULT_REFUSALS),
       defaultOf,
+    );
+  }
+
+  /** The Claude model the account's Generate chapters runs on, read off the preferences snapshot. */
+  readChaptersModel(): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
+    return chaptersModelAnswerOf(askHosted(this.#hosted.account.preferences, undefined));
+  }
+
+  /** The account's chapters model written on its own, answering it as kept. */
+  writeChaptersModel(
+    model: ChaptersModelId,
+  ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
+    return chaptersModelAnswerOf(
+      askHosted(this.#hosted.account.writePreferences, { chaptersModel: model }),
     );
   }
 

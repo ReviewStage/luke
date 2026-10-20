@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   createCodingAgent,
   updateCodingAgentBranch,
@@ -10,8 +11,10 @@ import {
   CHAPTER_CLAIM_OUTCOME,
   claimChapterGeneration,
 } from "@luke/database/models/pull-request-chapters-store";
+import { accountPreference } from "@luke/database/schemas/preferences";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { CHAPTER_KIND, CHAPTER_RISK } from "@luke/features/pull-request-chapters";
 import {
@@ -23,6 +26,7 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { MockLanguageModelV4 } from "ai/test";
+import { eq } from "drizzle-orm";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { requestUserId } from "../auth/bearer.js";
@@ -50,11 +54,15 @@ import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedure
  * answers the pull request's head now beside the workspace's newest
  * chapters; a Generate claims the head, tells the chapters on a scripted
  * model, lands them or the kind they failed with, and counts the outcome by
- * counts alone; a claim another request holds answers as generating without
+ * counts alone, on the model the member who pressed it chose in Settings,
+ * Haiku where they never chose or stored one no build offers; a claim another request holds answers as generating without
  * asking the model; and a deployment with no model key answers unavailable.
  * GitHub is a script, the model a mock, the store PGlite. Synthetic
  * accounts, repositories, and words throughout.
  */
+
+// SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
+const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
 const ORIGIN = "https://luke.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -264,7 +272,9 @@ const standing = (
             },
             () => Effect.succeed(Option.none()),
           ),
-        chaptersModel: () => (options.keyless ? undefined : model.chaptersModel),
+        // The scripted model answers under the id it was asked for, as the store then names it.
+        chaptersModel: (_key, modelId) =>
+          options.keyless ? undefined : { ...model.chaptersModel, id: modelId },
       }),
     });
     const ask = (
@@ -394,7 +404,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           status: PULL_REQUEST_CHAPTERS_STATE.READY,
           headSha: HEAD,
           baseSha: BASE,
-          model: "scripted",
+          model: CHAPTERS_MODEL.HAIKU,
           chapters: [{ kind: CHAPTER_KIND.STORY, ...TOLD.chapters[0] }],
         };
         assert.deepEqual(generated, {
@@ -523,5 +533,39 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         );
         assert.equal(model.asked(), 0);
       }),
+  );
+
+  it.effect(
+    "a Generate runs on the model the member who pressed it chose in Settings, not another member's",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, ask } = yield* standing();
+        yield* writeAccountPreferences(owner, { chaptersModel: CHAPTERS_MODEL.SONNET });
+        yield* writeAccountPreferences(teammate, { chaptersModel: CHAPTERS_MODEL.OPUS });
+        const answer = chaptersOf(yield* ask(teammate, { method: "POST", number: NUMBER }));
+        const chapters = answer.pullRequest?.chapters;
+        assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
+        assert.equal("model" in chapters ? chapters.model : undefined, CHAPTERS_MODEL.OPUS);
+        // The chapters stay the workspace's: the owner reads the ones the teammate's model told.
+        assert.deepEqual(chaptersOf(yield* ask(owner, { number: NUMBER })), answer);
+      }),
+  );
+
+  it.effect("a Generate by a member whose stored model no build offers runs on Haiku", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* standing();
+      yield* writeAccountPreferences(owner, { chaptersModel: CHAPTERS_MODEL.OPUS });
+      const db = yield* Database;
+      yield* db
+        .update(accountPreference)
+        .set({ chaptersModel: RETIRED_MODEL })
+        .where(eq(accountPreference.userId, owner));
+      const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
+      const chapters = answer.pullRequest?.chapters;
+      assert.equal(
+        chapters !== undefined && "model" in chapters ? chapters.model : undefined,
+        CHAPTERS_MODEL.HAIKU,
+      );
+    }),
   );
 });

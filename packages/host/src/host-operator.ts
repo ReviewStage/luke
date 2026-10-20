@@ -143,6 +143,9 @@ import {
 } from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
+  type ChaptersModelAnswerView,
+  type ChaptersModelWriteParams,
+  chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   pullRequestChaptersAnswerViewSchema,
@@ -605,6 +608,10 @@ export interface HostOperator {
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
+  /** The Claude model the account's Generate chapters runs on, read from the service; or why there is none. */
+  chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
+  /** The account's chapters model written to the service; the model as kept, or why it is unchanged. */
+  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
     params: CodingAgentPullRequestReadParams,
@@ -1792,6 +1799,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           pullRequestChaptersRead(params),
         ),
         codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
+      ),
+    chaptersModelRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_READ),
+        codingAgentAnswer(chaptersModelAnswerViewSchema),
+      ),
+    chaptersModelWrite: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
+        codingAgentAnswer(chaptersModelAnswerViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CHAPTER_KIND, CHAPTER_RISK } from "@luke/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
@@ -17,7 +18,8 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * The Pull request tab's chapters acts, through the act port as a window
  * calls them: a panel's read and Generate reach the host with the pull
  * request the tab names, and the panel hears the chapters or why there are
- * none; the voice and call windows, and a frame this build does not trust,
+ * none; Settings' read and write of the chapters model reach it the same
+ * way, a model outside the set refused at the port; the voice and call windows, and a frame this build does not trust,
  * are refused in each kind's own words before the host is asked; and an
  * answer the kind's schema does not admit is refused rather than handed to
  * the tab. Synthetic ids and words.
@@ -34,6 +36,8 @@ const AGENT_ID = "6b1f3c2e-9d4a-4f1b-8c7d-2e3f4a5b6c7d";
 
 const READ_REFUSAL = "Could not read the pull request's chapters on this system.";
 const GENERATE_REFUSAL = "Could not generate the pull request's chapters on this system.";
+const MODEL_READ_REFUSAL = "Could not read the chapters model on this system.";
+const MODEL_WRITE_REFUSAL = "Could not change the chapters model on this system.";
 
 /** Chapters made for the pull request's head. */
 const READY: PullRequestChaptersAnswerView = {
@@ -85,6 +89,16 @@ function windowPort(
       host: {
         pullRequestChapters: answering("read"),
         pullRequestChaptersGenerate: answering("generate"),
+        chaptersModelRead: () =>
+          Effect.sync(() => {
+            asked.push("model");
+            return { model: CHAPTERS_MODEL.HAIKU };
+          }),
+        chaptersModelWrite: ({ model }) =>
+          Effect.sync(() => {
+            asked.push(`model-write:${model}`);
+            return { model };
+          }),
       },
     }),
   );
@@ -95,6 +109,10 @@ function windowPort(
       settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_READ](params)),
     generate: (params: PullRequestChaptersParams) =>
       settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_GENERATE](params)),
+    readModel: () => settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_MODEL_READ](undefined)),
+    writeModel: (model: string) =>
+      // SAFETY: a model is written as a window might send it, one the kind's schema may refuse.
+      settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_MODEL_WRITE]({ model } as never)),
     asked,
   };
 }
@@ -134,4 +152,22 @@ it("a failure word crosses as the answer, and an answer the schema does not admi
     answer: { pullRequest: { ...READY.pullRequest, headSha: "" } } as PullRequestChaptersAnswerView,
   });
   assert.deepEqual(await broken.read({ agentId: AGENT_ID }), { refused: READ_REFUSAL });
+});
+
+it("a panel reads and writes the chapters model, and a model outside the set is refused before the host is asked", async () => {
+  const { readModel, writeModel, asked } = windowPort(PANEL);
+
+  assert.deepEqual(await readModel(), { answer: { model: CHAPTERS_MODEL.HAIKU } });
+  assert.deepEqual(await writeModel(CHAPTERS_MODEL.OPUS), {
+    answer: { model: CHAPTERS_MODEL.OPUS },
+  });
+  assert.deepEqual(await writeModel("gpt-5.5"), { refused: MODEL_WRITE_REFUSAL });
+  assert.deepEqual(asked, ["model", `model-write:${CHAPTERS_MODEL.OPUS}`]);
+});
+
+it("the voice window is refused the chapters model in each kind's own words", async () => {
+  const { readModel, writeModel, asked } = windowPort(VOICE);
+  assert.deepEqual(await readModel(), { refused: MODEL_READ_REFUSAL });
+  assert.deepEqual(await writeModel(CHAPTERS_MODEL.OPUS), { refused: MODEL_WRITE_REFUSAL });
+  assert.deepEqual(asked, []);
 });
