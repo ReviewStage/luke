@@ -275,4 +275,20 @@ describe("verdict", () => {
 
     expect(conditions.every((each) => !each.pass)).toBe(true);
   });
+
+  it("fails the resume when the resumed turn said its closing words but ended in an error", () => {
+    expect(
+      failing(
+        verdict(
+          observations({
+            resumedLaunch: [
+              init(SESSION),
+              said(`luke-probe/${NONCE}.txt\n${TURN_DONE.RESUMED}`),
+              result(SESSION, "error_during_execution"),
+            ],
+          }),
+        ),
+      ),
+    ).toEqual(["a relaunch with resume continued the session"]);
+  });
 });

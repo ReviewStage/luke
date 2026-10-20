@@ -68,6 +68,15 @@ export const PROBE_ENV = {
   MODEL: "LUKE_PROBE_MODEL",
 } as const;
 
+/** GitHub's own spelling of `owner/name`: an owner of letters, digits and hyphens, a name of letters, digits, `.`, `_` and `-`. */
+const REPOSITORY_NAME = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
+
+/** Whether the text names exactly one repository as `owner/name`, so the clone URL and the firewall's path reach that one and no other. */
+export function isRepositoryName(text: string): boolean {
+  const name = text.split("/")[1] ?? "";
+  return REPOSITORY_NAME.test(text) && name !== "." && name !== ".." && !name.endsWith(".git");
+}
+
 /** The variable the CLI reads its plan token from, set in its own process alone. */
 export const CLAUDE_TOKEN_VARIABLE = "CLAUDE_CODE_OAUTH_TOKEN";
 
