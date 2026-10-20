@@ -2010,6 +2010,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
           ...(params.answers === undefined ? undefined : { answers: params.answers }),
+          ...(params.revision === undefined ? undefined : { revision: params.revision }),
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),

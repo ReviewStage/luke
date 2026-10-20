@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BOUNDS,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxItem,
@@ -47,6 +48,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import {
   attachedAnswers,
   attachedStamp,
+  awaitsNod,
   type InboxDraft,
   type InboxMissing,
   inboxMessageOf,
@@ -122,7 +124,11 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * attaches it over the words as a stamp, its glyph and its words with a ×
  * that takes it off, a muted line beside it saying the send answers the
  * ask, and the button takes the answer's name, "Approve" or "Mark done"; the
- * reply then carries the answer with the reader's words and files.
+ * reply then carries the answer with the reader's words and files. A
+ * thread that asks nothing while it stands open, a notice, waits on the
+ * reader's nod: its button reads Got it while the box holds nothing,
+ * which settles it without messaging the agent, and Reply once it holds
+ * words or files, which settles it as the reply reaches the agent.
  */
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
@@ -336,6 +342,8 @@ function AnswerCard({
   const asking = thread === undefined ? undefined : openAskOf(thread);
   const attached = asking === undefined ? undefined : attachedAnswers(asking, draft);
   const stamp = attached === undefined ? undefined : attachedStamp(attached, asking?.ask);
+  const notice = thread !== undefined && awaitsNod(item, thread);
+  const nod = notice && draft.note.trim() === "" && draft.attachments.length === 0;
   // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end, as a thread's Reply is.
   const namedSend =
     thread !== undefined || (answering && item.response.type === INBOX_RESPONSE.NONE);
@@ -397,6 +405,10 @@ function AnswerCard({
     setRefusal(undefined);
     control.onMessage(item, draft);
   };
+  const acknowledge = () => {
+    setRefusal(undefined);
+    control.onAnswer(item, draft, INBOX_REPLY.ACKNOWLEDGED);
+  };
   const attach = (files: readonly File[]) => {
     if (files.length === 0) return;
     const { revision } = item;
@@ -423,9 +435,11 @@ function AnswerCard({
   };
   const quiet = answering
     ? openQuietLine(item, draft, wanting)
-    : asking !== undefined && stamp === undefined
-      ? { line: ASK_LINE.KEPT, wanting: false }
-      : undefined;
+    : notice
+      ? { line: quietLine(draft), wanting: false }
+      : asking !== undefined && stamp === undefined
+        ? { line: ASK_LINE.KEPT, wanting: false }
+        : undefined;
   const sendable =
     thread === undefined
       ? inboxMessageOf(draft) !== undefined
@@ -463,6 +477,7 @@ function AnswerCard({
           onSubmit={() => {
             if (reading > 0) return;
             if (answering) send();
+            else if (nod) acknowledge();
             else message();
           }}
         >
@@ -556,9 +571,9 @@ function AnswerCard({
                       variant={BUTTON_VARIANT.INK}
                       busy={sending}
                       busyLabel="Sending"
-                      disabled={reading > 0 || !sendable}
+                      disabled={reading > 0 || !(sendable || nod)}
                     >
-                      {stamp?.words ?? REPLY}
+                      {nod ? NOTE_SEND.NOD : (stamp?.words ?? REPLY)}
                       <Shortcut chord={{ key: SHORTCUT_KEY.ENTER, bare: true }} />
                     </Button>
                   ) : (

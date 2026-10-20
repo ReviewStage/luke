@@ -123,6 +123,10 @@
         "reply"
       ],
       "additionalProperties": false
+    },
+    "revision": {
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [

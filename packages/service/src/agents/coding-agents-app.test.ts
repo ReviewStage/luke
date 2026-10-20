@@ -5581,6 +5581,56 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "a notice waits on the account until Got it settles it, which messages nobody, and a reply with words settles another as it reaches the agent",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, agent, answer, message, waiting } = yield* openInbox(eve);
+        const owned = { userId: owner, taskId: task.id, agentId: agent.id };
+        const notice = (key: string) =>
+          postInboxThread(owned, {
+            key,
+            title: "The preview is up",
+            body: "It deploys from main.",
+          });
+        const nodded = yield* notice("preview-nod");
+        const replied = yield* notice("preview-reply");
+        assert.ok(Result.isSuccess(nodded) && Result.isSuccess(replied));
+        const waitingIds = Effect.map(waiting(), (read) =>
+          read.items.map((item) => item.id).sort(),
+        );
+        assert.deepEqual(yield* waitingIds, [nodded.success.id, replied.success.id].sort());
+        const before = eve.sent.length;
+
+        const pressed = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(nodded.success.id, {
+            revision: nodded.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.ACKNOWLEDGED,
+          }),
+        );
+        assert.deepEqual([pressed.taken, pressed.item.status], [true, INBOX_STATUS.ANSWERED]);
+        assert.equal(eve.sent.length, before, "Got it messages nobody");
+
+        const sent = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(replied.success.id, {
+            text: "Nice work.",
+            clientKey: randomUUID(),
+            revision: replied.success.revision,
+          }),
+        );
+        assert.equal(sent.item.status, INBOX_STATUS.ANSWERED);
+        assert.equal(eve.sent.length, before + 1, "a reply with words reaches the agent");
+        assert.ok(JSON.stringify(eve.sent.at(-1)?.message.message).includes("Nice work."));
+        assert.deepEqual(yield* waitingIds, []);
+      }),
+  );
+
+  it.effect(
     "an answer carrying a file and no note reaches the agent with the file, even from an item that asks nothing back, and the item names the file it kept",
     () =>
       Effect.gen(function* () {

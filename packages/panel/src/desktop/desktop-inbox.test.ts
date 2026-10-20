@@ -6009,6 +6009,61 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
   ]);
 });
 
+test("a notice's box reads Got it while it holds nothing, which answers the notice at its revision and writes no message; with words it reads Reply, and the reply names the notice's revision", async () => {
+  const said: InboxMessage = {
+    id: "e1b2c3d4-0000-4000-8000-000000000020",
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text: "The preview is up.",
+    createdAt: 1_000,
+  };
+  const shown = threadItem([said], {
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    revision: 4,
+  });
+  const pane = await mountThread(shown);
+  const answered: CodingAgentInboxAnswerParams[] = [];
+  const messaged: CodingAgentInboxMessageParams[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+        answered.push(request.payload);
+        // Unanswered, so the box stands open again for the reply below.
+        const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      messaged.push(request.payload);
+      return new Promise(() => undefined);
+    },
+  });
+  const submit = () =>
+    act(() =>
+      pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+    );
+
+  assert.equal(sendWords(pane), "Got it");
+  submit();
+  await settle();
+  assert.deepEqual(
+    answered.map(({ revision, reply }) => ({ revision, reply })),
+    [{ revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED }],
+  );
+
+  typeInComposer(pane, "Looks right.");
+  assert.equal(sendWords(pane), "Reply");
+  submit();
+  await settle();
+  assert.deepEqual(
+    messaged.map(({ text, revision }) => ({ text, revision })),
+    [{ text: "Looks right.", revision: 4 }],
+  );
+  assert.equal(answered.length, 1, "the reply is no second answer");
+});
+
 test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);

@@ -22,6 +22,7 @@ import { test } from "vitest";
 import {
   ANSWER_TONE,
   attachedStamp,
+  awaitsNod,
   CODE_READ,
   codeNotice,
   codeReadOf,
@@ -1472,6 +1473,34 @@ test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn
   const titled = { type: INBOX_ASK.DO, steps: [] } as const;
   assert.deepEqual(shownTicks(titled, done), [0], "the title standing as the one step is ticked");
   assert.deepEqual(inboxThreadSend([asking(titled)], done)?.answers?.steps, []);
+});
+
+test("a notice, open and asking nothing with no ask open on its thread, waits on the reader's nod, which Got it answers; a thread whose ask is open, or one settled, waits on none", () => {
+  const said: InboxMessage = {
+    id: "b1b2c3d4-0000-4000-8000-000000000010",
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text: "The preview is up.",
+    createdAt: 1_000,
+  };
+  const notice = item({
+    id: "a1b2c3d4-0000-4000-8000-000000000010",
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    thread: [said],
+  });
+
+  assert.equal(awaitsNod(notice, [said]), true);
+  assert.deepEqual(inboxReply(notice, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED), {
+    reply: INBOX_REPLY.ACKNOWLEDGED,
+  });
+  const asked = asking({ type: INBOX_ASK.ANSWER });
+  assert.equal(awaitsNod({ ...notice, response: { type: INBOX_RESPONSE.TEXT } }, [asked]), false);
+  assert.equal(
+    awaitsNod(notice, [said, asked]),
+    false,
+    "an ask open on the thread is answered, not nodded to",
+  );
+  assert.equal(awaitsNod({ ...notice, status: INBOX_STATUS.ANSWERED }, [said]), false);
 });
 
 test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {
