@@ -57,6 +57,7 @@ import {
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
+  placeAgentPair,
   placeChannel,
 } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
@@ -1454,6 +1455,19 @@ export function useTasksTab(input: {
         : held,
     );
   }, [shownChannel, heldAnswer, liveRun]);
+  // A pair of agents shown that a read answered since holds no line of puts Chat back on For you, as a vanished channel does.
+  // Note that every answer carries the agents' lines whole, so the answer held is always the one to settle it by.
+  const shownPair =
+    standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.AGENT_PAIR
+      ? standIn.place
+      : undefined;
+  useEffect(() => {
+    if (shownPair === undefined || heldAnswer === undefined) return;
+    if (placeAgentPair(heldAnswer, shownPair) !== undefined) return;
+    setStandIn((held) =>
+      held?.kind === STAND_IN.CHAT && held.place === shownPair ? { ...held, place: FOR_YOU } : held,
+    );
+  }, [shownPair, heldAnswer]);
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after

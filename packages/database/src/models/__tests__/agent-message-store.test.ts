@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
@@ -32,8 +33,13 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** An agent the account starts on a new task of the workspace, titled as given. */
-const openAgent = (userId: string, organizationId: string, title: string) =>
+/** An agent the account starts on a new task of the workspace, titled as given, on the workspace's App unless its own token is asked. */
+const openAgent = (
+  userId: string,
+  organizationId: string,
+  title: string,
+  githubAccess: GitHubAccess = GITHUB_ACCESS.APP,
+) =>
   Effect.gen(function* () {
     const { id: taskId } = yield* createTask(userId, {
       organizationId,
@@ -49,6 +55,7 @@ const openAgent = (userId: string, organizationId: string, title: string) =>
       prompt: null,
       repository: "acme/api",
       title,
+      githubAccess,
     });
     return Option.getOrThrow(started).agent;
   });
@@ -134,6 +141,40 @@ it.layer(getTestDB())("the agent message store", (it) => {
         });
         assert.ok((read[0]?.sentAt.getTime() ?? 0) < (read[1]?.sentAt.getTime() ?? 0));
         assert.deepEqual(yield* agentMessagesOf(stranger, workspace), []);
+      }),
+  );
+
+  it.effect(
+    "a line to or from an agent on its starter's own token reads for its starter alone, never for a teammate who does not read its repository",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const charles = yield* openAccount;
+        const workspace = yield* openWorkspace(dean);
+        yield* joinWorkspace(workspace, charles);
+        const invites = yield* openAgent(dean, workspace, "Invites", GITHUB_ACCESS.TOKEN);
+        const billing = yield* openAgent(dean, workspace, "Billing");
+        const writer = yield* storeWriter({ tools: {} });
+        const send = (from: Agent, to: Agent, text: string) =>
+          Effect.andThen(
+            TestClock.adjust("1 second"),
+            writer.writeAwaitingLine(
+              { userId: to.userId, conversationId: to.conversationId },
+              {
+                text,
+                clientKey: randomUUID(),
+                sender: { kind: MESSAGE_SENDER.AGENT, agentId: from.id, name: from.title ?? "" },
+              },
+              Effect.succeed(true),
+            ),
+          );
+        yield* send(invites, billing, "From the private agent");
+        yield* send(billing, invites, "To the private agent");
+        assert.deepEqual(
+          (yield* agentMessagesOf(dean, workspace)).map((message) => message.text),
+          ["From the private agent", "To the private agent"],
+        );
+        assert.deepEqual(yield* agentMessagesOf(charles, workspace), []);
       }),
   );
 

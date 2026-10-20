@@ -547,12 +547,22 @@ function seenThroughGitHub(userId: string, row: GitHubReachedColumns): SQL {
   return sql`(${eq(row.access, GITHUB_ACCESS.APP)} or ${eq(row.owner, userId)} or ${readsRepository})`;
 }
 
-/** The condition that the account sees the coding agent row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
-export function agentSeenBy(userId: string): SQL {
+/**
+ * The condition that the account sees the coding agent row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already;
+ * the row read through an alias of the agents' table where a statement reads two agents.
+ */
+export function agentSeenBy(
+  userId: string,
+  agent: {
+    readonly githubAccess: SQLWrapper;
+    readonly userId: SQLWrapper;
+    readonly repository: SQLWrapper;
+  } = codingAgent,
+): SQL {
   return seenThroughGitHub(userId, {
-    access: codingAgent.githubAccess,
-    owner: codingAgent.userId,
-    repository: codingAgent.repository,
+    access: agent.githubAccess,
+    owner: agent.userId,
+    repository: agent.repository,
   });
 }
 

@@ -2955,6 +2955,63 @@ test("a channel link the chat held before it was opened does not hold stands unt
   });
 });
 
+test("a pair of agents shown stands while the chat's reads hold a line between them, and goes back to For you once a read holds none", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const [invites, billing] = [
+    "a9a9a9a9-0000-4000-8000-000000000001",
+    "a9a9a9a9-0000-4000-8000-000000000002",
+  ];
+  const agent = (agentId: string, name: string) => ({ agentId, name, model: "openai/gpt-6.1-sol" });
+  /** The chat as one read answers it, holding the pair's one line or none. */
+  const answerOf = (cursor: number, withLine: boolean) => ({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: [],
+    messages: [],
+    cursor: String(cursor),
+    agentMessages: withLine
+      ? [
+          {
+            id: "f0f0f0f0-0000-4000-8000-000000000001",
+            from: agent(invites, "Invites"),
+            to: agent(billing, "Billing"),
+            text: "Merged.",
+            sentAt: 1,
+          },
+        ]
+      : [],
+  });
+  const second = Promise.withResolvers<ReturnType<typeof answerOf>>();
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(answerOf(1, true));
+        return reads === 2 ? second.promise : new Promise(() => undefined);
+      },
+    },
+    AtomRegistryModule.make(),
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().chatView.chat, "the chat landed");
+  });
+  const pair = { kind: CHAT_PLACE.AGENT_PAIR, agentIds: [invites, billing] } as const;
+  act(() => tab.control().chatView.onShow(pair));
+  await settle();
+  assert.deepEqual(tab.control().chatView.place, pair);
+
+  second.resolve(answerOf(2, false));
+  await vi.waitFor(async () => {
+    await settle();
+    assert.deepEqual(tab.control().chatView.place, FOR_YOU);
+  });
+});
+
 test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },

@@ -9,7 +9,7 @@ import { conversations, messages } from "../schemas/storage.js";
 import { MESSAGE_SENDER } from "../storage-vocabulary.js";
 import type { ChatStoreEffect } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
-import { isWorkspaceMember } from "./workspace-store.js";
+import { agentSeenBy, isWorkspaceMember } from "./workspace-store.js";
 
 /**
  * agent-message-store.ts -- the lines one coding agent sent another of its workspace, read for a person watching them talk.
@@ -30,7 +30,11 @@ import { isWorkspaceMember } from "./workspace-store.js";
  * was kept, an agent's own reply in its own transcript, and a line from a
  * person, Luke, an automation, or GitHub are none, and nothing is guessed
  * from a name or from the words. A person reads them only while a member
- * of the workspace, and an agent of a deleted conversation is read as gone.
+ * of the workspace, and only where they see both agents as their GitHub
+ * access allows (`agentSeenBy`): an agent on its starter's own token is
+ * seen by its starter and by a member whose own verified token reads its
+ * repository, so a line to or from one is hidden from everyone else. An
+ * agent of a deleted conversation is read as gone.
  */
 
 /** The most lines one read answers: the newest, which a window shows oldest first. */
@@ -62,9 +66,13 @@ const AgentMessageRowSchema = Schema.Struct({
 type AgentMessageRow = typeof AgentMessageRowSchema.Type;
 
 const findAgentMessages = SqlSchema.findAll({
-  Request: Schema.Struct({ organizationId: Schema.String, limit: Schema.Number }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    limit: Schema.Number,
+  }),
   Result: AgentMessageRowSchema,
-  execute: ({ organizationId, limit }) =>
+  execute: ({ userId, organizationId, limit }) =>
     Database.use((db) =>
       db
         .select({
@@ -101,6 +109,8 @@ const findAgentMessages = SqlSchema.findAll({
           and(
             eq(codingAgent.organizationId, organizationId),
             eq(sender.organizationId, organizationId),
+            agentSeenBy(userId),
+            agentSeenBy(userId, sender),
             eq(messages.role, MESSAGE_ROLE.USER),
             eq(messages.sender, MESSAGE_SENDER.AGENT),
             isNotNull(messages.senderAgentId),
@@ -156,7 +166,7 @@ export function agentMessagesOf(
 ): ChatStoreEffect<readonly AgentMessage[]> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
-    const rows = yield* findAgentMessages({ organizationId, limit: MAX_AGENT_MESSAGES });
+    const rows = yield* findAgentMessages({ userId, organizationId, limit: MAX_AGENT_MESSAGES });
     return rows.map(messageOf).toReversed();
   });
 }
