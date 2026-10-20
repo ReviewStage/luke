@@ -6935,6 +6935,13 @@ button.subagent-line:hover {
   margin: 0;
 }
 
+/* The pictures a comment on an Inbox thread carried, after its words
+   (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
+   in, its room around it the comment's own gap between what it holds. */
+.inbox-comment-body > .transcript-pictures {
+  margin: 0;
+}
+
 /* A link standing alone in a paragraph of a document (lone-link-card.tsx):
    its card of one row, a pull request's or a page's, or the Code tab's card
    of the lines it names, standing apart from the words around it. */
