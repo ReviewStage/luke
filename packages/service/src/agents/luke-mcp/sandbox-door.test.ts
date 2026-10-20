@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import type { HttpClient } from "effect/http";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
-import { agentSandboxDoor, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
+import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 
 /**
  * The door to a native agent's sandbox, over Vercel Sandbox's REST API as
@@ -53,6 +53,11 @@ function vercel(files: Readonly<Record<string, Uint8Array<ArrayBuffer>>>) {
         })
       );
     }
+    if (parsed.pathname.endsWith("/cmd")) {
+      return new Response(
+        `${JSON.stringify({ command: { exitCode: null } })}\n${JSON.stringify({ stream: "stdout", data: "12: const invite = true;\n" })}\n${JSON.stringify({ command: { exitCode: 0 } })}\n`,
+      );
+    }
     const bytes = files[(body as { path: string }).path];
     return bytes === undefined
       ? Response.json({ error: { code: "file_not_found" } }, { status: 404 })
@@ -68,11 +73,15 @@ const ADMITTED: AdmittedConversation = {
   timeZone: undefined,
 };
 
-/** The door over the layer given, its effects run on this test's own context. */
-const doorOver = (admitted: AdmittedConversation) =>
+/** The doors over the layer given, their effects run on this test's own context. */
+const doorsOver = (admitted: AdmittedConversation) =>
   Effect.map(Effect.context<HttpClient.HttpClient>(), (context) =>
-    agentSandboxDoor((effect) => Effect.runPromiseWith(context)(effect), fixtureToken)(admitted),
+    agentSandboxDoors((effect) => Effect.runPromiseWith(context)(effect), fixtureToken)(admitted),
   );
+
+/** The file door over the layer given. */
+const doorOver = (admitted: AdmittedConversation) =>
+  Effect.map(doorsOver(admitted), (doors) => doors.files);
 
 /** A stream read whole. */
 async function bytesOf(stream: ReadableStream<Uint8Array> | null): Promise<number[] | null> {
@@ -117,6 +126,38 @@ it.effect("a file past every tool's bound is read only one byte past it", () =>
 
     assert.equal(read?.length, SANDBOX_DOOR_MAX_BYTES + 1);
   }),
+);
+
+it.effect(
+  "a command of the checkout's is run in the running sandbox under bash, its environment set by env on its command line, and waited on",
+  () =>
+    Effect.gen(function* () {
+      const api = vercel({});
+      const doors = yield* doorsOver(ADMITTED).pipe(Effect.provide(api.layer));
+
+      const sandbox = yield* Effect.promise(() => doors.repository());
+      const ran = yield* Effect.promise(() =>
+        sandbox.run({
+          command: 'sed -n "12p" "$LUKE_FILE"',
+          workingDirectory: "/workspace/repository",
+          env: { LUKE_FILE: "src/invite.ts" },
+        }),
+      );
+
+      assert.deepEqual(
+        [ran.exitCode, ran.stdout, ran.stderr],
+        [0, "12: const invite = true;\n", ""],
+      );
+      const command = api.asked.at(-1);
+      assert.equal(command?.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/cmd");
+      assert.deepEqual(command?.body, {
+        command: "env",
+        args: ["LUKE_FILE=src/invite.ts", "bash", "-c", 'sed -n "12p" "$LUKE_FILE"'],
+        cwd: "/workspace/repository",
+        wait: true,
+        logs: true,
+      });
+    }),
 );
 
 it.effect("a conversation that records no session opens no door", () =>

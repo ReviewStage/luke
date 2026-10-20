@@ -39,6 +39,8 @@ import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
+import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
+import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
 import {
   type CommentToolName,
   READ_COMMENTS_TOOL,
@@ -48,15 +50,18 @@ import {
 } from "../../tasks/comment-tools.js";
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
+import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import {
   type AgentDoorSeams,
   type AgentToolCall,
+  runAgentBoard,
   runAgentChat,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
+  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -68,6 +73,7 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
+import { CODER_TOOL } from "../coder-host/tool-set.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -81,6 +87,7 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
@@ -96,9 +103,10 @@ export type LukeMcpServices =
   | WorkspaceLinearConnect
   | HostedEnvironment;
 
-/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
+/** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
 interface LukeMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
+  readonly repository: RepositorySandboxDoor;
   readonly callId: string;
   readonly seams: AgentDoorSeams;
 }
@@ -165,6 +173,25 @@ const isLooked = Schema.is(
   }),
 );
 
+/** A look at the whiteboard that answered its image, a PNG as base64. */
+const isBoardLooked = Schema.is(
+  Schema.Struct({ status: Schema.Literal(LOOK_AT_BOARD_STATUS.LOOKED), image: Schema.String }),
+);
+
+/** The type the whiteboard's image is drawn in (`../../tasks/board-look.ts`). */
+const BOARD_IMAGE_TYPE = "image/png";
+
+/** What the agent is shown of a look at the whiteboard: its image, as an image, where it looked; its JSON otherwise. */
+function lookedBoardContent(result: LukeMcpToolResult): readonly McpContent[] {
+  if (isBoardLooked(result)) {
+    return [
+      { type: "text", text: "The task's whiteboard, as the developer sees it:" },
+      { type: "image", data: result.image, mimeType: BOARD_IMAGE_TYPE },
+    ];
+  }
+  return [{ type: "text", text: JSON.stringify(result) }];
+}
+
 /** What the agent is shown of a look: the picture itself, as an image, where it looked; its JSON otherwise. */
 function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
   if (isLooked(result)) {
@@ -205,6 +232,18 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
     runAgentShowPage(admitted, input, sandbox),
   ),
   agentTool(READ_PAGE_TOOL),
+  entry(SHOW_CODE_TOOL, (admitted, input, { repository }) =>
+    runAgentShowCode(admitted, input, repository),
+  ),
+  // The task's whiteboard.
+  entry(DRAW_ON_BOARD_TOOL, (admitted, input) =>
+    runAgentBoard(admitted, CODER_TOOL.DRAW_ON_BOARD, input),
+  ),
+  entry(
+    LOOK_AT_BOARD_TOOL,
+    (admitted, input) => runAgentBoard(admitted, CODER_TOOL.LOOK_AT_BOARD, input),
+    lookedBoardContent,
+  ),
   // The workspace's agents.
   agentTool(START_AGENT_TOOL),
   agentTool(MESSAGE_AGENT_TOOL),

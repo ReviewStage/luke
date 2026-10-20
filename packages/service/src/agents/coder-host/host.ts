@@ -35,12 +35,7 @@ import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import {
-  ACTION_RESULT_STATUS,
-  MESSAGE_ROLE,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "../../core.js";
+import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
@@ -49,11 +44,8 @@ import {
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
-import { runLookAtBoard } from "../../tasks/board-look.js";
-import { runDrawOnBoard } from "../../tasks/board-tool.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
-import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
@@ -94,23 +86,21 @@ import {
   runSearchWeb,
   type SearchWebResult,
 } from "../public-research.js";
-import {
-  checkoutDeepened,
-  REPOSITORY_REFUSAL,
-  RepositoryRefusal,
-  type RepositorySandbox,
-} from "../repository-shell.js";
+import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import {
   type AgentToolCall,
+  type BoardTool,
   type ChatCall,
+  runAgentBoard,
   runAgentChat,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
+  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -501,21 +491,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** The whiteboard's tools, by the name a call of one is made under. */
-export type BoardTool = typeof CODER_TOOL.DRAW_ON_BOARD | typeof CODER_TOOL.LOOK_AT_BOARD;
-
-/** Why a call of the whiteboard's tools drew or looked at nothing, in words the model can act on. */
-const BOARD_REFUSAL = {
-  TASKLESS: "Not run: you work on no task, so there is no whiteboard to draw on or look at.",
-  UNAVAILABLE: "Not run: the whiteboard could not be reached just now. The call may be made again.",
-} as const;
-
-/** A call of the whiteboard's tools that ran nothing, and why. */
-function boardRejected(reason: string): WireRecord {
-  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
-
-export type { AgentToolCall, ChatCall } from "./agent-doors.js";
+export type { AgentToolCall, BoardTool, ChatCall } from "./agent-doors.js";
 export type { InboxCall } from "./inbox-door.js";
 
 /** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
@@ -1078,44 +1054,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),
 
-    showCode: (admitted, input, sandbox) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return showCodeRejected(found.failure);
-        const { repository } = found.success;
-        // Note that the tool is not offered to an agent with no repository (`repositoryToolsOf`), so this refuses only a call made across a change of its row.
-        // The sandbox opened with the checkout standing (`checkOut`), so the lines are read where it stands.
-        const checkout =
-          repository === null
-            ? Effect.fail(new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY }))
-            : Effect.tryPromise({
-                try: sandbox,
-                catch: () =>
-                  new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
-              }).pipe(Effect.map((opened) => ({ sandbox: opened, repository })));
-        return yield* showCodeIn(checkout, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(showCodeRejected(SHOW_CODE_REFUSAL.READ_FAILED))),
-      ),
+    showCode: (admitted, input, sandbox) => runAgentShowCode(admitted, input, sandbox),
 
-    board: (admitted, tool, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return boardRejected(found.failure);
-        const { taskId } = found.success;
-        if (taskId === null) return boardRejected(BOARD_REFUSAL.TASKLESS);
-        // The board is drawn and read as the member whose turn this is, as `editPlan` writes the plan.
-        const binding = { userId: admitted.caller, taskId };
-        const ran =
-          tool === CODER_TOOL.DRAW_ON_BOARD
-            ? runDrawOnBoard(binding, input)
-            : runLookAtBoard(binding, input);
-        return { ...(yield* ran) };
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(boardRejected(BOARD_REFUSAL.UNAVAILABLE))),
-      ),
+    board: (admitted, tool, input) => runAgentBoard(admitted, tool, input),
 
     showImage: (admitted, input, sandbox) => runAgentShowImage(admitted, input, sandbox),
 

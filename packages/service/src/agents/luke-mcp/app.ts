@@ -43,9 +43,9 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
-import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { lukeMcpDoorSeams } from "./door-seams.js";
+import type { AgentSandboxDoors } from "./sandbox-door.js";
 import {
   LUKE_MCP_TOOLS,
   type LukeMcpServices,
@@ -193,8 +193,8 @@ const DOOR_FAILED_RESULT: McpToolCallResult = {
   isError: true,
 };
 
-/** The door to an admitted agent's sandbox, which the edge composes on its own runner (`sandbox-door.ts`). */
-export type LukeMcpSandboxDoor = (admitted: AdmittedConversation) => InboxSandboxDoor;
+/** The doors to an admitted agent's sandbox, which the edge composes on its own runner (`sandbox-door.ts`). */
+export type LukeMcpSandboxDoor = (admitted: AdmittedConversation) => AgentSandboxDoors;
 
 /** One `tools/call` run through the tool's door as the admitted conversation, with a fresh id of its own. */
 function callTool(
@@ -212,9 +212,16 @@ function callTool(
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, `Unknown tool: ${name}`));
   }
   const input = fieldOf(params, "arguments") ?? {};
-  return Effect.flatMap(lukeMcpDoorSeams, (seams) =>
-    tool.run(admitted, input, { sandbox: sandboxDoor(admitted), callId: randomUUID(), seams }),
-  ).pipe(
+  return Effect.flatMap(lukeMcpDoorSeams, (seams) => {
+    const doors = sandboxDoor(admitted);
+    const context = {
+      sandbox: doors.files,
+      repository: doors.repository,
+      callId: randomUUID(),
+      seams,
+    };
+    return tool.run(admitted, input, context);
+  }).pipe(
     Effect.map((result) => Result.succeed(toolResult(tool, result))),
     Effect.catchCause((cause) =>
       Effect.as(
