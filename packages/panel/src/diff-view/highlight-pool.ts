@@ -33,6 +33,15 @@ type HighlightMode = (typeof HIGHLIGHT_MODE)[keyof typeof HIGHLIGHT_MODE];
 const HIGHLIGHT_WORKERS = 2;
 
 /**
+ * How many results the pool keeps on the window's thread, for each of its
+ * file and diff caches (Pierre's `totalASTLRUCacheSize`, which defaults to
+ * 100 of each). The list names every read under a counter of its own, so a
+ * kept result is never asked for again; only the files drawn right now are
+ * read back, so a few are all the cache is for.
+ */
+export const HIGHLIGHT_CACHE_ENTRIES = 16;
+
+/**
  * What a list highlights with: the pool to hand Pierre, none for the
  * window's own thread, where it settles once started, and the door that
  * hands its workers a look, since a pool kept across lists holds the look
@@ -75,6 +84,7 @@ export function startHighlighting(
     {
       workerFactory: startWorker,
       poolSize: HIGHLIGHT_WORKERS,
+      totalASTLRUCacheSize: HIGHLIGHT_CACHE_ENTRIES,
       // Note that a worker failing to start is no error of the window's, since the list then highlights on its own thread.
       onWorkerError: (event) => event.preventDefault(),
     },

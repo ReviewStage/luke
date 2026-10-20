@@ -877,6 +877,8 @@ async function colourLines(request: ColourRequest): Promise<ColouredLines | unde
       await highlighting.follow(request.look);
       await pool.primeFileHighlightCache(file);
       const cached = pool.getFileResultCache(file)?.result;
+      // Its key is never asked for again, so the result is let go once read.
+      pool.evictFileFromCache(file.cacheKey);
       return cached === undefined ? undefined : colouredFrom(cached, request.lines.length);
     }
     const { dark, light } = request.look.themes;

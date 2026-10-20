@@ -10,7 +10,12 @@ import {
 } from "@luke/settings/diff-view";
 import { afterEach, test, vi } from "vitest";
 import type { DiffLook } from "./contract.js";
-import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
+import {
+  HIGHLIGHT_CACHE_ENTRIES,
+  HIGHLIGHT_MODE,
+  type Highlighting,
+  startHighlighting,
+} from "./highlight-pool.js";
 
 /**
  * highlight-pool.test.ts -- a list's files are highlighted in Pierre's pool
@@ -118,4 +123,12 @@ test("a pool kept for a list drawn in another look hands its workers that look",
     assert.equal(told.length, 2, "both workers are told");
     for (const request of told) assert.deepEqual(request.renderOptions?.theme, solarized);
   });
+});
+
+test("a pool keeps only a few results on the window's thread", async () => {
+  started = startHighlighting(() => new StandInWorker(true), LOOK, 1000);
+  await started.settled;
+  const { fileCache, diffCache } = started.pool?.inspectCaches() ?? {};
+  assert.equal(fileCache?.limit, HIGHLIGHT_CACHE_ENTRIES);
+  assert.equal(diffCache?.limit, HIGHLIGHT_CACHE_ENTRIES);
 });
