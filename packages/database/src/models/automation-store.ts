@@ -482,6 +482,24 @@ const removeAutomation = SqlSchema.findAll({
     ),
 });
 
+const writeTargetAgent = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    fromAgentId: Schema.String,
+    toAgentId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, fromAgentId, toAgentId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ targetAgentId: toAgentId, updatedAt: now })
+        .where(and(eq(automation.targetAgentId, fromAgentId), memberOfAutomationWorkspace(userId)))
+        .returning({ id: automation.id }),
+    ),
+});
+
 const insertRun = SqlSchema.findAll({
   Request: Schema.Struct({
     automationId: Schema.String,
@@ -1166,6 +1184,24 @@ export function updateAutomation(
 /** Deletes an automation the account may delete, and its history; false for any other id. */
 export function deleteAutomation(userId: string, id: string): TaskStoreEffect<boolean> {
   return Effect.map(removeAutomation({ userId, id }), (rows) => rows.length > 0);
+}
+
+/**
+ * Every automation that hands its runs to one agent handed to another
+ * instead, as a take-over leaves the first archived and the work going on in
+ * the second, whoever's automation it is, so long as the account taking
+ * over is a member of its workspace; answers the automations moved.
+ */
+export function retargetAutomations(
+  userId: string,
+  fromAgentId: string,
+  toAgentId: string,
+): TaskStoreEffect<readonly string[]> {
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const moved = yield* writeTargetAgent({ userId, fromAgentId, toAgentId, now });
+    return moved.map((row) => row.id);
+  });
 }
 
 /** Records a firing of the automation, queued; nothing where a run under the same dedupe key stands already. */

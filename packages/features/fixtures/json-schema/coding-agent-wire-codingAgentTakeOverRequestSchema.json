@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "required": [
+    "idempotencyKey"
+  ],
+  "additionalProperties": false
+}

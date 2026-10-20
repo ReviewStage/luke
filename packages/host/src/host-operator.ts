@@ -72,6 +72,7 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentTakeOverParams,
   type CodingAgentWorkspaceListParams,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
@@ -577,6 +578,8 @@ export interface HostOperator {
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** A teammate's agent taken over under the panel's own key; the agent that goes on, or why none started. */
+  codingAgentTakeOver(params: CodingAgentTakeOverParams): Effect.Effect<CodingAgentAgentAnswer>;
   codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
@@ -1720,6 +1723,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
           agentId: params.agentId,
           archived: params.archived,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentTakeOver: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TAKE_OVER, {
+          agentId: params.agentId,
+          idempotencyKey: params.idempotencyKey,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

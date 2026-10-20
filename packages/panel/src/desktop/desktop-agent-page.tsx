@@ -1,4 +1,4 @@
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -26,7 +26,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useCodingAgents } from "../tasks/use-coding-agents.js";
+import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
 import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
@@ -34,6 +34,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
+import { useAgentTakeOver } from "./agent-take-over.js";
 import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
@@ -69,7 +70,8 @@ import { useTabViews } from "./strip-tabs.js";
  * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
- * its tab would, and its ⋯ offers its Copy link. An archived agent takes no message, so its composer gives
+ * its tab would, and its ⋯ offers its Copy link, and Take over on a teammate's agent,
+ * which opens the agent that goes on in its place. An archived agent takes no message, so its composer gives
  * way to its own Unarchive. An agent the service will not hand the reader,
  * deleted or of a workspace they are not in, as a link may name, is not
  * found, and nothing of it is drawn. Whoever sent it a message is read against its
@@ -100,27 +102,29 @@ const ACTIONS_LABEL = "Agent actions";
 /** The page's ⋯, offering the agent's Copy link. */
 function AgentPageActions({
   agent,
+  agents,
   shown,
 }: {
-  agent: { readonly id: string; readonly planId: string | null };
+  agent: CodingAgentSummary;
+  agents: CodingAgentsControl;
   shown: boolean;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
-  if (copyLink === undefined) return null;
+  const takeOver = useAgentTakeOver(agent, agents, shown);
+  const groups = [copyLink, takeOver.action].flatMap((action) =>
+    action === undefined ? [] : [[action]],
+  );
+  if (groups.length === 0) return null;
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
         <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={ACTIONS_LABEL}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
+        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
+      {takeOver.dialog}
     </>
   );
 }
@@ -194,7 +198,8 @@ export function DesktopAgentPage({
     onUnarchive: nothing,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
-    onStarted: nothing,
+    // A take-over on the page opens the agent that goes on in its place.
+    onStarted: tasks.agentView.onOpen,
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
@@ -309,7 +314,7 @@ export function DesktopAgentPage({
       </div>
       {agent === undefined ? null : (
         <div className="desktop-toolbar-actions">
-          <AgentPageActions agent={agent} shown={tasks.shown} />
+          <AgentPageActions agent={agent} agents={control} shown={tasks.shown} />
         </div>
       )}
     </header>

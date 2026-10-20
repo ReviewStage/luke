@@ -42,6 +42,7 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentTakeOverParamsSchema,
   codingAgentWorkspaceListParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { Schema as EffectSchema } from "effect";
@@ -137,6 +138,11 @@ export const agentActsContract = {
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(codingAgentPinParamsSchema))
+    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_TAKE_OVER]: actProcedure(
+    "Could not take over the agent on this system.",
+  )
+    .input(exactInput(codingAgentTakeOverParamsSchema))
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: actProcedure(
     "Could not note which agent is shown on this system.",

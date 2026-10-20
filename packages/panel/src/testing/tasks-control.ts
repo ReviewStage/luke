@@ -113,6 +113,7 @@ export function codingAgentsControl(
     onOpenApiKeys: ignore,
     onRename: () => Promise.resolve(false),
     onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
+    onTakeOver: undefined,
     // An agent read again stands as the control's list has it.
     readAgent: (agentId) =>
       Promise.resolve(

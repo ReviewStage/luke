@@ -52,6 +52,7 @@ import {
   START_NEEDS_REPOSITORY,
   STOP_FAILED,
   startFailureNote,
+  takeOverFailureWords,
   withAgent,
   withAgentRun,
 } from "./coding-agent-model.js";
@@ -294,6 +295,14 @@ export interface CodingAgentsControl {
    * its dialog or a toast of its own.
    */
   onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
+  /**
+   * Takes over a teammate's agent: a new agent of the reader's goes on from
+   * it and theirs is archived, the new agent's tab, or its page where it has
+   * no task, opening as a Start's does; a refusal is answered rather than
+   * said, for the dialog to say. Present exactly while the task is not
+   * archived.
+   */
+  onTakeOver: ((agentId: string) => Promise<ActionResult>) | undefined;
   /** Reads the task's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
   readAgent: (agentId: string) => Promise<CodingAgentSummary | undefined>;
   /** An agent's transcript page said where it stands now. */
@@ -1110,6 +1119,31 @@ export function useCodingAgents(input: {
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
+  // Note that a press carries the key its source's last press minted while the service has not
+  // answered it, so a press asked again answers the agent the first may already have started.
+  const takeOvers = useRef(new Map<string, string>());
+  const onTakeOver = async (sourceId: string): Promise<ActionResult> => {
+    const key = takeOvers.current.get(sourceId) ?? mintKey();
+    takeOvers.current.set(sourceId, key);
+    const on = taskId;
+    const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_TAKE_OVER, {
+      agentId: sourceId,
+      idempotencyKey: key,
+    }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    if ("failure" in answer) {
+      // Only a service that never answered is asked again under the same key.
+      if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED)
+        takeOvers.current.delete(sourceId);
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: takeOverFailureWords(answer) };
+    }
+    takeOvers.current.delete(sourceId);
+    // The new agent's tab opens as a Start's does, on the task still open; an agent with no task opens its page.
+    if (on === undefined) latest.current.onStarted(answer.agent.id);
+    else landed(on, answer.agent);
+    readAgain();
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  };
+
   const archiveNow = useRef(onArchive);
   archiveNow.current = onArchive;
   const sayRefusal = (result: ActionResult) => {
@@ -1353,6 +1387,7 @@ export function useCodingAgents(input: {
     onOpenApiKeys: () => latest.current.onOpenApiKeys(),
     onRename,
     onArchive,
+    onTakeOver: taskId !== undefined && archived ? undefined : onTakeOver,
     readAgent,
     onStatus,
     onTitle,

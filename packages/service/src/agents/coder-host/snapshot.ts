@@ -23,8 +23,9 @@
  * sweep once the copy's hold lapses. A copy that fails logs the tail of what
  * it printed on stderr, credential-shaped runs redacted.
  * Files named the way credentials are kept are never copied. No copy is
- * made where the task moved to another repository since the source
- * started, since the new agent's checkout would not hold the branch. The
+ * made where the new agent clones another repository than the source did,
+ * as once its task moved since the source started, since the new agent's
+ * checkout would not hold the branch. The
  * whole step is bounded, so a Start waits on it no longer than that, and
  * whatever goes wrong is a miss the caller names, never a failure.
  */
@@ -35,7 +36,6 @@ import { type CodingAgent, readCodingAgentByKey } from "@luke/database/models/co
 import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { readTaskHeader } from "@luke/database/models/task-store";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Duration, Effect, Option, type Redacted, Schedule } from "effect";
@@ -63,10 +63,10 @@ export const SNAPSHOT = {
   STDERR_TAIL: 600,
 } as const;
 
-/** Why the source's work was not copied: the Start already made its agent, the task moved repository since the source started, the source never opened a sandbox, the copy failed, or it ran past its bound. */
+/** Why the source's work was not copied: the Start already made its agent, the new agent clones another repository, the source never opened a sandbox, the copy failed, or it ran past its bound. */
 export const SNAPSHOT_MISS = {
   STARTED: "started",
-  /** The task moved to another repository than the source's, which the new agent's checkout would not hold the branch in. */
+  /** The new agent clones another repository than the source's, as once its task moved, so its checkout would not hold the branch. */
   MOVED: "moved",
   NO_SANDBOX: "no-sandbox",
   FAILED: "failed",
@@ -306,15 +306,18 @@ export type SourceCopyServices = DatabaseServices | HttpClient.HttpClient | GitH
 
 /**
  * The source agent's work copied for an agent the account starts from it,
- * as above, under the Start's key; nothing copied for a retry whose Start
- * already made its agent, which is handed nothing new, or for a source that
- * never opened a sandbox. The token the push goes through is the one a
+ * as above, under the Start's key, for a new agent that clones
+ * `repository`; nothing copied for a retry whose Start already made its
+ * agent, which is handed nothing new, for one that clones another
+ * repository, or for a source that never opened a sandbox. The token the
+ * push goes through is the one a
  * coding agent's checkout is minted, through the installation of the
  * source's workspace as the account reaches it.
  */
 export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(function* (
   userId: string,
   source: CodingAgent,
+  repository: string | null,
   forked: boolean,
   idempotencyKey: string,
 ): Effect.fn.Return<SnapshotOutcome, never, SourceCopyServices> {
@@ -323,10 +326,8 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     if (Option.isSome(yield* readCodingAgentByKey(userId, idempotencyKey))) {
       return missed(SNAPSHOT_MISS.STARTED);
     }
-    // Note that the new agent clones the task's repository as it stands now, so a branch pushed to the
-    // one the source cloned before the task moved would be none of its checkout's.
-    const task = yield* readTaskHeader(userId, source.taskId ?? "");
-    const repository = Option.isSome(task) ? task.value.repository : null;
+    // Note that a branch pushed to the repository the source cloned would be none of the new agent's
+    // checkout's where it clones another, as once the task moved since the source started.
     if (repository?.toLowerCase() !== source.repository.toLowerCase()) {
       return missed(SNAPSHOT_MISS.MOVED);
     }

@@ -637,6 +637,56 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
+/**
+ * What taking over a teammate's agent does, as its question lists it under
+ * who started it: that the new agent going on from it runs on the reader's
+ * keys and Mac and commits as them; where it
+ * has an open pull request, that it keeps pushing there, the pull request
+ * staying opened by its starter on GitHub; and that the teammate's agent is
+ * archived, its open inbox items and its automations moving to the new one.
+ */
+export function takeOverEffects(
+  owner: string,
+  pullRequest: CodingAgentPullRequest | undefined,
+): readonly string[] {
+  const open = pullRequest?.state === PULL_REQUEST_STATE.OPEN ? pullRequest : undefined;
+  return [
+    "It runs on your model keys, and whatever it runs on a Mac runs on yours.",
+    open === undefined
+      ? "Its commits are by you."
+      : `Its commits are by you. It keeps pushing to #${open.number}, which stays opened by ${owner} on GitHub.`,
+    `${owner}'s agent is archived, and its open inbox items and automations move to yours.`,
+  ];
+}
+
+/**
+ * Why a take-over did not start the agent that goes on, as its dialog says
+ * it: the reader's own GitHub, which the new agent reaches the repository
+ * on, not reaching it, rather than the teammate's it never falls back on; an
+ * agent on its starter's own GitHub token, which only they go on with; a
+ * model the reader is not offered; the agent archived or gone since; or
+ * the bare sentence that trying again answers.
+ */
+export function takeOverFailureWords(refused: RefusedCall): string {
+  switch (refused.failure) {
+    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+      return `Luke can't reach ${refused.unreached?.repository ?? "this agent's repository"} on GitHub as you, so you can't take this agent over.`;
+    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+      return "This agent runs on a model you aren't offered, so you can't take it over.";
+    case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
+      return "This agent no longer exists.";
+    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+      return "This agent was archived, so it can't be taken over.";
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+      return "This agent works on its starter's own GitHub token, so only they can go on with it.";
+    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+      return SHARED_FAILURE_NOTE[refused.failure];
+    default:
+      return "The agent could not be taken over. Try again.";
+  }
+}
+
 /** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
 export function messageFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {

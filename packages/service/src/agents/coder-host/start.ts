@@ -133,10 +133,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
- * A Start from another agent of the task, to continue it or to fork it at
- * one of its messages, hands the new agent that agent's brief with its
- * transcript replayed after it (`replay.ts`) and its work, what it had not
- * pushed included, copied to a branch of its own (`snapshot.ts`), the note
+ * A Start from another agent of the task, or of the workspace where both
+ * stand on no task, to continue it or to fork it at one of its messages,
+ * hands the new agent that agent's brief with its transcript replayed
+ * after it (`replay.ts`) and its work, what it had not pushed included, copied to a branch of its own (`snapshot.ts`), the note
  * after both with the files the note carries, and runs it on that agent's
  * choice and servers unless the ask names its own, and an agent started from an
  * automation's run is no run of that automation. Its mentions and servers
@@ -342,6 +342,8 @@ export type StartPlace =
       readonly organizationId: string;
       readonly repository: string;
       readonly prompt: string;
+      /** Another agent of the workspace with no task to take over from, its prompt and its transcript replayed in this prompt's place; none for an agent started afresh. */
+      readonly from?: CodingAgentStartFrom | undefined;
     };
 
 /** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks, with that run. */
@@ -505,7 +507,7 @@ const startBranchOf = Effect.fnUntraced(function* (
   );
 });
 
-/** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */
+/** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt, or the prompt of the agent it takes over from with that one's replay after it. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -515,6 +517,10 @@ const landingOf = Effect.fnUntraced(function* (
   if (place.taskId === null) {
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
     if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const brief = fitter?.prompt ?? place.prompt;
+    const written = (replayed: Replay | undefined) =>
+      firstMessageText(brief, replayed, undefined, START_NOTE_HEADING.DEVELOPER, noteFiles);
+    const fitted = fitter === undefined ? undefined : yield* fitter.fit(written);
     return {
       workspaceId: place.organizationId,
       repository: place.repository,
@@ -524,9 +530,9 @@ const landingOf = Effect.fnUntraced(function* (
         taskId: null,
         organizationId: place.organizationId,
         planSnapshot: null,
-        prompt: place.prompt,
+        prompt: fitted === undefined ? place.prompt : written(fitted.replay),
       },
-      startedFrom: undefined,
+      startedFrom: fitted?.startedFrom,
     };
   }
   const read = yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
@@ -717,17 +723,29 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
   // Note that a retry from another agent is answered before its source is read, because the source
   // may be gone since the first Start made the agent its key names.
-  if (ask.taskId !== null && ask.from !== undefined) {
+  if (ask.from !== undefined) {
     const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
     if (Option.isSome(made) && made.value.taskId === ask.taskId) {
-      const reached = yield* hostedStoreOrUnavailable(readTaskWorkspace(userId, ask.taskId));
-      if (Option.isSome(reached)) return { agent: made.value, created: false };
+      // An agent with no task stands in its workspace, which its own read already held to the account.
+      const task =
+        ask.taskId === null
+          ? undefined
+          : yield* hostedStoreOrUnavailable(readTaskWorkspace(userId, ask.taskId));
+      if (task === undefined || Option.isSome(task)) return { agent: made.value, created: false };
     }
   }
   const from =
-    ask.taskId === null || ask.from === undefined
+    ask.from === undefined
       ? undefined
-      : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? [], ask.idempotencyKey);
+      : yield* startFromOf(
+          userId,
+          ask.taskId === null
+            ? { taskId: null, organizationId: ask.organizationId, repository: ask.repository }
+            : { taskId: ask.taskId },
+          ask.from,
+          ask.attachments ?? [],
+          ask.idempotencyKey,
+        );
   // An agent started from another runs on that agent's choice unless the Start names one.
   const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
   // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
@@ -888,6 +906,24 @@ export interface RequestedStart {
   readonly created: boolean;
 }
 
+/** A Start's agent as its request is answered: a new one as it was just made, with no turn; one a retry found under its key, as it stands now. */
+export const requestedStartOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  { agent, created }: CodingAgentStart,
+): Effect.fn.Return<RequestedStart, HostedRefusal, DatabaseServices> {
+  if (!created) return { agent: yield* summaryOf(userId, agent), created };
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
+  return {
+    agent: codingAgentSummary(
+      agent,
+      { turn: undefined, awaitingLineAt: undefined },
+      yield* Clock.currentTimeMillis,
+      names,
+    ),
+    created,
+  };
+});
+
 /**
  * The account's agent started on the task as a request asks it, through
  * `startCodingAgent`: the agent's own Start (`POST /api/plans/{id}/agents`)
@@ -916,7 +952,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     model !== undefined && effort !== undefined
       ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
       : undefined;
-  const { agent, created } = yield* startCodingAgent(eve, userId, {
+  const started = yield* startCodingAgent(eve, userId, {
     taskId,
     idempotencyKey: request.idempotencyKey,
     choice,
@@ -927,15 +963,5 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
-  if (!created) return { agent: yield* summaryOf(userId, agent), created };
-  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
-  return {
-    agent: codingAgentSummary(
-      agent,
-      { turn: undefined, awaitingLineAt: undefined },
-      yield* Clock.currentTimeMillis,
-      names,
-    ),
-    created,
-  };
+  return yield* requestedStartOf(userId, started);
 });

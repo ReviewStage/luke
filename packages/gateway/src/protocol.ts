@@ -160,6 +160,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_PIN: "codingAgents.pin",
+  /** A teammate's agent taken over under the panel's own key: a new agent of the account's goes on from it, and theirs is archived; the new agent, or why none started. */
+  CODING_AGENTS_TAKE_OVER: "codingAgents.takeOver",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
   AUTOMATIONS_LIST: "automations.list",

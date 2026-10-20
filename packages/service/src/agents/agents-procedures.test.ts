@@ -162,6 +162,7 @@ const standing = (bearers: ReadonlyMap<string, string>, sandbox: Layer.Layer<Age
           ),
         eveOrigin: () => undefined,
         sandbox,
+        summaryModel: () => Effect.succeed(undefined),
       }),
     });
     // SAFETY: the terminal procedures yield the store and the network alone, which is all a test provides of the web runtime's services.
@@ -204,11 +205,41 @@ const standing = (bearers: ReadonlyMap<string, string>, sandbox: Layer.Layer<Age
     return Object.assign(call, { bytes });
   });
 
+const takeOverOf = (agentId: string) => `/api/agents/${agentId}/take-over`;
 const terminalsOf = (agentId: string) => `/api/agents/${agentId}/terminals`;
 const resumeOf = (agentId: string) => `/api/agents/${agentId}/sandbox/resume`;
 const terminalOf = (agentId: string, terminalId: string) => `${terminalsOf(agentId)}/${terminalId}`;
 
 it.layer(getTestDB())("the agent terminals procedures", (it) => {
+  it.effect(
+    "a take-over of the caller's own agent is not permitted, one by an account of another workspace reaches no agent, and neither archives it",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent } = yield* openAgent;
+        const stranger = yield* openGithubUser();
+        const sandbox = scriptedSandbox(SANDBOX_STATE.RUNNING);
+        const call = yield* standing(
+          new Map([
+            ["Bearer owner", userId],
+            ["Bearer stranger", stranger],
+          ]),
+          sandbox.layer,
+        );
+        const body = { idempotencyKey: randomUUID() };
+
+        const own = yield* call(takeOverOf(agent.id), "Bearer owner", { method: "POST", body });
+        const strangers = yield* call(takeOverOf(agent.id), "Bearer stranger", {
+          method: "POST",
+          body,
+        });
+        const read = yield* call(`/api/agents/${agent.id}`, "Bearer owner");
+
+        assert.deepEqual([own.status, own.body.error], [403, HOSTED_API_ERROR.NOT_PERMITTED]);
+        assert.equal(strangers.status, 404);
+        assert.equal(read.body.agent.archivedAt, undefined);
+      }),
+  );
+
   it.effect(
     "the agent's member lists its shells, and another account reads the agent as none",
     () =>

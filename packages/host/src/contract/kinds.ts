@@ -93,6 +93,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
+  CODING_AGENTS_TAKE_OVER: "codingAgents.takeOver",
   /**
    * Which agent's tab the panel shows, or none, and which task's Inbox tab,
    * or none: what main's notification of an agent's end or of an inbox item

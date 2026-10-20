@@ -38,9 +38,10 @@ import { MenuTab } from "./tab-strip.js";
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
  * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; an agent's Open terminal; a transcript's two copies; and an
- * agent's Archive. Those that act on what the chosen tab shows, an agent's
- * Rename, Open terminal, copies, and Archive, and a subagent's copies, its
+ * beside it; an agent's Open terminal; a transcript's two copies; a
+ * teammate's agent's Take over; and an agent's Archive. Those that act on
+ * what the chosen tab shows, an agent's Rename, Open terminal, copies, Take
+ * over, and Archive, and a subagent's copies, its
  * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`), with what the
  * tab's own body hands up while it is drawn, a Pull request tab's Refresh
  * and Open on GitHub (`useHandedTabActions`). Each strip
@@ -86,6 +87,8 @@ export interface TabDoors {
   onOpenTerminal?: (() => void) | undefined;
   /** Runs the agent's pushed branch in a terminal of this Mac in the side panel, for an agent's where a panel takes the tab and its task names a repository. */
   onOpenOnMac?: (() => void) | undefined;
+  /** Takes over the agent the tab shows, for a teammate's agent's (`agent-take-over.tsx`). */
+  takeOver?: MenuAction | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
@@ -102,16 +105,17 @@ interface ContentActions {
   rename: MenuAction[];
   terminal: MenuAction[];
   copies: MenuAction[];
+  takeOver: MenuAction[];
   archive: MenuAction[];
 }
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
  * itself: an agent's Rename, its Open terminal and Run, Copy link and a transcript's two copies,
- * and an agent's Archive, which takes the tab with it.
+ * a teammate's agent's Take over, and an agent's Archive, which takes the tab with it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, onOpenTerminal, onOpenOnMac, archive, copyLink } = doors;
+  const { onCopy, onRename, onOpenTerminal, onOpenOnMac, takeOver, archive, copyLink } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
@@ -147,6 +151,7 @@ function contentActions(doors: TabDoors): ContentActions {
             },
           ]),
     ],
+    takeOver: takeOver === undefined ? [] : [takeOver],
     archive: archive === undefined ? [] : [archive],
   };
 }
@@ -157,7 +162,7 @@ function contentActions(doors: TabDoors): ContentActions {
  * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
  * takes it out, and a Rename beside it; for an agent's, its Open terminal;
  * Copy link, for a tab whose thing has a link, and a transcript's two
- * copies after it; and last, for an agent's, its Archive. Close others stands dimmed where nothing else would close.
+ * copies after it; a teammate's agent's Take over; and last, for an agent's, its Archive. Close others stands dimmed where nothing else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
   const { onClose } = doors;
@@ -181,7 +186,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
             ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
             : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
         ];
-  const { rename, terminal, copies, archive } = contentActions(doors);
+  const { rename, terminal, copies, takeOver, archive } = contentActions(doors);
   return [
     [
       ...close,
@@ -192,7 +197,9 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
         disabled: doors.onCloseOthers === undefined,
       },
     ],
-    ...[[...pin, ...rename], terminal, copies, archive].filter((group) => group.length > 0),
+    ...[[...pin, ...rename], terminal, copies, takeOver, archive].filter(
+      (group) => group.length > 0,
+    ),
   ];
 }
 
@@ -204,8 +211,8 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
  * stay on the right-click alone.
  */
 function contentActionGroups(doors: TabDoors): MenuAction[][] {
-  const { rename, terminal, copies, archive } = contentActions(doors);
-  return [doors.handed ?? [], rename, terminal, copies, archive].filter(
+  const { rename, terminal, copies, takeOver, archive } = contentActions(doors);
+  return [doors.handed ?? [], rename, terminal, copies, takeOver, archive].filter(
     (group) => group.length > 0,
   );
 }

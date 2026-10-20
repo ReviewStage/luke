@@ -67,7 +67,7 @@ import { CURSOR_START } from "./transcript.js";
  * beside it, so the transcript goes inside the first message, in the format
  * `@luke/features/agent-replay` writes and the desktop reads back. The
  * source is read as the account asking, on the plan the Start names and no
- * other, and its transcript under the member who started it, whose
+ * other, or on no plan in the workspace it names, and its transcript under the member who started it, whose
  * conversation it is. A continue replays every step; a fork stops at the
  * assistant message named, its turn's journal included, and a message that
  * is none of the source's own journals is refused. A fork of a reply still
@@ -953,17 +953,33 @@ function transcriptSteps(
 }
 
 /**
- * The source agent of the plan read as the account, its transcript cut and
- * replayed as above, its work copied to a branch for the new agent under the
- * Start's key, and what the new agent is handed and runs on, the source's
- * files held to what fits beside `noteFiles`, the ones the Start's note
- * carries, within one message's bounds and named in the preamble past them;
- * refused as naming nothing where the account reaches no such agent on this
- * plan, and as invalid where the message named is none of its journals.
+ * Where the agent a Start takes over from must stand: on the task the Start
+ * names, or on no task, in the workspace the Start names, which then names
+ * the repository the new agent clones too.
+ */
+export type SourcePlace =
+  | { readonly taskId: string }
+  | { readonly taskId: null; readonly organizationId: string; readonly repository: string };
+
+/** Whether the source stands where the Start lands: on its task, or on no task in its workspace. */
+function standsAt(source: CodingAgent, place: SourcePlace): boolean {
+  if (place.taskId !== null) return source.taskId === place.taskId;
+  return source.taskId === null && source.organizationId === place.organizationId;
+}
+
+/**
+ * The source agent of the plan, or of the workspace with no plan, read as
+ * the account, its transcript cut and replayed as above, its work copied to
+ * a branch for the new agent under the Start's key, and what the new agent
+ * is handed and runs on, the source's files held to what fits beside
+ * `noteFiles`, the ones the Start's note carries, within one message's
+ * bounds and named in the preamble past them; refused as naming nothing
+ * where the account reaches no such agent where the Start lands, and as
+ * invalid where the message named is none of its journals.
  */
 export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  taskId: string,
+  place: SourcePlace,
   from: CodingAgentStartFrom,
   noteFiles: readonly CodingAgentAttachment[],
   idempotencyKey: string,
@@ -971,14 +987,19 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const [found] = yield* hostedStoreOrUnavailable(
     listPublishedCodingAgentsById(userId, [from.agentId]),
   );
-  if (found === undefined || found.agent.taskId !== taskId) {
+  if (found === undefined || !standsAt(found.agent, place)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
   // An agent on its starter's own GitHub token is continued or forked by its starter alone, before its work is copied.
   if (!controlsAgent(userId, source)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
-  const repository = Option.isSome(task) ? task.value.repository : null;
+  // The new agent clones the task's repository as it stands now, or the one a Start with no task names.
+  const task =
+    place.taskId === null
+      ? Option.none()
+      : yield* hostedStoreOrUnavailable(readTaskHeader(userId, place.taskId));
+  const repository =
+    place.taskId === null ? place.repository : Option.isSome(task) ? task.value.repository : null;
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
     lineageOf(userId, source, repository),
   );
@@ -1007,7 +1028,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const files = filesOf(records[0], noteFiles);
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
-  const copy = yield* copySourceWork(userId, source, forked, idempotencyKey);
+  const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
   const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
   const edited =
     cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));

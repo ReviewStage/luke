@@ -38,6 +38,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
 import { useAgentArchive } from "./agent-archive.js";
+import { useAgentTakeOver } from "./agent-take-over.js";
 import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
@@ -195,7 +196,7 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, renamed in place from its menu while its task is not archived, and archived from it (`agent-archive.tsx`). */
+/** An agent's tab, renamed in place from its menu while its task is not archived, taken over from it where a teammate started it (`agent-take-over.tsx`), and archived from it (`agent-archive.tsx`). */
 function AgentMenuTab({
   agent,
   agents,
@@ -213,16 +214,18 @@ function AgentMenuTab({
 }): React.JSX.Element {
   const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
+  const takeOver = useAgentTakeOver(agent, agents, shown);
   return (
     <>
       <RenamableTab
         look={look}
-        doors={{ ...doors, archive: archive.action }}
+        doors={{ ...doors, takeOver: takeOver.action, archive: archive.action }}
         // A rename still open when the task is archived elsewhere is let go unsaved.
         rename={agents.onUnarchive === undefined ? rename : undefined}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
       />
+      {takeOver.dialog}
       {archive.dialog}
     </>
   );

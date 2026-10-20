@@ -93,6 +93,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_STOP]: "Could not stop the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_TAKE_OVER]: "Could not take over the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]:
@@ -183,6 +184,11 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PIN,
     payload: { agentId: AGENT_ID, pinned: true },
     ask: "codingAgentPin",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_TAKE_OVER,
+    payload: { agentId: AGENT_ID, idempotencyKey: "take-1" },
+    ask: "codingAgentTakeOver",
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,

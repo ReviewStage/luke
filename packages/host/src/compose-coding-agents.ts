@@ -53,6 +53,7 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentTakeOverParamsSchema,
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -120,6 +121,7 @@ export type CodingAgentClient = Pick<
   | "rename"
   | "switchServers"
   | "archive"
+  | "takeOver"
   | "pin"
   | "stop"
   | "agent"
@@ -393,6 +395,16 @@ function composed(
           "pinning an agent names the agent and whether it is pinned",
         );
         const answer = yield* asked(client.pin(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TAKE_OVER]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentTakeOverParamsSchema,
+          params,
+          "taking over an agent names the agent and the press's own key",
+        );
+        const answer = yield* asked(client.takeOver(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>

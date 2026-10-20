@@ -44,6 +44,7 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentTakeOverParams,
   type CodingAgentWorkspaceListParams,
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -72,6 +73,7 @@ export interface AgentProceduresDependencies {
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentTakeOver(params: CodingAgentTakeOverParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
@@ -239,6 +241,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* notedAgent(host.codingAgentArchive(input));
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_TAKE_OVER]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_TAKE_OVER
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.codingAgentTakeOver(input));
+    }),
     [AGENT_ACT_KIND.CODING_AGENTS_PIN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PIN].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

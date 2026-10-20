@@ -1,5 +1,5 @@
 /**
- * agents.ts -- a coding agent as the desktop lists, starts, reads, changes, and stops it, its changes and review options, and its shells (`coding-agent-wire.ts`, `terminal-wire.ts`).
+ * agents.ts -- a coding agent as the desktop lists, starts, reads, changes, takes over, and stops it, its changes and review options, and its shells (`coding-agent-wire.ts`, `terminal-wire.ts`).
  *
  * Every path names the task or the agent it is about as `{id}`, and a shell
  * as `{terminal}`, which the handler reads as an id: one that is no UUID
@@ -28,6 +28,7 @@ import {
   codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
+  codingAgentTakeOverRequestSchema,
   MAXIMUM_START_BODY_BYTES,
 } from "../coding-agent-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
@@ -43,6 +44,9 @@ import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const CHOICE_BODY_BYTES = 4_096;
+
+/** A take-over names its key alone, so a body past this is no take-over. */
+const TAKE_OVER_BODY_BYTES = 1_024;
 
 /** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
 const TERMINAL_BODY_BYTES = 1_024;
@@ -137,6 +141,19 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(idParams, codingAgentChangeRequestSchema))
     .output(EffectSchema.flip(codingAgentAnswerSchema)),
+  /** A teammate's agent taken over by the caller: the agent that goes on, made now or by a retry's first ask, answered as a Start answers it. */
+  takeOver: hostedProcedure
+    .meta(bodyCap(TAKE_OVER_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: `${AGENT_PATH}/take-over`,
+        inputStructure: "detailed",
+        outputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(idParams, codingAgentTakeOverRequestSchema))
+    .output(EffectSchema.flip(startAnswerSchema)),
   /** One agent stopped. */
   stop: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))

@@ -1,5 +1,5 @@
 /**
- * agents-procedures.ts -- a coding agent as the desktop lists, starts, reads, changes, and stops it, its changes, its review options, and its shells, on the hosted oRPC router.
+ * agents-procedures.ts -- a coding agent as the desktop lists, starts, reads, changes, takes over, and stops it, its changes, its review options, and its shells, on the hosted oRPC router.
  *
  * Every procedure resolves the caller before it reads its input, and every
  * row it touches is one of a workspace the caller's account is a member
@@ -92,6 +92,7 @@ import {
   stoppedTurn,
   summaryOf,
 } from "./coder-host/stop.js";
+import { takeOverCodingAgent } from "./coder-host/take-over.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
@@ -198,6 +199,18 @@ const listedShells = /* @__PURE__ */ Effect.fnUntraced(function* (sessionId: str
   return yield* sandboxOrUpstream(sandbox.terminals(sessionId));
 });
 
+/** The model a Start from another agent summarizes on: the seams' where they name one, the deployment's own otherwise. */
+const summaryModelOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: AgentsProcedureSeams,
+): Effect.fn.Return<SummaryModelOf, never, HostedEnvironment> {
+  if (seams.summaryModel !== undefined) return seams.summaryModel;
+  const environment = yield* HostedEnvironment;
+  return (owner, chosen, effort) =>
+    productionSummaryModel(owner, chosen, effort).pipe(
+      Effect.provideService(HostedEnvironment, environment),
+    );
+});
+
 /** The agents resource: every procedure to a signed-in caller, a body read under its own cap. */
 export function agentsProcedures(seams: AgentsProcedureSeams) {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -260,18 +273,33 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      */
     start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
-      const environment = yield* HostedEnvironment;
-      const summaryModel: SummaryModelOf =
-        seams.summaryModel ??
-        ((owner, chosen, effort) =>
-          productionSummaryModel(owner, chosen, effort).pipe(
-            Effect.provideService(HostedEnvironment, environment),
-          ));
+      const summaryModel = yield* summaryModelOf(seams);
       const { agent, created } = yield* startRequestedAgent(
         eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
         taskId,
         input.body,
+        summaryModel,
+      );
+      return {
+        status: created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
+        body: { agent },
+      };
+    }),
+    /**
+     * A teammate's agent taken over by the caller (`coder-host/take-over.ts`):
+     * continued in a new agent of theirs, reaching eve as the caller, the
+     * teammate's archived with its open inbox items and its automations moved
+     * to the new one; 201 for the agent made, 200 for the one a retry under
+     * the same key made before. The caller's own agent is not permitted.
+     */
+    takeOver: signedIn.takeOver.effect(function* ({ input, context }) {
+      const summaryModel = yield* summaryModelOf(seams);
+      const { agent, created } = yield* takeOverCodingAgent(
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        context.userId,
+        input.params.id,
+        input.body.idempotencyKey,
         summaryModel,
       );
       return {

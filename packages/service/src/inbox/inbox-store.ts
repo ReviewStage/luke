@@ -96,15 +96,17 @@ import {
   eq,
   exists,
   getTableName,
+  inArray,
   isNotNull,
   isNull,
   max,
   ne,
+  notExists,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
-import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, type AnyPgTable, alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -612,6 +614,61 @@ const lockAgent = SqlSchema.findOneOption({
           ),
         )
         .for("update"),
+    ),
+});
+
+/** The items already standing under the agent an item is handed to, which keep their keys. */
+const heldItem = alias(inboxItem, "held_item");
+
+/**
+ * One agent's open items handed to another agent and its owner, where the
+ * account is a member of their workspace; an item under a key the other
+ * agent already holds stays where it stands, since one agent holds one item
+ * per key.
+ */
+const handOverItems = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    fromAgentId: Schema.String,
+    toAgentId: Schema.String,
+    toUserId: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, fromAgentId, toAgentId, toUserId }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({ agentId: toAgentId, userId: toUserId })
+        .where(
+          and(
+            eq(inboxItem.agentId, fromAgentId),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            itemReachableBy(userId),
+            notExists(
+              db
+                .select({ id: heldItem.id })
+                .from(heldItem)
+                .where(and(eq(heldItem.agentId, toAgentId), eq(heldItem.key, inboxItem.key))),
+            ),
+          ),
+        )
+        .returning({ id: inboxItem.id }),
+    ),
+});
+
+/** The files of the items handed over that were kept for the agent's owner, kept for the owner they were handed to. */
+const handOverItemFiles = SqlSchema.void({
+  Request: Schema.Struct({
+    itemIds: Schema.Array(Schema.String),
+    fromUserId: Schema.String,
+    toUserId: Schema.String,
+  }),
+  execute: ({ itemIds, fromUserId, toUserId }) =>
+    Database.use((db) =>
+      db
+        .update(attachment)
+        .set({ userId: toUserId })
+        .where(and(inArray(attachment.inboxItemId, itemIds), eq(attachment.userId, fromUserId))),
     ),
 });
 
@@ -2197,6 +2254,39 @@ export function readInboxAttachment(
   attachmentId: string,
 ): InboxStoreEffect<Option.Option<InboxFile>> {
   return findAttachment({ userId, itemId, attachmentId });
+}
+
+/**
+ * One agent's open items handed to another of its workspace, as a take-over
+ * hands the work on: each item, its thread, and the ask it holds open, now
+ * the other agent's and its owner's, so an answer reaches the agent that
+ * goes on, and the files kept for the first owner kept for the second.
+ * Answered and closed items stay with the agent that posted them, as does
+ * an open one under a key the other agent already holds. Answers the items
+ * handed over; nothing where the account is not a member of their workspace.
+ */
+export function handOverOpenInboxItems(
+  userId: string,
+  from: Pick<InboxAgent, "userId" | "agentId">,
+  to: Pick<InboxAgent, "userId" | "agentId">,
+): InboxStoreEffect<readonly string[]> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const moved = yield* handOverItems({
+          userId,
+          fromAgentId: from.agentId,
+          toAgentId: to.agentId,
+          toUserId: to.userId,
+        });
+        const itemIds = moved.map((row) => row.id);
+        if (itemIds.length > 0) {
+          yield* handOverItemFiles({ itemIds, fromUserId: from.userId, toUserId: to.userId });
+        }
+        return itemIds;
+      }),
+    ),
+  );
 }
 
 /**

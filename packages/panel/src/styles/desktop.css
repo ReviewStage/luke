@@ -7692,7 +7692,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-12);
 }
 
-.move-effects {
+/* Take over (`agent-take-over.tsx`) says what it does in the same well, under
+   its question. */
+.move-effects,
+.take-over-effects {
   display: grid;
   gap: var(--luke-space-4);
   margin: 0;

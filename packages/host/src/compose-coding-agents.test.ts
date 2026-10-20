@@ -299,6 +299,11 @@ function fakeService() {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
         return { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } };
       }),
+    takeOver: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`take-over:${agentId}:${request.idempotencyKey}`);
+        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
+      }),
     pin: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
@@ -652,6 +657,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TAKE_OVER, {
+        agentId: AGENT_ID,
+        idempotencyKey: "take-1",
+      }),
+      { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
       { agent: AGENT },
     );
@@ -867,6 +879,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `servers:${AGENT_ID}:linear`,
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
+      `take-over:${AGENT_ID}:take-1`,
       `pin:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,

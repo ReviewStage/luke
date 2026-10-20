@@ -488,6 +488,17 @@ export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
 export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
 
 /**
+ * A teammate's agent taken over (POST): a new agent of the caller's goes on
+ * from it, under the request's own key, so a retry carrying the same key
+ * answers the agent the first made, and the teammate's is archived.
+ */
+export const codingAgentTakeOverRequestSchema = EffectSchema.Struct({
+  idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+});
+
+export type CodingAgentTakeOverRequest = typeof codingAgentTakeOverRequestSchema.Type;
+
+/**
  * Pinning an agent in the sidebar, or unpinning it (PATCH). The pin is the
  * asking member's own and no one else's, as a plan's is; pinning one
  * already pinned keeps the instant it was first pinned. A position, where

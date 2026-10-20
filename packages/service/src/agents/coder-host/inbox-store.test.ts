@@ -57,9 +57,11 @@ import {
   accountInboxLiveStatements,
   accountInboxTasks,
   accountWaitingItems,
+  agentInboxItems,
   answerInboxItem,
   closeInboxItem,
   closeInboxItemAsMember,
+  handOverOpenInboxItems,
   INBOX_MESSAGE_OUTCOME,
   type InboxAgent,
   type InboxFile,
@@ -211,6 +213,69 @@ const liveAnswerOf = (userId: string, readAt: number) =>
   });
 
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "a teammate's take-over hands the agent's open items, pictures and all, to the agent that goes on and its owner, while an item under a key the new agent holds stays, and an account outside the workspace hands nothing",
+    () =>
+      Effect.gen(function* () {
+        const { agent: source, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        const started = yield* createCodingAgent(teammate, {
+          taskId: source.taskId,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        const goesOn = {
+          ...source,
+          userId: teammate,
+          agentId: Option.getOrThrow(started).agent.id,
+        };
+        const handed = yield* postInboxItem(
+          source,
+          {
+            ...SETTINGS,
+            blocks: [{ type: INBOX_BLOCK.IMAGE, path: "shots/rule.png", alt: "The branch rule" }],
+          },
+          [{ contentType: INBOX_IMAGE_TYPE.PNG, bytes: SHOT }],
+        );
+        const clashing = yield* postInboxItem(source, { ...SETTINGS, key: "release" });
+        const held = yield* postInboxItem(goesOn, { ...SETTINGS, key: "release" });
+        assert.ok(Result.isSuccess(handed) && Result.isSuccess(clashing) && Result.isSuccess(held));
+        const picture = handed.success.blocks.find(
+          (block): block is InboxImageBlock => block.type === INBOX_BLOCK.IMAGE,
+        );
+        assert.ok(picture);
+
+        const outside = yield* handOverOpenInboxItems(outsider, source, goesOn);
+        const moved = yield* handOverOpenInboxItems(teammate, source, goesOn);
+
+        assert.deepEqual(outside, []);
+        assert.deepEqual(moved, [handed.success.id]);
+        const theirs = yield* agentInboxItems(goesOn);
+        assert.deepEqual(
+          theirs.map((item) => item.id).toSorted(),
+          [handed.success.id, held.success.id].toSorted(),
+        );
+        assert.ok(
+          Option.isSome(
+            yield* readInboxAttachment(teammate, handed.success.id, picture.attachmentId),
+          ),
+          "the handed item keeps its picture",
+        );
+        const left = yield* agentInboxItems(source);
+        assert.deepEqual(
+          left.map((item) => item.id),
+          [clashing.success.id],
+          "the item under a key the new agent held stays",
+        );
+      }),
+  );
+
   it.effect(
     "a message that waits names its author by what they are called, a person by their account's name and a task's Luke as Luke, alike in the live read and the held read",
     () =>

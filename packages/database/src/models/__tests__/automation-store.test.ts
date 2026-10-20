@@ -34,17 +34,20 @@ import {
   readAutomation,
   readWebhookAutomation,
   recordAutomationRun,
+  retargetAutomations,
   settleAutomationRun,
   updateAutomation,
 } from "../automation-store.js";
+import { createCodingAgent } from "../coding-agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
  * on a task the account reaches, read and changed by that account alone
  * while it still reaches the task, one run per firing however often it is
- * claimed, a run settled once, and a schedule claimed once when due, its
- * backlog moved on rather than run.
+ * claimed, a run settled once, a schedule claimed once when due, its
+ * backlog moved on rather than run, and the agent its runs go to handed on
+ * by a member of its workspace alone.
  *
  * Synthetic accounts, workspaces, and tasks throughout.
  */
@@ -90,6 +93,48 @@ const nightly = (taskId: string): NewAutomation => ({
 });
 
 it.layer(getTestDB())("the automation store", (it) => {
+  it.effect(
+    "a member of its workspace sends the runs an automation sent to one agent to another, and an account outside it moves nothing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const outsider = yield* openAccount;
+        const taskId = yield* openTask(owner);
+        const agentOf = Effect.map(
+          createCodingAgent(owner, {
+            taskId,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+            planSnapshot: "# Nightly triage\n",
+            prompt: null,
+          }),
+          (started) => Option.getOrThrow(started).agent.id,
+        );
+        const source = yield* agentOf;
+        const goesOn = yield* agentOf;
+        const sameAgent = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            ...nightly(taskId),
+            nextRunAt: null,
+            targetKind: AUTOMATION_TARGET.SAME_AGENT,
+            targetAgentId: source,
+          }),
+        );
+
+        const outside = yield* retargetAutomations(outsider, source, goesOn);
+        const unmoved = Option.getOrThrow(yield* readAutomation(owner, sameAgent.id));
+        const moved = yield* retargetAutomations(owner, source, goesOn);
+        const now = Option.getOrThrow(yield* readAutomation(owner, sameAgent.id));
+
+        assert.deepEqual(outside, []);
+        assert.equal(unmoved.targetAgentId, source);
+        assert.deepEqual(moved, [sameAgent.id]);
+        assert.equal(now.targetAgentId, goesOn);
+      }),
+  );
+
   it.effect(
     "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for the sweep alone",
     () =>

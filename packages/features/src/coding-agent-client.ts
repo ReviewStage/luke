@@ -75,10 +75,12 @@ import {
   type CodingAgentRenameRequest,
   type CodingAgentServersRequest,
   type CodingAgentStartRequest,
+  type CodingAgentTakeOverRequest,
   codingAgentMessageRequestSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
+  codingAgentTakeOverRequestSchema,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
@@ -177,6 +179,12 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
   [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
+} satisfies NamedRefusals;
+
+/** The refusals a take-over can answer with: a Start's, and a source archived since, which no one takes over. */
+const TAKE_OVER_REFUSALS = {
+  ...START_REFUSALS,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -579,6 +587,30 @@ export class HostedCodingAgentClient {
         (started) => started.body,
       ),
       START_REFUSALS,
+    );
+  }
+
+  /**
+   * Takes over a teammate's agent under the request's own key, so a retry
+   * carrying the same key answers the agent the first made: a new agent of
+   * the account's goes on from it, and the teammate's is archived.
+   */
+  takeOver(
+    agentId: string,
+    request: CodingAgentTakeOverRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(codingAgentTakeOverRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      Effect.map(
+        askHosted(
+          this.#hosted.agents.takeOver,
+          { params: { id: agentId }, body: admitted },
+          HOSTED_DEADLINE.START,
+        ),
+        (started) => started.body,
+      ),
+      TAKE_OVER_REFUSALS,
     );
   }
 

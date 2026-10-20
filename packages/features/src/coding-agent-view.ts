@@ -20,6 +20,7 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
+  codingAgentTakeOverRequestSchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
@@ -300,6 +301,14 @@ export const codingAgentArchiveParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentArchiveParams = typeof codingAgentArchiveParamsSchema.Type;
+
+/** One teammate's agent taken over, as the window asks it: the agent and the key the window minted for the press. */
+export const codingAgentTakeOverParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentTakeOverRequestSchema.fields,
+});
+
+export type CodingAgentTakeOverParams = typeof codingAgentTakeOverParamsSchema.Type;
 
 /** One agent pinned or unpinned, as the window asks it: the agent and which. */
 export const codingAgentPinParamsSchema = EffectSchema.Struct({
