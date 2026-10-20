@@ -1,11 +1,11 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ff5696b7-b287-4db0-be1e-a76c2ac0a614",
+  "id": "a7d4ff71-0fd3-4495-b868-ab0e5026f772",
   "prevIds": [
-    "2c67ce47-35b1-46b7-b885-7754676f4141",
-    "ab6b290d-468e-498f-bc07-eebf2d6ffaff",
-    "edad1ba7-1bf0-439f-a276-55a66e473d57"
+    "b115e346-06af-4881-a9a6-6decc8d730aa",
+    "d921e078-cd52-43f9-993c-def07d07222f",
+    "df35a0dc-805f-4c3d-b138-8191a9f6bf20"
   ],
   "ddl": [
     {
@@ -17,6 +17,12 @@
     {
       "isRlsEnabled": false,
       "name": "account_provider_key",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "agent_browser_tab",
       "entityType": "tables",
       "schema": "public"
     },
@@ -251,6 +257,12 @@
     {
       "isRlsEnabled": false,
       "name": "mac_command_listener",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "mac_command_listener_kind",
       "entityType": "tables",
       "schema": "public"
     },
@@ -634,6 +646,162 @@
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "target_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "address",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "''",
+      "generated": null,
+      "identity": null,
+      "name": "title",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "opened_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "opened_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "driver_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "last_acted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
     },
     {
       "type": "text",
@@ -5866,10 +6034,36 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": "'shell'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
       "name": "command",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "params",
       "entityType": "columns",
       "schema": "public",
       "table": "mac_command"
@@ -5927,6 +6121,32 @@
       "table": "mac_command"
     },
     {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "result_image",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "result_image_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -5951,6 +6171,45 @@
       "entityType": "columns",
       "schema": "public",
       "table": "mac_command_listener"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command_listener_kind"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command_listener_kind"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "seen_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command_listener_kind"
     },
     {
       "type": "text",
@@ -7573,6 +7832,32 @@
       "generated": null,
       "identity": null,
       "name": "runner_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_sequence",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_projection",
       "entityType": "columns",
       "schema": "public",
       "table": "conversations"
@@ -9591,6 +9876,62 @@
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "target_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_browser_tab_conversation_target",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "task_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_browser_tab_task_created",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_browser_tab"
     },
     {
       "nameExplicit": true,
@@ -12553,6 +12894,58 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_browser_tab_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["task_id"],
+      "schemaTo": "public",
+      "tableTo": "task",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_browser_tab_task_id_task_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["opened_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "agent_browser_tab_opened_by_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["driver_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "agent_browser_tab_driver_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -13651,6 +14044,19 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "mac_command_listener_kind_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "mac_command_listener_kind"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "personal_workspace_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -14412,6 +14818,14 @@
       "table": "github_repository_read"
     },
     {
+      "columns": ["user_id", "kind"],
+      "nameExplicit": false,
+      "name": "mac_command_listener_kind_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "mac_command_listener_kind"
+    },
+    {
       "columns": ["task_id", "seq"],
       "nameExplicit": false,
       "name": "plan_revision_plan_id_seq_pk",
@@ -14481,6 +14895,14 @@
       "name": "account_chatgpt_host_pkey",
       "schema": "public",
       "table": "account_chatgpt_host",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "agent_browser_tab_pkey",
+      "schema": "public",
+      "table": "agent_browser_tab",
       "entityType": "pks"
     },
     {
