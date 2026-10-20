@@ -69,10 +69,25 @@ const NOT_MODIFIED = 304;
 const FIRST_HUNDRED = { per_page: "100" } as const;
 
 /** A check run's conclusions and a commit status's states told as failed, as the webhook path tells them. */
-const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set(["failure", "timed_out"]);
-const FAILED_STATES: ReadonlySet<string> = new Set(["failure", "error"]);
+const GITHUB_CHECK = {
+  COMPLETED: "completed",
+  FAILURE: "failure",
+  TIMED_OUT: "timed_out",
+  ERROR: "error",
+} as const;
+const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set([
+  GITHUB_CHECK.FAILURE,
+  GITHUB_CHECK.TIMED_OUT,
+]);
+const FAILED_STATES: ReadonlySet<string> = new Set([GITHUB_CHECK.FAILURE, GITHUB_CHECK.ERROR]);
 
-const COMPLETED = "completed";
+/** What a wake's key names, in place of a delivery's id. */
+const WAKE_KEY = {
+  REVIEW: "review",
+  COMMENT: "comment",
+  CHECK: "check",
+  STATUS: "status",
+} as const;
 
 /** A review its author has not submitted, which no one else sees. */
 const PENDING_REVIEW = "PENDING";
@@ -174,6 +189,14 @@ function readIfChanged<A>(
   );
 }
 
+/** A wake's key, its kind and GitHub's ids encoded so no part can run into the next. */
+function wakeKey(
+  kind: (typeof WAKE_KEY)[keyof typeof WAKE_KEY],
+  ...ids: readonly string[]
+): string {
+  return JSON.stringify([kind, ...ids]);
+}
+
 /** An instant GitHub wrote, in epoch milliseconds, or the poll's own where it wrote none it can read. */
 function instantOf(poll: Poll, written: string | null | undefined): number {
   const at = written == null ? Number.NaN : Date.parse(written);
@@ -253,7 +276,7 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
   const changed = yield* readIfChanged(poll, path, kept.etag, CheckRunsSchema, FIRST_HUNDRED);
   if (Option.isNone(changed)) return { ...kept, told: 0 };
   const failed = changed.value.body.check_runs.find(
-    (run) => run.status === COMPLETED && FAILED_CONCLUSIONS.has(run.conclusion ?? ""),
+    (run) => run.status === GITHUB_CHECK.COMPLETED && FAILED_CONCLUSIONS.has(run.conclusion ?? ""),
   );
   const conclusion = failed?.conclusion ?? null;
   const etag = changed.value.etag;
@@ -266,7 +289,7 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
       by: `${failed.app?.slug ?? "github"}[bot]`,
       at: instantOf(poll, failed.completed_at),
     },
-    `check:${sha}:${conclusion}`,
+    wakeKey(WAKE_KEY.CHECK, sha, failed.conclusion ?? ""),
   );
   return { etag, conclusion, told };
 });
@@ -294,7 +317,7 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
         by: status.creator?.login ?? GHOST,
         at: instantOf(poll, status.updated_at),
       },
-      `status:${sha}:${status.context}:${status.state}`,
+      wakeKey(WAKE_KEY.STATUS, sha, status.context, status.state),
     ),
   );
   return { etag: changed.value.etag, told: counts.reduce((sum, count) => sum + count, 0) };
@@ -339,7 +362,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
               words: review.body ?? "",
               reviewId: review.id,
             },
-            `review:${review.id}`,
+            wakeKey(WAKE_KEY.REVIEW, String(review.id)),
           ],
   );
   const comments = yield* pollListing(
@@ -358,7 +381,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
         at: instantOf(poll, comment.created_at),
         words: comment.body ?? "",
       },
-      `comment:${comment.id}`,
+      wakeKey(WAKE_KEY.COMMENT, String(comment.id)),
     ],
   );
   // The checks' ETags and conclusion stand for the head they were read on, so another head reads afresh.
