@@ -39,6 +39,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** Every move the strip asked for, as its place before and after. */
@@ -246,9 +247,7 @@ const touch = (type: string) =>
   });
 
 test("under a finger, a tab held offers Move left and Move right, and Move right moves it a place along", async () => {
-  vi.spyOn(window, "matchMedia").mockImplementation(
-    (query) => ({ matches: query === "(pointer: coarse)" }) as MediaQueryList,
-  );
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
   const tab = await menuStripTab("Changes");
   vi.useFakeTimers();
   try {
