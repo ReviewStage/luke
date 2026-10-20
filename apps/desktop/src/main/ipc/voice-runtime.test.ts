@@ -285,46 +285,42 @@ it.effect(
     }),
 );
 
-it.effect(
-  "the voice window's transcript changes are held whole in the document, and a report that moved none keeps it",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
-      const view = {
-        ...IDLE_VOICE_VIEW,
-        voiceStatus: LIVE_STATUS.LISTENING,
-        callTaskId: CALL_TASK,
-      };
-      const line = (rowId: string, words: string) => ({
-        rowId,
-        speaker: "user" as const,
-        words,
-        startMs: 0,
-        endMs: 1_000,
-      });
-      f.report(f.voiceSender, view, {
-        voiceSessionId: session,
-        from: 0,
-        lines: [line("a", "One")],
-      });
-      f.report(f.voiceSender, view, { voiceSessionId: session, from: 1, lines: [line("b", "Tw")] });
-      f.report(f.voiceSender, view, {
-        voiceSessionId: session,
-        from: 1,
-        lines: [line("b", "Two")],
-      });
-      f.report(f.voiceSender, { ...view, lukeSpeaking: true });
-      // Another window's report is not the voice window's to write.
-      f.report(f.panelSender, view, { voiceSessionId: session, from: 0, lines: [] });
-      assert.deepEqual(f.state.snapshot().voice.callTranscript, {
-        voiceSessionId: session,
-        lines: [line("a", "One"), line("b", "Two")],
-      });
-      assert.equal(f.state.snapshot().voice.view?.lukeSpeaking, true);
+it("the voice window's transcript changes are held whole in the document, and a report that moved none keeps it", () => {
+  const f = fixture();
+  const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
+  const view = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    callTaskId: CALL_TASK,
+  };
+  const line = (rowId: string, words: string) => ({
+    rowId,
+    speaker: "user" as const,
+    words,
+    startMs: 0,
+    endMs: 1_000,
+  });
+  f.report(f.voiceSender, view, {
+    voiceSessionId: session,
+    from: 0,
+    lines: [line("a", "One")],
+  });
+  f.report(f.voiceSender, view, { voiceSessionId: session, from: 1, lines: [line("b", "Tw")] });
+  f.report(f.voiceSender, view, {
+    voiceSessionId: session,
+    from: 1,
+    lines: [line("b", "Two")],
+  });
+  f.report(f.voiceSender, { ...view, lukeSpeaking: true });
+  // Another window's report is not the voice window's to write.
+  f.report(f.panelSender, view, { voiceSessionId: session, from: 0, lines: [] });
+  assert.deepEqual(f.state.snapshot().voice.callTranscript, {
+    voiceSessionId: session,
+    lines: [line("a", "One"), line("b", "Two")],
+  });
+  assert.equal(f.state.snapshot().voice.view?.lukeSpeaking, true);
 
-      // The call gone: no lines from the first on.
-      f.report(f.voiceSender, IDLE_VOICE_VIEW, { voiceSessionId: undefined, from: 0, lines: [] });
-      assert.equal(f.state.snapshot().voice.callTranscript, undefined);
-    }),
-);
+  // The call gone: no lines from the first on.
+  f.report(f.voiceSender, IDLE_VOICE_VIEW, { voiceSessionId: undefined, from: 0, lines: [] });
+  assert.equal(f.state.snapshot().voice.callTranscript, undefined);
+});
