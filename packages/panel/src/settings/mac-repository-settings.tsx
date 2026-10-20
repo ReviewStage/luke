@@ -158,9 +158,8 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
   return (
     <SettingsSection title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
       <SettingsLine>
-        Run, in an agent tab&apos;s ⋯, checks the agent&apos;s pushed branch out on this Mac with
-        your own git login and opens a terminal on it inside Luke. A repository&apos;s run command,
-        if it has one, runs there first. Commands are kept on this Mac only.
+        Run checks an agent&apos;s pushed branch out on this Mac with your own git login, then runs
+        the repository&apos;s command. Commands are kept on this Mac only.
       </SettingsLine>
       {read.failed ? (
         <SettingsLine>

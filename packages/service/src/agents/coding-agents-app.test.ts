@@ -155,7 +155,11 @@ import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/i
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request-write-wire";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_BOUNDS,
+  REACTION,
+} from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_LIST_ARCHIVED,
@@ -241,6 +245,7 @@ import {
   sourceCheckout,
   sourceSandbox,
 } from "../testing/source-sandbox.js";
+import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -521,6 +526,30 @@ const countedFor = (userId: string, name: string) =>
   ANALYTICS.recorded.filter((event) => event.userId === userId && event.name === name).length;
 
 /**
+ * The public path of each route the hosted oRPC router answers, by the
+ * flattened key a test names it with: the rewrite carries this path to the
+ * router in `route-path`, and keeps the agent's id in the `id` query beside
+ * it, as a request here does.
+ */
+const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
+  ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
+  ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
+  ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
+  ["/api/agents/overview-pull-request", (id: string) => `/api/agents/${id}/overview/pull-request`],
+  ["/api/agents/overview-checks", (id: string) => `/api/agents/${id}/overview/checks`],
+  ["/api/agents/overview-conversation", (id: string) => `/api/agents/${id}/overview/conversation`],
+]);
+
+/** The request at its public path, for a route the hosted oRPC router answers; none for any other route. */
+function publicRequest(request: Request): Request | undefined {
+  const url = new URL(request.url);
+  const publicPath = ORPC_PUBLIC_PATH.get(url.pathname);
+  if (publicPath === undefined) return undefined;
+  url.pathname = publicPath(encodeURIComponent(url.searchParams.get("id") ?? ""));
+  return new Request(url, request);
+}
+
+/**
  * The group over the test's own database, GitHub, and eve, stood once and
  * answering every request of the test, so what it keeps between two
  * requests, the published answers, is kept as one function instance keeps
@@ -581,6 +610,7 @@ const standing = (
       Effect.provide(services),
     )) as Context.Context<WebServices>;
     const routed = hostedFetch({
+      agentPullRequests: agentPullRequestProcedures(seams),
       messages: messagesProcedures(seams),
       plans: tasksProcedures(seams),
     });
@@ -591,9 +621,11 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), chatPictures.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript and the chat land on the hosted oRPC router. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its Pull request tab, and the chat land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
+        const procedure = publicRequest(request);
+        if (procedure !== undefined) return routed(procedure, webServices);
         const url = new URL(request.url);
         const { pathname } = url;
         const id = url.searchParams.get("id");
@@ -648,6 +680,8 @@ function request(
   if (init.number !== undefined) url.searchParams.set("number", init.number);
   const headers = new Headers();
   if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
+  // Every client of the service names its JSON body so, which the hosted oRPC router reads a body by.
+  if (init.body !== undefined) headers.set("content-type", "application/json");
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
   // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
   if (init.body !== undefined) headers.set("content-type", "application/json");
@@ -1619,6 +1653,50 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* TestClock.adjust(Duration.hours(1));
         assert.deepEqual(yield* overview(), cold);
         assert.equal(reachRequests(github.sent.slice(later), installation.id).repositoryMints, 1);
+      }),
+  );
+
+  it.effect(
+    "an agent whose repository its workspace's installation no longer reaches answers each of its Pull request tab's reads and a change as out of reach, byte for byte, with no reason beside it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, fetch } = yield* openTask({ github: publishedPullRequest });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ repository: "Acme/Former" })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const unreached = {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          contentType: "application/json",
+          cacheControl: null,
+          text: '{"error":"repository-not-reachable"}',
+        };
+        const asked = [
+          ...[AGENT_PULL_REQUEST, AGENT_PULL_REQUEST_VIEWED, ...AGENT_OVERVIEW].map((path) =>
+            request(path, owner, { id: agent.id, number: "12" }),
+          ),
+          request(AGENT_PULL_REQUEST_ACTION, owner, {
+            method: "POST",
+            id: agent.id,
+            number: "12",
+            body: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
+          }),
+        ];
+        for (const sent of asked) {
+          const answered = yield* fetch(sent);
+          assert.deepEqual(
+            {
+              status: answered.status,
+              contentType: answered.headers.get("content-type"),
+              cacheControl: answered.headers.get("cache-control"),
+              text: yield* Effect.promise(() => answered.text()),
+            },
+            unreached,
+          );
+        }
       }),
   );
 
@@ -5422,6 +5500,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(pressed.taken, true);
         assert.equal(eve.sent.length, before + 1, "an item that asks nothing back messages nobody");
 
+        const withdrawn = yield* closeInboxItem(
+          { userId: owner, agentId: asked.success.agentId },
+          QUESTION.key,
+          "Found it myself.",
+        );
+        assert.ok(Option.isNone(withdrawn), "the agent withdraws no ask the member's close did");
+        assert.ok(Result.isSuccess(yield* post(QUESTION)), "the agent asks again");
         yield* closeInboxItem(
           { userId: owner, agentId: asked.success.agentId },
           QUESTION.key,
@@ -8648,6 +8733,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
       return {
         ...opened,
         ...started,
+        codingAgent: started.agent,
         workspace,
         sessionId,
         agent,
@@ -8658,6 +8744,26 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         agentAsks,
       };
     });
+
+  it.effect(
+    "the window's read names each person by their account's name and each agent as its tab does, and a post names its place by the channel shown",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const answer = yield* chat.read;
+        const named = (id: string) => answer.members.find((member) => member.id === id)?.name;
+        assert.equal(named(answer.self), "Test User");
+        assert.equal(named(chat.agent.id), chat.codingAgent.title ?? chat.codingAgent.model);
+
+        const sent = yield* chat.wrote({
+          text: "Ship it once the migration lands.",
+          channelId: chat.channel.id,
+          clientKey: randomUUID(),
+        });
+        assert.ok("posted" in sent);
+        assert.equal(sent.posted.channelId, chat.channel.id);
+      }),
+  );
 
   it.effect(
     "a person's DM to an agent steers it once as a chat line, the receipt naming it told, and the post repeated under its key steers nothing more",

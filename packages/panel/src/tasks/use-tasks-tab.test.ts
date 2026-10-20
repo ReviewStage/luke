@@ -162,7 +162,7 @@ function mount(
   const links: SettingsLink[] = [];
   const record = (kind: ActKind | PortActKind) => {
     if (!kind.startsWith("codingAgents.")) told.push(kind);
-    else if (!isPortActKind(kind)) agentActs.push(kind);
+    else agentActs.push(kind);
   };
   let control: TasksControl | undefined;
   let restand: ((next: Standing) => void) | undefined;

@@ -11,7 +11,7 @@ import {
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "@luke/runtime/testing";
-import { type TestContext, test } from "vitest";
+import { type TestContext, test, vi } from "vitest";
 
 const SCRIPT = fileURLToPath(new URL("../../../scripts/eve-source-maps.sh", import.meta.url));
 
@@ -115,12 +115,26 @@ test("a build without SENTRY_AUTH_TOKEN uploads nothing and leaves the output as
   assert.deepEqual(existing(root, ".vercel/output"), BUILT_FILES);
 });
 
+test("a Preview build with the token uploads nothing and leaves the output as eve wrote it", async (t) => {
+  const root = await builtService(t, ".vercel/output");
+  const run = await upload(t, root, {
+    VERCEL: "1",
+    VERCEL_GIT_COMMIT_SHA: COMMIT,
+    SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "preview",
+  });
+  assert.equal(run.status, 0, run.output);
+  assert.equal(run.uploadArguments, undefined);
+  assert.deepEqual(existing(root, ".vercel/output"), BUILT_FILES);
+});
+
 test("a build with the token uploads every bundle's maps to luke-web under the commit, then ships none", async (t) => {
   const root = await builtService(t, ".vercel/output");
   const run = await upload(t, root, {
     VERCEL: "1",
     VERCEL_GIT_COMMIT_SHA: COMMIT,
     SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "production",
   });
   assert.equal(run.status, 0, run.output);
   assert.equal(flagValue(run.uploadArguments, "--org"), "stage-review");
@@ -147,6 +161,7 @@ test("the output Vercel names for the service is the one uploaded from", async (
     VERCEL: "1",
     EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY: "service-output",
     SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "production",
   });
   assert.equal(run.status, 0, run.output);
   assert.equal(run.uploadedMaps.length, 3);
@@ -164,7 +179,53 @@ test("a build with the token but no maps fails rather than shipping traces Sentr
     VERCEL: "1",
     VERCEL_GIT_COMMIT_SHA: COMMIT,
     SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "production",
   });
   assert.notEqual(run.status, 0);
   assert.equal(run.uploadArguments, undefined);
+});
+
+/** Each eve root's Nitro config, which decides whether `eve build` writes the maps this step uploads. */
+const NITRO_CONFIGS = ["luke", "dev"].map((root) =>
+  fileURLToPath(new URL(`../../${root}/nitro.config.ts`, import.meta.url)),
+);
+
+/** What a Nitro config's production overrides say about source maps. */
+interface NitroProductionConfig {
+  readonly sourcemap?: string;
+}
+
+/** The production overrides one Nitro config answers under `environment`. */
+async function nitroProductionConfig(
+  path: string,
+  environment: Readonly<Record<string, string>>,
+): Promise<NitroProductionConfig> {
+  vi.resetModules();
+  vi.stubEnv("SENTRY_AUTH_TOKEN", environment.SENTRY_AUTH_TOKEN ?? "");
+  vi.stubEnv("VERCEL_ENV", environment.VERCEL_ENV ?? "");
+  try {
+    const loaded: { default: { $production: NitroProductionConfig } } = await import(
+      /* @vite-ignore */ path
+    );
+    return loaded.default.$production;
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
+test("each eve root's Nitro config writes hidden maps only for a production build holding the token", async () => {
+  for (const path of NITRO_CONFIGS) {
+    const production = await nitroProductionConfig(path, {
+      SENTRY_AUTH_TOKEN: "test-token",
+      VERCEL_ENV: "production",
+    });
+    assert.equal(production.sourcemap, "hidden", path);
+    for (const environment of [
+      { SENTRY_AUTH_TOKEN: "test-token", VERCEL_ENV: "preview" },
+      { SENTRY_AUTH_TOKEN: "test-token" },
+      { VERCEL_ENV: "production" },
+    ]) {
+      assert.deepEqual(await nitroProductionConfig(path, environment), {}, path);
+    }
+  }
 });

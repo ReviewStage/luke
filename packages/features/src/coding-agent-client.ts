@@ -77,11 +77,7 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
-  codingAgentOverviewChecksAnswerSchema,
-  codingAgentOverviewConversationAnswerSchema,
-  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
-  codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
@@ -123,22 +119,14 @@ import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
-  pullRequestViewedAnswerSchema,
-  pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
   agentGitHubImagePath,
   agentInboxPath,
-  agentOverviewChecksPath,
-  agentOverviewConversationPath,
-  agentOverviewPullRequestPath,
   agentPath,
   agentPicturePath,
-  agentPullRequestActionPath,
-  agentPullRequestPath,
-  agentPullRequestViewedPath,
   agentReviewOptionsPath,
   agentStopPath,
   HOSTED_SERVICE_PATH,
@@ -318,6 +306,11 @@ function hostedAnswer<Answer>(
   named: NamedRefusals,
 ): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
   return Effect.catch(asked, (failed) => Effect.succeed(hostedFailedAs(failed, named)));
+}
+
+/** The agent and, where the tab names one, the pull request of its repository a read is about, the number as its query spells it. */
+function pullRequestRead(agentId: string, number: number | undefined) {
+  return number === undefined ? { id: agentId } : { id: agentId, number: String(number) };
 }
 
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
@@ -727,9 +720,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentPullRequestAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId, number) }),
-      (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.pullRequest, pullRequestRead(agentId, number)),
+      ROW_REFUSALS,
     );
   }
 
@@ -749,12 +742,12 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: agentOverviewPullRequestPath(agentId, number),
-      }),
-      (answer) => readAnswer(answer, codingAgentOverviewPullRequestAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.agentPullRequests.overviewPullRequest,
+        pullRequestRead(agentId, number),
+      ),
+      ROW_REFUSALS,
     );
   }
 
@@ -773,9 +766,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewChecksPath(agentId, number) }),
-      (answer) => readAnswer(answer, codingAgentOverviewChecksAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.overviewChecks, pullRequestRead(agentId, number)),
+      ROW_REFUSALS,
     );
   }
 
@@ -784,12 +777,12 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: agentOverviewConversationPath(agentId, number),
-      }),
-      (answer) => readAnswer(answer, codingAgentOverviewConversationAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.agentPullRequests.overviewConversation,
+        pullRequestRead(agentId, number),
+      ),
+      ROW_REFUSALS,
     );
   }
 
@@ -913,13 +906,14 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: agentPullRequestActionPath(agentId, number),
-        body: JSON.stringify(admitted),
+    const read = pullRequestRead(agentId, number);
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.action, {
+        params: { id: read.id },
+        ...(read.number === undefined ? undefined : { query: { number: read.number } }),
+        body: admitted,
       }),
-      (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
+      ROW_REFUSALS,
     );
   }
 
@@ -928,12 +922,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: agentPullRequestViewedPath(agentId, number),
-      }),
-      (answer) => readAnswer(answer, pullRequestViewedAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number)),
+      ROW_REFUSALS,
     );
   }
 

@@ -398,7 +398,7 @@ function inboxToolView(
       output: refused,
     };
   }
-  if (tool === AGENT_TOOL.CLOSE_INBOX_ITEM) {
+  if (tool === RETIRED_TOOL.CLOSE_INBOX_ITEM) {
     return {
       kind: CALL_KIND.INBOX_CLOSE,
       subject: stringAt(input, "key") ?? "",
@@ -569,7 +569,7 @@ function knownToolView(
         output: output === undefined ? undefined : jsonBlock(output),
       };
     case AGENT_TOOL.POST_TO_INBOX:
-    case AGENT_TOOL.CLOSE_INBOX_ITEM:
+    case RETIRED_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:
     case REPLY_INBOX_TOOL:
       return inboxToolView(tool, input, output);
@@ -1048,7 +1048,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
-  [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
+  [RETIRED_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
   [REPLY_INBOX_TOOL, () => INBOX_TARGET],
   [CHAT_TOOL.POST, tasksOwnPost],

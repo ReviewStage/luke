@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, type CodingAgentBrief } from "@luke/features/coding-agent-wire";
@@ -399,16 +399,31 @@ const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4
  * code for each brief, on a task and on none: what an agent whose starter
  * has not turned Chat on must still read, byte for byte.
  */
+const BEFORE_CHAT_PATH = fileURLToPath(
+  new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url),
+);
+
+/** The instructions with Chat off for each brief, on a task and on none, as the golden records them. */
+function chatOffInstructions(): Record<string, { onTask: string; taskless: string }> {
+  return Object.fromEntries(
+    Object.values(CODING_AGENT_BRIEF).map((brief) => [
+      brief,
+      {
+        onTask: coderInstructions("Acme/Relay", brief, true, TASK_LINK),
+        taskless: coderInstructions("Acme/Relay", brief, false, null),
+      },
+    ]),
+  );
+}
+
+// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
+if (process.env.LUKE_UPDATE_FIXTURES === "1") {
+  writeFileSync(BEFORE_CHAT_PATH, `${JSON.stringify(chatOffInstructions(), null, 2)}\n`);
+}
+
 const BEFORE_CHAT = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
-)(
-  JSON.parse(
-    readFileSync(
-      fileURLToPath(new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url)),
-      "utf8",
-    ),
-  ),
-);
+)(JSON.parse(readFileSync(BEFORE_CHAT_PATH, "utf8")));
 
 test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {

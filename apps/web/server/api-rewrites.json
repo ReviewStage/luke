@@ -45,19 +45,19 @@
   },
   {
     "src": "/api/plans/([^/]+)/code",
-    "dest": "/api/default.js?route=plans/code&id=$1"
+    "dest": "/api/default.js?route=plans/code&route-path=plans/$1/code&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/file",
-    "dest": "/api/default.js?route=plans/file&id=$1"
+    "dest": "/api/default.js?route=plans/file&route-path=plans/$1/file&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/tree",
-    "dest": "/api/default.js?route=plans/tree&id=$1"
+    "dest": "/api/default.js?route=plans/tree&route-path=plans/$1/tree&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/skills",
-    "dest": "/api/default.js?route=plans/skills&id=$1"
+    "dest": "/api/default.js?route=plans/skills&route-path=plans/$1/skills&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/edit",
@@ -69,11 +69,11 @@
   },
   {
     "src": "/api/plans/([^/]+)/comments/([^/]+)",
-    "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
+    "dest": "/api/default.js?route=plans/comment-thread&route-path=plans/$1/comments/$2&id=$1&thread=$2"
   },
   {
     "src": "/api/plans/([^/]+)/comments",
-    "dest": "/api/default.js?route=plans/comments&id=$1"
+    "dest": "/api/default.js?route=plans/comments&route-path=plans/$1/comments&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/attachments/([^/]+)",
@@ -81,7 +81,7 @@
   },
   {
     "src": "/api/plans/([^/]+)/attachments",
-    "dest": "/api/default.js?route=plans/attachments&id=$1"
+    "dest": "/api/default.js?route=plans/attachments&route-path=plans/$1/attachments&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/agents",
@@ -105,11 +105,11 @@
   },
   {
     "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
-    "dest": "/api/default.js?route=plans/page&id=$1&page=$2&version=$3"
+    "dest": "/api/default.js?route=plans/page&route-path=plans/$1/pages/$2/versions/$3&id=$1&page=$2&version=$3"
   },
   {
     "src": "/api/plans/([^/]+)/pages",
-    "dest": "/api/default.js?route=plans/pages&id=$1"
+    "dest": "/api/default.js?route=plans/pages&route-path=plans/$1/pages&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)",
@@ -145,15 +145,15 @@
   },
   {
     "src": "/api/agents/([^/]+)/pull-request",
-    "dest": "/api/default.js?route=agents/pull-request&id=$1"
+    "dest": "/api/default.js?route=agents/pull-request&route-path=agents/$1/pull-request&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/pull-request/action",
-    "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
+    "dest": "/api/default.js?route=agents/pull-request-action&route-path=agents/$1/pull-request/action&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/pull-request/viewed",
-    "dest": "/api/default.js?route=agents/pull-request-viewed&id=$1"
+    "dest": "/api/default.js?route=agents/pull-request-viewed&route-path=agents/$1/pull-request/viewed&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/changes",
@@ -161,15 +161,15 @@
   },
   {
     "src": "/api/agents/([^/]+)/overview/pull-request",
-    "dest": "/api/default.js?route=agents/overview-pull-request&id=$1"
+    "dest": "/api/default.js?route=agents/overview-pull-request&route-path=agents/$1/overview/pull-request&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/overview/checks",
-    "dest": "/api/default.js?route=agents/overview-checks&id=$1"
+    "dest": "/api/default.js?route=agents/overview-checks&route-path=agents/$1/overview/checks&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/overview/conversation",
-    "dest": "/api/default.js?route=agents/overview-conversation&id=$1"
+    "dest": "/api/default.js?route=agents/overview-conversation&route-path=agents/$1/overview/conversation&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/github-image",

@@ -327,3 +327,19 @@ export function withPublishedCache<A, E, R>(
 ): Effect.Effect<Layer.Layer<A, E, R>> {
   return Effect.map(publishedCache, routes);
 }
+
+/**
+ * A cache of its own for procedures that are built with no Effect to build
+ * one in (`agent-pull-request-procedures.ts`): made on the first ask and
+ * kept for the instance's life, as a route group's is. Note that two first
+ * asks at once each make one and the first to land is the one kept, so
+ * every later ask shares it.
+ */
+export function instancePublishedCache(): Effect.Effect<PublishedCache> {
+  let kept: PublishedCache | undefined;
+  return Effect.suspend(() =>
+    kept === undefined
+      ? Effect.map(publishedCache, (made) => (kept ??= made))
+      : Effect.succeed(kept),
+  );
+}

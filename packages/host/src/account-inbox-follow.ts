@@ -7,7 +7,17 @@ import {
   nextFailedRunExpiry,
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
-import { Cause, Data, Duration, Effect, Option, Queue, Schema, Stream } from "effect";
+import {
+  Cause,
+  Data,
+  Duration,
+  Effect,
+  ErrorReporter,
+  Option,
+  Queue,
+  Schema,
+  Stream,
+} from "effect";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime as Neon's guide says to.
@@ -23,6 +33,14 @@ import { Cause, Data, Duration, Effect, Option, Queue, Schema, Stream } from "ef
  *
  * A seal the service did not answer is asked for again, and a subscription
  * that stops for good started again, after `LIVE_RESTART`.
+ *
+ * A follow that has published no answer `FIRST_ANSWER_BOUND` after it began
+ * is reported once, as a warning, to the host's line and to whatever error
+ * reporter the runtime carries, naming why it last stopped and never an
+ * address or a seal, and goes on asking. Realtime's client reconnects a
+ * socket that never opens without end and says nothing of it, so without
+ * this a socket the page may not open (the web app's
+ * `Content-Security-Policy`) leaves the account's inbox empty in silence.
  */
 
 /** How long before a sealed statement expires it is renewed, as Neon's own bindings renew it. */
@@ -32,11 +50,25 @@ const RENEW_RETRY = Duration.seconds(1);
 /** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
 const LIVE_RESTART = Duration.seconds(5);
 
+/** How long a follow may go without its first answer before it is reported, once. */
+const FIRST_ANSWER_BOUND = Duration.seconds(30);
+
 /** How often a follower holding no failed run looks again for one to age out, since one may arrive meanwhile. */
 const EXPIRY_RECHECK = Duration.hours(1);
 
 /** A subscription that stopped for good: Realtime said so, or a row did not decode. */
 class LiveBroken extends Data.TaggedError("LiveBroken")<{ readonly reason: string }> {}
+
+/** A follow that has answered nothing within its bound, reported once as a warning; `reason` is why it last stopped, never an address or a seal. */
+class LiveUnanswered extends Data.TaggedError("LiveUnanswered")<{ readonly reason: string }> {
+  override readonly [ErrorReporter.severity] = "Warn" as const;
+  override get message(): string {
+    return `the account inbox's live read has not answered in ${Duration.toSeconds(FIRST_ANSWER_BOUND)} seconds: ${this.reason}`;
+  }
+}
+
+/** Why a follow that never stopped has not answered: its parts have not all delivered, as when the socket never opened. */
+const NOT_DELIVERED = "Realtime has not delivered every part";
 
 /** One part's subscription, the slice of Realtime's client this reads. */
 interface LiveSubscription {
@@ -246,12 +278,41 @@ function liveAnswers(
 export function followAccountInbox(
   dependencies: AccountInboxFollowDependencies,
 ): Effect.Effect<never> {
-  const attempt = Effect.gen(function* () {
-    const sealed = yield* dependencies.live();
-    if ("failure" in sealed) return yield* Effect.sleep(LIVE_RESTART);
-    yield* Stream.runForEach(liveAnswers(dependencies, sealed), (answer) =>
-      Effect.sync(() => dependencies.publish(answer)),
-    ).pipe(Effect.catch(() => Effect.sleep(LIVE_RESTART)));
+  return Effect.gen(function* () {
+    let answered = false;
+    let stopped = NOT_DELIVERED;
+    yield* Effect.forkChild(
+      Effect.gen(function* () {
+        yield* Effect.sleep(FIRST_ANSWER_BOUND);
+        if (answered) return;
+        const unanswered = new LiveUnanswered({ reason: stopped });
+        yield* Effect.logWarning(unanswered.message);
+        yield* ErrorReporter.report(Cause.fail(unanswered));
+      }),
+    );
+    const attempt = Effect.gen(function* () {
+      const sealed = yield* dependencies.live();
+      if ("failure" in sealed) {
+        stopped = `the service sealed nothing (${sealed.failure})`;
+        return yield* Effect.sleep(LIVE_RESTART);
+      }
+      stopped = NOT_DELIVERED;
+      yield* Stream.runForEach(liveAnswers(dependencies, sealed), (answer) =>
+        Effect.sync(() => {
+          answered = true;
+          dependencies.publish(answer);
+        }),
+      ).pipe(
+        Effect.catch((failure) =>
+          Effect.andThen(
+            Effect.sync(() => {
+              stopped = failure.reason;
+            }),
+            Effect.sleep(LIVE_RESTART),
+          ),
+        ),
+      );
+    });
+    return yield* Effect.forever(attempt);
   });
-  return Effect.forever(attempt);
 }

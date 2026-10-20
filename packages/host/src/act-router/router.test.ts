@@ -10,8 +10,7 @@ import {
   type ActOutcome,
 } from "../acts.js";
 import { recordingReporter } from "../testing/recording-reporter.js";
-import { hostActRows } from "./host-act-rows.js";
-import { createHostActRouter, type HostActDependencies, type PlatformActRows } from "./index.js";
+import type { PlatformActRows } from "./index.js";
 import {
   ActRefused,
   type ActRouter,
@@ -76,74 +75,19 @@ it.effect("a row is handed the sender's standing, which no payload can claim", (
   }),
 );
 
-// SAFETY: no act the assembly tests send reaches a dependency of the host's
-// rows: the one host kind they send is refused at the row's own sender check,
-// and building the rows reads none of them.
-const UNREACHED = {
-  account: {},
-  settings: {},
-  tasks: {},
-  codingAgents: {},
-} as unknown as HostActDependencies;
-
-/** A platform table of every kind the host's rows leave, each recording that it ran. */
+/** A platform table of every kind `app:act` carries, each recording that it ran. */
 function platformRecording(ran: ActKind[]): PlatformActRows<unknown> {
-  const hosts = new Set(Object.keys(hostActRows(UNREACHED)));
-  // SAFETY: the kinds are exactly those the host's rows leave, each once, and
-  // a row answering nothing is what every kind's own guard admits.
-  return recording(
-    ran,
-    KINDS.filter((kind) => !hosts.has(kind)),
-  ) as unknown as PlatformActRows<unknown>;
+  // SAFETY: the kinds are exactly those `app:act` carries, each once, and a
+  // row answering nothing is what every kind's own guard admits.
+  return recording(ran, KINDS) as unknown as PlatformActRows<unknown>;
 }
 
-it.effect(
-  "the assembled table answers the host's kinds by the host's rows and every other by the platform's",
-  () =>
-    Effect.gen(function* () {
-      const ran: ActKind[] = [];
-      const router = createHostActRouter(UNREACHED, platformRecording(ran));
-      const voice: ActSender = { ...PANEL, panel: false, voice: true };
-      const earlier = yield* perform(router, { kind: ACT_KIND.TASKS_WORK_EARLIER }, voice);
-      yield* perform(router, { kind: ACT_KIND.UPDATE_CHECK }, PANEL);
-      assert.deepEqual(earlier, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.TASKS_WORK_EARLIER].refusal,
-      });
-      assert.deepEqual(ran, [ACT_KIND.UPDATE_CHECK]);
-    }),
-);
-
-it.effect(
-  "a platform table carrying a row for one of the host's kinds does not build, and the host's row answers it anyway",
-  () =>
-    Effect.gen(function* () {
-      const ran: ActKind[] = [];
-      const overlapping = {
-        ...platformRecording(ran),
-        [ACT_KIND.TASKS_WORK_EARLIER]: () => {
-          ran.push(ACT_KIND.TASKS_WORK_EARLIER);
-        },
-      };
-      // @ts-expect-error -- tasks.workEarlier is the host's to answer, so a platform row for it is refused.
-      const platform: PlatformActRows<unknown> = overlapping;
-      const router = createHostActRouter(UNREACHED, platform);
-      const voice: ActSender = { ...PANEL, panel: false, voice: true };
-      const earlier = yield* perform(router, { kind: ACT_KIND.TASKS_WORK_EARLIER }, voice);
-      assert.deepEqual(earlier, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.TASKS_WORK_EARLIER].refusal,
-      });
-      assert.deepEqual(ran, []);
-    }),
-);
-
-it.effect("a platform table missing a kind the host leaves it does not build", () =>
+it.effect("a platform table missing a kind does not build", () =>
   Effect.gen(function* () {
     const { [ACT_KIND.UPDATE_CHECK]: _unanswered, ...partial } = platformRecording([]);
     // @ts-expect-error -- update.check is the platform's to answer, and this table has no row for it.
     const platform: PlatformActRows<unknown> = partial;
-    const router = createHostActRouter(UNREACHED, platform);
+    const router = createActRouter(platform);
     const outcome = yield* perform(router, { kind: ACT_KIND.UPDATE_CHECK }, PANEL);
     assert.deepEqual(outcome, {
       status: ACT_OUTCOME_STATUS.REFUSED,

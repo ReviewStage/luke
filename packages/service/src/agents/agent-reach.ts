@@ -72,7 +72,21 @@ export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
   const agentId = yield* uuidOf(request, AGENT_ID_QUERY);
   const userId = yield* resolvedUserId(seams, request);
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+  return yield* reachedAgentById(userId, agentId);
+});
+
+/**
+ * The agent an id names for an account already resolved, as `reachedAgent`
+ * reads it, for a procedure whose path carries the id: an id that is no
+ * UUID names no row, and is not found.
+ */
+export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  id: string,
+): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
+  const read = readEither(wireUuidSchema)(unparsedWire(id));
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, read.success));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return {
     userId,

@@ -286,3 +286,49 @@ test("/api/issues/:id reaches its procedure through the committed table and the 
   assert.equal(deleted.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
   assert.equal(await deleted.text(), '{"error":"method-not-allowed"}');
 });
+
+test("a plan's comment thread path reaches its procedure through the committed table, the dispatcher and the deployed route", async () => {
+  const plan = "0f8e2b7a-4c1d-4e5f-9a6b-7c8d9e0f1a2b";
+  const thread = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+  const routes = new Map([["plans/comment-thread", orpcRoute]]);
+  const unsigned = await dispatched(
+    new Request(`${ORIGIN}/api/plans/${plan}/comments/${thread}`, {
+      method: HTTP_METHOD.POST,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "resolve" }),
+    }),
+    routes,
+  );
+  assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(unsigned.headers.get("cache-control"), null);
+  assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
+
+  const read = await dispatched(
+    new Request(`${ORIGIN}/api/plans/${plan}/comments/${thread}`),
+    routes,
+  );
+  assert.equal(read.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
+  assert.equal(await read.text(), '{"error":"method-not-allowed"}');
+});
+
+test("an agent's Pull request tab is reached at its public paths through the committed table, the dispatcher and the deployed route, and refuses an unsigned caller as its old group did", async () => {
+  const agentId = "8a7c2a1e-3b9f-4c62-9d1e-0f4b5a6c7d8e";
+  const routes = new Map([
+    ["agents/overview-checks", orpcRoute],
+    ["agents/pull-request-action", orpcRoute],
+  ]);
+  for (const sent of [
+    new Request(`${ORIGIN}/api/agents/${agentId}/overview/checks?number=12`),
+    new Request(`${ORIGIN}/api/agents/${agentId}/pull-request/action?number=12`, {
+      method: HTTP_METHOD.POST,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "ready-for-review" }),
+    }),
+  ]) {
+    const unsigned = await dispatched(sent, routes);
+    assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+    assert.equal(unsigned.headers.get("content-type"), "application/json");
+    assert.equal(unsigned.headers.get("cache-control"), null);
+    assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
+  }
+});

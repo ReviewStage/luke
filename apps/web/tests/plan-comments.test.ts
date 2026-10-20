@@ -13,6 +13,7 @@ import {
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
@@ -30,12 +31,14 @@ import {
   type EveMessage,
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import type { WebServices } from "@luke/service/runtime";
-import { planCommentsApp } from "@luke/service/tasks/plan-comments-app";
+import { planCommentsProcedures } from "@luke/service/tasks/plan-comments-procedures";
 import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
+import { announcingClock, driven } from "@luke/service/testing/clock-driven";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -43,26 +46,38 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, type Context, Effect, Layer, Option, Result, Stream } from "effect";
-import { HttpRouter } from "effect/http";
+import {
+  Clock,
+  type Context,
+  Duration,
+  Effect,
+  Layer,
+  Option,
+  Queue,
+  Result,
+  Stream,
+} from "effect";
 import { SqlClient } from "effect/sql";
 
 /**
- * A plan's comment threads through the routes a desktop calls, over a real
+ * A plan's comment threads through the paths a desktop calls, answered by
+ * the hosted oRPC router as the deployed route answers them, over a real
  * dialect: a member starts a thread on a teammate's plan and every member
  * reads it, named by its writer; a reader whose cursor is behind reads it at
- * once; an account outside the workspace reads and writes nothing, exactly
- * as for a plan that does not exist; and the developer's edit that deletes
- * the anchored words leaves the thread its quote, while the edit their
- * editor's undo sends anchors it again.
+ * once, and one whose cursor is current is held until something moves or
+ * the hold ends, on the test's clock; an account outside the workspace
+ * reads and writes nothing, exactly as for a plan that does not exist; and
+ * the developer's edit that deletes the anchored words leaves the thread its
+ * quote, while the edit their editor's undo sends anchors it again.
  *
  * Synthetic accounts, bearers, and plans throughout.
  */
 
 const ORIGIN = "https://luke.test";
-const COMMENTS = "/api/plans/comments";
-const THREAD = "/api/plans/comment-thread";
 const EDIT = (taskId: string) => `/api/plans/${taskId}/edit`;
+
+const commentsPath = (taskId: string) => `/api/plans/${taskId}/comments`;
+const threadPath = (taskId: string, threadId: string) => `${commentsPath(taskId)}/${threadId}`;
 
 const PLAN_TEXT =
   "## Goal\n\nAn admin invites a teammate by email.\n\n## Approach\n\nAdmins can withdraw an invite from the members page. A withdrawn link never grants access again.\n";
@@ -115,45 +130,64 @@ const fakeEve = (): EveSessions => ({
   stream: () => Stream.empty,
 });
 
-/** The comments' route group, or the plans' procedures behind the hosted oRPC router, over the test's own database, answering one request. */
-const answer = (routes: "comments" | "plans", request: Request) =>
+/** The services a request runs on: the test's own database and clock, and no GitHub or model catalog. */
+const servicesOver = (clock: Clock.Clock) =>
   Effect.gen(function* () {
-    const services = Layer.mergeAll(
+    return Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      Layer.succeed(Clock.Clock, clock),
       NO_GITHUB,
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
-    let response: Response;
-    if (routes === "comments") {
-      const { handler, dispose } = HttpRouter.toWebHandler(
-        planCommentsApp({ resolveUserId, eveOrigin: () => undefined, eve: fakeEve }).pipe(
-          HttpRouter.provideRequest(services),
-        ),
-        { disableLogger: true },
-      );
-      response = yield* Effect.promise(() => handler(request));
-      yield* Effect.promise(() => dispose());
-    } else {
-      // SAFETY: the plans procedures yield the services this layer provides, which is all a test provides of the web runtime's.
-      const webServices = (yield* Effect.context<never>().pipe(
-        Effect.provide(services),
-      )) as Context.Context<WebServices>;
-      const plans = hostedFetch({
-        plans: tasksProcedures({
-          resolveUserId,
-          workspaces: yield* fakeWorkspaceSeams,
-          eveOrigin: () => undefined,
-        }),
-      });
-      response = yield* Effect.promise(() => plans(request, webServices));
-    }
-    const text = yield* Effect.promise(() => response.text());
+  });
+
+/** The web runtime's services as a request runs on them: the test's own database and clock. */
+const webServicesOver = (clock: Clock.Clock) =>
+  Effect.gen(function* () {
+    const provided = yield* Effect.context<Database>().pipe(
+      Effect.provide(yield* servicesOver(clock)),
+    );
+    // SAFETY: the procedures yield the database, the clock and GitHub alone, which is all a test provides of the web runtime's services.
+    return provided as Context.Context<WebServices>;
+  });
+
+/** The comments resource behind the hosted handler, answering one request on the clock handed in. */
+const commentsAnswer = (request: Request, clock: Clock.Clock) =>
+  Effect.gen(function* () {
+    const services = yield* webServicesOver(clock);
+    const handle = hostedFetch({
+      planComments: planCommentsProcedures({
+        resolveUserId,
+        eveOrigin: () => undefined,
+        eve: fakeEve,
+      }),
+    });
+    const response = yield* Effect.promise(() => handle(request, services));
     return {
       status: response.status,
-      body: text,
+      body: yield* Effect.promise(() => response.text()),
+      cacheControl: response.headers.get("cache-control"),
+    };
+  });
+
+/** One request answered on the test's own clock: the comments resource, or the plans resource's edit. */
+const answer = (routes: "comments" | "plans", request: Request) =>
+  Effect.gen(function* () {
+    if (routes === "comments") return yield* commentsAnswer(request, yield* Clock.Clock);
+    const services = yield* webServicesOver(yield* Clock.Clock);
+    const plans = hostedFetch({
+      plans: tasksProcedures({
+        resolveUserId,
+        workspaces: yield* fakeWorkspaceSeams,
+        eveOrigin: () => undefined,
+      }),
+    });
+    const response = yield* Effect.promise(() => plans(request, services));
+    return {
+      status: response.status,
+      body: yield* Effect.promise(() => response.text()),
     } satisfies Answered;
   });
 
@@ -169,7 +203,6 @@ function request(
     method: body === undefined ? "GET" : "POST",
     headers: {
       authorization: `Bearer ${userId}`,
-      // A body is named JSON, as the account call names every body it sends.
       ...(body === undefined ? undefined : { "content-type": "application/json" }),
     },
     ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
@@ -224,14 +257,14 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
         const started = yield* answer(
           "comments",
-          request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
+          request(commentsPath(taskId), teammate, {}, startBody("Is withdrawing in v1?")),
         );
         assert.equal(started.status, HOSTED_HTTP_STATUS.CREATED);
         const thread = threadIn(started);
 
         const read = yield* answer(
           "comments",
-          request(COMMENTS, owner, { id: taskId, after: PLAN_COMMENTS_CURSOR_START }),
+          request(commentsPath(taskId), owner, { after: PLAN_COMMENTS_CURSOR_START }),
         );
         assert.equal(read.status, HOSTED_HTTP_STATUS.OK);
         const threads = threadsIn(read);
@@ -240,17 +273,17 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           [[thread.id, "Approach", "Charles Pan"]],
         );
 
-        const outsiderRead = yield* answer("comments", request(COMMENTS, outsider, { id: taskId }));
+        const outsiderRead = yield* answer("comments", request(commentsPath(taskId), outsider, {}));
         const outsiderStart = yield* answer(
           "comments",
-          request(COMMENTS, outsider, { id: taskId }, startBody("Hello")),
+          request(commentsPath(taskId), outsider, {}, startBody("Hello")),
         );
         const outsiderResolve = yield* answer(
           "comments",
           request(
-            THREAD,
+            threadPath(taskId, thread.id),
             outsider,
-            { id: taskId, thread: thread.id },
+            {},
             { action: PLAN_COMMENT_ACTION.RESOLVE },
           ),
         );
@@ -264,16 +297,16 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
     Effect.gen(function* () {
       const { owner, teammate, taskId } = yield* openSharedTask;
       const thread = threadIn(
-        yield* answer("comments", request(COMMENTS, teammate, { id: taskId }, startBody("v1?"))),
+        yield* answer("comments", request(commentsPath(taskId), teammate, {}, startBody("v1?"))),
       );
 
       const resolved = threadIn(
         yield* answer(
           "comments",
           request(
-            THREAD,
+            threadPath(taskId, thread.id),
             owner,
-            { id: taskId, thread: thread.id },
+            {},
             { action: PLAN_COMMENT_ACTION.RESOLVE },
           ),
         ),
@@ -289,7 +322,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
       Effect.gen(function* () {
         const { owner, taskId } = yield* openSharedTask;
         const thread = threadIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
+          yield* answer("comments", request(commentsPath(taskId), owner, {}, startBody("v1?"))),
         );
         const deleted = PLAN_TEXT.replace(`${WORDS} `, "");
 
@@ -307,7 +340,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
         );
         assert.equal(deleting.status, HOSTED_HTTP_STATUS.OK);
         const afterDelete = threadsIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
+          yield* answer("comments", request(commentsPath(taskId), owner, {})),
         )[0];
         assert.equal(afterDelete?.anchor, undefined);
         assert.equal(afterDelete?.quote, WORDS);
@@ -329,7 +362,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           ),
         );
         const afterUndo = threadsIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
+          yield* answer("comments", request(commentsPath(taskId), owner, {})),
         )[0];
         assert.deepEqual(afterUndo?.anchor, { from, to: from + WORDS.length });
       }),
@@ -348,9 +381,9 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
           yield* answer(
             "comments",
             request(
-              COMMENTS,
+              commentsPath(taskId),
               teammate,
-              { id: taskId },
+              {},
               startBody(
                 `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) is withdrawing in v1?`,
               ),
@@ -365,7 +398,7 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
         assert.ok(words.includes("Charles Pan sent you a comment thread"));
         assert.ok(words.includes(thread.id));
         const [after] = threadsIn(
-          yield* answer("comments", request(COMMENTS, teammate, { id: taskId })),
+          yield* answer("comments", request(commentsPath(taskId), teammate, {})),
         );
         assert.deepEqual(
           after?.entries.map((entry) => [entry.kind, entry.asked?.actor]),
@@ -385,16 +418,16 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
         const thread = threadIn(
           yield* answer(
             "comments",
-            request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
+            request(commentsPath(taskId), teammate, {}, startBody("Is withdrawing in v1?")),
           ),
         );
         const reply = (words: string, clientKey: string) =>
           answer(
             "comments",
             request(
-              THREAD,
+              threadPath(taskId, thread.id),
               owner,
-              { id: taskId, thread: thread.id },
+              {},
               { action: PLAN_COMMENT_ACTION.REPLY, clientKey, words },
             ),
           );
@@ -418,7 +451,7 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
           ),
         );
         const [first] = threadsIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
+          yield* answer("comments", request(commentsPath(taskId), owner, {})),
         );
         assert.deepEqual(
           first?.entries.map((entry) => [entry.kind, entry.asked?.actor]),
@@ -446,23 +479,23 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
         yield* answer(
           "comments",
           request(
-            COMMENTS,
+            commentsPath(taskId),
             owner,
-            { id: taskId },
+            {},
             { ...startBody("First thread"), clientKey: taken },
           ),
         );
         const other = threadIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("Second"))),
+          yield* answer("comments", request(commentsPath(taskId), owner, {}, startBody("Second"))),
         );
         const before = opened.length;
 
         const refused = yield* answer(
           "comments",
           request(
-            THREAD,
+            threadPath(taskId, other.id),
             owner,
-            { id: taskId, thread: other.id },
+            {},
             {
               action: PLAN_COMMENT_ACTION.REPLY,
               clientKey: taken,
@@ -482,16 +515,16 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
       Effect.gen(function* () {
         const { owner, taskId } = yield* openSharedTask;
         const thread = threadIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
+          yield* answer("comments", request(commentsPath(taskId), owner, {}, startBody("v1?"))),
         );
         const key = randomUUID();
         const reply = (words: string) =>
           answer(
             "comments",
             request(
-              THREAD,
+              threadPath(taskId, thread.id),
               owner,
-              { id: taskId, thread: thread.id },
+              {},
               { action: PLAN_COMMENT_ACTION.REPLY, clientKey: key, words },
             ),
           );
@@ -508,5 +541,163 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
           0,
         );
       }),
+  );
+});
+
+it.layer(getTestDB())("a plan's comments read held on the test's clock", (it) => {
+  /** A read past the cursor, forked on a clock that announces each wait it makes. */
+  const heldRead = (userId: string, taskId: string, after: string) =>
+    Effect.gen(function* () {
+      const { clock, asleep } = yield* announcingClock;
+      const fiber = yield* Effect.forkChild(
+        commentsAnswer(request(commentsPath(taskId), userId, { after }), clock),
+      );
+      return { fiber, asleep };
+    });
+
+  it.effect(
+    "a read at the current cursor is held, and answers the thread once one is started",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const first = yield* answer("comments", request(commentsPath(taskId), owner, {}));
+        const { cursor } = readEither(planCommentsAnswerSchema)(
+          unparsedWire(JSON.parse(first.body)),
+        ).pipe(Result.getOrThrow);
+
+        const held = yield* heldRead(owner, taskId, cursor);
+        yield* Queue.take(held.asleep);
+        assert.equal(held.fiber.pollUnsafe(), undefined, "the read is held while nothing moved");
+        const thread = threadIn(
+          yield* answer(
+            "comments",
+            request(commentsPath(taskId), teammate, {}, startBody("Is withdrawing in v1?")),
+          ),
+        );
+        const answered = yield* driven(held, CODER.MESSAGES_POLL);
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(answered.cacheControl, "private, no-store");
+        assert.deepEqual(
+          threadsIn(answered).map((each) => each.id),
+          [thread.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "a read at the current cursor is let go at the route's own hold, no sooner, answering the threads unchanged",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        const first = yield* answer("comments", request(commentsPath(taskId), owner, {}));
+        const before = JSON.parse(first.body);
+
+        const startedAt = yield* Clock.currentTimeMillis;
+        const held = yield* heldRead(owner, taskId, before.cursor);
+        const answered = yield* driven(held, CODER.MESSAGES_POLL);
+        const heldFor = (yield* Clock.currentTimeMillis) - startedAt;
+
+        assert.equal(heldFor, Duration.toMillis(CODER.MESSAGES_HOLD));
+        assert.deepEqual(
+          { status: answered.status, body: JSON.parse(answered.body) },
+          { status: HOSTED_HTTP_STATUS.OK, body: before },
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the comment paths' refusals, byte for byte", (it) => {
+  it.effect(
+    "a plan the account does not reach is refused bare, as not found, with no cache header",
+    () =>
+      Effect.gen(function* () {
+        const { outsider, taskId } = yield* openSharedTask;
+        const answered = yield* answer("comments", request(commentsPath(taskId), outsider, {}));
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: '{"error":"not-found"}',
+          cacheControl: null,
+        });
+      }),
+  );
+
+  it.effect("an id that is no UUID names no plan, as it always has", () =>
+    Effect.gen(function* () {
+      const { owner } = yield* openSharedTask;
+      const answered = yield* answer("comments", request(commentsPath("not-a-plan"), owner, {}));
+      assert.equal(answered.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+      assert.equal(answered.body, '{"error":"not-found"}');
+    }),
+  );
+
+  it.effect(
+    "an unsigned caller is refused as unauthenticated, though its body is malformed too",
+    () =>
+      Effect.gen(function* () {
+        const { taskId } = yield* openSharedTask;
+        const answered = yield* answer(
+          "comments",
+          new Request(new URL(commentsPath(taskId), ORIGIN), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ words: 42 }),
+          }),
+        );
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+        assert.equal(answered.body, JSON.stringify({ error: HOSTED_API_ERROR.INVALID_TOKEN }));
+      }),
+  );
+
+  it.effect(
+    "a malformed cursor, and a body carrying a key its request does not name, are invalid",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        const cursor = yield* answer(
+          "comments",
+          request(commentsPath(taskId), owner, { after: "" }),
+        );
+        const excess = yield* answer(
+          "comments",
+          new Request(new URL(commentsPath(taskId), ORIGIN), {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner}`, "content-type": "application/json" },
+            body: JSON.stringify({ ...startBody("v1?"), extra: true }),
+          }),
+        );
+        for (const answered of [cursor, excess]) {
+          assert.equal(answered.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+          assert.equal(answered.body, '{"error":"invalid-request"}');
+        }
+      }),
+  );
+
+  it.effect("a reply whose stated length is past the action's cap is refused as too large", () =>
+    Effect.gen(function* () {
+      const { owner, taskId } = yield* openSharedTask;
+      const thread = threadIn(
+        yield* answer("comments", request(commentsPath(taskId), owner, {}, startBody("v1?"))),
+      );
+      const body = JSON.stringify({
+        action: PLAN_COMMENT_ACTION.REPLY,
+        clientKey: randomUUID(),
+        words: "x".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 7),
+      });
+      const answered = yield* answer(
+        "comments",
+        new Request(new URL(threadPath(taskId, thread.id), ORIGIN), {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${owner}`,
+            "content-type": "application/json",
+            "content-length": String(Buffer.byteLength(body)),
+          },
+          body,
+        }),
+      );
+      assert.equal(answered.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
+      assert.equal(answered.body, '{"error":"request-too-large"}');
+    }),
   );
 });

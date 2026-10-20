@@ -55,10 +55,11 @@ import {
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import type { LiveClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+import { reporterLayer } from "./effect/seams.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -1187,6 +1188,83 @@ it.effect(
       yield* settled;
       assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
     }),
+);
+
+/**
+ * The host's line and the runtime's error reporters, as a follow started
+ * under them hears them: every line said, and every error reported.
+ */
+function heard() {
+  const lines: string[] = [];
+  const reported: Error[] = [];
+  const layer = Layer.merge(
+    reporterLayer((line) => void lines.push(line)),
+    ErrorReporter.layer([ErrorReporter.make(({ error }) => void reported.push(error))]),
+  );
+  return { lines, reported, layer };
+}
+
+it.effect(
+  "a follow whose socket never delivers is reported once, as a warning naming no address or seal, after thirty seconds, and goes on asking",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime } = yield* subject();
+      const { lines, reported, layer } = heard();
+      seal(SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url]);
+
+      yield* TestClock.adjust("29 seconds");
+      yield* settled;
+      assert.deepEqual(reported, []);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      const [warning, ...more] = reported;
+      assert.ok(warning !== undefined && more.length === 0);
+      assert.equal(ErrorReporter.getSeverity(warning), "Warn");
+      const said = lines.filter((line) => line.includes("account inbox"));
+      assert.deepEqual(said, [
+        "the account inbox's live read has not answered in 30 seconds: Realtime has not delivered every part",
+      ]);
+      assert.ok(!said[0]?.includes(SEALED.url) && !said[0]?.includes("capability"));
+
+      // It keeps following, and says so no more however long it waits.
+      yield* TestClock.adjust("5 minutes");
+      yield* settled;
+      assert.equal(reported.length, 1);
+      assert.ok(realtime.subscribed().length > 0);
+    }),
+);
+
+it.effect("a follow that answers within thirty seconds reports nothing", () =>
+  Effect.gen(function* () {
+    const { call, seal, realtime, inboxes } = yield* subject();
+    const { lines, reported, layer } = heard();
+    seal(SEALED);
+    yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+    yield* settled;
+    for (const part of [
+      "items",
+      "planless",
+      "plans",
+      "automations",
+      "failedRuns",
+      "chatAsks",
+      "chatNotices",
+    ]) {
+      realtime.deliver(part, []);
+    }
+    yield* settled;
+    assert.equal(inboxes().length, 1);
+    yield* TestClock.adjust("1 minute");
+    yield* settled;
+    assert.deepEqual(reported, []);
+    assert.deepEqual(
+      lines.filter((line) => line.includes("account inbox")),
+      [],
+    );
+  }),
 );
 
 it.effect(

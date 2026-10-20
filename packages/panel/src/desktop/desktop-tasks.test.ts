@@ -21,7 +21,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -611,7 +611,7 @@ test("with Needs you on, the item a task's Inbox chose for itself stays shown on
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
   assert.deepEqual(inbox.rows(), []);
-  assert.equal(inbox.filteredOut()?.[0], "Nothing needs you");
+  assert.equal(inbox.filteredOut()?.[1], "Nothing needs you");
   assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
   window.localStorage.clear();
   inbox.unmount();
@@ -629,11 +629,7 @@ test("a task's Inbox holding only settled items, on the Needs you tab, lists no 
   wide.pressNeedsYou();
   assert.deepEqual(wide.head(), ["Inbox", "Needs you"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(wide.filteredOut(), [
-    "Nothing needs you",
-    "You've answered everything",
-    "Show everything",
-  ]);
+  assert.deepEqual(wide.filteredOut(), [undefined, "Nothing needs you", "Show everything"]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
   assert.deepEqual(wide.head(), ["Inbox", "Everything"]);
@@ -959,13 +955,12 @@ test("with Chat off for the account, a Chat tab kept on the task's strip draws n
 test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
   const marked: string[] = [];
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
-        const { itemId, unread } = request.payload;
-        marked.push(`${unread ? "unread" : "read"}:${itemId}`);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: itemId, unread } });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
+  });
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
+      marked.push(`${unread ? "unread" : "read"}:${itemId}`);
+      return Promise.resolve({ id: itemId, unread });
     },
   });
   const SHIP = {

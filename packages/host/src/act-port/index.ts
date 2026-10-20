@@ -10,6 +10,10 @@ import {
   accountAskProcedures,
 } from "./account-ask-procedures.js";
 import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
+import {
+  type AgentInboxProceduresDependencies,
+  agentInboxProcedures,
+} from "./agent-inbox-procedures.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
 import {
   type AutomationProceduresDependencies,
@@ -89,6 +93,7 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   readonly accountAsks: AccountAskProceduresDependencies;
+  readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
@@ -106,9 +111,8 @@ export interface ActPortDependencies {
  * schema could not encode, is answered with the procedure's own sentence, so
  * the window never hears what a failure held and never meets an error it
  * does not draw. That failure is logged here, in main, before it is replaced.
- * The host's procedures sit beside the platform's own, as the host's act
- * rows sit beside the platform's on `app:act` (`createHostActRouter`), and
- * together they answer every kind of the contract.
+ * The host's procedures sit beside the platform's own, and together they
+ * answer every kind of the contract.
  */
 export function createActPortHandler<Sender>(
   dependencies: ActPortDependencies,
@@ -118,6 +122,7 @@ export function createActPortHandler<Sender>(
     ...platformProcedures,
     ...accountProcedures(dependencies.account),
     ...accountAskProcedures(dependencies.accountAsks),
+    ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
     ...factoryProcedures(dependencies.factory),

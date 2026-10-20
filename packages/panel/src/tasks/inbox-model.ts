@@ -765,16 +765,14 @@ export function inboxPreview(
 /**
  * The Inbox's one name for an item waiting on the developer's answer, in
  * each form its surfaces say it: the list's filter, a count's words after
- * its figure, the line where nothing is listed, and the line under it where
- * the filter leaves out every item listed. A settled item reads as
- * answered. Every surface reads its words here, so the name is changed in
+ * its figure, and the line where nothing is listed. A settled item reads
+ * as answered. Every surface reads its words here, so the name is changed in
  * this one place.
  */
 export const NEEDS_YOU = {
   LABEL: "Needs you",
   COUNT: { one: "needs you", many: "need you" } satisfies CountNoun,
   NONE: "Nothing needs you",
-  ANSWERED: "You've answered everything",
 } as const;
 
 /** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
@@ -11,7 +11,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -65,7 +65,7 @@ const roots: Root[] = [];
 const saved: string[] = [];
 
 /** The keep the host answers next: held until the test lets it go, with what it answers. */
-let keeping: { resolve: (outcome: ActOutcome) => void } | undefined;
+let keeping: { resolve: (answer: TasksPictureKeepAnswer) => void } | undefined;
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -73,14 +73,15 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installEditorLayout();
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-        return new Promise((resolve) => {
-          keeping = { resolve };
-        });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.TASKS_PICTURE_KEEP]: () =>
+      new Promise((resolve) => {
+        keeping = { resolve };
+      }),
   });
 });
 
@@ -155,7 +156,7 @@ async function keepAsked(): Promise<void> {
 
 async function answerKeep(value: TasksPictureKeepAnswer): Promise<void> {
   const held = keeping ?? assert.fail("a keep is asked");
-  act(() => held.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }));
+  act(() => held.resolve(value));
   await settle();
 }
 

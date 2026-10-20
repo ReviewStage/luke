@@ -5,7 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import { AGENT_ACT_KIND, TASKS_ACT_KIND } from "@luke/host/contract";
+import { AGENT_ACT_KIND, AGENT_INBOX_ACT_KIND, TASKS_ACT_KIND } from "@luke/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -40,9 +40,9 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 
-/** Whether a port kind is one of the agents' reads, which a window with no agents is refused as `app:act` refused it. */
+/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused as `app:act` refused it. */
 const isAgentRead = (kind: string): boolean =>
-  Object.values<string>(AGENT_ACT_KIND).includes(kind) &&
+  Object.values<string>({ ...AGENT_ACT_KIND, ...AGENT_INBOX_ACT_KIND }).includes(kind) &&
   kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
 
 /**
