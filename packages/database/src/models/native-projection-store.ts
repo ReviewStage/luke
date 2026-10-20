@@ -31,12 +31,16 @@ export interface NativeProjectionRow {
 type NativeProjectionFailure = QueryError | Schema.SchemaError;
 
 const lockProjectionRow = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    runnerTokenHash: Schema.String,
+  }),
   Result: Schema.Struct({
     sequence: Schema.NullOr(Schema.Number),
     projection: Schema.NullOr(WireValueSchema),
   }),
-  execute: ({ userId, conversationId }) =>
+  execute: ({ userId, conversationId, runnerTokenHash }) =>
     Database.use((db) =>
       db
         .select({
@@ -48,6 +52,7 @@ const lockProjectionRow = SqlSchema.findOneOption({
           and(
             eq(conversations.id, conversationId),
             eq(conversations.userId, userId),
+            eq(conversations.runnerTokenHash, runnerTokenHash),
             isNull(conversations.deletedAt),
           ),
         )
@@ -98,15 +103,19 @@ export interface NativeProjectionApplied<A> {
 /**
  * Runs `apply` over the conversation's projection row, under its lock, and
  * keeps the place it answers in the same transaction as every write `apply`
- * made; nothing for a conversation the account does not hold or that was
- * cleared, where `apply` never runs.
+ * made; nothing for a conversation the account does not hold, that was
+ * cleared, or whose runner holds a bearer of another digest by the time the
+ * lock is taken, where `apply` never runs. Note that the digest is read
+ * again under the lock, because a bearer retired after the caller admitted
+ * it takes the same row's lock and must leave its runner writing nothing.
  */
 export function withNativeProjection<A, E, R>(
   target: ConversationTarget,
+  runnerTokenHash: string,
   apply: (held: NativeProjectionRow) => Effect.Effect<NativeProjectionApplied<A>, E, R>,
 ): Effect.Effect<Option.Option<A>, E | NativeProjectionFailure, R | DatabaseServices> {
   const locked = Effect.gen(function* () {
-    const held = yield* lockProjectionRow(target);
+    const held = yield* lockProjectionRow({ ...target, runnerTokenHash });
     if (Option.isNone(held)) return Option.none<A>();
     const applied = yield* apply(held.value);
     if (applied.saved !== undefined) {

@@ -31,7 +31,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
-import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
+import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { claudeCodeMoments, type HeldCallName } from "./claude-code-moments.js";
 import type { NativeMoment } from "./native-moments.js";
 import {
@@ -288,9 +288,11 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     read,
   };
   const applied = yield* hostedStoreOrUnavailable(
-    withNativeProjection(target, (held) => applyBatch(applying, batch.value, held)),
+    withNativeProjection(target, runnerTokenDigest(bearer), (held) =>
+      applyBatch(applying, batch.value, held),
+    ),
   );
-  // Note that a conversation cleared since the bearer was read takes nothing more.
+  // Note that a conversation cleared, or a bearer retired, since the bearer was read takes nothing more.
   if (Option.isNone(applied)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   if (ended !== undefined) {
     for (const sequence of applied.value.ends) {

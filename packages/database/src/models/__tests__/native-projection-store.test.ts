@@ -20,25 +20,27 @@ import { readNativeSequence, withNativeProjection } from "../native-projection-s
 const openConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
+  // Note that each conversation's runner holds a digest of its own, which the store keeps unique.
+  const digest = randomUUID();
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const [row] = yield* db
     .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT })
+    .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT, runnerTokenHash: digest })
     .returning({ id: conversations.id });
   assert.ok(row);
-  return { userId, conversationId: row.id };
+  return { userId, conversationId: row.id, digest };
 });
 
 /** What the conversation's projection reads as now, saving nothing. */
-const readBack = (target: { userId: string; conversationId: string }) =>
-  withNativeProjection(target, (held) => Effect.succeed({ result: held }));
+const readBack = (target: { userId: string; conversationId: string; digest: string }) =>
+  withNativeProjection(target, target.digest, (held) => Effect.succeed({ result: held }));
 
 it.layer(getTestDB())("the native projection's place", (it) => {
   it.effect("reads nothing before the first save, and what the last save kept after it", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;
       const before = yield* readBack(target);
-      yield* withNativeProjection(target, () =>
+      yield* withNativeProjection(target, target.digest, () =>
         Effect.succeed({ result: undefined, saved: { sequence: 3, projection: { turn: "t1" } } }),
       );
       const after = yield* readBack(target);
@@ -53,11 +55,11 @@ it.layer(getTestDB())("the native projection's place", (it) => {
   it.effect("an application that fails keeps nothing it wrote or asked to save", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;
-      yield* withNativeProjection(target, () =>
+      yield* withNativeProjection(target, target.digest, () =>
         Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
       );
       const failed = yield* Effect.exit(
-        withNativeProjection(target, () =>
+        withNativeProjection(target, target.digest, () =>
           Effect.andThen(
             Effect.flatMap(Database, (db) =>
               db
@@ -73,6 +75,30 @@ it.layer(getTestDB())("the native projection's place", (it) => {
 
       assert.equal(failed._tag, "Failure");
       assert.equal(Option.getOrThrow(after).sequence, 1);
+    }),
+  );
+
+  it.effect("a runner whose bearer was retired, or replaced, is never applied for", () =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      const target = yield* openConversation;
+      yield* db
+        .update(conversations)
+        .set({ runnerTokenHash: randomUUID() })
+        .where(eq(conversations.id, target.conversationId));
+      const replaced = yield* withNativeProjection(target, target.digest, () =>
+        Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
+      );
+      yield* db
+        .update(conversations)
+        .set({ runnerTokenHash: null })
+        .where(eq(conversations.id, target.conversationId));
+      const retired = yield* withNativeProjection(target, target.digest, () =>
+        Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
+      );
+
+      assert.deepEqual([Option.isNone(replaced), Option.isNone(retired)], [true, true]);
+      assert.equal(Option.isNone(yield* readNativeSequence(target)), true);
     }),
   );
 
@@ -95,9 +121,10 @@ it.layer(getTestDB())("the native projection's place", (it) => {
 
       const crossed = yield* withNativeProjection(
         { userId: stranger.userId, conversationId: target.conversationId },
+        target.digest,
         apply,
       );
-      const gone = yield* withNativeProjection(cleared, apply);
+      const gone = yield* withNativeProjection(cleared, cleared.digest, apply);
       const untouched = yield* readBack(target);
       const strangers = yield* readNativeSequence({
         userId: stranger.userId,

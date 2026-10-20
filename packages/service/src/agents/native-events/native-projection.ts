@@ -325,6 +325,9 @@ class Fold {
       at: this.#context.now,
     });
     this.#setTurn(undefined);
+    // Note that a limit is the launch's: the next launch is refused again or it is not.
+    const { rateLimit: _spent, ...rest } = this.state;
+    this.state = rest;
   }
 
   #usage(usage: BrainRunUsage): void {

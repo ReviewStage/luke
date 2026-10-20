@@ -453,19 +453,24 @@ it.layer(getTestDB())("the runner events route", (it) => {
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
 
+        // The next launch fails on its own, the limit having lifted: it says nothing of the old one.
+        const relaunch = [
+          { type: "system", subtype: "init", ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.INPUT_CLOSED },
+        ].map((message, index) => ({ sequence: events.length + index, message }) as RunnerEvent);
+
         yield* post(agent.bearer, events);
+        yield* post(agent.bearer, relaunch);
         const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
         const context = yield* readCodingAgentContext(agent.userId, agent.agentId);
 
-        assert.deepEqual(
-          ended.map((turn) => [turn.status, turn.failureDetail]),
+        assert.deepEqual(ended.map((turn) => [turn.status, turn.failureDetail]).sort(), [
           [
-            [
-              TURN_STATUS.FAILED,
-              "error_during_execution; rate_limit_rejected five_hour resets 2027-01-15T08:00:00.000Z",
-            ],
+            TURN_STATUS.FAILED,
+            "error_during_execution; rate_limit_rejected five_hour resets 2027-01-15T08:00:00.000Z",
           ],
-        );
+          [TURN_STATUS.FAILED, "input_closed"],
+        ]);
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
       }),
   );
