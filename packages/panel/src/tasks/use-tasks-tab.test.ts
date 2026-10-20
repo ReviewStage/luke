@@ -76,6 +76,7 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
+import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
@@ -2286,14 +2287,9 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
 });
 
 test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", async () => {
+  // The window is drawn once the synthetic tasks have landed (`App`).
+  await loadTasksFixture();
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
-  // The synthetic tasks are imported by a fixture run alone, so they land a moment after the mount.
-  await vi.waitFor(async () => {
-    await settle();
-    assert.equal(fixture.control().workspaces.length, 2);
-  });
-  // The tab's own defaults are written as it mounts, before the run is known to be a fixture's.
-  window.localStorage.clear();
   const staged = fixture.control().listed.tasks.map((task) => task.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));
 
@@ -2304,16 +2300,6 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
   );
   assert.equal(fixture.control().workspaces.length, 2);
   assert.equal(window.localStorage.length, 0);
-});
-
-test("a fixture run reports its synthetic tasks settled only once they have; a live run has none to wait for", async () => {
-  assert.equal(mount({ shown: true }).control().fixtureSettled, true);
-  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.TASKS });
-  assert.equal(fixture.control().fixtureSettled, false);
-  await vi.waitFor(async () => {
-    await settle();
-    assert.equal(fixture.control().fixtureSettled, true);
-  });
 });
 
 /** The task as the list names it, archived where `archivedAt` is given. */

@@ -160,6 +160,7 @@ import type { MessageReveal } from "./message-links.js";
 import type { SectionReveal } from "./plan-body.js";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
+import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
@@ -467,8 +468,6 @@ interface ChatViewControl {
 
 /** The fixture's staging, as a fixture run imports it. */
 type ChatStager = typeof import("./chat-fixture.js");
-/** The fixture's synthetic tasks, as a fixture run imports them. */
-type TasksStaging = typeof import("./tasks-fixture.js");
 
 /** What a post or an answer says where no chat is read to send it to. */
 const NO_CHAT_SERVICE = "Chat is not available yet.";
@@ -605,8 +604,6 @@ export interface TasksControl {
   shownCode: TasksView["shownCode"];
   /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
   workFailed: boolean;
-  /** Whether the synthetic tasks a fixture run draws have landed or failed to load, true at once for a live run, which draws none. */
-  fixtureSettled: boolean;
   /** Reads the open task's work and code again after a read that did not land. */
   onRetryWork: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
@@ -1208,25 +1205,8 @@ export function useTasksTab(input: {
       live = false;
     };
   }, [fixtureMode]);
-  // Likewise the synthetic tasks, which only a fixture run draws.
-  const [tasksFixture, setTasksFixture] = useState<TasksStaging | undefined>(undefined);
-  const [tasksFixtureFailed, setTasksFixtureFailed] = useState(false);
-  useEffect(() => {
-    if (!fixtureMode) return;
-    let live = true;
-    // A chunk that fails to load settles the run too, so a capture waiting on it still ends.
-    import("./tasks-fixture.js").then(
-      (loaded) => {
-        if (live) setTasksFixture(loaded);
-      },
-      () => {
-        if (live) setTasksFixtureFailed(true);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [fixtureMode]);
+  // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
+  const tasksFixture = loadedTasksFixture();
   const stage = (
     staged: (held: FixtureChat, staging: ChatStager) => Staged,
   ): Promise<string | undefined> => {
@@ -3121,7 +3101,6 @@ export function useTasksTab(input: {
     board: tasks.board,
     shownCode: tasks.shownCode,
     workFailed: tasks.workStatus === TASKS_READ.FAILED,
-    fixtureSettled: !fixtureMode || tasksFixture !== undefined || tasksFixtureFailed,
     onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     transcript: {

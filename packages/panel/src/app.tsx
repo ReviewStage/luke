@@ -76,6 +76,7 @@ import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
+import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
@@ -87,7 +88,6 @@ import { useSignIn } from "./use-sign-in.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
-import { useWindowReady } from "./window-ready.js";
 import { useWindowZoom } from "./window-zoom.js";
 
 /** No agent ended unseen, as the document reads before main has answered. */
@@ -108,7 +108,19 @@ const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
   appPlatform().unsavedWork?.(ask);
 };
 
+/**
+ * The window, drawn once a fixture run's synthetic tasks have landed. They are
+ * imported apart from the bundle every launch parses, and drawn from the first
+ * frame so that a capture, and the history entry the window's first place
+ * writes, never see the tasks arrive after the rest.
+ */
 export function App(): React.JSX.Element {
+  const fixtureMode = useAppState()?.run.fixtureMode === true;
+  const landed = useTasksFixtureLanded(fixtureMode);
+  return landed ? <AppWindow /> : <></>;
+}
+
+function AppWindow(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
   // Everything main holds, on the one channel it holds it on, and this
   // window's own facts beside it. There is no second reading to reconcile
@@ -548,9 +560,16 @@ export function App(): React.JSX.Element {
   // above a phone's keyboard.
   useVisualViewport();
 
-  // The window is painted once its settings have arrived and, for a fixture
-  // run, the synthetic tasks it imports on demand have settled.
-  useWindowReady(state?.settings !== undefined && tasks.fixtureSettled);
+  /**
+   * The report that the window has painted, made once, on the first snapshot
+   * that carries settings.
+   */
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || !state?.settings) return;
+    opened.current = true;
+    appBridge().notifyReady();
+  }, [state]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the
