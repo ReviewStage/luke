@@ -60,8 +60,17 @@ interface LiveSubscription {
     }) => void,
   ): () => void;
   renew(query: SealedLiveQueryWire): Promise<void>;
+  /** Settles once the transaction named has arrived on the subscription, or rejects once the timeout passes. */
+  awaitTxId(txid: string, timeout?: number): Promise<void>;
   unsubscribe(): void;
 }
+
+/**
+ * A wait for a write's transaction to arrive on a followed read: it settles
+ * once any of the read's parts has it, and fails once the timeout passes,
+ * as Realtime's `awaitTxId` does.
+ */
+export type TxWait = (txid: string, timeout: Duration.Duration) => Effect.Effect<void, LiveBroken>;
 
 /** One socket to Realtime, every part's subscription on it. */
 export interface LiveClient {
@@ -160,6 +169,12 @@ export interface LiveFollowDependencies<Part extends string> {
   >;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /**
+   * Hears the read's wait for a write's transaction once its parts are
+   * subscribed over Realtime, and none once they are let go, a polled read
+   * included, which has no transaction to wait on.
+   */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** The earliest any of the read's sealed statements expires, in epoch milliseconds. */
@@ -222,8 +237,21 @@ function realtimeRows<Part extends string>(
         ),
         (standing) =>
           Effect.sync(() => {
+            dependencies.onTxWait?.(undefined);
             for (const [, subscription] of standing) subscription.unsubscribe();
           }),
+      );
+      // Note that a write reaches only the parts whose rows it changes, so the first part it reaches settles the wait.
+      dependencies.onTxWait?.((txid, timeout) =>
+        Effect.tryPromise({
+          try: () =>
+            Promise.any(
+              subscriptions.map(([, subscription]) =>
+                subscription.awaitTxId(txid, Duration.toMillis(timeout)),
+              ),
+            ),
+          catch: () => new LiveBroken({ reason: "the write's transaction did not arrive" }),
+        }),
       );
       let expiresAt = earliestExpiry(first);
       const renewal = Effect.gen(function* () {
