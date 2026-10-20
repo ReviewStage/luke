@@ -543,26 +543,30 @@ function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
 }
 
 /**
- * The draft with Mark done pressed, which ticks every step the ask shows,
- * so the checklist reads done whether or not the reader ticked each first.
+ * The steps a `do` ask's card shows ticked: every one while Mark done is
+ * pressed, which ticks them all, or else those the reader ticked by hand,
+ * which the draft keeps apart so Couldn't do it still sends only those.
  */
-export function withDone(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): InboxDraft {
-  return { ...draft, press: INBOX_REPLY.DONE, steps: everyStep(ask) };
+export function shownTicks(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): readonly number[] {
+  return draft.press === INBOX_REPLY.DONE ? everyStep(ask) : tickedSteps(draft);
 }
 
 /**
- * The draft with the step at `at` ticked, or let go where it was. Note that
- * letting a step go takes Mark done off, since it ticks every step.
+ * The draft with the step at `at` ticked, or let go where the card shows
+ * it ticked. Note that letting a step go under Mark done takes the press
+ * off and keeps the others ticked, as the card showed them.
  */
-export function withStep(draft: InboxDraft, at: number): InboxDraft {
-  const ticked = tickedSteps(draft);
-  if (ticked.includes(at)) {
-    const steps = ticked.filter((each) => each !== at);
-    return draft.press === INBOX_REPLY.DONE
-      ? { ...draft, steps, press: undefined }
-      : { ...draft, steps };
-  }
-  return { ...draft, steps: [...ticked, at] };
+export function withStep(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: InboxDraft,
+  at: number,
+): InboxDraft {
+  const ticked = shownTicks(ask, draft);
+  if (!ticked.includes(at)) return { ...draft, steps: [...ticked, at] };
+  const steps = ticked.filter((each) => each !== at);
+  return draft.press === INBOX_REPLY.DONE
+    ? { ...draft, steps, press: undefined }
+    : { ...draft, steps };
 }
 
 /** Whether a form's required fields are filled as the draft holds them, which Submit waits for. */

@@ -120,11 +120,11 @@ import {
   sentStamp,
   settledAt,
   settlementOf,
+  shownTicks,
   THREAD_ENTRY,
   threadCut,
   threadEntries,
   withDecision,
-  withDone,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -1647,7 +1647,7 @@ function AskControls({
       );
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
-      const ticked = new Set(draft.steps ?? []);
+      const ticked = new Set(shownTicks(ask, draft));
       return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
@@ -1657,7 +1657,7 @@ function AskControls({
                 <Checkbox
                   checked={ticked.has(at)}
                   disabled={disabled}
-                  onChange={() => onDraft(withStep(draft, at))}
+                  onChange={() => onDraft(withStep(ask, draft, at))}
                 >
                   {step}
                 </Checkbox>
@@ -1668,7 +1668,7 @@ function AskControls({
             <AskPress
               label={ASK_PRESS.DONE}
               disabled={disabled}
-              onPress={() => onDraft(withDone(ask, draft))}
+              onPress={() => press(INBOX_REPLY.DONE)}
             />
             <AskPress
               label={ASK_PRESS.NOT_DONE}
@@ -1808,7 +1808,14 @@ function AskBox({
   }
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
   const drafted = open ? doors?.draft : undefined;
-  const head = askHeadWords(ask, drafted === undefined ? undefined : (drafted.steps ?? []));
+  const head = askHeadWords(
+    ask,
+    drafted === undefined
+      ? undefined
+      : ask.type === INBOX_ASK.DO
+        ? shownTicks(ask, drafted)
+        : (drafted.steps ?? []),
+  );
   const standing = (() => {
     switch (ask.status) {
       case INBOX_ASK_STATUS.OPEN:

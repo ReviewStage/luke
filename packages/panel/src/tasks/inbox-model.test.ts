@@ -61,11 +61,11 @@ import {
   SETTLED_BY,
   sentStamp,
   settlementOf,
+  shownTicks,
   taskHolder,
   tasklessGroups,
   withChoice,
   withDecision,
-  withDone,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -1346,14 +1346,19 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     reply: INBOX_REPLY.ANSWERED,
   });
 
-  const steps = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
+  const toDo = { type: INBOX_ASK.DO, steps: ["One", "Two"] } as const;
+  const steps = [asking(toDo)];
   const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] };
   assert.deepEqual(inboxThreadSend(steps, { ...done, press: INBOX_REPLY.NOT_DONE })?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.NOT_DONE,
     steps: [1],
   });
-  assert.deepEqual(inboxThreadSend(steps, withStep(done, 0))?.answers?.steps, [0, 1]);
+  assert.deepEqual(
+    inboxThreadSend(steps, withStep(toDo, { ...done, press: INBOX_REPLY.NOT_DONE }, 0))?.answers
+      ?.steps,
+    [0, 1],
+  );
 
   const settled: InboxMessage = {
     ...asking(pick),
@@ -1366,34 +1371,34 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
   );
 });
 
-test("Mark done ticks every step of a to-do, ticked by hand or not, and letting a step go after takes it off", () => {
-  const ask: InboxAsk = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] };
+test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn't do it still sends only those ticked by hand", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
   const steps = [asking(ask)];
-  const untouched = withDone(ask, EMPTY_INBOX_DRAFT);
-  assert.deepEqual(untouched.steps, [0, 1, 2], "the checklist shows every step ticked");
-  assert.deepEqual(inboxThreadSend(steps, untouched)?.answers, {
+  const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE };
+  assert.deepEqual(shownTicks(ask, done), [0, 1, 2], "the checklist shows every step ticked");
+  assert.deepEqual(inboxThreadSend(steps, done)?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.DONE,
     steps: [0, 1, 2],
   });
-  const partly = withDone(ask, withStep(EMPTY_INBOX_DRAFT, 1));
-  assert.deepEqual(inboxThreadSend(steps, partly)?.answers?.steps, [0, 1, 2]);
-  assert.deepEqual(
-    inboxThreadSend(steps, { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] })?.answers
-      ?.steps,
-    [0, 1, 2],
-    "a Done attached with steps unticked still sends every one",
-  );
-  const letGo = withStep(untouched, 2);
-  assert.equal(letGo.press, undefined);
-  assert.deepEqual(letGo.steps, [0, 1]);
+  const byHand: InboxDraft = { ...withStep(ask, EMPTY_INBOX_DRAFT, 1), press: INBOX_REPLY.DONE };
+  assert.deepEqual(inboxThreadSend(steps, byHand)?.answers?.steps, [0, 1, 2]);
 
-  const titled = withDone({ steps: [] }, EMPTY_INBOX_DRAFT);
-  assert.deepEqual(titled.steps, [0], "the title standing as the one step is ticked on the card");
+  const failed: InboxDraft = { ...byHand, press: INBOX_REPLY.NOT_DONE };
+  assert.deepEqual(shownTicks(ask, failed), [1]);
   assert.deepEqual(
-    inboxThreadSend([asking({ type: INBOX_ASK.DO, steps: [] })], titled)?.answers?.steps,
-    [],
+    inboxThreadSend(steps, failed)?.answers?.steps,
+    [1],
+    "Couldn't do it after Mark done sends only the step ticked by hand",
   );
+
+  const letGo = withStep(ask, done, 2);
+  assert.equal(letGo.press, undefined, "letting a step go takes Mark done off");
+  assert.deepEqual(shownTicks(ask, letGo), [0, 1]);
+
+  const titled = { type: INBOX_ASK.DO, steps: [] } as const;
+  assert.deepEqual(shownTicks(titled, done), [0], "the title standing as the one step is ticked");
+  assert.deepEqual(inboxThreadSend([asking(titled)], done)?.answers?.steps, []);
 });
 
 test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {

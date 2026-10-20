@@ -5806,6 +5806,13 @@ test("a to-do's steps are ticked in its box, Mark done needs none ticked and tic
     "Mark done ticks the step left unticked",
   );
   assert.deepEqual(askBoxes(pane), [["open", "Steps · 2 of 2Waiting on you"]]);
+  act(() => askPress(pane, "Couldn't do it").click());
+  assert.deepEqual(
+    steps().map((step) => step.checked),
+    [true, false],
+    "Couldn't do it after Mark done keeps only the step ticked by hand",
+  );
+  act(() => askPress(pane, "Mark done").click());
   assert.equal(sendWords(pane), "Mark done");
   act(() =>
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
