@@ -747,30 +747,6 @@ export type CodingAgentPage = typeof codingAgentPageSchema.Type;
 /** One agent read by its id (GET), on a task or with none. */
 export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
 
-/**
- * One agent with no plan as the plan list carries it beside the plans, so
- * the sidebar lists it among them: the agent as the tabs draw it, its
- * automation's name among them, the automation, workspace, and repository
- * its own page names, and when it last moved, which orders it among the
- * plans by their last update, and when the reader pinned it, where they did.
- * The run that started it is its page's alone, so a list of many carries no
- * prompt.
- */
-export const tasklessAgentSchema = EffectSchema.Struct({
-  ...codingAgentSummarySchema.fields,
-  automationId: codingAgentPageSchema.fields.automationId,
-  workspaceId: codingAgentPageSchema.fields.workspaceId,
-  repository: codingAgentPageSchema.fields.repository,
-  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
-  activityAt: countedNumber,
-  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
-  pinnedAt: EffectSchema.optionalKey(countedNumber),
-  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
-  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type TasklessAgent = typeof tasklessAgentSchema.Type;
-
 /** The task's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(codingAgentSummarySchema),
@@ -824,6 +800,41 @@ export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
+/**
+ * One agent with no plan as the plan list carries it beside the plans, so
+ * the sidebar lists it among them: the agent as the tabs draw it, its
+ * automation's name among them, the automation, workspace, and repository
+ * its own page names, and when it last moved, which orders it among the
+ * plans by their last update, when the reader pinned it, where they did,
+ * and the pull request it opened, where it opened one.
+ * The run that started it is its page's alone, so a list of many carries no
+ * prompt.
+ */
+export const tasklessAgentSchema = EffectSchema.Struct({
+  ...codingAgentSummarySchema.fields,
+  automationId: codingAgentPageSchema.fields.automationId,
+  workspaceId: codingAgentPageSchema.fields.workspaceId,
+  repository: codingAgentPageSchema.fields.repository,
+  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  activityAt: countedNumber,
+  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
+  pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** The pull request it opened, as GitHub last answered the service, which its row's card shows as a task's row's card shows its own; absent while it opened none, and from a service before it was sent. */
+  pullRequest: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      number: codingAgentPullRequestSchema.fields.number,
+      title: codingAgentPullRequestSchema.fields.title,
+      url: codingAgentPullRequestSchema.fields.url,
+      state: codingAgentPullRequestSchema.fields.state,
+      checks: codingAgentPullRequestSchema.fields.checks,
+    }),
+  ),
+});
+
+export type TasklessAgent = typeof tasklessAgentSchema.Type;
 
 /** What became of one file: made, changed in place, removed, or moved, with or without changes. */
 export const CHANGED_FILE_STATUS = {

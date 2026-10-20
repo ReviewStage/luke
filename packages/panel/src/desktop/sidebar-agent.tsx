@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_BOUNDS,
-  type CodingAgentSummary,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
   ArchiveIcon,
   InlineEdit,
@@ -28,7 +24,7 @@ import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
+import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
@@ -86,27 +82,13 @@ function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAc
     : { label: "Unpin", icon: <UnpinIcon />, onSelect: () => onPin(false) };
 }
 
-/** The agent as the tabs' summary holds it, its automation left out where it ran on none. */
-function summaryOf(agent: TasklessAgent): CodingAgentSummary {
-  const { automationId, ...rest } = agent;
-  return automationId === null ? rest : { ...rest, automationId };
-}
-
 /**
  * The agent's card, as its tab hangs it on a task (`agent-ref.tsx`): its
  * name, where it stands and when it last moved, who started it, and its
- * pull request, read from the list's row.
+ * pull request, read from the list's row as a task's row's card is.
  */
 function agentCardOf(agent: TasklessAgent, agents: CodingAgentsControl): React.JSX.Element {
-  const summary = summaryOf(agent);
-  const archived = agent.archivedAt !== undefined;
-  const subject = agentSubject(
-    { ...agents, agents: archived ? [] : [summary], archived: archived ? [summary] : [] },
-    agent.id,
-    NOTHING_HELD,
-    false,
-  );
-  return <AgentCard subject={subject} models={agents.models} />;
+  return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
 
 /** One agent with no task among the sidebar's tasks. */

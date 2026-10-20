@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -241,4 +246,34 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
 
   assert.equal(drawn(false), true);
   assert.equal(drawn(true), false);
+});
+
+test("the row's card says the agent last moved when its row does, the end of its run included, and shows the pull request it opened, as a task's row's card shows its own", () => {
+  const minute = 60_000;
+  const now = Date.now();
+  const ran = {
+    ...RUN,
+    runStartedAt: now - 3 * 24 * 60 * minute,
+    activityAt: now - 2 * minute,
+    pullRequest: {
+      number: 42,
+      title: "Remove the stale copy",
+      url: "https://github.com/acme/relay/pull/42",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+    },
+  };
+  const row = mount(ran);
+  const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
+  act(() => {
+    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const corner = card?.querySelector(".luke-hover-card-corner")?.textContent ?? "";
+  assert.equal(
+    corner,
+    "#42 · 2m",
+    "its pull request, and its run's end rather than its start three days ago",
+  );
 });
