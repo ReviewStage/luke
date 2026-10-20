@@ -2358,6 +2358,338 @@
   display: none;
 }
 
+/* The Chapters view (agent-chapters-tab.tsx): the chapters' rail docked at
+   its left, as Files changed's tree docks at its right, and the chapter
+   chosen beside it, its head over its own Files changed list and its foot
+   under it. The rail is as wide as the tree stands by default, slides in
+   past the view's left edge and out over the chapter (`usePaneSlide`), so
+   the body clips what stands past it, with `clip` rather than `hidden`, and
+   leaves a strip of one mark a chapter while hidden. */
+.chapters-view {
+  --chapter-rail-width: calc(var(--luke-space-64) * 4);
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.chapters-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+}
+
+.chapter-rail {
+  display: flex;
+  width: min(var(--chapter-rail-width), 40%);
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-right: 1px solid var(--luke-color-border);
+}
+
+.chapter-rail[data-leaving] {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  left: 0;
+  background: var(--luke-color-well);
+}
+
+/* Note that the rail hidden beside the chapter is hidden only where it can
+   stand beside it, so a panel narrowed since still floats it when asked. */
+@container side-panel (min-width: 640px) {
+  .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
+    display: none;
+  }
+}
+
+.chapter-rail-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: var(--column-inset);
+  list-style: none;
+}
+
+/* A row's number, quiet before its title, and its risk as a dot in the
+   risk's colour in the glyph's place; "Other changes" draws none. */
+.chapter-row-number {
+  margin-right: var(--luke-icon-gap);
+  color: var(--luke-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chapter-risk-mark {
+  display: block;
+  width: var(--luke-space-8);
+  height: var(--luke-space-8);
+  border-radius: var(--luke-radius-full);
+}
+
+.chapter-risk-mark[data-risk="high"],
+.chapter-strip-mark[data-risk="high"] {
+  background: var(--luke-color-danger-text);
+}
+
+.chapter-risk-mark[data-risk="medium"],
+.chapter-strip-mark[data-risk="medium"] {
+  background: var(--luke-color-attention);
+}
+
+.chapter-risk-mark[data-risk="low"],
+.chapter-strip-mark[data-risk="low"] {
+  background: var(--luke-color-complete);
+}
+
+/* While the rail is hidden, a strip stands in its place, one mark for each
+   chapter in its risk's colour, dimmed once viewed, the chapter shown
+   standing out, as Files changed's strip stands for its tree. */
+.chapter-strip {
+  display: none;
+}
+
+.chapters-view[data-rail-beside="false"] .chapter-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding-block: var(--luke-space-12);
+  border-right: 1px solid var(--luke-color-border);
+  cursor: pointer;
+}
+
+.chapter-strip-mark {
+  width: var(--luke-space-6);
+  height: var(--luke-space-6);
+  flex: none;
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-border-strong);
+}
+
+.chapter-strip-mark[data-viewed] {
+  opacity: 0.35;
+}
+
+.chapter-strip-mark[data-current] {
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--luke-color-text);
+}
+
+.chapter-rail-toggle {
+  display: flex;
+}
+
+.chapter-rail-toggle[data-place="over"] {
+  display: none;
+}
+
+/* The chapter: its head, which scrolls on its own once it is taller than
+   its share, so the diff under it keeps at least half the view; the list;
+   and the foot. */
+.chapter-reading {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.chapter-head {
+  display: flex;
+  min-height: 0;
+  max-height: 50%;
+  flex: 0 1 auto;
+  flex-direction: column;
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.chapter-head-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
+}
+
+.chapter-head-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-control-gap);
+}
+
+.chapter-head-row > .luke-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chapter-head-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  margin-left: auto;
+}
+
+.chapter-viewed {
+  display: flex;
+  align-items: center;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.chapter-summary,
+.chapter-key-changes {
+  padding-inline: var(--row-inset);
+}
+
+.chapter-key-changes > ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chapter-key-change {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-6) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+.chapter-key-change > .luke-text-button {
+  align-self: flex-start;
+}
+
+/* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
+.chapter-key-change-ref {
+  color: var(--luke-color-text-muted);
+}
+
+.chapter-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-4) var(--column-inset);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.chapter-foot-place {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* Chapters being made: how long it has been, then blocks where the rail
+   and the chapter will stand. */
+.chapters-generating {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.chapters-generating-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  margin: 0;
+  padding: var(--luke-space-8) var(--column-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.chapters-skeleton {
+  display: flex;
+  gap: var(--luke-section-gap);
+  padding: var(--luke-space-12) var(--column-inset);
+}
+
+.chapters-skeleton-rail {
+  display: flex;
+  width: min(var(--chapter-rail-width, calc(var(--luke-space-64) * 4)), 40%);
+  flex: none;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
+.chapters-skeleton-reading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+/* A panel too narrow for the rail beside the chapter floats it over the
+   chapter's left edge instead, on the window's floating surface, away until
+   its toggle or its strip opens it, and away again at a choice in it or at
+   Escape; the strip always stands for it. */
+@container side-panel (max-width: 639px) {
+  .chapter-rail {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    left: 0;
+    width: min(var(--chapter-rail-width), calc(100% - var(--luke-space-48)));
+    border-right-color: var(--luke-color-border-strong);
+    background: var(--luke-color-overlay);
+    box-shadow: var(--luke-menu-shadow);
+  }
+
+  .chapters-view[data-rail-over="closed"] .chapter-rail {
+    display: none;
+  }
+
+  .chapters-view[data-rail-over="open"] .chapter-rail {
+    display: flex;
+    animation: chapter-rail-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .chapters-view .chapter-strip {
+    display: flex;
+    width: var(--luke-space-12);
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--luke-space-4);
+    padding-block: var(--luke-space-12);
+    border-right: 1px solid var(--luke-color-border);
+    cursor: pointer;
+  }
+
+  .chapter-rail-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .chapter-rail-toggle[data-place="over"] {
+    display: flex;
+  }
+
+  .chapters-skeleton-rail {
+    display: none;
+  }
+}
+
+@keyframes chapter-rail-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
 /* The band the views' tabs stand in under the header, whose hairline is the
    band's rather than the tabs', with Review at its end while the pull
    request is open: the tabs give way first, folding to their glyphs. */
