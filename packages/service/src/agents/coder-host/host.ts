@@ -25,26 +25,18 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask } from "@luke/database/models/task-store";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
-import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { Effect, Option, Result, type Schema, Stream } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import {
-  ACTION_RESULT_STATUS,
-  MESSAGE_ROLE,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "../../core.js";
+import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
@@ -52,22 +44,8 @@ import {
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
-import { runLookAtBoard } from "../../tasks/board-look.js";
-import { runDrawOnBoard } from "../../tasks/board-tool.js";
-import {
-  COMMENT_TOOL_REFUSAL,
-  type CommentToolName,
-  commentToolRejected,
-  runCommentTool,
-} from "../../tasks/comment-tools.js";
-import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../tasks/page-tool.js";
-import {
-  PICTURE_LOOK_REFUSAL,
-  type PictureLookResult,
-  pictureNotLooked,
-  runLookAtPicture,
-} from "../../tasks/picture-look.js";
-import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
+import type { CommentToolName } from "../../tasks/comment-tools.js";
+import type { PictureLookResult } from "../../tasks/picture-look.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
@@ -87,11 +65,7 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 import {
-  type AgentSessions,
-  EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../brain-host/eve-sessions.js";
@@ -106,51 +80,33 @@ import {
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
 import {
-  AGENT_CALLER,
-  agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  runListAgents,
-  runListModels,
-  runListTasks,
-  runMessageAgent,
-  runReadAgent,
-  runReadPage,
-  runStartAgent,
-  runStopAgent,
-  runUpdateAgent,
-  runUpdateTask,
-} from "../coding-agent-tools.js";
-import {
   type ReadWebPageResult,
   ResearchBudget,
   runReadWebPage,
   runSearchWeb,
   type SearchWebResult,
 } from "../public-research.js";
-import {
-  checkoutDeepened,
-  REPOSITORY_REFUSAL,
-  RepositoryRefusal,
-  type RepositorySandbox,
-} from "../repository-shell.js";
-import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
-import { runCreateTask, runReadTask } from "../task-tools.js";
+import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
-import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
-  agentAway,
-  CHAT_TOOL_REFUSAL,
-  type ChatToolResult,
-  chatDigest,
-  chatRejected,
-  editAsAgent,
-  postAsAgent,
-  readAsAgent,
-  resolveAsAgent,
-} from "./chat.js";
-import { CHAT_DOORS } from "./chat-notify.js";
+  type AgentToolCall,
+  type BoardTool,
+  type ChatCall,
+  runAgentBoard,
+  runAgentChat,
+  runAgentComment,
+  runAgentEditPlan,
+  runAgentLookAtPicture,
+  runAgentOpenPullRequest,
+  runAgentShowCode,
+  runAgentShowImage,
+  runAgentShowPage,
+  runAgentTools,
+} from "./agent-doors.js";
+import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import { type ChatToolResult, chatDigest } from "./chat.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -170,19 +126,9 @@ import { type InboxCall, runAgentInbox } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
-import {
-  PLAN_EDIT_REFUSAL,
-  type PlanEditResult,
-  planEditRejected,
-  recordPlanEdit,
-} from "./plan-edit.js";
+import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
-import {
-  openPullRequest,
-  PULL_REQUEST_UNAVAILABLE,
-  type PullRequestToolResult,
-  pullRequestRejected,
-} from "./pull-request.js";
+import type { PullRequestToolResult } from "./pull-request.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
@@ -545,103 +491,8 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** The whiteboard's tools, by the name a call of one is made under. */
-export type BoardTool = typeof CODER_TOOL.DRAW_ON_BOARD | typeof CODER_TOOL.LOOK_AT_BOARD;
-
-/** Why a call of the whiteboard's tools drew or looked at nothing, in words the model can act on. */
-const BOARD_REFUSAL = {
-  TASKLESS: "Not run: you work on no task, so there is no whiteboard to draw on or look at.",
-  UNAVAILABLE: "Not run: the whiteboard could not be reached just now. The call may be made again.",
-} as const;
-
-/** A call of the whiteboard's tools that ran nothing, and why. */
-function boardRejected(reason: string): WireRecord {
-  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
-
+export type { AgentToolCall, BoardTool, ChatCall } from "./agent-doors.js";
 export type { InboxCall } from "./inbox-door.js";
-
-/** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input eve held to its schema, and eve's id for the call. */
-export interface AgentToolCall {
-  readonly tool:
-    | typeof CODER_TOOL.LIST_AGENTS
-    | typeof CODER_TOOL.READ_AGENT
-    | typeof CODER_TOOL.MESSAGE_AGENT
-    | typeof CODER_TOOL.START_AGENT
-    | typeof CODER_TOOL.STOP_AGENT
-    | typeof CODER_TOOL.UPDATE_AGENT
-    | typeof CODER_TOOL.READ_PAGE
-    | typeof CODER_TOOL.LIST_TASKS
-    | typeof CODER_TOOL.READ_TASK
-    | typeof CODER_TOOL.CREATE_TASK
-    | typeof CODER_TOOL.CREATE_SECTION
-    | typeof CODER_TOOL.DELETE_SECTION
-    | typeof CODER_TOOL.UPDATE_TASK
-    | typeof CODER_TOOL.LIST_MODELS;
-  readonly input: UnparsedWireValue;
-  readonly callId: string;
-}
-
-/** Each of the agent tools a coding agent is offered, run under the call it makes. */
-const AGENT_TOOL_RUN = {
-  [CODER_TOOL.LIST_AGENTS]: runListAgents,
-  [CODER_TOOL.READ_AGENT]: runReadAgent,
-  [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
-  [CODER_TOOL.START_AGENT]: runStartAgent,
-  [CODER_TOOL.STOP_AGENT]: runStopAgent,
-  [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
-  [CODER_TOOL.READ_PAGE]: runReadPage,
-  [CODER_TOOL.LIST_TASKS]: runListTasks,
-  [CODER_TOOL.READ_TASK]: runReadTask,
-  [CODER_TOOL.CREATE_TASK]: runCreateTask,
-  [CODER_TOOL.CREATE_SECTION]: runCreateSection,
-  [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
-  [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
-  [CODER_TOOL.LIST_MODELS]: runListModels,
-} as const;
-
-/** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
-export type ChatCall =
-  | {
-      readonly tool: typeof CHAT_TOOL.POST;
-      readonly input: UnparsedWireValue;
-      readonly clientKey: string;
-      readonly postsInTurn: number;
-      readonly sandbox: InboxSandboxDoor;
-    }
-  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.EDIT_CHANNEL; readonly input: UnparsedWireValue };
-
-/**
- * eve as a deployment that names no secret or no origin for it reaches it:
- * every call answered as failed, so a chat post still lands and a member it
- * addresses, whose notice could not be handed over, reads it when it next
- * reads, as one whose steer eve refused does (`chat-notify.ts`).
- */
-const EVE_UNREACHED: AgentSessions = {
-  open: () =>
-    Effect.succeed({
-      outcome: EVE_SEND_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  send: () =>
-    Effect.succeed({
-      outcome: EVE_SEND_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  cancel: () =>
-    Effect.succeed({
-      outcome: EVE_CANCEL_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  reset: () =>
-    Effect.succeed({
-      outcome: EVE_RESET_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  stream: () => Stream.empty,
-};
 
 /** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
 const PREVIOUS_TURN_READ = 2;
@@ -1158,63 +1009,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         });
       }),
     editPlan: (admitted, input, takenInTurn, sandbox) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return planEditRejected(found.failure);
-        const { id: agentId, taskId } = found.success;
-        if (taskId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
-        // The plan is written as the member whose turn this is, whoever started the agent.
-        const binding = { userId: admitted.caller, taskId };
-        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn, sandbox);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
-      ),
+      runAgentEditPlan(admitted, input, takenInTurn, sandbox),
 
     inbox: (admitted, call) => runAgentInbox(admitted, call),
 
-    lookAtPicture: (admitted, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-        const { taskId } = found.success;
-        if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
-        // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
-      ),
+    lookAtPicture: (admitted, input) => runAgentLookAtPicture(admitted, input),
 
-    openPullRequest: (admitted, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return pullRequestRejected(found.failure);
-        // Note that the tool is not offered to an agent with no repository (`repositoryToolsOf`), so this refuses only a call made across a change of its row.
-        if (!hasRepository(found.success)) return pullRequestRejected(CODER_REFUSAL.NO_REPOSITORY);
-        return yield* openPullRequest(admitted.target, found.success, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
-      ),
+    openPullRequest: (admitted, input) => runAgentOpenPullRequest(admitted, input),
 
-    comment: (admitted, name, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return commentToolRejected(found.failure);
-        const { id: agentId, taskId } = found.success;
-        if (taskId === null) return commentToolRejected(COMMENT_TOOL_REFUSAL.TASKLESS);
-        // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
-        const writer = {
-          actor: PLAN_COMMENT_ACTOR.AGENT,
-          userId: admitted.caller,
-          agentId,
-        } as const;
-        return yield* runCommentTool(name, { taskId, writer }, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(commentToolRejected(COMMENT_TOOL_REFUSAL.UNAVAILABLE))),
-      ),
+    comment: (admitted, name, input) => runAgentComment(admitted, name, input),
     chatOffered: (admitted, prompt) =>
       (prompt.chatOn === true
         ? chatEnabledFor(admitted.target.userId)
@@ -1224,44 +1027,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.orElseSucceed(() => false),
       ),
 
-    chat: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-        if (!(yield* chatEnabledFor(admitted.target.userId))) {
-          return chatRejected(CHAT_TOOL_REFUSAL.OFF);
-        }
-        const { id: agentId, taskId, repository } = found.success;
-        const self = { kind: MEMBER_KIND.AGENT, agentId };
-        const reader = { userId: admitted.target.userId, taskId, self };
-        if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
-        if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
-        // An archived agent, or one on an archived task, posts nothing until it is brought back.
-        if (yield* agentAway(admitted.target.userId, found.success)) {
-          return chatRejected(CHAT_TOOL_REFUSAL.LEFT);
-        }
-        if (call.tool === CHAT_TOOL.EDIT_CHANNEL) return yield* editAsAgent(reader, call.input);
-        // A notice reaches the receiving agent's session as the deployment acting for that agent's
-        // starter, whose principal its turn runs under, as the planning model's message to an
-        // agent does: no bearer stands here.
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        const compose = yield* eveSessionsComposer;
-        const eveFor = (starter: string) =>
-          secret === undefined || origin === undefined
-            ? EVE_UNREACHED
-            : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
-        const { clientKey, postsInTurn, sandbox } = call;
-        return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
-          clientKey,
-          postsInTurn,
-          sandbox,
-        });
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
-      ),
+    chat: (admitted, call) => runAgentChat(seams, admitted, call),
 
     turnKind: (auth) => turnKindOf(auth.current),
 
@@ -1286,67 +1052,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         return parts.length === 0 ? undefined : parts.join("\n\n");
       }),
 
-    showPage: (admitted, input, sandbox) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return showPageRejected(found.failure);
-        const { taskId } = found.success;
-        if (taskId === null) return showPageRejected(SHOW_PAGE_REFUSAL.TASKLESS);
-        const binding = {
-          userId: admitted.target.userId,
-          taskId,
-          sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
-        };
-        return yield* runShowPage(binding, input, {
-          kind: PAGE_SHOWER.AGENT,
-          agentId: found.success.id,
-        });
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
-      ),
+    showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),
 
-    showCode: (admitted, input, sandbox) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return showCodeRejected(found.failure);
-        const { repository } = found.success;
-        // Note that the tool is not offered to an agent with no repository (`repositoryToolsOf`), so this refuses only a call made across a change of its row.
-        // The sandbox opened with the checkout standing (`checkOut`), so the lines are read where it stands.
-        const checkout =
-          repository === null
-            ? Effect.fail(new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY }))
-            : Effect.tryPromise({
-                try: sandbox,
-                catch: () =>
-                  new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
-              }).pipe(Effect.map((opened) => ({ sandbox: opened, repository })));
-        return yield* showCodeIn(checkout, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(showCodeRejected(SHOW_CODE_REFUSAL.READ_FAILED))),
-      ),
+    showCode: (admitted, input, sandbox) => runAgentShowCode(admitted, input, sandbox),
 
-    board: (admitted, tool, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return boardRejected(found.failure);
-        const { taskId } = found.success;
-        if (taskId === null) return boardRejected(BOARD_REFUSAL.TASKLESS);
-        // The board is drawn and read as the member whose turn this is, as `editPlan` writes the plan.
-        const binding = { userId: admitted.caller, taskId };
-        const ran =
-          tool === CODER_TOOL.DRAW_ON_BOARD
-            ? runDrawOnBoard(binding, input)
-            : runLookAtBoard(binding, input);
-        return { ...(yield* ran) };
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(boardRejected(BOARD_REFUSAL.UNAVAILABLE))),
-      ),
+    board: (admitted, tool, input) => runAgentBoard(admitted, tool, input),
 
-    showImage: (admitted, input, sandbox) =>
-      runShowImage({ target: admitted.target, sandbox, checkout: CODER.CHECKOUT_PATH }, input),
+    showImage: (admitted, input, sandbox) => runAgentShowImage(admitted, input, sandbox),
 
     showDelegatedImage: (session, input, sandbox) =>
       Effect.gen(function* () {
@@ -1359,36 +1071,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
       ),
 
-    agentTools: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return agentToolRejected(found.failure);
-        // The agent asking is the one the session was admitted to, and eve is reached as its starter.
-        const sender = found.success;
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        const compose = yield* eveSessionsComposer;
-        const eve =
-          secret === undefined || origin === undefined
-            ? undefined
-            : compose({
-                origin,
-                caller: { secret, account: sender.userId },
-                mount: EVE_MOUNT.CODER,
-              });
-        const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
-        const toolCall = {
-          caller,
-          eve,
-          writer: seams.writer(),
-          clientKey: call.callId,
-          summaryModel: seams.summaryModel,
-        };
-        return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
-      ),
+    agentTools: (admitted, call) => runAgentTools(seams, admitted, call),
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
