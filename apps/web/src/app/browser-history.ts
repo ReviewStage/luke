@@ -17,10 +17,10 @@
  * time, or it refuses a write, as Safari throws on a hundred in ten seconds.
  * So any landing ends the panel's move, and one on another entry than the
  * move's stands that entry alone, the writes waiting on the move dropped, as
- * a tab reloaded there would; and a write or move refused leaves only the
- * entry standing held, so the panel never travels to an entry the browser
- * may not hold. Either way the entries around it are learnt again as the
- * browser lands on them.
+ * a tab reloaded there would; a write refused leaves only the entry standing
+ * held, so the panel never travels to an entry the browser may not hold; and
+ * a move refused stands the entry the browser stayed on. Either way the
+ * entries around it are learnt again as the browser lands on them.
  *
  * A tab reloaded on an entry this history wrote starts on it, its state read
  * back from the browser, and learns the entries around it as the browser
@@ -143,8 +143,9 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
     drain();
   };
 
-  // Whether the browser refused a call since the history last stood, which the next stand answers.
+  // Whether the browser refused a write, or a move, since the history last stood, which the next stand answers.
   let refused = false;
+  let stayed = false;
   // The history holding only the entry `next` stands on, kept as the same object so the panel, already on it, does not move.
   const onlyStanding = (next: HistorySnapshot<State>): HistorySnapshot<State> => {
     const standing = next.entries[next.at];
@@ -154,8 +155,12 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
   };
   // Note that every way in that reaches the browser ends here, so a refusal made on the way is answered once it stands.
   const stand = (asked: HistorySnapshot<State>) => {
-    const next = refused ? onlyStanding(asked) : asked;
+    let next = asked;
+    // Note that a refused move left the browser where it stood, so that entry stands, as a tab reloaded there would.
+    if (stayed) next = alone(savedEntry<State>());
+    else if (refused) next = onlyStanding(asked);
     refused = false;
+    stayed = false;
     if (next.entries === snapshot.entries && next.at === snapshot.at) return;
     snapshot = next;
     for (const listener of [...listeners]) listener();
@@ -216,9 +221,10 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
     const arrived = saved?.idx === travelling;
     travelling = undefined;
     if (!arrived) {
-      // Landing elsewhere is the browser's word over the panel's, so what waited to be written after the move is dropped.
+      // Landing elsewhere is the browser's word over the panel's: with nothing waiting the entries held are the browser's,
+      // and otherwise what waited to be written after the move is dropped, and with it what the entries around knew.
+      stand(waiting.length === 0 ? landed(saved) : alone(saved));
       waiting.length = 0;
-      stand(alone(saved));
     }
     drain();
     stand(snapshot);
@@ -252,8 +258,10 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
       inTurn(() => {
         travelling = target;
         if (browserDid(() => window.history.go(delta))) return;
+        // What waited on the move was written for the entry it went to, which the browser never reached.
         travelling = undefined;
-        refused = true;
+        waiting.length = 0;
+        stayed = true;
       });
       stand({ entries: snapshot.entries, at });
     },

@@ -143,6 +143,11 @@ test("the browser landing elsewhere than a move of the panel's went, as when the
 
   assert.equal(addressBar(), "/acme/inbox");
   assert.equal(history.current().entries[history.current().at]?.state, "inbox");
+  assert.equal(
+    history.current().entries.length,
+    3,
+    "with nothing waiting, the steps held stay held",
+  );
   history.push({ address: "/acme/automations", state: "automations" });
   assert.equal(addressBar(), "/acme/automations", "a write is not left waiting");
   await travel(() => window.history.back());
@@ -178,6 +183,72 @@ test("a write the browser refuses, as Safari does past a hundred in ten seconds,
   assert.equal(history.current().entries[history.current().at]?.state, "inbox");
   history.push({ address: "/acme/automations", state: "automations" });
   assert.equal(addressBar(), "/acme/automations", "a write is not left waiting");
+});
+
+/** Safari's refusal of a history call past its limit. */
+function refusal(): DOMException {
+  return new DOMException(
+    "Attempt to use history.go() more than 100 times per 10 seconds",
+    "SecurityError",
+  );
+}
+
+/** The state of the entry the history stands on. */
+function standing(history: {
+  current: () => { entries: readonly { state: string }[]; at: number };
+}) {
+  return history.current().entries[history.current().at]?.state;
+}
+
+test("a move the browser refuses stands the entry the browser stayed on, so the next write lands after it and the browser's Back is followed", async () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  history.push({ address: "/acme/settings", state: "settings" });
+  vi.spyOn(window.history, "go").mockImplementationOnce(() => {
+    throw refusal();
+  });
+
+  assert.doesNotThrow(() => history.go(-1));
+
+  assert.equal(standing(history), "settings");
+  assert.equal(addressBar(), "/acme/settings");
+  history.push({ address: "/acme/chat", state: "chat" });
+  assert.equal(addressBar(), "/acme/chat");
+  await travel(() => window.history.back());
+  assert.equal(standing(history), "settings", "the browser's Back is followed, not swallowed");
+});
+
+test("a move refused while it waited on another of the panel's stands the entry the first landed on, and drops what waited behind it", async () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  history.push({ address: "/acme/settings", state: "settings" });
+  history.push({ address: "/acme/chat", state: "chat" });
+  const browserGo = window.history.go.bind(window.history);
+  let moves = 0;
+  vi.spyOn(window.history, "go").mockImplementation((delta = 0) => {
+    moves += 1;
+    if (moves > 1) throw refusal();
+    browserGo(delta);
+  });
+
+  await travel(() => {
+    history.go(-1);
+    history.go(-1);
+    history.replace({ address: "/acme/automations", state: "automations" });
+  });
+
+  assert.equal(standing(history), "settings");
+  assert.equal(
+    addressBar(),
+    "/acme/settings",
+    "the write that waited on the refused move is dropped",
+  );
+  history.push({ address: "/acme/issues", state: "issues" });
+  assert.equal(addressBar(), "/acme/issues");
+  await travel(() => window.history.back());
+  assert.equal(standing(history), "settings", "the browser's Back is followed");
 });
 
 test("a disposed history no longer follows the browser", async () => {
