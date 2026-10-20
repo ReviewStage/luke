@@ -47,7 +47,7 @@ import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { Schema } from "effect";
 import { SquareKanbanIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
@@ -416,9 +416,15 @@ function TaskBoardColumnView({
 export function TasksBoard({
   tasks,
   room,
+  title = BOARD,
+  switcher,
 }: {
   tasks: TasksControl;
   room: ShellRoom;
+  /** What the toolbar calls the page: the Board's own name, or the Tasks page's it stands on. */
+  title?: string;
+  /** The Tasks page's List | Board switch, beside the title, where the board is one of its views. */
+  switcher?: ReactNode;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const toast = useToast();
@@ -458,7 +464,8 @@ export function TasksBoard({
   const toolbar = (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{BOARD}</h1>
+        <h1 className="desktop-toolbar-title">{title}</h1>
+        {switcher}
       </div>
       <div className="desktop-toolbar-actions">
         <Chip
@@ -482,7 +489,7 @@ export function TasksBoard({
       frame={PAGE_FRAME.TOOLBAR}
       // Note that the board stands its columns across the room and scrolls sideways past it, each column scrolling its own cards.
       width={PAGE_WIDTH.FULL}
-      label={BOARD}
+      label={title}
       toolbar={toolbar}
       filters={tabs}
       state={boardState(tasks, listed.length === 0)}
