@@ -954,10 +954,13 @@ function ThreadComment({
   comment,
   now,
   picture,
+  marked,
 }: {
   comment: ReviewThread["comments"][number];
   now: number;
   picture: GitHubPictureDrawer;
+  /** Whether a pending comment wears its own Pending mark; not the one a pending thread starts, whose head wears it. */
+  marked: boolean;
 }): React.JSX.Element {
   const draft = usePendingComment(comment.url);
   const head = (
@@ -976,7 +979,7 @@ function ThreadComment({
           <Reactions reactions={comment.reactions} subject={comment.subject} />
         </>
       ) : (
-        <PendingComment draft={draft} head={head} words={words} />
+        <PendingComment draft={draft} head={head} words={words} marked={marked} />
       )}
     </li>
   );
@@ -1029,12 +1032,20 @@ function ThreadComments({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const openLink = useOpenLink();
+  // A thread a pending comment starts wears Pending in its head, so its first comment does not again.
+  const startsPending = usePendingThread(thread);
   const last = thread.comments.at(-1);
   return (
     <>
       <ol className="pull-request-thread-comments">
-        {thread.comments.map((comment) => (
-          <ThreadComment key={comment.url} comment={comment} now={now} picture={picture} />
+        {thread.comments.map((comment, at) => (
+          <ThreadComment
+            key={comment.url}
+            comment={comment}
+            now={now}
+            picture={picture}
+            marked={!(startsPending && at === 0)}
+          />
         ))}
       </ol>
       {thread.more === 0 || last === undefined ? null : (

@@ -4865,6 +4865,13 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
   const card = list.renderAnnotation(INVITE_FILE.path, "PRRC_start");
   assert.match(card.textContent ?? "", /dana.*Pending/u);
+  assert.deepEqual(
+    [...card.querySelectorAll(".pull-request-thread-head, .changes-comment-head")].map((head) =>
+      /Pending/u.test(head.textContent ?? ""),
+    ),
+    [true, false],
+    "the card it starts wears Pending in its head alone",
+  );
   assert.match(card.textContent ?? "", /Why four\?/u, "its words as GitHub rendered them");
   const replied = list.renderAnnotation(INVITE_FILE.path, `${PAGE}#discussion_r1`);
   const comments = [...replied.querySelectorAll<HTMLElement>(".pull-request-thread-comment")];
