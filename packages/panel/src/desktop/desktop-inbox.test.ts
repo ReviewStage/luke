@@ -1815,6 +1815,59 @@ test("an item's Markdown draws its own pictures, read once its item's own read l
   assert.ok(page.querySelector(".ph-no-capture [data-lone-link]"));
 });
 
+test("a picture of an item opens a viewer the arrow keys walk across every picture of the item, its Markdown's pair and its image block alike, in the order they are drawn", async () => {
+  const before = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c74";
+  const after = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c75";
+  const picture = (attachmentId: string) =>
+    inboxAttachmentAddress(
+      { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+      attachmentId,
+      "acme",
+    );
+  const words = {
+    type: INBOX_BLOCK.MARKDOWN,
+    text: `![The form before](${picture(before)} "Before") ![The form after](${picture(after)} "After")`,
+  };
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c76",
+    alt: "The pull request tab",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [words, shot] }, RETRY]);
+  const { page } = mount();
+  await settle();
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  const press = page.querySelector<HTMLButtonElement>(
+    'button[aria-label="Enlarge The form after"]',
+  );
+  assert.ok(press, "the picture is pressed to enlarge it");
+  act(() => press.click());
+  const viewer = () => {
+    const card = document.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(card, "the viewer is open");
+    return [
+      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector(".attachment-viewer-place")?.textContent,
+    ];
+  };
+  const key = (name: string) =>
+    act(() =>
+      document
+        .querySelector('[role="dialog"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
+        ),
+    );
+  assert.deepEqual(viewer(), ["The form after.png", "2 of 3"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["The form before.png", "1 of 3"]);
+  key("ArrowLeft");
+  assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
+});
+
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
