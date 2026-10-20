@@ -549,14 +549,16 @@ export function App(): React.JSX.Element {
 
   /**
    * The report that the window has painted, made once, on the first snapshot
-   * that carries settings.
+   * that carries settings, and for a fixture run once its synthetic tasks have
+   * landed, because a capture is taken a moment after this report.
    */
   const opened = useRef(false);
+  const { fixtureLanded } = tasks;
   useEffect(() => {
-    if (opened.current || !state?.settings) return;
+    if (opened.current || !state?.settings || !fixtureLanded) return;
     opened.current = true;
     appBridge().notifyReady();
-  }, [state]);
+  }, [state, fixtureLanded]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the

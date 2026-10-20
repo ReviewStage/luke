@@ -2306,6 +2306,16 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
   assert.equal(window.localStorage.length, 0);
 });
 
+test("a fixture run reports its synthetic tasks landed only once they have, so a capture is not taken before them; a live run has none to wait for", async () => {
+  assert.equal(mount({ shown: true }).control().fixtureLanded, true);
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.TASKS });
+  assert.equal(fixture.control().fixtureLanded, false);
+  await vi.waitFor(async () => {
+    await settle();
+    assert.equal(fixture.control().fixtureLanded, true);
+  });
+});
+
 /** The task as the list names it, archived where `archivedAt` is given. */
 function listed(archivedAt?: number): TasksView["tasks"][number] {
   const { document: _document, ...summary } = TASK;

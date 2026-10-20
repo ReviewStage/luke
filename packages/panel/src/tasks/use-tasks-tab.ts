@@ -605,6 +605,8 @@ export interface TasksControl {
   shownCode: TasksView["shownCode"];
   /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
   workFailed: boolean;
+  /** Whether the synthetic tasks a fixture run draws have landed, true at once for a live run, which draws none. */
+  fixtureLanded: boolean;
   /** Reads the open task's work and code again after a read that did not land. */
   onRetryWork: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
@@ -3112,6 +3114,7 @@ export function useTasksTab(input: {
     board: tasks.board,
     shownCode: tasks.shownCode,
     workFailed: tasks.workStatus === TASKS_READ.FAILED,
+    fixtureLanded: !fixtureMode || tasksFixture !== undefined,
     onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     transcript: {
