@@ -44,6 +44,7 @@ import {
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveSessions,
+  type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
@@ -197,7 +198,7 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
-  eve: EveSessions,
+  eve: EveSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: CodingAgent,

@@ -393,7 +393,11 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 {
                   // Composed to send no message at all: the deployment acting for the
                   // conversation's owner here cancels a turn and does nothing else.
-                  eve: eve<never>({ origin, caller: { secret, account: target.userId } }),
+                  eve: eve<never>({
+                    origin,
+                    caller: { secret, account: target.userId },
+                    mount: EVE_MOUNT.TASKS,
+                  }),
                   writer,
                   now: seams.now,
                   report: (message) => console.warn(message),

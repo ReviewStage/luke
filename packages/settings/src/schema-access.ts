@@ -87,10 +87,15 @@ const LINK_OPEN_PART = APP_SETTING_SCHEMA.linkOpen.field;
 
 /**
  * The preferences a record holds, each read by its own setting's guard.
- * A key outside `fields` is passed over wherever it comes from, so a newer
- * build's preference costs this one none of the others. A known key holding
- * what its guard refuses is passed over in a stored record, and refuses the
- * whole of a wire one, which a client or the service sent wrong.
+ * A key outside `fields` is passed over wherever it comes from, so a
+ * preference a build newer than this one adds costs this one none of the
+ * others. Builds before this rule do not pass it over: v0.18.0's reader
+ * refuses the whole of a wire record that names a key it does not know, so
+ * the shared part keeps to the keys that build reads, and a new preference
+ * rides a part of its own (`account-preferences.test.ts` pins the list). A
+ * known key holding what its guard refuses is passed over in a stored
+ * record, and refuses the whole of a wire one, which a client or the
+ * service sent wrong.
  */
 function parseAccountPreferences(
   value: UnparsedWireValue,

@@ -13,6 +13,7 @@ import {
   Duration,
   Effect,
   ErrorReporter,
+  Fiber,
   Option,
   Queue,
   Schema,
@@ -34,9 +35,10 @@ import {
  * A seal the service did not answer is asked for again, and a subscription
  * that stops for good started again, after `LIVE_RESTART`.
  *
- * A follow that has published no answer `FIRST_ANSWER_BOUND` after it began
- * is reported once, as a warning, to the host's line and to whatever error
- * reporter the runtime carries, naming why it last stopped and never an
+ * A follow that has published no answer `FIRST_ANSWER_BOUND` after it began,
+ * or after it restarted from a subscription it had answered on, is reported
+ * once for that silence, as a warning, to the host's line and to whatever
+ * error reporter the runtime carries, naming why it last stopped and never an
  * address or a seal, and goes on asking. Realtime's client reconnects a
  * socket that never opens without end and says nothing of it, so without
  * this a socket the page may not open (the web app's
@@ -281,7 +283,7 @@ export function followAccountInbox(
   return Effect.gen(function* () {
     let answered = false;
     let stopped = NOT_DELIVERED;
-    yield* Effect.forkChild(
+    const watchdog = Effect.forkChild(
       Effect.gen(function* () {
         yield* Effect.sleep(FIRST_ANSWER_BOUND);
         if (answered) return;
@@ -290,7 +292,15 @@ export function followAccountInbox(
         yield* ErrorReporter.report(Cause.fail(unanswered));
       }),
     );
+    let watching = yield* watchdog;
     const attempt = Effect.gen(function* () {
+      // Note that a follow that answered and then stopped is watched afresh from its restart,
+      // because otherwise one that dies after its first answer would go silent for good.
+      if (answered) {
+        answered = false;
+        yield* Fiber.interrupt(watching);
+        watching = yield* watchdog;
+      }
       const sealed = yield* dependencies.live();
       if ("failure" in sealed) {
         stopped = `the service sealed nothing (${sealed.failure})`;

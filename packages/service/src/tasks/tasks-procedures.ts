@@ -86,7 +86,7 @@ import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
-import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
@@ -355,7 +355,7 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ) =>
-  startRequestedAgent(eveFor(seams, request, userId), userId, task.id, agent).pipe(
+  startRequestedAgent(eveFor<EveTypedTurn>(seams, request, userId), userId, task.id, agent).pipe(
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),
@@ -605,7 +605,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           stoppedAgentIds: stopped,
           // Note that the sessions are retired under the plan's lock and before its conversations are
           // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
-          // agent started meanwhile refuses retires nothing.
+          // agent started meanwhile refuses retires nothing. They stay inside the transaction, since
+          // outside it a refused delete would leave a standing plan's sessions retired; the retires'
+          // own budget (`retire-sessions.ts`) bounds how long they hold the lock.
           beforeDelete: (conversationIds) =>
             Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
               retireSessions(eveAt, sessions),

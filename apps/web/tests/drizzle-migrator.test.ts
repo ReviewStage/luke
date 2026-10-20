@@ -162,6 +162,25 @@ const SECOND = "20260102000000_second";
 const THIRD = "20260103000000_third";
 
 it.effect(
+  "a run leaves its session's lock_timeout at five seconds, so a DDL statement blocked by live traffic fails the build rather than stalling the traffic queued behind it",
+  () =>
+    onFreshDatabase(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { folder, write } = yield* syntheticMigrationsFolder;
+          yield* write(FIRST);
+          assert.deepEqual(yield* runWebMigrations(folder), [FIRST]);
+          const sql = yield* SqlClient.SqlClient;
+          const [setting] = yield* sql<{ readonly timeout: string }>`
+            select current_setting('lock_timeout') as timeout
+          `;
+          assert.equal(setting?.timeout, "5s");
+        }),
+      ),
+    ),
+);
+
+it.effect(
   "a migration named before the latest one applied, landing after it, is applied rather than stepped over",
   () =>
     onFreshDatabase(

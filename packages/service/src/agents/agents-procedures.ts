@@ -68,6 +68,7 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { pathUuid, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
+import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import {
   agentPullRequestReach,
   instancePublishedCache,
@@ -264,7 +265,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
             Effect.provideService(HostedEnvironment, environment),
           ));
       const { agent, created } = yield* startRequestedAgent(
-        eveFor(seams, context.request, context.userId),
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
         taskId,
         input.body,
