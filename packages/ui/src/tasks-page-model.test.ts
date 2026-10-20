@@ -18,6 +18,7 @@ import {
   type TasksDisplay,
   type TasksFilter,
   type TasksGroup,
+  type TasksGroupHead,
   tasksBoardColumns,
   tasksListGroups,
   toggledFilter,
@@ -74,9 +75,28 @@ function task(
   };
 }
 
-/** Each group as its key and its tasks' names. */
+/** What a group stands for: its kind, and the value it heads where it heads one. */
+function headOf(head: TasksGroupHead): readonly (string | null)[] {
+  switch (head.kind) {
+    case TASKS_GROUP.PINNED:
+    case TASKS_GROUP.ALL:
+      return [head.kind];
+    case TASKS_GROUP.SECTION:
+      return [head.kind, head.sectionId];
+    case TASKS_GROUP.STATUS:
+      return [head.kind, head.status];
+    case TASKS_GROUP.PRIORITY:
+      return [head.kind, head.priority];
+    case TASKS_GROUP.REPOSITORY:
+      return [head.kind, head.repository];
+    case TASKS_GROUP.CREATOR:
+      return [head.kind, head.creatorId];
+  }
+}
+
+/** Each group as what it stands for and its tasks' names. */
 const drawn = (groups: readonly TasksGroup[]) =>
-  groups.map((group) => [group.key, group.tasks.map((each) => each.name)]);
+  groups.map((group) => [headOf(group.head), group.tasks.map((each) => each.name)]);
 
 /** The List's groups with no pins and no sections. */
 const listed = (
@@ -110,16 +130,19 @@ test("the List at first runs the open work by status from the work under way, th
   ];
 
   expect(listed(tasks)).toEqual([
-    ["status:in-progress", ["Urgent", "Under way"]],
-    ["status:todo", ["Older service"]],
-    ["status:backlog", ["Filed"]],
+    [
+      ["status", "in-progress"],
+      ["Urgent", "Under way"],
+    ],
+    [["status", "todo"], ["Older service"]],
+    [["status", "backlog"], ["Filed"]],
   ]);
-  expect(listed(tasks, { done: true, canceled: true }).map(([key]) => key)).toEqual([
-    "status:in-progress",
-    "status:todo",
-    "status:backlog",
-    "status:done",
-    "status:canceled",
+  expect(listed(tasks, { done: true, canceled: true }).map(([head]) => head)).toEqual([
+    ["status", "in-progress"],
+    ["status", "todo"],
+    ["status", "backlog"],
+    ["status", "done"],
+    ["status", "canceled"],
   ]);
 });
 
@@ -135,11 +158,11 @@ test("a filter keeps the tasks holding one of each field's values, its fields an
   filter = toggledFilter(filter, TASKS_FILTER_FIELD.PRIORITY, TASK_PRIORITY.NONE);
 
   expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, filter)).toEqual([
-    ["all", ["Dean's urgent", "Dean's unweighed, nowhere"]],
+    [["all"], ["Dean's urgent", "Dean's unweighed, nowhere"]],
   ]);
   const nowhere = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.REPOSITORY, null);
   expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, nowhere)).toEqual([
-    ["all", ["Dean's unweighed, nowhere"]],
+    [["all"], ["Dean's unweighed, nowhere"]],
   ]);
   expect(
     toggledFilter(
@@ -159,11 +182,11 @@ test("a status filter narrows the status groups, and empty groups stand only for
   );
 
   expect(listed(tasks, { emptyGroups: true }, filter)).toEqual([
-    ["status:in-progress", ["Under way"]],
+    [["status", "in-progress"], ["Under way"]],
   ]);
   expect(listed(tasks, { emptyGroups: true, done: true }, filter)).toEqual([
-    ["status:in-progress", ["Under way"]],
-    ["status:done", []],
+    [["status", "in-progress"], ["Under way"]],
+    [["status", "done"], []],
   ]);
 });
 
@@ -176,15 +199,18 @@ test("grouped by repository the groups run by name and the tasks with none last;
   ];
 
   expect(listed(tasks, { grouping: TASKS_GROUPING.REPOSITORY })).toEqual([
-    ["repository:acme/api", ["Api"]],
-    ["repository:acme/relay", ["Relay"]],
-    ["repository:acme/web", ["Web"]],
-    ["repository:", ["Nowhere"]],
+    [["repository", "acme/api"], ["Api"]],
+    [["repository", "acme/relay"], ["Relay"]],
+    [["repository", "acme/web"], ["Web"]],
+    [["repository", null], ["Nowhere"]],
   ]);
   expect(listed(tasks, { grouping: TASKS_GROUPING.CREATOR, order: TASKS_ORDER.NAME })).toEqual([
-    [`creator:${DEAN}`, ["Api"]],
-    [`creator:${MAYA}`, ["Relay", "Web"]],
-    ["creator:", ["Nowhere"]],
+    [["creator", DEAN], ["Api"]],
+    [
+      ["creator", MAYA],
+      ["Relay", "Web"],
+    ],
+    [["creator", null], ["Nowhere"]],
   ]);
 });
 
@@ -226,11 +252,16 @@ test("the List leads with the pins, then each section, a task in one group alone
     );
 
   expect(groups(true)).toEqual([
-    [TASKS_GROUP.PINNED, ["Pinned"]],
-    ["section:launch", ["Sectioned"]],
-    ["status:todo", ["Loose"]],
+    [[TASKS_GROUP.PINNED], ["Pinned"]],
+    [["section", "launch"], ["Sectioned"]],
+    [["status", "todo"], ["Loose"]],
   ]);
-  expect(groups(false)).toEqual([["status:todo", ["Pinned", "Sectioned", "Loose"]]]);
+  expect(groups(false)).toEqual([
+    [
+      ["status", "todo"],
+      ["Pinned", "Sectioned", "Loose"],
+    ],
+  ]);
 });
 
 test("the Board stands a column for every status but Canceled at first, empty ones too, and by priority where asked; a grouping it cannot drop into is read as status", () => {
@@ -248,15 +279,18 @@ test("the Board stands a column for every status but Canceled at first, empty on
     );
 
   expect(board({})).toEqual([
-    ["status:backlog", []],
-    ["status:todo", ["Urgent", "Unweighed"]],
-    ["status:in-progress", []],
-    ["status:done", []],
+    [["status", "backlog"], []],
+    [
+      ["status", "todo"],
+      ["Urgent", "Unweighed"],
+    ],
+    [["status", "in-progress"], []],
+    [["status", "done"], []],
   ]);
   expect(board({ grouping: TASKS_GROUPING.REPOSITORY })).toEqual(board({}));
   expect(board({ grouping: TASKS_GROUPING.PRIORITY, emptyGroups: false })).toEqual([
-    ["priority:urgent", ["Urgent"]],
-    ["priority:none", ["Unweighed"]],
+    [["priority", "urgent"], ["Urgent"]],
+    [["priority", "none"], ["Unweighed"]],
   ]);
 });
 

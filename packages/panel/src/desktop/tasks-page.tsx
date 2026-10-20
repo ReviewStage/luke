@@ -46,6 +46,7 @@ import {
   type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
+  type TasksGroup,
   type TasksGroupHead,
   type TasksSection,
   tasksListGroups,
@@ -59,7 +60,7 @@ import {
   PinIcon,
   UserXIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
@@ -120,7 +121,7 @@ export const TASKS_VIEW = {
 
 export type TasksView = (typeof TASKS_VIEW)[keyof typeof TASKS_VIEW];
 
-/** Where the view shown last, the filter (one for each workspace), and each view's display are kept in the renderer's storage. */
+/** Where the view shown last, the filters (each workspace's by its id), and each view's display are kept in the renderer's storage. */
 const VIEW_KEY = "luke.tasksPageView";
 const FILTER_KEY = "luke.tasksFilter";
 const DISPLAY_KEY = {
@@ -130,13 +131,17 @@ const DISPLAY_KEY = {
 
 const storedView = Schema.fromJsonString(Schema.Literals(Object.values(TASKS_VIEW)));
 
-const storedFilter = Schema.fromJsonString(
-  Schema.Struct({
-    status: Schema.optionalKey(Schema.Array(Schema.Literals(Object.values(TASK_STATUS)))),
-    priority: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PRIORITY_ORDER))),
-    creator: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
-    repository: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
-  }),
+/** The filters as kept: each workspace's by its id. */
+const storedFilters = Schema.fromJsonString(
+  Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      status: Schema.optionalKey(Schema.Array(Schema.Literals(Object.values(TASK_STATUS)))),
+      priority: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PRIORITY_ORDER))),
+      creator: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
+      repository: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
+    }),
+  ),
 );
 
 /** A display as kept: each choice optional, so one kept by an earlier build reads over the view's own for whatever it lacks. */
@@ -200,11 +205,6 @@ function ViewSwitch({
   );
 }
 
-/** Where one workspace's filter is kept. */
-function filterKey(workspaceId: string): string {
-  return `${FILTER_KEY}.${workspaceId}`;
-}
-
 /** A view's display as kept, over its own initial one; its own where none was kept. */
 function readDisplay(view: TasksView): TasksDisplay {
   return { ...INITIAL_DISPLAY[view], ...readKept(DISPLAY_KEY[view], storedDisplay, {}) };
@@ -223,16 +223,17 @@ export function TasksPage({
     [TASKS_VIEW.LIST]: readDisplay(TASKS_VIEW.LIST),
     [TASKS_VIEW.BOARD]: readDisplay(TASKS_VIEW.BOARD),
   }));
-  const [filters, setFilters] = useState<Readonly<Record<string, TasksFilter>>>({});
+  const [filters, setFilters] = useState<Readonly<Record<string, TasksFilter>>>(() =>
+    readKept(FILTER_KEY, storedFilters, {}),
+  );
   const workspaceId = tasks.workspace?.id;
   const filter =
-    workspaceId === undefined
-      ? NO_TASKS_FILTER
-      : (filters[workspaceId] ?? readKept(filterKey(workspaceId), storedFilter, NO_TASKS_FILTER));
+    workspaceId === undefined ? NO_TASKS_FILTER : (filters[workspaceId] ?? NO_TASKS_FILTER);
   const onFilter = (next: TasksFilter) => {
     if (workspaceId === undefined) return;
-    setFilters((held) => ({ ...held, [workspaceId]: next }));
-    writeKept(filterKey(workspaceId), storedFilter, next);
+    const kept = { ...filters, [workspaceId]: next };
+    setFilters(kept);
+    writeKept(FILTER_KEY, storedFilters, kept);
   };
   const display = displays[view];
   const onDisplay = (next: TasksDisplay) => {
@@ -345,6 +346,22 @@ function groupHead(
         : { icon: creatorMark(head.creatorId), name: creatorName(head.creatorId) };
     case TASKS_GROUP.ALL:
       return { icon: null, name: TASKS };
+  }
+}
+
+/** The value a group of the grouping chosen stands for, which keys it among its run; none for a pin, a section, the run of every task, and the tasks with no repository or creator. */
+function groupValue(head: TasksGroupHead): string | undefined {
+  switch (head.kind) {
+    case TASKS_GROUP.STATUS:
+      return head.status;
+    case TASKS_GROUP.PRIORITY:
+      return head.priority;
+    case TASKS_GROUP.REPOSITORY:
+      return head.repository ?? undefined;
+    case TASKS_GROUP.CREATOR:
+      return head.creatorId ?? undefined;
+    default:
+      return undefined;
   }
 }
 
@@ -466,6 +483,58 @@ function TasksList({
     group.head.kind === TASKS_GROUP.REPOSITORY ? [{ repository: group.head.repository }] : [],
   );
   const workspaceName = tasks.workspace?.name ?? "";
+  const drawGroup = (group: TasksGroup) => {
+    const { icon, name } = groupHead(group.head, tasks, repositories, creatorName, creatorMark);
+    return (
+      <section className="tasks-list-group" aria-label={name}>
+        {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
+        {group.head.kind === TASKS_GROUP.ALL ? null : (
+          <h2 className="tasks-list-head">
+            {icon}
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
+              {name}
+            </Text>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {group.tasks.length}
+            </Text>
+          </h2>
+        )}
+        {group.tasks.length === 0 ? (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            No tasks
+          </Text>
+        ) : (
+          <List label={name}>
+            {group.tasks.map((task) => (
+              <TaskListRow
+                key={task.id}
+                task={task}
+                workspaceName={workspaceName}
+                waiting={waitingOn.get(task.id) ?? 0}
+                now={now}
+                properties={display.properties}
+                onOpen={() => tasks.onSelect(task.id)}
+              />
+            ))}
+          </List>
+        )}
+      </section>
+    );
+  };
+  const pins = groups.find((group) => group.head.kind === TASKS_GROUP.PINNED);
+  const sections = groups.flatMap((group) =>
+    group.head.kind === TASKS_GROUP.SECTION ? [{ sectionId: group.head.sectionId, group }] : [],
+  );
+  const valued = groups.flatMap((group) => {
+    const value = groupValue(group.head);
+    return value === undefined ? [] : [{ value, group }];
+  });
+  const unvalued = groups.find(
+    (group) =>
+      group.head.kind === TASKS_GROUP.ALL ||
+      (group.head.kind === TASKS_GROUP.REPOSITORY && group.head.repository === null) ||
+      (group.head.kind === TASKS_GROUP.CREATOR && group.head.creatorId === null),
+  );
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -488,55 +557,15 @@ function TasksList({
             {NONE_STANDING}
           </Text>
         ) : null}
-        {groups.map((group) => {
-          const { icon, name } = groupHead(
-            group.head,
-            tasks,
-            repositories,
-            creatorName,
-            creatorMark,
-          );
-          const alone = group.head.kind === TASKS_GROUP.ALL;
-          return (
-            <section key={group.key} className="tasks-list-group" aria-label={name}>
-              {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
-              {alone ? null : (
-                <h2 className="tasks-list-head">
-                  {icon}
-                  <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-                    {name}
-                  </Text>
-                  <Text
-                    as={TEXT_ELEMENT.SPAN}
-                    variant={TEXT_VARIANT.CAPTION}
-                    tone={TEXT_TONE.SUBTLE}
-                  >
-                    {group.tasks.length}
-                  </Text>
-                </h2>
-              )}
-              {group.tasks.length === 0 ? (
-                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                  No tasks
-                </Text>
-              ) : (
-                <List label={name}>
-                  {group.tasks.map((task) => (
-                    <TaskListRow
-                      key={task.id}
-                      task={task}
-                      workspaceName={workspaceName}
-                      waiting={waitingOn.get(task.id) ?? 0}
-                      now={now}
-                      properties={display.properties}
-                      onOpen={() => tasks.onSelect(task.id)}
-                    />
-                  ))}
-                </List>
-              )}
-            </section>
-          );
-        })}
+        {/* Note that each run of groups is keyed by the value its groups stand for, the pins and the run of every task by their place alone. */}
+        {pins === undefined ? null : drawGroup(pins)}
+        {sections.map(({ sectionId, group }) => (
+          <Fragment key={sectionId}>{drawGroup(group)}</Fragment>
+        ))}
+        {valued.map(({ value, group }) => (
+          <Fragment key={value}>{drawGroup(group)}</Fragment>
+        ))}
+        {unvalued === undefined ? null : drawGroup(unvalued)}
       </div>
     </CollectionPage>
   );

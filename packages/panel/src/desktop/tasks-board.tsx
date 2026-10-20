@@ -128,7 +128,7 @@ function repositoryName(repository: string): string {
 const CARD_HANDLE = ".tasks-board-card-press";
 
 /** The column a narrow board shows first, where it stands: where a task starts. */
-const FIRST_SHOWN = `${TASKS_GROUP.STATUS}:${TASK_STATUS.TODO}`;
+const FIRST_SHOWN: string = TASK_STATUS.TODO;
 
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
@@ -367,9 +367,11 @@ function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
   return (task.priority ?? TASK_PRIORITY.NONE) === standing.priority;
 }
 
-/** A column's key as an element's id may carry it. */
-function columnId(key: string): string {
-  return key.replace(":", "-");
+/** The value a column stands for, which names it among the Board's columns: a status, or a priority, as its grouping is. */
+function columnValue(head: TasksGroupHead): string {
+  if (head.kind === TASKS_GROUP.STATUS) return head.status;
+  if (head.kind === TASKS_GROUP.PRIORITY) return head.priority;
+  return head.kind;
 }
 
 /**
@@ -406,18 +408,19 @@ function TaskBoardColumnView({
     handle: CARD_HANDLE,
     onDropOut: (from, zone) => {
       const task = column.tasks[from];
-      const onto = columns.find((each) => each.key === zone);
+      const onto = columns.find((each) => columnValue(each.head) === zone);
       const standing = onto === undefined ? undefined : columnStanding(onto.head);
       if (task === undefined || standing === undefined || standsAt(task, standing)) return;
       onStanding(task, standing);
     },
   });
   const { mark, words } = columnHead(column.head);
+  const value = columnValue(column.head);
   return (
     <section
       className="tasks-board-column"
-      data-task-column={column.key}
-      data-row-drop={column.key}
+      data-task-column={value}
+      data-row-drop={value}
       aria-label={words}
       id={narrow ? panelId : undefined}
       role={narrow ? "tabpanel" : undefined}
@@ -486,16 +489,13 @@ export function TasksBoard({
   const { filter, display } = frame;
   const columns = tasksBoardColumns(listed, { filter, display });
   const narrow = room === SHELL_ROOM.NARROW;
+  const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
-  const standingKeys = columns.map((column) => column.key).join(" ");
+  const chosenStands = values.includes(chosen);
   useEffect(() => {
-    if (!standingKeys.split(" ").includes(chosen)) setChosen(FIRST_SHOWN);
-  }, [standingKeys, chosen]);
-  const shown = columns.some((column) => column.key === chosen)
-    ? chosen
-    : columns.some((column) => column.key === FIRST_SHOWN)
-      ? FIRST_SHOWN
-      : columns[0]?.key;
+    if (!chosenStands) setChosen(FIRST_SHOWN);
+  }, [chosenStands]);
+  const shown = chosenStands ? chosen : values.includes(FIRST_SHOWN) ? FIRST_SHOWN : values[0];
   const panelId = `${ids}panel`;
   const tabs =
     narrow && columns.length > 0 ? (
@@ -505,7 +505,7 @@ export function TasksBoard({
           items={columns.map((column) => {
             const { mark, words } = columnHead(column.head);
             return {
-              value: column.key,
+              value: columnValue(column.head),
               label: words,
               icon: mark ?? undefined,
               count: column.tasks.length === 0 ? undefined : String(column.tasks.length),
@@ -513,7 +513,7 @@ export function TasksBoard({
           })}
           value={shown ?? FIRST_SHOWN}
           look={CHOICE_BAR_LOOK.FILL}
-          panels={(key) => ({ tab: `${ids}tab-${columnId(key)}`, panel: panelId })}
+          panels={(value) => ({ tab: `${ids}tab-${value}`, panel: panelId })}
           onChange={setChosen}
         />
       </div>
@@ -554,20 +554,22 @@ export function TasksBoard({
             {NONE_STANDING}
           </Text>
         ) : null}
-        {(narrow ? columns.filter((column) => column.key === shown) : columns).map((column) => (
-          <TaskBoardColumnView
-            key={column.key}
-            tasks={tasks}
-            column={column}
-            columns={columns}
-            workspaceName={workspaceName}
-            narrow={narrow}
-            panelId={panelId}
-            properties={display.properties}
-            onOpen={(task) => tasks.onSelect(task.id)}
-            onStanding={setStanding}
-          />
-        ))}
+        {(narrow ? columns.filter((column) => columnValue(column.head) === shown) : columns).map(
+          (column) => (
+            <TaskBoardColumnView
+              key={columnValue(column.head)}
+              tasks={tasks}
+              column={column}
+              columns={columns}
+              workspaceName={workspaceName}
+              narrow={narrow}
+              panelId={panelId}
+              properties={display.properties}
+              onOpen={(task) => tasks.onSelect(task.id)}
+              onStanding={setStanding}
+            />
+          ),
+        )}
       </div>
     </CollectionPage>
   );

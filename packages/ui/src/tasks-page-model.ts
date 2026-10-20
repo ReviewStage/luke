@@ -169,10 +169,9 @@ export type TasksGroupHead =
   | { readonly kind: typeof TASKS_GROUP.CREATOR; readonly creatorId: string | null }
   | { readonly kind: typeof TASKS_GROUP.ALL };
 
-/** One group as drawn: what heads it, a key unique among the groups, and its tasks in order. */
+/** One group as drawn: what heads it, and its tasks in order. */
 export interface TasksGroup {
   readonly head: TasksGroupHead;
-  readonly key: string;
   readonly tasks: readonly TaskSummary[];
 }
 
@@ -338,7 +337,7 @@ function finiteValues<T extends string>(
   return order.filter((value) => shown(value) && (kept.length === 0 || kept.includes(value)));
 }
 
-/** What a grouping groups by, and the head and key of one value's group. */
+/** What a grouping groups by, and the head of one value's group. */
 interface GroupingRule {
   readonly keyOf: (task: TaskSummary) => string | null;
   readonly head: (value: string | null) => TasksGroupHead;
@@ -426,28 +425,9 @@ interface GroupingContext {
   readonly creatorName: (userId: string) => string;
 }
 
-/** A group's key, unique among a view's groups. */
-function groupKey(head: TasksGroupHead): string {
-  switch (head.kind) {
-    case TASKS_GROUP.PINNED:
-    case TASKS_GROUP.ALL:
-      return head.kind;
-    case TASKS_GROUP.SECTION:
-      return `section:${head.sectionId}`;
-    case TASKS_GROUP.STATUS:
-      return `status:${head.status}`;
-    case TASKS_GROUP.PRIORITY:
-      return `priority:${head.priority}`;
-    case TASKS_GROUP.REPOSITORY:
-      return `repository:${head.repository ?? ""}`;
-    case TASKS_GROUP.CREATOR:
-      return `creator:${head.creatorId ?? ""}`;
-  }
-}
-
 /** A group from its head and its tasks. */
 function group(head: TasksGroupHead, tasks: readonly TaskSummary[]): TasksGroup {
-  return { head, key: groupKey(head), tasks };
+  return { head, tasks };
 }
 
 /** The tasks grouped by the grouping chosen, each group in the order chosen, the groups in their own order. */
