@@ -37,7 +37,6 @@
 /* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "@luke/panel/styles/desktop.css";
-@import "@luke/panel/styles/issues.css";
 @import "@luke/panel/styles/call.css";
 
 /* Where else the utilities are gathered from: this app's own modules. The

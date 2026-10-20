@@ -220,7 +220,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         automations: { host: operator.host },
         factory: { host: operator.host },
         integrations: { host: operator.host },
-        issues: { host: operator.host },
         pushes: windowPushes,
         settings: {
           host: operator.host,

@@ -149,6 +149,24 @@ interface ScannedSite {
   readonly site: CallerSite;
 }
 
+/** What opens an absolute address's origin, which its host follows. */
+const SCHEME_END = "://";
+
+/**
+ * Whether the `/api/` at `start` is deeper than an absolute address's first
+ * path segment, as GitHub's `https://github.com/acme/api/issues/5` names a
+ * repository called `api`: another site's page, which no route of ours
+ * answers. A path with no origin before it, or one right after its origin's
+ * host, is ours to resolve.
+ */
+function insideForeignPath(text: string, start: number): boolean {
+  const scheme = text.lastIndexOf(SCHEME_END, start);
+  // Note that an address ends where a path would, so one earlier in the words names nothing here.
+  if (scheme === -1 || text.slice(scheme, start).search(PATH_END) !== -1) return false;
+  const hostEnd = text.indexOf("/", scheme + SCHEME_END.length);
+  return hostEnd !== -1 && hostEnd < start;
+}
+
 /** A relative `api/…` at the start of a literal, or right after an interpolated origin, is the same path. */
 function rooted(text: string): string {
   const fromStart = text.startsWith(RELATIVE_PATH_START) ? `/${text}` : text;
@@ -166,7 +184,7 @@ function pathTokens(text: string): readonly string[] {
     const afterStart = start + PATH_START.length;
     const endOffset = rootedText.slice(afterStart).search(PATH_END);
     const end = endOffset === -1 ? rootedText.length : afterStart + endOffset;
-    tokens.push(rootedText.slice(start, end));
+    if (!insideForeignPath(rootedText, start)) tokens.push(rootedText.slice(start, end));
     from = end;
   }
   return tokens;

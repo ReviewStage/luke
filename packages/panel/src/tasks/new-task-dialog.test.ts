@@ -15,7 +15,6 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
@@ -25,9 +24,7 @@ import {
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
 import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
@@ -45,7 +42,6 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -58,7 +54,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import type { NewTaskAgent, NewTaskIssue, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
+import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
 
 /**
  * New task as the developer meets it: a card over the window whose head row
@@ -131,12 +127,10 @@ function keptInLukeMode(): void {
  * The dialog open in its owner, a start answered by `answer` and each
  * start's name and repository written down, with the agent it asked for;
  * `preset` is what the press that opened it chose, a repository as a
- * repository group's + does or an issue as its Start task… does, `issues`
- * the workspace's Linear issues where it has Linear connected, `finds`
- * what its Linear answers a search or an identifier with, `own` the
- * workspace's own issues where Issues stand on, and `github` what a
- * repository's GitHub issues read answers, where the workspace has GitHub
- * connected.
+ * repository group's + does, `issues` the workspace's Linear issues where it
+ * has Linear connected, `finds` what its Linear answers a search or an
+ * identifier with, and `github` what a repository's GitHub issues read
+ * answers, where the workspace has GitHub connected.
  */
 async function mount(
   answer: string | undefined = undefined,
@@ -144,7 +138,6 @@ async function mount(
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
-  own?: readonly NewTaskIssue[],
   github?: (repository: string, ask: RepositoryIssuesAsk) => GitHubRepositoryIssuesAnswer,
 ) {
   const starts: [string, string | null][] = [];
@@ -153,9 +146,7 @@ async function mount(
   const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
-  const agentsAtOnce: (boolean | undefined)[] = [];
   const fromIssues: (readonly (string | number)[] | undefined)[] = [];
-  const fromWorkspaceIssues: (string | undefined)[] = [];
   const briefs: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
   const statuses: (TaskStatus | undefined)[] = [];
@@ -191,10 +182,8 @@ async function mount(
           starts.push([name, repository]);
           planned.push(planning);
           agents.push(from?.handed);
-          agentsAtOnce.push(from?.agent);
           fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
           choices.push(from?.issues);
-          fromWorkspaceIssues.push(from?.issueId);
           briefs.push(from?.brief);
           startedIn.push(workspaceId);
           statuses.push(from?.status);
@@ -209,7 +198,6 @@ async function mount(
                 asks.push(ask);
                 return Promise.resolve(finds(ask));
               },
-        issuesIn: () => (own === undefined ? undefined : () => Promise.resolve(own)),
         githubIssuesIn: () =>
           github === undefined
             ? undefined
@@ -259,8 +247,6 @@ async function mount(
     choices,
     /** Every read of a repository's GitHub issues, by repository, and what it asked. */
     githubAsks,
-    /** The workspace's own issue each start came from, where it came from one. */
-    fromWorkspaceIssues,
     /** The brief each start handed Luke, where it handed one. */
     briefs,
     /** The workspace each start asked for. */
@@ -271,8 +257,6 @@ async function mount(
     planned,
     /** The coding agent each start handed its words, where it asked for one. */
     agents,
-    /** Whether each start asked an agent to start on its task's plan at once. */
-    agentsAtOnce,
     /** Every Settings link the dialog's presses followed. */
     links,
     opener,
@@ -520,81 +504,6 @@ test("once a repository is chosen, an @ offers its files, read through the works
   assert.equal(
     started[0]?.prompt,
     `Follow ${mentionMarkdown(file, "rollout-store.ts", { workspace: "workspace-acme", repository: "acme/web" })}`,
-  );
-});
-
-test("with Issues on, an @ offers the workspace's issues, and the one chosen is drawn as its chip and handed to the agent as its link", async () => {
-  const issue = {
-    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000007",
-    workspaceId: "workspace-acme",
-    number: 7,
-    title: "Token refresh fails",
-    description: "",
-    status: ISSUE_STATUS.TODO,
-    priority: ISSUE_PRIORITY.NONE,
-    creator: null,
-    archivedAt: null,
-    createdAt: 1,
-    updatedAt: 1,
-  };
-  fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.ISSUES_LIST]: () => Promise.resolve({ issues: [issue] }) });
-  handState({ [EXPERIMENT.ISSUES]: true });
-  const started: (NewTaskAgent | undefined)[] = [];
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const control = tasksControl();
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(NewTaskDialog, {
-          newTask: {
-            ...control.newTask,
-            open: true,
-            workspaceId: "workspace-acme",
-            workspaces: [
-              {
-                id: "workspace-acme",
-                name: "Acme",
-                slug: "acme",
-                role: WORKSPACE_ROLE.OWNER,
-                github: null,
-              },
-            ],
-            repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
-            start: (...asked) => {
-              started.push(asked[4]?.handed);
-              return Promise.resolve(undefined);
-            },
-          },
-        }),
-      ),
-    ),
-  );
-  await settle();
-
-  typeInComposer(document, "Fix @issues:refresh");
-  await settle();
-  const offered = [...document.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
-    (row) => row.textContent,
-  );
-  pressInComposer(document, "Enter");
-  await settle();
-  const chips = [...composerEditor(document).querySelectorAll("[data-mention-ref]")];
-  pressInComposer(document, "Enter");
-  await settle();
-
-  assert.deepEqual(offered, ["ACME-7 Token refresh fails"]);
-  assert.deepEqual(
-    chips.map((chip) => chip.textContent),
-    ["ACME-7 Token refresh fails"],
-  );
-  assert.equal(
-    started[0]?.prompt,
-    `Fix [@ACME-7 Token refresh fails](https://tryluke.dev/acme/issue/${issue.id})`,
   );
 });
 
@@ -1202,17 +1111,6 @@ test("the Issue chip stands at the right end of the head row, after the reposito
   assert.equal(plain.controls().includes("Choose an issue"), false);
 });
 
-/** The workspace's own issues, as Issues lists them. */
-const OWN_ISSUES: readonly NewTaskIssue[] = [
-  { id: "own-1", workspaceId: "workspace-2", identifier: "ACME-7", title: "Invites expire" },
-  {
-    id: "own-2",
-    workspaceId: "workspace-2",
-    identifier: "ACME-8",
-    title: "Deploy notes go missing",
-  },
-];
-
 /** Each heading the open menu stands its issues under, with the issues under it as they read. */
 function issueGroups(): Record<string, readonly string[]> {
   return Object.fromEntries(
@@ -1222,104 +1120,6 @@ function issueGroups(): Record<string, readonly string[]> {
     ]),
   );
 }
-
-test("with no Linear connected, the Issue chip stands with its chevron and lists the workspace's own issues alone, under no heading", async () => {
-  const card = await mount(undefined, undefined, {}, undefined, () => [], OWN_ISSUES);
-  const chip = document.querySelector(ISSUE_CHIP);
-  const chevron = chip?.querySelector("svg:last-child") !== null;
-  await openLinear();
-
-  assert.ok(card.controls().includes("Choose an issue"));
-  assert.equal(chevron, true);
-  assert.deepEqual(issueGroups(), {});
-  assert.deepEqual(issueRows().rows, ["Invites expireACME-7", "Deploy notes go missingACME-8"]);
-});
-
-test("the Issue chip lists the workspace's own issues and Linear's, each under its heading, and one search narrows both", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES, () => [], OWN_ISSUES);
-  await openLinear();
-  const listed = issueGroups();
-  search("deploy");
-  await settle();
-
-  assert.deepEqual(listed, {
-    Issues: ["Invites expireACME-7", "Deploy notes go missingACME-8"],
-    Linear: [
-      "Restack the deploy queueENG-1 · Todo",
-      "Add support for stacked PRsENG-2 · In Progress",
-      "Rotate the deploy keyOPS-7",
-    ],
-  });
-  assert.deepEqual(issueGroups(), {
-    Issues: ["Deploy notes go missingACME-8"],
-    Linear: ["Restack the deploy queueENG-1 · Todo", "Rotate the deploy keyOPS-7"],
-  });
-  assert.deepEqual(card.starts, []);
-});
-
-test("a Luke link to one of the workspace's own issues pasted in the search offers that issue", async () => {
-  const linked: NewTaskIssue = {
-    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000009",
-    workspaceId: "workspace-2",
-    identifier: "ACME-9",
-    title: "Billing page loads slowly",
-  };
-  await mount(undefined, undefined, {}, undefined, () => [], [...OWN_ISSUES, linked]);
-  await openLinear();
-  search(`https://tryluke.dev/acme/issue/${linked.id}`);
-  await settle();
-
-  assert.deepEqual(issueRows().rows, ["Billing page loads slowlyACME-9"]);
-});
-
-test("choosing one of the workspace's own issues lays it over the words in the Linear issue's place; Return starts an agent on a mention of it and the words, the task named by it and linked to it, and with no words an agent on the task's plan", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES, () => [], OWN_ISSUES);
-  await openLinear();
-  search("restack");
-  await settle();
-  await card.press("Enter", linearSearch());
-  const linear = issueChip();
-  await openLinear();
-  await card.press("Enter", linearSearch());
-  const chosen = { chip: issueChip(), starts: card.starts.length };
-  card.type("Make them last a week");
-  await card.key("Enter");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  document.body.innerHTML = "";
-  const bare = await mount(undefined, undefined, {}, undefined, () => [], OWN_ISSUES);
-  await openLinear();
-  await bare.press("Enter", linearSearch());
-  await bare.key("Enter");
-
-  assert.equal(linear, "ENG-1Restack the deploy queueCloses");
-  assert.deepEqual(chosen, { chip: "ACME-7Invites expire", starts: 0 });
-  assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
-  assert.deepEqual(card.fromWorkspaceIssues, ["own-1"]);
-  assert.deepEqual(card.fromIssues, [undefined], "one issue at a time");
-  assert.equal(
-    card.agents[0]?.prompt,
-    "[@ACME-7 Invites expire](https://tryluke.dev/workspace-2/issue/own-1)\n\nMake them last a week",
-  );
-  assert.deepEqual(bare.starts, [["Invites expire", "acme/web"]]);
-  assert.deepEqual(bare.fromWorkspaceIssues, ["own-1"]);
-  assert.deepEqual(bare.agentsAtOnce, [true]);
-  assert.deepEqual(bare.agents, [undefined]);
-});
-
-test("Plan mode with one of the workspace's own issues picked names the task by it, links it, and hands Luke the words as its brief", async () => {
-  keptInLukeMode();
-  const card = await mount(undefined, undefined, {}, undefined, () => [], OWN_ISSUES);
-  await openLinear();
-  await card.press("ArrowDown", linearSearch());
-  await card.press("Enter", linearSearch());
-  card.type("Keep the notes.");
-  await card.key("Enter");
-
-  assert.deepEqual(card.starts, [["Deploy notes go missing", "acme/web"]]);
-  assert.deepEqual(card.planned, [true]);
-  assert.deepEqual(card.fromWorkspaceIssues, ["own-2"]);
-  assert.deepEqual(card.briefs, ["Keep the notes."]);
-});
 
 test("choosing a Linear issue from the Issue chip lays it over the words as a chip and starts nothing; Return then starts an agent on a mention of it and the words, the task named by it and linked to it", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES);
@@ -1528,73 +1328,6 @@ test("Command-L from the words opens the Linear search, but not while an input m
   assert.ok(card.dialog());
 });
 
-test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, offers no Issue chip, and links the task to the issue", async () => {
-  const issue = {
-    id: "issue-1",
-    workspaceId: "workspace-2",
-    identifier: "ACME-7",
-    title: "Invites expire",
-  };
-  const linear: LinearIssueSummary = {
-    id: "linear-1",
-    identifier: "ENG-1",
-    title: "Invites expire in Linear",
-    url: "https://linear.app/acme/issue/ENG-1",
-  };
-  const card = await mount(undefined, { issue }, {}, [linear]);
-
-  assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New task from ACME-7\b/);
-  assert.equal(document.querySelector(ISSUE_CHIP), null, "no Issue chip is offered");
-  await card.key("l", { metaKey: true });
-  assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "Command-L opens nothing");
-  await card.key("Enter");
-  card.type("Make them last a week");
-  await card.key("Enter");
-
-  assert.deepEqual(card.starts, [
-    ["Invites expire", "acme/web"],
-    ["Invites expire", "acme/web"],
-  ]);
-  assert.deepEqual(
-    card.agentsAtOnce,
-    [true, undefined],
-    "with nothing written the agent starts on the plan",
-  );
-  assert.equal(
-    card.agents[1]?.prompt,
-    "[@ACME-7 Invites expire](https://tryluke.dev/workspace-2/issue/issue-1)\n\nMake them last a week",
-  );
-  assert.deepEqual(card.fromWorkspaceIssues, ["issue-1", "issue-1"]);
-  assert.deepEqual(card.fromIssues, [undefined, undefined]);
-  assert.deepEqual(card.startedIn, ["workspace-2", "workspace-2"]);
-});
-
-test("opened as a new agent's card on an issue, it offers no Plan toggle, holds Start until a repository is chosen, and asks an agent to start on the task at once", async () => {
-  keptInLukeMode();
-  const issue = {
-    id: "issue-1",
-    workspaceId: "workspace-2",
-    identifier: "ACME-7",
-    title: "Invites expire",
-  };
-  const card = await mount(undefined, { issue, agent: true }, { recent: [] });
-
-  assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New agent from ACME-7\b/);
-  assert.equal(card.controls().includes("Plan with Luke first"), false);
-  await card.key("Enter");
-  assert.deepEqual(card.starts, [], "no agent is asked for with no repository to work in");
-  assert.match(card.dialog()?.textContent ?? "", /An agent needs a repository/u);
-
-  await card.rechoose({ recent: ["acme/web"] });
-  act(() => card.startButton().click());
-  await settle();
-
-  assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
-  assert.deepEqual(card.planned, [false]);
-  assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
-  assert.deepEqual(card.agentsAtOnce, [true]);
-});
-
 test("File for later files the task in the backlog with no call and no agent, named by the words' first line and keeping them as its brief", async () => {
   const card = await mount();
   card.type("Rate limit the public search\nThirty a minute per installation.");
@@ -1605,7 +1338,6 @@ test("File for later files the task in the backlog with no call and no agent, na
   assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG]);
   assert.deepEqual(card.planned, [false]);
   assert.deepEqual(card.agents, [undefined]);
-  assert.deepEqual(card.agentsAtOnce, [undefined]);
   assert.deepEqual(card.briefs, [
     "Rate limit the public search\nThirty a minute per installation.",
   ]);
@@ -1688,7 +1420,7 @@ function acmeGitHub(repository: string, ask: RepositoryIssuesAsk): GitHubReposit
 test("the Issue chip lists the chosen repository's open GitHub issues under its own heading above Linear's, an author outside the repository wearing a badge, and words search GitHub once the typing rests", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const card = await mount(undefined, undefined, {}, ISSUES, () => [], undefined, acmeGitHub);
+    const card = await mount(undefined, undefined, {}, ISSUES, () => [], acmeGitHub);
     await openLinear();
     const listed = issueRows().rows;
     const headings = Object.keys(issueGroups());
@@ -1718,7 +1450,7 @@ test("the Issue chip lists the chosen repository's open GitHub issues under its 
 });
 
 test("GitHub and Linear issues picked stand as chips with a Closes / Part of switch, and Return starts the task linked to each with its relation, named by the first", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES, () => [], undefined, acmeGitHub);
+  const card = await mount(undefined, undefined, {}, ISSUES, () => [], acmeGitHub);
   await openLinear();
   await card.press("Enter", linearSearch());
   await openLinear();
@@ -1758,15 +1490,7 @@ test("GitHub and Linear issues picked stand as chips with a Closes / Part of swi
 test("a pasted #N, owner/name#N, or link to a GitHub issue offers that one issue, and with no repository chosen picking it makes its repository the task's", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const card = await mount(
-      undefined,
-      undefined,
-      { recent: [] },
-      undefined,
-      () => [],
-      undefined,
-      acmeGitHub,
-    );
+    const card = await mount(undefined, undefined, { recent: [] }, undefined, () => [], acmeGitHub);
     await openLinear();
     const unchosen = issueRows().rows;
     search("acme/api#5");
@@ -1809,7 +1533,7 @@ test("a pasted #N, owner/name#N, or link to a GitHub issue offers that one issue
 });
 
 test("a change of repository lets go the GitHub issues picked in the one before, keeps Linear's, and reads the new one's issues", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES, () => [], undefined, acmeGitHub);
+  const card = await mount(undefined, undefined, {}, ISSUES, () => [], acmeGitHub);
   await openLinear();
   await card.press("Enter", linearSearch());
   await openLinear();
@@ -1839,7 +1563,6 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
     { recent: ["acme/ledger"] },
     ISSUES,
     () => [],
-    undefined,
     (repository, ask) =>
       granted
         ? { issues: [githubIssue(repository, 4, "Ledger totals drift")] }

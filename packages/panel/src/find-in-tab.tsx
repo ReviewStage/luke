@@ -78,7 +78,6 @@ export const FIND_PAGE = {
   INBOX: "inbox",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
-  ISSUES: "issues",
   BOARD: "board",
   VERSION_HISTORY: "version-history",
   PERSON: "person",

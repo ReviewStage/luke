@@ -46,8 +46,7 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
  * the caret where the click landed, and so does a press on the empty room
- * around the text (`useTextRoom`), which an issue's description shares; the
- * editor is TipTap, from the editor
+ * around the text (`useTextRoom`); the editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
  * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
@@ -77,7 +76,7 @@ export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
 export const EDITOR_ROOM_CLASS = "plan-document-editor";
 
 /** What the text says while the editor's bundle could not be loaded. */
-export const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
@@ -107,7 +106,7 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
 }
 
 /** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox, or the section's byline. */
-export function editsOnClick(target: EventTarget): boolean {
+function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item; a comment's marked words open its thread and the editor at them alike.
@@ -150,7 +149,7 @@ function scrollRoomOf(element: HTMLElement): HTMLElement | undefined {
  * Where a press on a text's room puts the caret: at the end where it lands
  * under the text's last line, or no text is drawn; on the nearest line where
  * it lands beside the text; and nowhere where it lands above it, among the
- * lines over the text (a title, a byline, an issue's properties).
+ * lines over the text (a title, a byline).
  */
 function roomPlacement(
   event: MouseEvent,
@@ -577,7 +576,7 @@ function useDraftHandOver(
 }
 
 /** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
-export function MountedPlanEditor({
+function MountedPlanEditor({
   module,
   props,
   handle,
@@ -758,7 +757,7 @@ export function PlanDocumentEditor({
   });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
-  // The plan's pages, agents, pull requests, and workspace's issues are offered as the page's agents' boxes offer them.
+  // The plan's pages, agents, and pull requests are offered as the page's agents' boxes offer them.
   const page = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
@@ -773,7 +772,6 @@ export function PlanDocumentEditor({
       agents: page?.agents,
       readAgents: page?.readAgents,
       pullRequests: page?.pullRequests,
-      readIssues: page?.readIssues,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,
@@ -879,7 +877,7 @@ interface EditorDrawings<A> {
  * What the editor asks the panel to draw, a mention or a diagram, each drawn
  * into its own element while it stands, as the composer draws its chips.
  */
-export function useEditorDrawings<A>(): EditorDrawings<A> {
+function useEditorDrawings<A>(): EditorDrawings<A> {
   const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
   const counted = useRef(0);
   const draw = (element: HTMLElement, what: A) => {

@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, an empty issue list, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -111,9 +111,6 @@ export function fakeService(options: FakeServiceOptions): FakeService {
     }
     if (pathname === "/api/workspaces/github/connect" && method === "POST" && signedIn) {
       return json({ url: GITHUB_INSTALL });
-    }
-    if (pathname === "/api/issues" && method === "GET" && signedIn) {
-      return json({ issues: [] });
     }
     if (pathname === "/api/workspaces/members" && method === "GET" && signedIn) {
       return json({ members: [WORKSPACE_MEMBER] });

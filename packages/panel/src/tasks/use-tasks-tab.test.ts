@@ -11,7 +11,6 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import {
   LINK_PLACE,
   PULL_REQUEST_THREAD_VIEW,
@@ -74,7 +73,6 @@ import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
-  ISSUES_PAGE,
   type LeaveAsk,
   type TasksControl,
   useLeaveGuard,
@@ -880,18 +878,6 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
 });
 
-test("a peek opened beside the Issues list shows the panel, though the plan open behind it holds no tab", () => {
-  window.localStorage.clear();
-  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
-  act(() => tab.control().issuesView.onOpen());
-  act(() => tab.control().issuesView.onPeek("issue-1"));
-  act(() => tab.control().sidePanel.onSetOpen(true));
-
-  assert.deepEqual(tab.control().sidePanel.strip, [], "no tab of the plan's");
-  assert.equal(tab.control().sidePanel.open, true);
-  assert.equal(tab.control().issuesView.peeked, "issue-1");
-});
-
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -1150,24 +1136,6 @@ test("a Luke link to a person opens their page in the workspace its slug names, 
   assert.equal(tab.control().inboxView.open, false);
   assert.equal(tab.control().personView.userId, "user-charles");
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
-});
-
-test("a Luke link to an issue opens its page in the workspace its slug names, in the place of the Inbox", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const issueId = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
-  act(() => tab.control().inboxView.onOpen());
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.ISSUE, issueId },
-    }),
-  );
-
-  assert.equal(tab.control().workspace?.id, PERSONAL.id);
-  assert.equal(tab.control().inboxView.open, false);
-  assert.equal(tab.control().issuesView.open, true);
-  assert.deepEqual(tab.control().issuesView.place, { kind: ISSUES_PAGE.ISSUE, issueId });
 });
 
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
@@ -2565,36 +2533,6 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(tab.control().chatView.open, true);
 });
 
-test("New task reads a workspace's own issues, each by its key, only while the account has Issues on", async () => {
-  const listed = {
-    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000007",
-    workspaceId: ACME.id,
-    number: 7,
-    title: "Invites expire",
-    description: "",
-    status: ISSUE_STATUS.TODO,
-    priority: ISSUE_PRIORITY.NONE,
-    creator: null,
-    archivedAt: null,
-    createdAt: 1,
-    updatedAt: 1,
-  };
-  const answers = { [ACT_KIND.ISSUES_LIST]: () => Promise.resolve({ issues: [listed] }) };
-  handState({});
-  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, answers, AtomRegistryModule.make());
-  const offRead = off.control().newTask.issuesIn(ACME.id);
-
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, answers, AtomRegistryModule.make());
-  await settle();
-  const read = on.control().newTask.issuesIn(ACME.id);
-
-  assert.equal(offRead, undefined, "Issues off reads none");
-  assert.deepEqual(await read?.(), [
-    { id: listed.id, workspaceId: ACME.id, identifier: "ACME-7", title: "Invites expire" },
-  ]);
-});
-
 test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
   handState({});
   const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
@@ -2792,91 +2730,6 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   assert.deepEqual(readTo(), [mark(4), mark(5)]);
 });
 
-test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {
-  let agents = 0;
-  let listed: CodingAgentSummary[] = [];
-  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
-      // The service lists the agent once it started, as it does.
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
-      [ACT_KIND.CODING_AGENTS_START]: () => {
-        if (agents++ > 0) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-        listed = [{ ...RUNNING_AGENT, id: AGENT_ID }];
-        return Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } });
-      },
-    },
-  );
-  await settle();
-  const issue = {
-    id: "issue-1",
-    workspaceId: "workspace-acme",
-    identifier: "ACME-7",
-    title: "Invites",
-  };
-  const agentStarts = () =>
-    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
-  /** Start agent… pressed and its card's Start answered, then the task standing open as the host opens it. */
-  const startFrom = async () => {
-    act(() => tab.control().onNewTaskFrom(issue, true));
-    await act(async () => {
-      await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
-        issueId: issue.id,
-        agent: true,
-      });
-    });
-    await settle();
-    tab.stand({
-      tasks: {
-        ...OPEN,
-        activeTaskId: OTHER_TASK_ID,
-        document: { status: TASKS_READ.READY, task: started },
-      },
-    });
-    await settle();
-  };
-
-  act(() => tab.control().onNewTaskFrom(issue, true));
-  assert.deepEqual(tab.control().newTask.preset, { issue, agent: true });
-  act(() => tab.control().newTask.onClose());
-  act(() => tab.control().onNewTaskFrom(issue, true));
-  await act(async () => {
-    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
-      issueId: issue.id,
-      agent: true,
-    });
-  });
-  await settle();
-  assert.deepEqual(agentStarts(), [], "no agent starts before its task stands open");
-  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
-    name: "Invites",
-    repository: "acme/web",
-    workspaceId: "workspace-acme",
-    issueId: issue.id,
-    planning: false,
-  });
-  tab.stand({
-    tasks: {
-      ...OPEN,
-      activeTaskId: OTHER_TASK_ID,
-      document: { status: TASKS_READ.READY, task: started },
-    },
-  });
-  await settle();
-
-  assert.equal(agentStarts().length, 1);
-  assert.equal(JSON.parse(JSON.stringify(agentStarts()[0]?.payload)).taskId, OTHER_TASK_ID);
-  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
-
-  tab.stand({ tasks: OPEN });
-  await settle();
-  await startFrom();
-  assert.equal(agentStarts().length, 2);
-  assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
-});
-
 test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -2898,51 +2751,6 @@ test("a task New task files for later asks the host to start it in the backlog, 
     status: TASK_STATUS.BACKLOG,
     planning: false,
   });
-});
-
-test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {
-  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
-      [ACT_KIND.CODING_AGENTS_START]: () =>
-        Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } }),
-    },
-  );
-  await settle();
-  const standOn = (task: Task) =>
-    tab.stand({
-      tasks: { ...OPEN, activeTaskId: task.id, document: { status: TASKS_READ.READY, task } },
-    });
-
-  act(() =>
-    tab
-      .control()
-      .onNewTaskFrom(
-        { id: "issue-1", workspaceId: "workspace-acme", identifier: "ACME-7", title: "Invites" },
-        true,
-      ),
-  );
-  await act(async () => {
-    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
-      issueId: "issue-1",
-      agent: true,
-    });
-  });
-  // The new task opens while its repository is still unread, and the developer leaves it for another.
-  standOn({ ...started, repository: null });
-  await settle();
-  standOn(TASK);
-  await settle();
-  standOn(started);
-  await settle();
-
-  assert.deepEqual(
-    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
-    [],
-  );
 });
 
 /** A start's agent, read back where it names one. */

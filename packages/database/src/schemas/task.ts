@@ -83,10 +83,10 @@ export const task = pgTable(
      */
     linearIssue: jsonb("linear_issue"),
     /**
-     * The workspace's own issue the task was started from (`issue.ts`), one
-     * of the same workspace, which a move to another workspace lets go;
-     * null for a task started from none, and once the issue is deleted. An
-     * issue may have many tasks, each an attempt at it.
+     * @deprecated Luke keeps no issues of its own now (`issue.ts`), and
+     * nothing writes or reads this. It was the workspace's own issue the task
+     * was started from. It stands until no running build reads it, then a
+     * later migration drops it.
      */
     issueId: uuid("issue_id").references(() => issue.id, { onDelete: "set null" }),
     /**
@@ -116,7 +116,7 @@ export const task = pgTable(
     index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
-    // An issue's tasks, and the issue's deletion letting each of them go. Note that it is not
+    // Deprecated with `issue_id`: an issue's deletion let each of its tasks go. Note that it is not
     // named `task_issue`, because an index shares its name's namespace with the table of links.
     index("task_workspace_issue").on(table.issueId),
     // The key names one task of its workspace, and a new task takes the next number.

@@ -252,10 +252,6 @@
     "dest": "/api/default.js?route=automations/automation&route-path=automations/$1&id=$1"
   },
   {
-    "src": "/api/issues/([^/]+)",
-    "dest": "/api/default.js?route=issues/issue&route-path=issues/$1&id=$1"
-  },
-  {
     "src": "/api/account/delete",
     "dest": "/api/default.js?route=account/delete"
   },
@@ -402,10 +398,6 @@
   {
     "src": "/api/inbox",
     "dest": "/api/default.js?route=inbox"
-  },
-  {
-    "src": "/api/issues",
-    "dest": "/api/default.js?route=issues"
   },
   {
     "src": "/api/live/inbox",

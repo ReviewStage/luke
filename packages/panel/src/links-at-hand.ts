@@ -9,7 +9,7 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
 
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
@@ -20,7 +20,7 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * fills the window, else the
  * work column's agent, then the side panel's tab, then the task under them;
  * what stands in the plan's place (an agent's page, the Inbox on an item,
- * an automation, an issue, Factory) before the list it is in; and a page of Settings
+ * an automation, Factory) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
@@ -34,10 +34,10 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
  * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, Factory, an issue, or a page of Settings. The
- * history writes that link as the step's address, so the address and Copy
- * link never disagree. Chat, the Issues list, a new automation's page, and
- * the home page have none. A narrow room, which shows one pane at a time,
+ * automation or the list, Factory, or a page of Settings. The history
+ * writes that link as the step's address, so the address and Copy link
+ * never disagree. Chat, the Board, a new automation's page, and the home
+ * page have none. A narrow room, which shows one pane at a time,
  * names the pane it shows as the step: the side panel's tab over the plan,
  * where the tab has a link, the Inbox's item standing alone, and Settings'
  * page list, whose link names no page.
@@ -62,7 +62,6 @@ const LINK_THING = {
   FACTORY: "Factory",
   SETTINGS: "settings page",
   PERSON: "profile",
-  ISSUE: "issue",
 } as const;
 
 type LinkThing = (typeof LINK_THING)[keyof typeof LINK_THING];
@@ -276,13 +275,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   if (tasks.chatView.open) return [];
   // The Board has no link of its own either, on the same terms.
   if (tasks.boardView.open) return [];
-  // The Issues list has no link of its own, and the task it stands over is not in sight, so it offers none.
-  const issues = tasks.issuesView;
-  if (issues.open) {
-    return issues.place.kind === ISSUES_PAGE.ISSUE
-      ? [at_({ kind: LINK_PLACE.ISSUE, issueId: issues.place.issueId }, LINK_THING.ISSUE)]
-      : [];
-  }
   return taskLinks(tasks, at);
 }
 

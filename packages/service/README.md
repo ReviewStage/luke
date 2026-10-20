@@ -1127,7 +1127,7 @@ mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
 section the agent's starter keeps it in, and those sections; `read_task`
 and `create_task` (`src/agents/task-tools.ts`), which read one task of the
-workspace with its plan, its brief, and the issue it was started from, and
+workspace with its plan, its brief, and the issues it links, and
 make one for the starter, on the repository named or the agent's own,
 confirmed through the workspace's installation, with a brief and a plan to
 start from and no agent on it, under an id drawn from eve's key for the
@@ -1145,12 +1145,7 @@ archives it or brings it back, by the task
 menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
-task's archive keeps only when it stands from; `list_issues`, `read_issue`,
-`create_issue`, and `update_issue` (`src/agents/issue-tools.ts`), which list,
-read, file, change, archive, and bring back the issues of the agent's
-workspace, named by id or by identifier, as its starter, through the store
-`/api/issues` writes by (`issue-store.ts`), an issue of another workspace
-reading as none; and `list_models`, the models and efforts the agent's starter may
+task's archive keeps only when it stands from; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1964,9 +1959,7 @@ offered, the same `read_task` and `create_task`
 (`src/agents/task-tools.ts`), and the same
 `create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which keep the call's member's own
-sidebar sections, and `list_issues`, `read_issue`, `create_issue`, and
-`update_issue` (`src/agents/issue-tools.ts`), which keep the workspace's
-issues: a list
+sidebar sections: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent

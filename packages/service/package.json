@@ -97,7 +97,6 @@
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
     "./agents/task-section-tools": "./src/agents/task-section-tools.js",
     "./agents/task-tools": "./src/agents/task-tools.js",
-    "./agents/issue-tools": "./src/agents/issue-tools.js",
     "./agents/chat-attachment-app": "./src/agents/chat-attachment-app.js",
     "./agents/coding-agents-app": "./src/agents/coding-agents-app.js",
     "./agents/command-description": "./src/agents/command-description.js",

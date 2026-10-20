@@ -46,9 +46,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * tasks-board.tsx -- the window's Board: the listed workspace's tasks on a column for each status, in the order work moves through them.
  *
  * It stands in the plan's place beside the sidebar, as Factory does, and its
- * sidebar row is marked while it does. A column is boxed and headed as the
- * Issues board's are, by its status's mark, its name, and how many tasks
- * stand in it, and scrolls its own cards, the most pressing first. A card
+ * sidebar row is marked while it does. A column is boxed and headed by its
+ * status's mark, its name, and how many tasks stand in it, and scrolls its own cards, the most pressing first. A card
  * is a row of the sidebar's own on two lines: its priority's mark, its key,
  * and its creator's face over its whole name. A press opens the task. A
  * card dragged onto another column is sent that column's status, as the

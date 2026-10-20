@@ -1,5 +1,5 @@
 /**
- * use-row-drag.ts -- a list's rows dragged up and down it to another place, or out of it into another, as the sidebar's Pinned section is ordered and the Issues board's cards are moved.
+ * use-row-drag.ts -- a list's rows dragged up and down it to another place, or out of it into another, as the sidebar's Pinned section is ordered and the Board's cards are moved.
  *
  * A press on a row is a click until the pointer has gone a few pixels any
  * way; past that a copy of the row is lifted into a layer of its own over
@@ -45,7 +45,7 @@
  * starts that row's own drag and not the group's.
  *
  * A drop scope (an element wearing `data-row-drop-scope`: the sidebar, the
- * Issues board) keeps its zones to its own lists' rows, and its classes are
+ * Board) keeps its zones to its own lists' rows, and its classes are
  * worn, boxless, around the copy, so its stylesheet's rules for a row still
  * draw the copy of one even though the copy stands outside it.
  */
@@ -216,7 +216,7 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
 /**
  * The nearest element around the list, within its drop scope, that scrolls
  * it up and down: the sidebar's column. None where nothing does, as on the
- * Issues board, whose columns scroll their own cards and whose page scrolls
+ * Board, whose columns scroll their own cards and whose page scrolls
  * it sideways, neither of which a card carried to another column should
  * run. A column whose rows fit is never run along, having nowhere to go.
  */

@@ -138,17 +138,6 @@ import {
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
 import {
-  ISSUE_CALL_FAILURE,
-  type IssueChangeParams,
-  type IssueCreateParams,
-  type IssueIdParams,
-  type IssueListParams,
-  type IssueListView,
-  type IssueView,
-  issueListViewSchema,
-  issueViewSchema,
-} from "@luke/features/issue-view";
-import {
   type MacRepositoriesAnswer,
   type MacRepository,
   macRepositoriesAnswerSchema,
@@ -593,14 +582,6 @@ export interface HostOperator {
   automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
-  /** One workspace's issues, standing or archived; or why there are none. */
-  issueList(params: IssueListParams): Effect.Effect<IssueListView>;
-  /** One issue; or why there is none. */
-  issueRead(params: IssueIdParams): Effect.Effect<IssueView>;
-  /** An issue filed; the issue as the service kept it, or why it was not filed. */
-  issueCreate(params: IssueCreateParams): Effect.Effect<IssueView>;
-  /** One issue changed; the issue as it then stands, or why it is unchanged. */
-  issueChange(params: IssueChangeParams): Effect.Effect<IssueView>;
   /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
@@ -834,9 +815,6 @@ const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** An issue call that reached no answer, as every issue method answers one. */
-const ISSUE_UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
-
 /** A call on a task's linked issues that reached no answer. */
 const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
@@ -902,14 +880,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       (answer.ok
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? AUTOMATION_UNANSWERED;
-
-  /** An issue answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const issueAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof ISSUE_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? ISSUE_UNANSWERED;
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -1586,7 +1556,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
           ...("issues" in request ? { issues: request.issues } : undefined),
-          ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
           ...("agent" in request ? { agent: request.agent } : undefined),
           ...("brief" in request ? { brief: request.brief } : undefined),
@@ -1770,14 +1739,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
         automationAnswer(automationViewSchema),
       ),
-    issueList: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_LIST, params), issueAnswer(issueListViewSchema)),
-    issueRead: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_READ, params), issueAnswer(issueViewSchema)),
-    issueCreate: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_CREATE, params), issueAnswer(issueViewSchema)),
-    issueChange: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_CHANGE, params), issueAnswer(issueViewSchema)),
     factoryWorld: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.FACTORY_WORLD, { workspaceId: params.workspaceId }),

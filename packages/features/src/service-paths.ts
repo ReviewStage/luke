@@ -93,12 +93,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   AUTOMATIONS: "/api/automations",
   /**
-   * A workspace's issues: list them, the most recently changed first, where
-   * `workspaceId` names it (GET), or file one (POST). `issue-wire.ts`
-   * declares the bodies.
-   */
-  ISSUES: "/api/issues",
-  /**
    * One workspace's Factory world, read as it stands now, to a member of it
    * (POST). `factory-world-wire.ts` declares the bodies.
    */

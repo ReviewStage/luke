@@ -131,8 +131,8 @@ function filteredActor(
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 
-/** Created by's choices: Anyone, then Me, then each other member as read, the choice checked; the Issues page's View options draws the same. */
-export function createdByEntries(
+/** Created by's choices: Anyone, then Me, then each other member as read, the choice checked. */
+function createdByEntries(
   createdBy: string | undefined,
   onCreatedBy: (createdBy: string | undefined) => void,
   reader: ReturnType<typeof useMemberDirectory>,

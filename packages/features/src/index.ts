@@ -64,7 +64,6 @@ export {
   HostedIntegrationsClient,
   type HostedIntegrationsClientOptions,
 } from "./integration-client.js";
-export { HostedIssueClient, type HostedIssueClientOptions } from "./issue-client.js";
 export {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,

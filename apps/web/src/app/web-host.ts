@@ -284,7 +284,6 @@ function portDependencies(
     automations: { host },
     factory: { host },
     integrations: { host },
-    issues: { host },
     // Note that nothing is pushed on the tab's port: the tab hears the host
     // through the in-process bridge's own listeners, so its push stream is
     // never opened and this table stays empty.

@@ -77,7 +77,6 @@ import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
   type InboxChoice,
-  ISSUES_PAGE,
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
@@ -100,7 +99,6 @@ const PLACE_KIND = {
   FACTORY: "factory",
   AUTOMATIONS: "automations",
   CHAT: "chat",
-  ISSUES: "issues",
   BOARD: "board",
   SETTINGS: "settings",
 } as const;
@@ -161,13 +159,6 @@ type Place =
       readonly listed?: boolean | undefined;
       /** The place standing alone, while one does. */
       readonly shown?: ChatPlace | undefined;
-    }
-  | {
-      readonly kind: typeof PLACE_KIND.ISSUES;
-      /** The workspace whose issues stood, which is no place of another's. */
-      readonly workspaceId: string | undefined;
-      /** The issue whose page stood, or none for the list. */
-      readonly issueId: string | undefined;
     }
   | {
       readonly kind: typeof PLACE_KIND.BOARD;
@@ -258,7 +249,7 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Issues list or the same issue's page, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   // A narrow room's pane opened over another is a step of its own.
@@ -268,9 +259,6 @@ function sameStep(one: Place | undefined, other: Place): boolean {
   }
   if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
-  if ("issueId" in one && "issueId" in other) {
-    return one.issueId === other.issueId && one.workspaceId === other.workspaceId;
-  }
   if ("userId" in one && "userId" in other) {
     return one.userId === other.userId && one.workspaceId === other.workspaceId;
   }
@@ -319,8 +307,8 @@ function samePlace(one: Place, other: Place): boolean {
 }
 
 /**
- * The address of a place with no link: the home page, Chat, the Issues list,
- * a new automation's page.
+ * The address of a place with no link: the home page, Chat, the Board, a
+ * new automation's page.
  * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
  * so it names no workspace's place.
  */
@@ -653,7 +641,6 @@ export function useWindowHistory(input: {
     | "factoryView"
     | "automationsView"
     | "chatView"
-    | "issuesView"
     | "boardView"
     | "restoring"
     | "leaveGuard"
@@ -684,10 +671,6 @@ export function useWindowHistory(input: {
   const automationsPage = tasks.automationsView.place;
   const chatOpen = tasks.chatView.open;
   const chatOn = useChatOn();
-  const issuesOpen = tasks.issuesView.open;
-  const issuesPlace = tasks.issuesView.place;
-  const pageIssue = issuesPlace.kind === ISSUES_PAGE.ISSUE ? issuesPlace.issueId : undefined;
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const boardOpen = tasks.boardView.open;
   // A launch reopening the task last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
@@ -731,9 +714,6 @@ export function useWindowHistory(input: {
         shown: chatAlone,
       };
     }
-    if (issuesOpen) {
-      return { kind: PLACE_KIND.ISSUES, workspaceId: listedWorkspace, issueId: pageIssue };
-    }
     if (boardOpen) return { kind: PLACE_KIND.BOARD, workspaceId: listedWorkspace };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
@@ -768,12 +748,10 @@ export function useWindowHistory(input: {
     chatOpen,
     chatListed,
     chatAlone,
-    issuesOpen,
-    pageIssue,
     boardOpen,
   ]);
   const reachable = (to: Place) => {
-    // Factory and the Issues page are experiments, so back and forward pass over each while it is off.
+    // Factory is an experiment, so back and forward pass over it while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
     // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
@@ -782,8 +760,6 @@ export function useWindowHistory(input: {
     }
     // Chat is the chat of the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.CHAT) return chatOn && to.workspaceId === listedWorkspace;
-    // The Issues page is a workspace's, so Back passes over it once another is listed.
-    if (to.kind === PLACE_KIND.ISSUES) return issuesOn && to.workspaceId === listedWorkspace;
     // The Board is a workspace's tasks, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.BOARD) return to.workspaceId === listedWorkspace;
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
@@ -837,26 +813,17 @@ export function useWindowHistory(input: {
       if (to.listed === true) tasks.chatView.onList();
       return;
     }
-    if (to.kind === PLACE_KIND.ISSUES) {
-      tasks.issuesView.onOpen(
-        to.issueId === undefined
-          ? { kind: ISSUES_PAGE.LIST }
-          : { kind: ISSUES_PAGE.ISSUE, issueId: to.issueId },
-      );
-      return;
-    }
     if (to.kind === PLACE_KIND.BOARD) {
       tasks.boardView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, Chat, the Issues page, and the Board stand over.
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, Chat, and the Board stand over.
     if (inboxOpen) tasks.inboxView.onClose();
     if (pageAgent !== undefined) tasks.agentView.onClose();
     if (pagePerson !== undefined) tasks.personView.onClose();
     if (factoryOpen) tasks.factoryView.onClose();
     if (automationsOpen) tasks.automationsView.onClose();
     if (chatOpen) tasks.chatView.onClose();
-    if (issuesOpen) tasks.issuesView.onClose();
     if (boardOpen) tasks.boardView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight

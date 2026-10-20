@@ -75,7 +75,6 @@ import {
   FolderPlusIcon,
   HouseIcon,
   InboxIcon,
-  ListTodoIcon,
   MessagesSquareIcon,
   SquareKanbanIcon,
   ZapIcon,
@@ -1129,34 +1128,6 @@ function SidebarBoardRow({
 }
 
 /**
- * The Issues page's row, after the Automations page's and drawn as it is:
- * its glyph, its name, and its chord. A press opens the window's Issues page
- * (`issues-page.tsx`), and the row is the place shown while it stands.
- */
-function SidebarIssuesRow({
-  current,
-  disabled,
-  onOpen,
-}: {
-  current: boolean;
-  disabled: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <NavItem
-      icon={<ListTodoIcon />}
-      current={current ? NAV_CURRENT.PAGE : undefined}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.ISSUES)}
-      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} />}
-      disabled={disabled}
-      onClick={onOpen}
-    >
-      Issues
-    </NavItem>
-  );
-}
-
-/**
  * The Automations page's row, after Factory's and drawn as it is: the
  * zap, its name, and its chord. A press opens the window's Automations page
  * (`automations-page.tsx`), and the row is the place shown while it stands.
@@ -1355,12 +1326,11 @@ function SidebarColumn({
   const onTasks = tab === PANEL_TAB.TASKS;
   const narrow = room === SHELL_ROOM.NARROW;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Issues page stand in the task's place, so while one does no task is the place shown.
+  // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inFactory = onTasks && tasks.factoryView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
-  const inIssues = onTasks && tasks.issuesView.open;
   const inBoard = onTasks && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
@@ -1377,13 +1347,11 @@ function SidebarColumn({
     inFactory ||
     inAutomations ||
     inChat ||
-    inIssues ||
     inBoard ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // Factory, Chat, and the Issues page are experiments: each row stands only while the account has it on.
+  // Factory and Chat are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // A press in the list is always about tasks, so it brings the Tasks tab
@@ -1410,10 +1378,6 @@ function SidebarColumn({
   const openFactory = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.factoryView.onOpen();
-  };
-  const openIssues = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.issuesView.onOpen();
   };
   const openBoard = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -1694,13 +1658,6 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        {issuesOn ? (
-          <SidebarIssuesRow
-            current={inIssues}
-            disabled={!tasks.signedIn}
-            onOpen={chosen(openIssues)}
-          />
-        ) : null}
       </div>
       <hr className="sidebar-rule" />
     </>

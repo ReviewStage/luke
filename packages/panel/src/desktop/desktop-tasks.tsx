@@ -62,7 +62,6 @@ import {
   TaskMentions,
   type TaskMentionsValue,
   useMentionAgentsReader,
-  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -486,10 +485,6 @@ function PlanDocument({
     mentionTasks,
     tasks.agents.models,
   );
-  // The task's workspace's issues an `@` offers, while Issues is on.
-  const readMentionIssues = useMentionIssuesReader(
-    tasks.workspaces.find((each) => each.id === opened?.workspaceId),
-  );
   const openMention = tasks.onShowMention;
   const revealed = tasks.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -695,7 +690,6 @@ function PlanDocument({
     }),
     readAgents: readMentionAgents,
     pullRequests: mentionablePullRequests(agents),
-    readIssues: readMentionIssues,
     doors: {
       taskId: task.id,
       place: { workspace, repository: task.repository },

@@ -223,9 +223,7 @@ function issuesNamedOnce(request: {
  * links from the start, Linear's and GitHub's, up to `TASK_BOUNDS.MAX_ISSUES`,
  * each named once and each with its relation (`task-issue-wire.ts`), a
  * GitHub issue only of the repository the task is about, which the service
- * reads itself, refusing the start where it reads none; and the workspace's
- * own issue it starts from where it was started from one (`issue-wire.ts`),
- * which must be an issue of the workspace it starts in; the document starts
+ * reads itself, refusing the start where it reads none; the document starts
  * as the untouched template, or empty where `planning` is false: a task
  * started without its planning phase, whose window opens no call on it
  * either. A name left out, or nothing but whitespace, starts the plan as
@@ -253,7 +251,6 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES),
     ),
   ),
-  issueId: EffectSchema.optionalKey(wireUuidSchema),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
   brief: EffectSchema.optionalKey(
@@ -397,13 +394,6 @@ const taskSummaryFields = {
    * service before it was sent.
    */
   createdBy: EffectSchema.optionalKey(memberRefSchema),
-  /**
-   * The workspace's own issue the task was started from, which the issue's
-   * page lists it under; absent for a task started from none, once that
-   * issue is deleted or the task moved to another workspace, and from a
-   * service before tasks were started from issues.
-   */
-  issueId: EffectSchema.optionalKey(wireUuidSchema),
   /** Where the task stands; absent from a service before tasks had one. */
   status: EffectSchema.optionalKey(taskStatusSchema),
   /** How much the task matters; absent from a service before tasks had one. */

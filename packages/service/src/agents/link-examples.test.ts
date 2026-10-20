@@ -12,7 +12,7 @@ import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
  * file, a pull request, or an issue with is one Luke draws as a chip: the
  * coding agent's instructions, which show every kind it names as a mention,
  * its inbox and plan tools, the planner's, and the notetaker's; the coding
- * agent's last example is one of the workspace's own issues. An example spelled with `<owner>/<name>` and `<path>` is
+ * agent's last example is another agent's. An example spelled with `<owner>/<name>` and `<path>` is
  * read as an author fills it in. Synthetic repository.
  */
 
@@ -62,7 +62,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(
         drawnAs(told),
-        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT, MENTION_KIND.ISSUE],
+        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT],
         `${brief} ${onTask}`,
       );
       assert.deepEqual(

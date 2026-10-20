@@ -25,7 +25,6 @@ import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
-import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import {
@@ -52,7 +51,6 @@ export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
-export { issueProcedures } from "./issue-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
@@ -101,7 +99,6 @@ export interface ActPortDependencies {
   readonly automations: AutomationProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
-  readonly issues: IssueProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
@@ -133,7 +130,6 @@ export function createActPortHandler<Sender>(
     ...automationProcedures(dependencies.automations),
     ...factoryProcedures(dependencies.factory),
     ...integrationProcedures(dependencies.integrations),
-    ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
     ...taskIssueProcedures(dependencies.taskIssues),

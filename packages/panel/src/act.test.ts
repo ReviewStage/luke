@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { type ActSender, accountAskProcedures, issueProcedures } from "@luke/host/act-port";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { type ActSender, accountAskProcedures } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
 import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
@@ -24,13 +24,12 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** This window's act port, served the issue and account asks' procedures alone, standing as `actor`. */
+/** This window's act port, served the account asks' procedures alone, standing as `actor`. */
 function openActPort(actor: ActSender): void {
-  const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const noKeys = () => Effect.succeed({ keys: [] });
   const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  const port = testActPort({
-    ...accountAskProcedures({
+  const port = testActPort(
+    accountAskProcedures({
       host: {
         providerKeysRead: noKeys,
         providerKeySave: noKeys,
@@ -43,15 +42,7 @@ function openActPort(actor: ActSender): void {
         dictationTranscribe: notTemplated,
       },
     }),
-    ...issueProcedures({
-      host: {
-        issueList: unanswered,
-        issueRead: unanswered,
-        issueCreate: unanswered,
-        issueChange: unanswered,
-      },
-    }),
-  });
+  );
   ports.push(port);
   installActPortClient(port.as(actor));
 }
@@ -60,18 +51,19 @@ it("a kind the port refuses rejects the caller with the sentence its row draws",
   openActPort(VOICE);
 
   await assert.rejects(
-    askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-1" }),
+    askAct(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
     (error) =>
-      error instanceof Error && error.message === "Could not read the issues on this system.",
+      error instanceof Error && error.message === "Could not remove your API key on this system.",
   );
 });
 
 it("a kind the port answers resolves the caller with the host's answer", async () => {
   openActPort(PANEL);
 
-  assert.deepEqual(await askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-1" }), {
-    failure: ISSUE_CALL_FAILURE.UNANSWERED,
-  });
+  assert.deepEqual(
+    await askAct(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
+    { keys: [] },
+  );
 });
 
 it("a kind the port answers that carries nothing is asked with nothing and resolves the caller with the host's answer", async () => {

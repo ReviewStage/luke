@@ -13,7 +13,6 @@ import { avatarActsContract } from "./avatar.js";
 import { browserActsContract } from "./browser.js";
 import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
-import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
@@ -48,7 +47,6 @@ export {
   BROWSER_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
-  ISSUE_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
@@ -85,7 +83,6 @@ export const actContract = {
   ...browserActsContract,
   ...factoryActsContract,
   ...integrationActsContract,
-  ...issueActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,

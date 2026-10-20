@@ -52,7 +52,6 @@ import {
   type WorkspaceLinearProcedureSeams,
   workspaceLinearProcedures,
 } from "../integrations/workspace-linear-procedures.js";
-import { type IssuesProcedureSeams, issuesProcedures } from "../issues/issues-procedures.js";
 import {
   type PlanCommentsProcedureSeams,
   planCommentsProcedures,
@@ -78,7 +77,6 @@ export type HostedRouterSeams = AccountProcedureSeams &
   GitHubProcedureSeams &
   InboxProcedureSeams &
   IntegrationsProcedureSeams &
-  IssuesProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
   PlanCommentsProcedureSeams &
@@ -105,7 +103,6 @@ export function hostedRouter(seams: HostedRouterSeams) {
     github: githubProcedures(seams),
     inbox: inboxProcedures(seams),
     integrations: integrationsProcedures(seams),
-    issues: issuesProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
     planComments: planCommentsProcedures(seams),

@@ -198,7 +198,6 @@ export function TaskIssueLinks({
             align={PICKER_ALIGN.END}
             linearIn={linearIn}
             githubIn={githubIn}
-            issuesIn={() => undefined}
             workspaceId={workspaceId}
             repository={repository}
             linked={linked}
@@ -207,7 +206,6 @@ export function TaskIssueLinks({
             onChoose={(issue: LinearIssueSummary) =>
               control.onLink({ provider: TASK_ISSUE_PROVIDER.LINEAR, id: issue.id })
             }
-            onChooseOwn={() => undefined}
             onChooseGitHub={(issue: GitHubIssuePick) =>
               control.onLink({
                 provider: TASK_ISSUE_PROVIDER.GITHUB,

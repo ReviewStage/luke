@@ -15,7 +15,6 @@ import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
-  ISSUES_PAGE,
   type TasksControl,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
@@ -325,14 +324,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
     },
-    issuesView: {
-      open: false,
-      place: { kind: ISSUES_PAGE.LIST },
-      onOpen: ignore,
-      onClose: ignore,
-      peeked: undefined,
-      onPeek: ignore,
-    },
     callTaskId: undefined,
     chatView: {
       open: false,
@@ -366,7 +357,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRetryDocument: ignore,
     onNewTask: ignore,
     onNewTaskIn: ignore,
-    onNewTaskFrom: ignore,
     newTask: {
       open: false,
       preset: undefined,
@@ -382,7 +372,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onShowMention: ignore,
       linearIssuesIn: () => undefined,
       githubIssuesIn: () => undefined,
-      issuesIn: () => undefined,
     },
     onLeaveTask: ignore,
     onGoHome: ignore,

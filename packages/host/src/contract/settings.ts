@@ -17,7 +17,7 @@ import { SETTINGS_ACT_KIND } from "./kinds.js";
  *
  * Each answers the settings as they then stand, its schema flipped, so oRPC's
  * output check encodes the row's value into what crosses the port, the
- * convention every act contract keeps (`issues.ts`).
+ * convention every act contract keeps (`agents.ts`).
  */
 
 /** A setting and a value already parsed for it, which is the pair its field types. */

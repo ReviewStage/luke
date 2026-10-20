@@ -52,11 +52,6 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   `/person/<userId>` after it, the link their page is opened and copied
  *   by (`luke-link.ts`): the account's id alone, never their name or email,
  *   so a mention of someone who renames themselves still names them.
- * - An issue of the workspace is its page, the workspace's address with
- *   `/issue/<issueId>` after it, the link the Issues page opens it by
- *   (`luke-link.ts`): the id the service minted alone, never its
- *   identifier or title, so a mention of an issue since retitled still
- *   names it.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
@@ -114,8 +109,6 @@ export const MENTION_KIND = {
   PERSON: "person",
   /** Luke on one task, whom a comment's mention sends its thread. */
   LUKE: "luke",
-  /** An issue of the workspace's own tracker. */
-  ISSUE: "issue",
   /** A day, a time on one, or a range of either. */
   DATE: "date",
 } as const;
@@ -148,7 +141,6 @@ const LINK = {
   PAGE_STEP: "page",
   AGENT_STEP: "agent",
   PERSON_STEP: "person",
-  ISSUE_STEP: "issue",
   LUKE_STEP: "luke",
 } as const;
 
@@ -351,11 +343,6 @@ const mentionSchema = EffectSchema.Union([
     taskId: taskIdSchema,
   }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(MENTION_KIND.ISSUE),
-    /** The issue's id, as the service minted it. */
-    issueId: thingIdSchema,
-  }),
-  EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.DATE),
     start: dateMomentSchema,
     /** A range's end: both ends days or both times, the end after the start. */
@@ -542,19 +529,12 @@ function personFields(id: string, rest: readonly string[], hash: string) {
   return { kind: MENTION_KIND.PERSON, userId: decodedPart(id) };
 }
 
-/** The fields an issue's address spells after the workspace, `/issue/<issueId>`, ending at the id. */
-function issueFields(id: string, rest: readonly string[], hash: string) {
-  if (!endsAtId(rest, hash)) return undefined;
-  return { kind: MENTION_KIND.ISSUE, issueId: decodedPart(id) };
-}
-
-/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it; or an agent's on no task, `/<workspace>/agent/<id>`; or a person's, `/<workspace>/person/<userId>`; or an issue's, `/<workspace>/issue/<issueId>`. */
+/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it; or an agent's on no task, `/<workspace>/agent/<id>`; or a person's, `/<workspace>/person/<userId>`. */
 function taskAddressFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
   if (first !== "" || workspace === "" || id === undefined) return undefined;
   if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
   if (step === LINK.PERSON_STEP) return personFields(id, rest, url.hash);
-  if (step === LINK.ISSUE_STEP) return issueFields(id, rest, url.hash);
   if (step === undefined || !LINK.TASK_STEPS.has(step)) return undefined;
   if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
   const taskId = decodedPart(id);
@@ -837,8 +817,6 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.PERSON_STEP}/${encodedPart(mention.userId)}`;
     case MENTION_KIND.LUKE:
       return `${taskTarget(mention.taskId, place, "")}/${LINK.LUKE_STEP}`;
-    case MENTION_KIND.ISSUE:
-      return `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.ISSUE_STEP}/${encodedPart(mention.issueId)}`;
     // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
     case MENTION_KIND.DATE: {
       const date = `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.DATE]}/${mention.start}`;
@@ -898,24 +876,22 @@ export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
 
-/** The kinds an address of Luke's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, a person, and an issue. */
+/** The kinds an address of Luke's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, and a person. */
 const LUKE_KINDS: ReadonlySet<Mention["kind"]> = new Set([
   MENTION_KIND.TASK,
   MENTION_KIND.SECTION,
   MENTION_KIND.PAGE,
   MENTION_KIND.AGENT,
   MENTION_KIND.PERSON,
-  MENTION_KIND.ISSUE,
 ]);
 
-/** What a bare link's chip names a plan, a page, an agent, a person, and an issue by, since its address holds no name of theirs. */
+/** What a bare link's chip names a plan, a page, an agent, and a person by, since its address holds no name of theirs. */
 const BARE_NAME = {
   TASK: "Plan",
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",
   LUKE: "Luke",
-  ISSUE: "Issue",
 } as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
@@ -954,8 +930,6 @@ function bareName(mention: Mention): string {
       return BARE_NAME.PERSON;
     case MENTION_KIND.LUKE:
       return BARE_NAME.LUKE;
-    case MENTION_KIND.ISSUE:
-      return BARE_NAME.ISSUE;
     case MENTION_KIND.DATE:
       return dateLabel(mention);
   }

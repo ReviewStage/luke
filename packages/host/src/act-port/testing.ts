@@ -46,7 +46,7 @@ export interface TestActPort<Sender> {
 /**
  * The act port's handler serving `procedures`, the ones a test calls, as
  * `createActPortHandler` serves them: a platform's own, or one host domain's
- * (`issueProcedures(dependencies)`), so a domain's test builds only its own
+ * (`factoryProcedures(dependencies)`), so a domain's test builds only its own
  * procedures over only its own dependencies.
  */
 export function testActPort<Sender>(
