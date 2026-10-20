@@ -2,6 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
   codingAgentMessagesAnswerSchema,
@@ -28,7 +29,7 @@ import {
   planPageVersionAnswerSchema,
   taskPagesAnswerSchema,
 } from "./page-wire.js";
-import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
+import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
   planCommentActionRequestSchema,
@@ -968,7 +969,7 @@ export const tasksRevisionAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionAnswer = typeof tasksRevisionAnswerSchema.Type;
 
-/** One picture of a plan, as the window drawing it names it: the plan, and the picture's id its text names. */
+/** One attachment of a plan, as the window drawing it names it: the plan, and the id its text or a comment's file names. */
 export const tasksPictureParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   attachmentId: EffectSchema.NonEmptyString,
@@ -977,14 +978,18 @@ export const tasksPictureParamsSchema = EffectSchema.Struct({
 export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
 
 /**
- * One picture of a plan, as the window hears it: its bytes in base64 under
- * its media type, which the window draws from a `data:` URL of its own
- * making, or why there is none: not the account's to read, or no answer.
- * The host fetched it under the account, so the window holds no bearer and
- * no address.
+ * One attachment of a plan, as the window hears it: its bytes in base64
+ * under its media type, which the window draws or offers from a `data:` URL
+ * of its own making, or why there is none: not the account's to read, or no
+ * answer. A picture the plan's text names is an image; a file a comment
+ * carries is any type a coding agent's file may be. The host fetched it
+ * under the account, so the window holds no bearer and no address.
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ contentType: pictureTypeSchema, base64: EffectSchema.String }),
+  EffectSchema.Struct({
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    base64: EffectSchema.String,
+  }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals([TASK_CALL_FAILURE.NOT_FOUND, TASK_CALL_FAILURE.UNANSWERED]),
   }),

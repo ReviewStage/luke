@@ -7890,6 +7890,22 @@ button.picture-frame {
   margin-left: var(--comment-indent);
 }
 
+/* Files dragged over a comment's field: its edge brightens as it does under
+   focus, so the drop target is the field itself. */
+.comment-field[data-dropping] {
+  border-color: var(--luke-color-border-selected);
+}
+
+/* The files a comment's field holds, over its words, at its padding. */
+.comment-field > .attached-files {
+  padding: var(--luke-space-8) var(--comment-field-inline) 0;
+}
+
+/* The files a sent comment carries, under its words, level with them. */
+.comment-files {
+  margin: var(--luke-space-6) 0 0 var(--comment-indent);
+}
+
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
 /* The Comments tab: its head over a list that scrolls under it, fading at
    its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,

@@ -13,6 +13,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
@@ -21,7 +22,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
-import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -1263,4 +1264,79 @@ test("words selected in a plan whose tab is then hidden take the bubble and ‚å•‚
     Reflect.deleteProperty(window, "matchMedia");
   }
   assert.ok(container.querySelector(".comment-bubble"), "the bubble stands again by the words");
+});
+
+/** Hands files to a field's picker, as a member picks them, and waits for them to be read. */
+async function pickFiles(field: Element, files: readonly File[]): Promise<void> {
+  const picker =
+    field.querySelector<HTMLInputElement>('input[type="file"]') ?? assert.fail("no file picker");
+  Object.defineProperty(picker, "files", { configurable: true, value: files });
+  await act(async () => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  // Note that a file is read off the disk before it lands in the field.
+  for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
+}
+
+test("a reply carries the files picked into its field, and a comment's files are drawn under its words, each read as the plan's", async () => {
+  const notes = Buffer.from("expiry: 7 days\n").toString("base64");
+  const read: string[] = [];
+  fakeActs({
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
+        return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+      }
+      read.push(request.payload.attachmentId);
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: { contentType: "text/plain", base64: notes },
+      });
+    },
+  });
+  const fileId = "4d5e6f7a-8b9c-4d0e-9f1a-3b4c5d6e7f80";
+  const [open] = THREADS;
+  assert.ok(open);
+  const withFile: PlanCommentThread = {
+    ...open,
+    entries: open.entries.map((entry) => ({
+      ...entry,
+      files: [{ attachmentId: fileId, name: "expiry.txt", mediaType: "text/plain" }],
+    })),
+  };
+  const { container, asked } = drawn("page", [withFile, ...THREADS.slice(1)]);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  await act(() => Promise.resolve());
+  const card =
+    container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`) ?? assert.fail("no card");
+
+  const sent = [...card.querySelectorAll('.comment-files [aria-label="Attached files"] > li')];
+  assert.deepEqual(
+    sent.map((chip) => chip.getAttribute("title")),
+    ["expiry.txt"],
+  );
+  assert.deepEqual(read, [fileId]);
+
+  const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
+  await pickFiles(field, [new File(["Steps to reproduce\n"], "steps.txt", { type: "text/plain" })]);
+  assert.deepEqual(
+    [...field.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
+      chip.getAttribute("title"),
+    ),
+    ["steps.txt"],
+  );
+  await post(field.querySelector("textarea") ?? assert.fail("no textarea"), "Repro attached.");
+
+  const [reply] = asked;
+  assert.equal(reply?.action.action, PLAN_COMMENT_ACTION.REPLY);
+  assert.deepEqual(
+    reply !== undefined && "attachments" in reply.action
+      ? reply.action.attachments?.map((file) => [file.name, file.mediaType, file.data])
+      : undefined,
+    [["steps.txt", "text/plain", Buffer.from("Steps to reproduce\n").toString("base64")]],
+  );
+  assert.equal(field.querySelectorAll('[aria-label="Attached files"] > li').length, 0);
 });
