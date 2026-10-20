@@ -38,6 +38,14 @@ if [[ -z ${SENTRY_AUTH_TOKEN:-} ]]; then
     exit 0
 fi
 
+# Only a production build uploads: a Preview's traces are read rarely, and
+# the maps cost every Preview build time. Each root's nitro.config.ts writes
+# no maps outside production either.
+if [[ ${VERCEL_ENV:-} != production ]]; then
+    printf 'eve-source-maps: not a production build, so no source maps are uploaded\n'
+    exit 0
+fi
+
 if [[ -n ${EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY:-} ]]; then
     output=$EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY
 elif [[ -n ${VERCEL:-} ]]; then
