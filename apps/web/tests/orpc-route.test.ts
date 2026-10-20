@@ -9,7 +9,8 @@
  * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
  * holds the signed-in read, which needs a catalog and a database), and a plan's routes refuse the
  * same way, an unsigned caller before its body is read (`tasks-app.test.ts` holds the signed-in
- * reads and writes), and one issue's path reaches its procedure the same way.
+ * reads and writes), one issue's path reaches its procedure the same way, and so do the
+ * inbox's paths, each with an id among its segments.
  */
 
 import assert from "node:assert/strict";
@@ -353,4 +354,38 @@ test("an agent's shells refuse an unsigned caller through the committed table, t
       : { status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, text: '{"error":"method-not-allowed"}' };
     assert.deepEqual({ status: unsigned.status, text: await unsigned.text() }, expected, path);
   }
+});
+
+test("the inbox's parameterized paths reach their procedures through the committed table, the dispatcher and the deployed route", async () => {
+  const routes = new Map(
+    [
+      "inbox",
+      "inbox/item",
+      "inbox/close",
+      "inbox/messages",
+      "inbox/read",
+      "plans/inbox",
+      "agents/inbox",
+    ].map((route) => [route, orpcRoute] as const),
+  );
+  const id = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+  const answer = async (method: string, path: string) => {
+    const response = await dispatched(new Request(`${ORIGIN}${path}`, { method }), routes);
+    return [response.status, await response.text()];
+  };
+  const unsigned = [HOSTED_HTTP_STATUS.UNAUTHORIZED, '{"error":"invalid-token"}'];
+  const otherMethod = [HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, '{"error":"method-not-allowed"}'];
+
+  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/plans/${id}/inbox?after=0`), unsigned);
+  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/agents/${id}/inbox?after=0`), unsigned);
+  assert.deepEqual(await answer(HTTP_METHOD.GET, "/api/inbox?after=0"), unsigned);
+  assert.deepEqual(await answer(HTTP_METHOD.PUT, `/api/inbox/${id}/read`), unsigned);
+  assert.deepEqual(await answer(HTTP_METHOD.DELETE, `/api/inbox/${id}/read`), unsigned);
+  assert.deepEqual(await answer(HTTP_METHOD.PUT, "/api/inbox/read"), unsigned);
+  // A method no procedure takes at a matched path is the hosted 405, so each path is the procedure's own.
+  assert.deepEqual(await answer(HTTP_METHOD.POST, `/api/inbox/${id}/read`), otherMethod);
+  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}`), otherMethod);
+  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}/messages`), otherMethod);
+  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}/close`), otherMethod);
+  assert.deepEqual(await answer(HTTP_METHOD.DELETE, "/api/inbox/read"), otherMethod);
 });

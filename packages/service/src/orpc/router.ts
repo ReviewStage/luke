@@ -43,6 +43,7 @@ import {
   type RepositoryPinsProcedureSeams,
   repositoryPinsProcedures,
 } from "../github/repository-pins-procedures.js";
+import { type InboxProcedureSeams, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
@@ -75,6 +76,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   DictationProcedureSeams &
   FactoryProcedureSeams &
   GitHubProcedureSeams &
+  InboxProcedureSeams &
   IntegrationsProcedureSeams &
   IssuesProcedureSeams &
   MessagesProcedureSeams &
@@ -101,6 +103,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     dictation: dictationProcedures(seams),
     factory: factoryProcedures(seams),
     github: githubProcedures(seams),
+    inbox: inboxProcedures(seams),
     integrations: integrationsProcedures(seams),
     issues: issuesProcedures(seams),
     messages: messagesProcedures(seams),

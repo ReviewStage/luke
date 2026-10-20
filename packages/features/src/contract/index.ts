@@ -12,6 +12,7 @@ import { automationsContract } from "./automations.js";
 import { dictationContract } from "./dictation.js";
 import { factoryContract } from "./factory.js";
 import { githubContract } from "./github.js";
+import { inboxContract } from "./inbox.js";
 import { integrationsContract } from "./integrations.js";
 import { issuesContract } from "./issues.js";
 import { messagesContract } from "./messages.js";
@@ -41,6 +42,7 @@ export const hostedContract = {
   dictation: dictationContract,
   factory: factoryContract,
   github: githubContract,
+  inbox: inboxContract,
   integrations: integrationsContract,
   issues: issuesContract,
   messages: messagesContract,
