@@ -14,8 +14,10 @@ import { dictationContract } from "./dictation.js";
 import { eventsContract } from "./events.js";
 import { factoryContract } from "./factory.js";
 import { githubContract } from "./github.js";
+import { githubTokenContract } from "./github-token.js";
 import { inboxContract } from "./inbox.js";
 import { integrationsContract } from "./integrations.js";
+import { liveContract } from "./live.js";
 import { macCommandsContract } from "./mac-commands.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
@@ -45,8 +47,10 @@ export const hostedContract = {
   events: eventsContract,
   factory: factoryContract,
   github: githubContract,
+  githubToken: githubTokenContract,
   inbox: inboxContract,
   integrations: integrationsContract,
+  live: liveContract,
   macCommands: macCommandsContract,
   messages: messagesContract,
   models: modelsContract,

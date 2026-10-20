@@ -4,13 +4,14 @@ import type { LiveStatement } from "@luke/database/core/live-statement";
 import { accountInboxLiveAnswerSchema } from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
-import { HttpRouter } from "effect/http";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { liveApp } from "./live-app.js";
+import { hostedAnswer } from "../testing/hosted-route.js";
+import { liveProcedures } from "./live-procedures.js";
 import { type LiveSealer, LiveSealing, SealRefused } from "./realtime.js";
 
 /**
- * The reads the desktop follows over Neon Realtime, sealed by the route:
+ * The reads the desktop follows over Neon Realtime, sealed by the
+ * procedure the way the hosted oRPC route answers it:
  * refused without a bearer, unavailable where the deployment has no
  * Realtime, and otherwise every part of the account inbox sealed for the
  * bearer's own account, with the address to subscribe at.
@@ -35,36 +36,32 @@ const SCRIPTED: LiveSealer = {
     }),
 };
 
-/** The group answering one request as `bearer`, over the deployment's Realtime where it has one. */
+/** The procedures answering one request as `bearer`, over the deployment's Realtime where it has one. */
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      liveApp({
-        resolveUserId: (incoming) => {
-          const bearer = incoming.headers.get("authorization") ?? "";
-          return Effect.succeed(
-            bearer.startsWith("Bearer ") ? Option.some(bearer.slice(7)) : Option.none(),
-          );
-        },
-      }).pipe(HttpRouter.provideRequest(Layer.succeed(LiveSealing, options.sealing))),
-      { disableLogger: true },
+    const procedures = liveProcedures({
+      resolveUserId: (incoming) => {
+        const bearer = incoming.headers.get("authorization") ?? "";
+        return Effect.succeed(
+          bearer.startsWith("Bearer ") ? Option.some(bearer.slice(7)) : Option.none(),
+        );
+      },
+    });
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      Layer.succeed(LiveSealing, options.sealing),
+      new Request(new URL(LIVE_INBOX, ORIGIN), {
+        method: options.method ?? "GET",
+        headers: options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
+      }),
     );
-    const response = yield* Effect.promise(() =>
-      handler(
-        new Request(new URL(LIVE_INBOX, ORIGIN), {
-          method: options.method ?? "GET",
-          headers:
-            options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
-        }),
-      ),
-    );
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
-    const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-    yield* Effect.promise(() => dispose());
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
 

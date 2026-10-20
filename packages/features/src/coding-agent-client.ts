@@ -10,7 +10,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountCall,
-  type CallAnswer,
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
@@ -99,7 +98,7 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
-import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
+import type { AccountInboxLiveAnswer } from "./live-wire.js";
 import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -243,26 +242,6 @@ const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMEN
 /** An inbox attachment's bytes in base64 under its type: a picture, or a file an answer carried; unanswered under any other type. */
 function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
-}
-
-/**
- * An answer read whole: the body the schema admits where the service
- * answered, a key a newer service added dropped rather than refused, the
- * refusal where it is one the caller names, and unanswered for everything
- * else.
- */
-function readAnswer<Answer, Encoded>(
-  answer: CallAnswer,
-  schema: Schema.Codec<Answer, Encoded>,
-  named: NamedRefusals,
-): Effect.Effect<Answer | Failed> {
-  if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-  return Effect.map(jsonOf(answer.response), (body): Answer | Failed => {
-    const payload = unparsedWire(body);
-    if (!answer.response.ok) return refusedAs(payload, named);
-    const read = Result.getOrUndefined(readServiceAnswer(schema)(payload));
-    return read === undefined ? UNANSWERED : read;
-  });
 }
 
 /**
@@ -813,10 +792,7 @@ export class HostedCodingAgentClient {
    * anything that went wrong, which the caller answers by asking again.
    */
   accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
-      (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.live.inbox, undefined), {});
   }
 
   /**

@@ -46,6 +46,10 @@ import {
 } from "../factory/factory-world-procedures.js";
 import { type GitHubProcedureSeams, githubProcedures } from "../github/github-procedures.js";
 import {
+  type GitHubTokenProcedureSeams,
+  githubTokenProcedures,
+} from "../github/github-token-procedures.js";
+import {
   type RepositoryPinsProcedureSeams,
   repositoryPinsProcedures,
 } from "../github/repository-pins-procedures.js";
@@ -58,6 +62,7 @@ import {
   type WorkspaceLinearProcedureSeams,
   workspaceLinearProcedures,
 } from "../integrations/workspace-linear-procedures.js";
+import { type LiveProcedureSeams, liveProcedures } from "../live/live-procedures.js";
 import {
   type PlanCommentsProcedureSeams,
   planCommentsProcedures,
@@ -83,8 +88,10 @@ export type HostedRouterSeams = AccountProcedureSeams &
   EventsProcedureSeams &
   FactoryProcedureSeams &
   GitHubProcedureSeams &
+  GitHubTokenProcedureSeams &
   InboxProcedureSeams &
   IntegrationsProcedureSeams &
+  LiveProcedureSeams &
   MacCommandsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
@@ -112,8 +119,10 @@ export function hostedRouter(seams: HostedRouterSeams) {
     events: eventsProcedures(seams),
     factory: factoryProcedures(seams),
     github: githubProcedures(seams),
+    githubToken: githubTokenProcedures(seams),
     inbox: inboxProcedures(seams),
     integrations: integrationsProcedures(seams),
+    live: liveProcedures(seams),
     macCommands: macCommandsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
