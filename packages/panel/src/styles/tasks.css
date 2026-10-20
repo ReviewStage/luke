@@ -1441,6 +1441,53 @@
   }
 }
 
+/* A narrow room, a phone's, floats the tree the same way whatever it held
+   for the desktop, so a file or a diff has the whole screen and a tree
+   opened there no longer leaves either a few words a line: the toggle opens
+   it as a sheet over the tab, as wide as the room less a strip of the tab
+   to press it away by, so a path reads whole, and a file chosen in it puts
+   it away to show that file (`usePaneRoom`). A finger opens it with the
+   toggle; a pointer, where the phone has one, still peeks it a beat later. */
+.desktop-shell[data-room="narrow"] .file-view .file-tree-pane {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  right: 0;
+  width: calc(100% - var(--luke-space-48));
+  background: var(--luke-color-well);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.desktop-shell[data-room="narrow"] .file-view .file-tree-pane > .side-panel-resize,
+.desktop-shell[data-room="narrow"]
+  .file-view[data-pane-beside="false"]
+  > .file-view-body
+  > .file-tree-strip,
+.desktop-shell[data-room="narrow"] .file-view[data-pane-over="closed"] .file-tree-pane,
+.desktop-shell[data-room="narrow"] .file-tree-pane > .file-tree-foot,
+.desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="beside"] {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"]
+  .file-view:is([data-pane-over="peek"], [data-pane-over="open"])
+  .file-tree-pane {
+  display: flex;
+  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+}
+
+.desktop-shell[data-room="narrow"] .file-view[data-pane-over="peek"] .file-tree-pane {
+  animation-delay: var(--duration-quick);
+}
+
+.desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
+  display: flex;
+}
+
+.desktop-shell[data-room="narrow"] .file-view[data-pane-beside] > .file-tree-foot {
+  display: block;
+}
+
 /* A panel with no room for the tree's least width beside the tab's own
    keeps the tree at its share of the panel, with no edge to drag, since
    any width a drag asked for would be drawn no wider (`useTreeEdge`). */
@@ -2264,11 +2311,18 @@
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-8);
+  /* Note that Tab walks a roomy row as it is drawn, the pill before the
+     title's pencil, where the browser reads `reading-flow`, as the
+     desktop's does; a narrow row is drawn in the markup's order (below). */
+  reading-flow: flex-visual;
 }
 
 .pull-request-title-row > .luke-chip,
 .pull-request-title-row > .luke-badge {
   flex: none;
+  /* Note that the pill is drawn ahead of the title it follows in the
+     markup, where a screen reader names the title first. */
+  order: -1;
 }
 
 .pull-request-title-row > .pull-request-title,
@@ -2289,20 +2343,64 @@
 /* A narrow header, a phone's or the side panel's at its least, gives the
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
-   line. Note that Tab follows the row as it is drawn (`reading-flow`)
-   rather than the markup's pill-first order, where the browser reads it. */
+   line. The row is then drawn in the markup's order, the title first. */
 @container pull-request-header (max-width: 520px) {
   .pull-request-title-row {
     flex-wrap: wrap;
-    reading-flow: flex-visual;
+    reading-flow: normal;
+  }
+
+  .pull-request-title-row > .luke-chip,
+  .pull-request-title-row > .luke-badge {
+    order: 0;
   }
 
   .pull-request-title-row > .pull-request-title,
   .pull-request-title-row > .luke-skeleton-region {
-    order: -1;
     flex-basis: 100%;
     padding-block: 0;
   }
+}
+
+/* On a phone the header would hold half the screen over the view under it,
+   so once that view is scrolled it folds to its title's one line, the rest
+   back as the view returns to its top (`useHeaderFold`). */
+.desktop-shell[data-room="narrow"] .pull-request-header[data-folded] {
+  padding-block: var(--luke-space-6);
+}
+
+.desktop-shell[data-room="narrow"]
+  .pull-request-header[data-folded]
+  > :not(.pull-request-title-row),
+.desktop-shell[data-room="narrow"]
+  .pull-request-header[data-folded]
+  .pull-request-title-row
+  > :not(.pull-request-title) {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"] .pull-request-header[data-folded] .pull-request-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A phone names each of the tabs in words, never their glyphs alone, which
+   a finger cannot hover for a name: the glyphs give way instead, and a row
+   still too long scrolls sideways, as a fill bar does. */
+.desktop-shell[data-room="narrow"] .pull-request-tabs .luke-choice-bar-icon {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"]
+  .pull-request-tabs
+  .luke-choice-bar[data-folded="true"]
+  .luke-choice-bar-label {
+  position: static;
+  overflow: visible;
+  width: auto;
+  height: auto;
+  clip-path: none;
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
@@ -2322,6 +2420,12 @@
 
 .side-panel-content .pull-request-filters {
   padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* On a phone the switches stand in as far as the words under them, clear of
+   the screen's edge, where a thumb gripping the phone rests. */
+.desktop-shell[data-room="narrow"] .pull-request-filters {
+  padding-inline: var(--content-inset);
 }
 
 .pull-request-filter {
@@ -2615,6 +2719,14 @@
 .pull-request-title-editable:hover .pull-request-title-edit,
 .pull-request-title-edit:has(:focus-visible) {
   opacity: 1;
+}
+
+/* A finger has no hover to bring the pencil, and an unseen one still takes
+   a tap at the title's end, so a touch screen shows it at rest. */
+@media (hover: none) {
+  .pull-request-title-edit {
+    opacity: 1;
+  }
 }
 
 .pull-request-title-field {
