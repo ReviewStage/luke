@@ -358,6 +358,41 @@ it.effect(
     }),
 );
 it.effect(
+  "an unanswered inbox read is asked again from the same cursor only once the watch's interval has passed, and an answer after it is read at once",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1"]);
+
+      f.answerInbox({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      yield* settled;
+      yield* TestClock.adjust(Duration.subtract(WATCH, Duration.seconds(1)));
+      yield* settled;
+      assert.deepEqual(
+        f.inboxReads,
+        [INBOX_CURSOR_START, "1"],
+        "nothing is asked before the interval",
+      );
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", "1"]);
+
+      f.answerInbox({
+        items: [waitingItem(ITEM_A), waitingItem(ITEM_B)],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.equal(f.badges.at(-1), 2);
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", "1", "2"]);
+    }),
+);
+it.effect(
   "what waits carries each open item's agent, what it asks, and when it was posted, grouped by plan as the read answered them",
   () =>
     Effect.gen(function* () {
