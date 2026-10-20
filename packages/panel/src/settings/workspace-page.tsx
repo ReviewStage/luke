@@ -74,6 +74,7 @@ import { wholeWordsHint } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
+import { shownWorkspace } from "./settings-rows.js";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
@@ -1301,15 +1302,6 @@ export interface WorkspaceSettingsControl {
   listFailed: boolean;
   /** Asks for the workspaces again. */
   onRetryList: () => void;
-}
-
-/** The workspace the page shows: the one the sidebar lists, else the first; none before the workspaces are read. */
-export function shownWorkspace(
-  control: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId">,
-): Workspace | undefined {
-  return (
-    control.workspaces.find((each) => each.id === control.workspaceId) ?? control.workspaces[0]
-  );
 }
 
 /** A picked file read into a workspace's photo: the `data:` URL to send, or why it cannot be one. */

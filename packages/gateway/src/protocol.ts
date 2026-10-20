@@ -179,6 +179,10 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHAPTERS: "codingAgents.chapters",
   /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
   CODING_AGENTS_CHAPTERS_GENERATE: "codingAgents.chaptersGenerate",
+  /** The Claude model the account's Generate chapters runs on, read from the service now. */
+  CHAPTERS_MODEL_READ: "chapters.modelRead",
+  /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
+  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
   CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",

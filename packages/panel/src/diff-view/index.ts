@@ -25,6 +25,7 @@ import {
   type ColourRequest,
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
+  type DiffLineRange,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -38,6 +39,7 @@ import {
   GAP_CONTROL,
   GAP_CONTROL_ATTRIBUTE,
   GAP_LINES,
+  LINE_FLASH_HOLD_MS,
   sameLines,
   sameListSelection,
   sameLook,
@@ -122,7 +124,11 @@ import { wholeOf } from "./whole-diff.js";
  * header beyond its one row, because Pierre reserves the header a height of
  * its own and holds it at the top while the file scrolls by. The view is
  * told which file stands at the top as the list scrolls, and scrolls it to
- * a file's header.
+ * a file's header, to one of its lines, or to a run of its lines, which
+ * stand lit a moment and fade (`revealLines`): Pierre's own lit lines,
+ * which it keeps on the rows it draws however it draws them again, worn
+ * with a fade of the file's own (`FLASH_CSS`), whose end lets them go, or
+ * a deadline of the moment's own where the rows were taken down first.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -143,6 +149,36 @@ declare const DIFF_HIGHLIGHT_WORKER: string | undefined;
 
 /** The attribute a list's file wears while it is drawn as its notes alone. */
 const LEAD_ATTRIBUTE = "data-lead";
+
+/** The attribute a list's file wears while lines of it are lit a moment, its value the moment's turn (`FLASH_TURN`). */
+const FLASH_ATTRIBUTE = "data-line-flash";
+
+/**
+ * The turns moments of lighting take by, each fading in an animation of its
+ * own, so lines lit again while still lit, the same lines among them, fade
+ * anew rather than going on with the fade they were already in.
+ */
+const FLASH_TURN = { EVEN: "even", ODD: "odd" } as const;
+
+type FlashTurn = (typeof FLASH_TURN)[keyof typeof FLASH_TURN];
+
+/** The animation each turn's lines fade in. */
+const FLASH_ANIMATION = {
+  [FLASH_TURN.EVEN]: "diff-line-flash-even",
+  [FLASH_TURN.ODD]: "diff-line-flash-odd",
+} as const satisfies Record<FlashTurn, string>;
+
+/** The fade animations, by name, whose end is a moment's. */
+const FLASH_ANIMATIONS: ReadonlySet<string> = new Set(Object.values(FLASH_ANIMATION));
+
+/**
+ * How long a moment stands at most, in milliseconds, past its hold and its
+ * fade: a fade on rows scrolled away or folded before it ends is dropped
+ * with no end told, so the moment ends by this deadline of its own. Twice
+ * the hold outlasts the fade and the scroll to the lines, whose rows start
+ * their hold only once drawn.
+ */
+const FLASH_DEADLINE_MS = LINE_FLASH_HOLD_MS * 2;
 
 /** What the find leaves out of the shadow root's words: the gutter of numbers, as a File tab's numbers are. */
 const FIND_SKIPPED = "[data-gutter]";
@@ -272,6 +308,34 @@ const LOOK_CSS = `
 }
 `;
 
+/**
+ * Lines lit a moment: Pierre's lit rows hold their light for
+ * `LINE_FLASH_HOLD_MS`, then fade to the line's own ground in the window's
+ * fast motion, which reduced motion and a capture run settle at once, so
+ * they still stand lit for the hold and only the fade is dropped. The fade's
+ * end is the moment's (`mountList`).
+ */
+const FLASH_CSS = Object.values(FLASH_TURN)
+  .map(
+    (turn) => `
+@layer unsafe {
+  :host([${FLASH_ATTRIBUTE}="${turn}"]) [data-selected-line] {
+    animation: ${FLASH_ANIMATION[turn]} var(--luke-duration-fast) var(--luke-motion-exit)
+      ${LINE_FLASH_HOLD_MS}ms both;
+  }
+}
+@keyframes ${FLASH_ANIMATION[turn]} {
+  from {
+    background-color: var(--diffs-computed-selected-line-bg);
+  }
+  to {
+    background-color: var(--diffs-computed-diff-line-bg, transparent);
+  }
+}
+`,
+  )
+  .join("");
+
 /** One diff alone: the theme's ground runs to the foot of the box it is drawn in, however few its lines. */
 const FILL_CSS = `
 @layer unsafe {
@@ -327,7 +391,7 @@ let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet } | undefined;
 function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet } {
   if (sheets !== undefined) return sheets;
   const look = new CSSStyleSheet();
-  look.replaceSync(`${LOOK_CSS}${LIST_CSS}`);
+  look.replaceSync(`${LOOK_CSS}${LIST_CSS}${FLASH_CSS}`);
   const fill = new CSSStyleSheet();
   fill.replaceSync(`${LOOK_CSS}${FILL_CSS}`);
   sheets = { look, fill };
@@ -696,9 +760,19 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const dressed = new WeakSet<HTMLElement>();
   // Each file's element by the file it draws now, which a drag's selection is read in.
   const elementPaths = new WeakMap<EventTarget, string>();
+  // The lines lit a moment, none while none are, and how many moments there were, whose count names the turn they fade in.
+  let flash: DiffLineRange | undefined;
+  let flashes = 0;
+  // The moment's deadline, run on the host's own animation clock, since the bundle holds no runtime to wait on.
+  let deadline: Animation | undefined;
+  const markFlash = (element: HTMLElement) => {
+    if (flash === undefined || elementPaths.get(element) !== flash.path)
+      return element.removeAttribute(FLASH_ATTRIBUTE);
+    element.setAttribute(FLASH_ATTRIBUTE, flashes % 2 === 0 ? FLASH_TURN.EVEN : FLASH_TURN.ODD);
+  };
   // Note that Pierre keeps a file's element for another file once the first
   // scrolls away, so each element's shadow root is dressed once, the first
-  // time it is drawn, and whether it is drawn as notes alone every time.
+  // time it is drawn, and whether it is drawn as notes alone, and lit a moment, every time.
   // Each drawn file's gaps watched for their controls (\`./gap-controls.ts\`), and let go as Pierre lets the file go, until its element draws a file again.
   const gapWatches = new Map<HTMLElement, () => void>();
   const watchGaps = (element: HTMLElement, phase: PostRenderPhase) => {
@@ -714,10 +788,15 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     watchGaps(element, phase);
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
+    markFlash(element);
     if (dressed.has(element) || element.shadowRoot === null) return;
     dressed.add(element);
     element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
     releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
+    // Note that a fade's end is heard in the file's own shadow root, since an animation's events do not leave it.
+    element.shadowRoot.addEventListener("animationend", (event) => {
+      if (event instanceof AnimationEvent && FLASH_ANIMATIONS.has(event.animationName)) endFlash();
+    });
   };
   // The hidden lines each file was last told to draw, told again only as they change.
   const drawn = drawnTeller((path, lines) => latest.onDrawn?.(path, lines));
@@ -830,6 +909,45 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     view.setSelectedLines({ id: selected.path, range: { start, side, end, endSide } });
   };
   if (props.selected !== undefined) light(props.selected);
+  const drawnElements = () => host.querySelectorAll<HTMLElement>(`[${FIND_SHADOW_ATTRIBUTE}]`);
+  // Note that the lines lit before stand again only where the moment's still stand, on the same side, since a press may have picked others meanwhile.
+  const endFlash = () => {
+    const standing = flash;
+    deadline?.cancel();
+    deadline = undefined;
+    if (standing === undefined) return;
+    flash = undefined;
+    for (const element of drawnElements()) markFlash(element);
+    const now = view.getSelectedLines();
+    const picked = now === null ? undefined : selectionOf(now.range);
+    if (
+      now?.id === standing.path &&
+      picked?.start === standing.startLine &&
+      picked.end === standing.endLine &&
+      picked.side === standing.side &&
+      picked.endSide === standing.side
+    )
+      light(latest.selected);
+  };
+  const revealLines = (range: DiffLineRange) => {
+    const { path, side, startLine, endLine } = range;
+    const lines = { start: startLine, side, end: endLine, endSide: side };
+    flashes += 1;
+    flash = range;
+    deadline?.cancel();
+    deadline = host.animate([], { duration: FLASH_DEADLINE_MS });
+    deadline.onfinish = endFlash;
+    view.setSelectedLines({ id: path, range: lines });
+    for (const element of drawnElements()) markFlash(element);
+    view.scrollTo({
+      type: "range",
+      id: path,
+      range: lines,
+      align: "start",
+      offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
+      behavior: "smooth-auto",
+    });
+  };
   return {
     update: (next) => {
       const was = latest;
@@ -851,7 +969,11 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       drawn.forget(new Set(next.files.map((file) => file.path)));
       readRehidden();
       tellTop(host.scrollTop);
-      if (!sameListSelection(next.selected, was.selected)) light(next.selected);
+      // Lines lit for a comment take the place of a moment's, which lights them again as it fades.
+      if (!sameListSelection(next.selected, was.selected)) {
+        if (flash === undefined) light(next.selected);
+        else endFlash();
+      }
     },
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
@@ -866,9 +988,11 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
         behavior: "smooth-auto",
       }),
+    revealLines,
     unmount: () => {
       // A list taken down draws nothing; the next one mounted opens no gap.
       drawn.forget(new Set());
+      deadline?.cancel();
       stopWatching();
       unsubscribe();
       view.cleanUp();

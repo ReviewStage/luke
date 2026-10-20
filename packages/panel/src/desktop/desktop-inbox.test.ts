@@ -4398,6 +4398,114 @@ test("a message refused says why under the box, which keeps its words, and leave
   assert.deepEqual(subjectOf(page), ["How is a failed email retried?"]);
 });
 
+test("a message refused as naming no agent says the agent is archived where it is, with Unarchive after it, which brings the agent back and lets the note go, the box keeping its words; one whose agent is gone says it no longer exists", async () => {
+  listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  const unarchived: { agentId: string; archived: boolean }[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      unarchived.push(request.payload);
+      // Brought back, the agent is listed so from then on.
+      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      listedAgents = [back];
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
+    },
+  });
+  const pane = itemPane(page);
+  const note = () => pane.querySelector('.agent-composer [role="alert"]');
+  const unarchive = () =>
+    [...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button")].find(
+      (button) => button.textContent === "Unarchive",
+    );
+
+  typeInComposer(pane, "Page on-call at night too.");
+  act(() => pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+
+  assert.match(note()?.textContent ?? "", /^This agent is archived\./u);
+  act(() => (unarchive() ?? assert.fail("Unarchive follows the note")).click());
+  await settle();
+  assert.deepEqual(unarchived, [{ agentId: AGENT.id, archived: false }]);
+  assert.equal(note(), null, "the note is let go once the agent is back");
+  assert.equal(composerEditor(pane).textContent, "Page on-call at night too.");
+
+  act(() => root?.unmount());
+  listedAgents = [];
+  const gone = mount().page;
+  await settle();
+  act(() => rowNamed(gone, "How is a failed email retried?").click());
+  await settle();
+  const goneItem = itemPane(gone);
+  typeInComposer(goneItem, "Page on-call at night too.");
+  act(() => goneItem.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+
+  assert.equal(
+    goneItem.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "This agent no longer exists.",
+  );
+  assert.equal(goneItem.querySelector(".agent-composer-note button"), null, "nothing to unarchive");
+});
+
+test("an Unarchive that lands after another send was refused lets only the archived note go, so the newer refusal still says why", async () => {
+  listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  let refusal:
+    | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
+    | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED = CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+  heldMessages(() => ({ failure: refusal }));
+  let land: () => void = () => undefined;
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      // Held until the test lands it, after the second send was refused.
+      return new Promise((resolve) => {
+        land = () => {
+          listedAgents = [back];
+          resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
+        };
+      });
+    },
+  });
+  const pane = itemPane(page);
+  const note = () => pane.querySelector('.agent-composer [role="alert"]')?.textContent;
+  const send = () =>
+    act(() => pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+
+  typeInComposer(pane, "Page on-call at night too.");
+  send();
+  await settle();
+  const unarchive = [
+    ...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button"),
+  ].find((button) => button.textContent === "Unarchive");
+  act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
+  refusal = CODING_AGENT_CALL_FAILURE.UNANSWERED;
+  send();
+  await settle();
+  const newer = note();
+  assert.notEqual(newer, undefined, "the second send says why it did not go");
+
+  act(() => land());
+  await settle();
+
+  assert.equal(note(), newer, "the newer refusal stands once the agent is back");
+});
+
 test("files alone make a message: sent from a settled item's box with no words, and drawn on the thread as the files alone", async () => {
   const { page } = mount();
   await settle();
@@ -5455,10 +5563,10 @@ test("in a narrow room a picture landing above the ask stands it over the box ag
   leaveRoom();
 });
 
-/** The thread's line under its title, a part a span. */
-function subjectLine(pane: HTMLElement): (string | null)[] {
-  const line = pane.querySelector("[data-inbox-subject-line]") ?? assert.fail("the line is drawn");
-  return [...line.children].map((part) => part.textContent);
+/** Everything the thread's subject draws, a part a child: its title alone. */
+function subjectParts(pane: HTMLElement): (string | null)[] {
+  const subject = pane.querySelector(".inbox-subject") ?? assert.fail("the subject is drawn");
+  return [...subject.children].map((part) => part.textContent);
 }
 
 /** Each ask's box on the thread: where it stands, then its head as a reader hears it. */
@@ -5521,7 +5629,7 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
-test("a thread draws every message, the agent's by its tile, name, and tag and a member's by their face and name, under its title and a line counting them and who wrote them, Waiting on you while its ask is open", async () => {
+test("a thread draws every message, the agent's by its tile, name, and tag and a member's by their face and name, under its title alone, Waiting on you on its open ask", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
     threadMessage(
@@ -5543,7 +5651,11 @@ test("a thread draws every message, the agent's by its tile, name, and tag and a
     pane.querySelector("[data-inbox-title]")?.textContent,
     "How long should invites last?",
   );
-  assert.deepEqual(subjectLine(pane), ["3 messages", "Alerts, Charles Pan", "Waiting on you"]);
+  assert.deepEqual(
+    subjectParts(pane),
+    ["How long should invites last?"],
+    "no line stands under the title",
+  );
   assert.deepEqual(threadOf(pane.ownerDocument.body), [
     [
       "message",
@@ -5629,7 +5741,7 @@ test("picking an option attaches it over the box as a stamp, renaming the send, 
   assert.equal(reply.querySelector("[data-inbox-stamp]")?.textContent, "Chose 7 days");
   assert.equal(reply.querySelector("[data-inbox-stamp]")?.getAttribute("data-tone"), "ahead");
   assert.deepEqual(askBoxes(pane), [["answered", "Pick oneYou chose 7 days"]]);
-  assert.deepEqual(subjectLine(pane), ["2 messages", "Alerts, You"], "nothing waits any more");
+  assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
 });
 
 test("an approve-or-request-changes ask is two small buttons: the one pressed is attached and names the send, and the reply sent with words carries it, stamped as requested changes", async () => {
@@ -5742,13 +5854,10 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
 });
 
-test("an ask of a type this build does not know reads as a line naming a newer Luke, and the box still replies", async () => {
+test("an ask of a type this build does not know reads as a line naming a newer Luke, saying who it waits on while open, and the box still replies", async () => {
   const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
   const pane = await mountThread(threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }]));
-  assert.equal(
-    pane.querySelector('[data-inbox-ask="newer"]')?.textContent,
-    "Answer this in a newer Luke.",
-  );
+  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke.Waiting on you"]]);
   assert.equal(sendWords(pane), "Reply");
 });
 
@@ -5809,9 +5918,9 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
   assert.equal(sendWords(pane), "Couldn't do it");
 });
 
-test("a teammate's open ask says it waits on them, in the line and on its box, rather than on you, and still takes your answer", async () => {
+test("a teammate's open ask says it waits on them on its box, rather than on you, and still takes your answer", async () => {
   const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)], { startedBy: TEAMMATE }));
-  assert.deepEqual(subjectLine(pane), ["1 message", "Alerts", "Waiting on Charles Pan"]);
+  assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on Charles Pan"]]);
   assert.equal(pane.querySelector(".inbox-waiting"), null, "no attention ink is spent");
   act(() => openOptions(pane)[0]?.click());

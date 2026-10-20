@@ -42,7 +42,8 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf, settingsPageShown } from "./settings/pages.js";
+import { settingsPageOf } from "./settings/pages.js";
+import { settingsPageShown } from "./settings/settings-rows.js";
 import { Shortcut } from "./shortcut.js";
 import { commandKeyshortcuts } from "./tooltip.js";
 
@@ -243,6 +244,18 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           label: "Fast",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: ["Fast", "coding agent fast version speed quick model"],
+        }
+      : undefined,
+    // The chapters model, which is the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
+          label: "Chapters model",
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "Chapters model",
+            "pull request chapters generate claude haiku sonnet opus review",
+          ],
         }
       : undefined,
     // The account's own provider keys, which are the account's on the service: drawn once an account is signed in.

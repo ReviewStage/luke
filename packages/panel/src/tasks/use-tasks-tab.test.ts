@@ -76,6 +76,7 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
+import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
@@ -2285,7 +2286,9 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   );
 });
 
-test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", async () => {
+  // The window is drawn once the synthetic tasks have landed (`App`).
+  await loadTasksFixture();
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
   const staged = fixture.control().listed.tasks.map((task) => task.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));

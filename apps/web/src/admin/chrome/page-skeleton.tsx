@@ -2,7 +2,7 @@ import { SkeletonRegion } from "@luke/ui";
 import type { AdminTab } from "../routing";
 import { SkeletonBody, type SkeletonShape } from "../skeleton";
 import { BackLink } from "./back-link";
-import { AdminPage, type ViewerAccount } from "./page-header";
+import { AdminPage } from "./page-header";
 
 /**
  * The loading stand-in every view wears: the page's own frame and controls,
@@ -15,29 +15,18 @@ import { AdminPage, type ViewerAccount } from "./page-header";
 export function PageSkeleton({
   title,
   description,
-  account,
-  onSignOut,
   controls,
   back,
   shapes,
 }: {
   title: string;
   description?: string | undefined;
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
   controls: React.ReactNode;
   back?: { tab: AdminTab; label: string; onBack: () => void };
   shapes: readonly SkeletonShape[];
 }): React.JSX.Element {
   return (
-    <AdminPage
-      title={title}
-      description={description}
-      account={account}
-      accountSkeleton
-      onSignOut={onSignOut}
-      controls={controls}
-    >
+    <AdminPage title={title} description={description} controls={controls}>
       {back === undefined ? null : (
         <BackLink tab={back.tab} label={back.label} onBack={back.onBack} />
       )}

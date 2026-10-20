@@ -107,7 +107,8 @@ recordings"); those turns are never sent to Luke's voice window or his
 call window, which draw none of them. Your default model, effort, and
 context size for a coding agent are kept with your account preferences on our
 service, set in Settings › Coding agents or by the model you last started
-with. Where a Luke link you open in a browser goes, staying there or handed
+with. The Claude model your Generate chapters runs on is kept with them too,
+set in Settings › Coding agents. Where a Luke link you open in a browser goes, staying there or handed
 to Luke for Mac, is kept with them too, set in Settings › Account; Luke in a
 browser on a Mac reads it each time it loads a link that names something in
 Luke.
@@ -475,8 +476,10 @@ service then reads the pull request's title, description, the messages of up
 to its first 100 commits, and each changed file's patch as Files changed
 reads them, and sends all of it, except the patches of files a reader reads
 past (lockfiles, minified files, source maps, snapshots, images, fonts,
-videos, and documents) and of files with no patch to read, to Anthropic's fast Claude model on our own key, never yours
-and never counted in your daily usage, as described under "Who we send it to".
+videos, and documents) and of files with no patch to read, to the Claude model
+the member who pressed it chose in Settings › Coding agents (Haiku 5.5 unless
+they changed it), on our own key, never yours and never counted in your daily
+usage, as described under "Who we send it to".
 It stores the chapters that come back with the workspace, for that repository,
 pull request, and head commit, beside which member asked, when, the model
 that answered, and why a generation failed where one did: each chapter's
@@ -1164,7 +1167,8 @@ only when you press Send.
 - Anthropic, for a pull request's chapters. Pressing Generate chapters in a
   coding agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to
-  Anthropic's fast Claude model from our service, on our key, in at most two
+  the Claude model the member chose in Settings (Haiku 5.5 unless they changed
+  it) from our service, on our key and outside their usage, in at most two
   calls (the second places the parts of the diff the first left out), as
   described under "A coding agent's pull request". Our service logs only how a
   generation failed, by its kind, and counts its outcome as described under

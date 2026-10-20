@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import {
@@ -34,9 +35,20 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { recordingHttpClient } from "@luke/wire/testing";
-import { Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
+import {
+  Clock,
+  type Context,
+  Duration,
+  Effect,
+  Layer,
+  Logger,
+  Option,
+  Result,
+  type Schema,
+} from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -51,7 +63,9 @@ import {
   openTokenMember,
 } from "../testing/github-app-fake.js";
 import type { GitHubApp } from "./github-app.js";
+import { setInstallationStatus } from "./github-installations.js";
 import { githubProcedures } from "./github-procedures.js";
+import { KEPT_LINK, type PullRequestLinks, pullRequestLinksLayer } from "./pull-request-links.js";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test
@@ -182,7 +196,11 @@ interface Answer {
 }
 
 /** The route over the test's own database and the GitHub given: one request in, its response out. */
-const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
+const routeOver = (
+  bearers: ReadonlyMap<string, string>,
+  github: FakeGitHub,
+  logger: Layer.Layer<never> = Layer.empty,
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on oRPC's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -191,8 +209,12 @@ const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
+      pullRequestLinksLayer,
+      logger,
     );
-    const handled = yield* Effect.context<GitHubApp>().pipe(Effect.provide(services));
+    const handled = yield* Effect.context<GitHubApp | PullRequestLinks>().pipe(
+      Effect.provide(services),
+    );
     const handle = hostedFetch({
       github: githubProcedures({
         resolveUserId: (incoming) =>
@@ -203,21 +225,42 @@ const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
         unlinkGitHub: () => Effect.void,
       }),
     });
-    // SAFETY: the repositories procedures yield the database, the GitHub App, and its HTTP client alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the repositories procedures yield the database, the GitHub App, its HTTP client, and the kept links alone, which is all a test provides of the web runtime's services.
     const webServices = handled as Context.Context<WebServices>;
     return (request: Request) => handle(request, webServices);
   });
 
-/** The route over the test's own database and the GitHub given, answering one request. */
-const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+/** One request answered on a route already standing. */
+const answerOn = (route: (request: Request) => Promise<Response>, request: Request) =>
   Effect.gen(function* () {
-    const route = yield* routeOver(bearers, github);
     const response = yield* Effect.promise(() => route(request));
     const text = yield* Effect.promise(() => response.text());
     // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
+
+/** The route over the test's own database and the GitHub given, answering one request. */
+const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+  Effect.flatMap(routeOver(bearers, github), (route) => answerOn(route, request));
+
+/** What one route answers `acme/relay`'s pull request 42 with, to the member given, on the route standing for the instance's life. */
+const keptPullRequest = (
+  route: (request: Request) => Promise<Response>,
+  member: string,
+  workspace: string,
+) => {
+  const url = new URL(HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, ORIGIN);
+  url.searchParams.append(GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace);
+  url.searchParams.append(GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay");
+  url.searchParams.append(GITHUB_REPOSITORIES_QUERY.NUMBER, "42");
+  return Effect.suspend(() =>
+    answerOn(route, new Request(url, { headers: { authorization: `Bearer ${member}` } })),
+  );
+};
+
+/** Pull request 42 of `acme/relay` as GitHub answers it, under the title given. */
+const relayPull42 = (title: string) => Response.json({ ...RELAY_PULLS.get(42), title });
 
 /** The owner signed in with GitHub through the App, which reaches nothing on its own; the other signed in with Google alone. */
 const openAccounts = (github: FakeGitHub) =>
@@ -744,6 +787,222 @@ it.layer(getTestDB())("the repositories route", (it) => {
           );
         }
         assert.equal(github.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a pull request asked for again within a minute, by one link or several at once, is read from GitHub once and answered as it was read, and read afresh once the minute is out",
+    () =>
+      Effect.gen(function* () {
+        let title = "Send invitations in batches";
+        const github = githubReaching(
+          [{ id: 7804, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => (PULL_PATH.test(new URL(sent.url).pathname) ? relayPull42(title) : undefined),
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7804,
+          accountId: 9804,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+        const titleOf = (answered: Answer) =>
+          readOf(githubRepositoryPullRequestAnswerSchema, answered).pullRequest?.title;
+
+        const together = yield* Effect.all([pullRequest, pullRequest, pullRequest], {
+          concurrency: "unbounded",
+        });
+        title = "Send invitations in batches of fifty";
+        yield* TestClock.adjust(Duration.seconds(30));
+        const kept = yield* pullRequest;
+        yield* TestClock.adjust(KEPT_LINK.ANSWER_TTL);
+        const afresh = yield* pullRequest;
+
+        assert.deepEqual(together.map(titleOf), [
+          "Send invitations in batches",
+          "Send invitations in batches",
+          "Send invitations in batches",
+        ]);
+        assert.equal(titleOf(kept), "Send invitations in batches");
+        assert.equal(titleOf(afresh), "Send invitations in batches of fifty");
+      }),
+  );
+
+  it.effect(
+    "GitHub refusing a pull request is answered unavailable and held for as long as its Retry-After asks, logged once and never sent again meanwhile, and read afresh once the hold is out",
+    () =>
+      Effect.gen(function* () {
+        let refusing = true;
+        const github = githubReaching(
+          [{ id: 7805, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            if (!PULL_PATH.test(new URL(sent.url).pathname)) return undefined;
+            return refusing
+              ? Response.json(
+                  { message: "You have exceeded a secondary rate limit." },
+                  { status: 403, headers: { "retry-after": "120" } },
+                )
+              : relayPull42("Send invitations in batches");
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7805,
+          accountId: 9805,
+          accountLogin: "acme",
+        });
+        const logged: string[] = [];
+        const route = yield* routeOver(
+          bearers,
+          github,
+          Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+        );
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const refused = yield* pullRequest;
+        refusing = false;
+        yield* TestClock.adjust(Duration.seconds(90));
+        const held = yield* pullRequest;
+        yield* TestClock.adjust(Duration.seconds(30));
+        const afresh = yield* pullRequest;
+
+        const unavailable = refusal(
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          HOSTED_API_ERROR.UNAVAILABLE,
+        );
+        assert.deepEqual(refused, unavailable);
+        assert.deepEqual(held, unavailable);
+        assert.equal(logged.filter((line) => line.includes("GitHub answered 403")).length, 1);
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, afresh).pullRequest?.title,
+          "Send invitations in batches",
+        );
+      }),
+  );
+
+  it.effect(
+    "a refusal held longer than the repository's reach is kept is still answered from the hold, without asking GitHub again however it would answer",
+    () =>
+      Effect.gen(function* () {
+        let refusingAll = false;
+        const github = githubReaching(
+          [{ id: 7808, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            const refusal = Response.json(
+              { message: "You have exceeded a secondary rate limit." },
+              { status: 403, headers: { "retry-after": "900" } },
+            );
+            if (refusingAll) return refusal;
+            return PULL_PATH.test(new URL(sent.url).pathname) ? refusal : undefined;
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7808,
+          accountId: 9808,
+          accountLogin: "acme",
+        });
+        const logged: string[] = [];
+        const route = yield* routeOver(
+          bearers,
+          github,
+          Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+        );
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const refused = yield* pullRequest;
+        refusingAll = true;
+        yield* TestClock.adjust(Duration.minutes(10));
+        const held = yield* Effect.all([pullRequest, pullRequest, pullRequest]);
+
+        const unavailable = refusal(
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          HOSTED_API_ERROR.UNAVAILABLE,
+        );
+        assert.deepEqual([refused, ...held], [unavailable, unavailable, unavailable, unavailable]);
+        assert.equal(logged.filter((line) => line.includes("GitHub App read failed")).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a kept pull request is answered none the moment the workspace's installation is removed, rather than when its minute is out",
+    () =>
+      Effect.gen(function* () {
+        const installations = [
+          { id: 7807, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ];
+        const github = githubReaching(installations, undefined, {}, (sent) =>
+          PULL_PATH.test(new URL(sent.url).pathname)
+            ? relayPull42("Send invitations in batches")
+            : undefined,
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7807,
+          accountId: 9807,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const kept = yield* pullRequest;
+        // GitHub removes the installation, and its webhook tells the store so.
+        installations.length = 0;
+        yield* setInstallationStatus(7807, GITHUB_INSTALLATION_STATUS.DELETED);
+        const removed = yield* pullRequest;
+
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, kept).pullRequest?.title,
+          "Send invitations in batches",
+        );
+        assert.deepEqual(removed, { status: HOSTED_HTTP_STATUS.OK, body: { pullRequest: null } });
+      }),
+  );
+
+  it.effect(
+    "a pull request GitHub failed to answer for any other reason is not held: the next ask reads it afresh",
+    () =>
+      Effect.gen(function* () {
+        let failing = true;
+        const github = githubReaching(
+          [{ id: 7806, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            if (!PULL_PATH.test(new URL(sent.url).pathname)) return undefined;
+            return failing
+              ? Response.json({ message: "Server Error" }, { status: 502 })
+              : relayPull42("Send invitations in batches");
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7806,
+          accountId: 9806,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const failed = yield* pullRequest;
+        failing = false;
+        const afresh = yield* pullRequest;
+
+        assert.deepEqual(
+          failed,
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, afresh).pullRequest?.title,
+          "Send invitations in batches",
+        );
       }),
   );
 

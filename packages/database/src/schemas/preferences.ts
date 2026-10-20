@@ -1,3 +1,4 @@
+import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
 import type { ContextWindow } from "@luke/features/coding-agent-wire";
 import type { LinkOpen } from "@luke/features/link-open";
 import type { ExperimentChoices } from "@luke/settings";
@@ -35,6 +36,13 @@ export const accountPreference = pgTable("account_preference", {
   codingAgentModel: text("coding_agent_model"),
   codingAgentEffort: text("coding_agent_effort"),
   codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
+  /**
+   * The Claude model a Generate chapters this account presses runs on
+   * (`@luke/features/chapters-model-choice`); null until the account
+   * chooses, and a value no build lists any more, both read as Haiku.
+   * Written alone, it moves no `updated_at`.
+   */
+  chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
   /**
    * The Markdown a new plan of this account starts from, kept verbatim as
    * Settings wrote it; null means the built-in `DEFAULT_PLAN_TEMPLATE`

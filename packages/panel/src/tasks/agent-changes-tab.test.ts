@@ -183,6 +183,8 @@ const standIn: DiffViewModule = {
       update: (next) => drawn.push(next),
       reveal: (path) => revealed.push(path),
       revealLine: (path, side, line) => revealed.push(`${path}:${side}:${line}`),
+      revealLines: (range) =>
+        revealed.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },
@@ -716,6 +718,54 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
   const hint = letter().getAttribute("aria-describedby");
   assert.ok(hint !== null, "the letter is described by its hint");
   assert.equal(document.getElementById(hint)?.textContent, "Modified");
+});
+
+test("a finger's arrival on a header draws none of it anew, so iOS spends no tap on the fold", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  act(() => {
+    fold.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "touch" }));
+  });
+  await flush();
+
+  assert.ok(fold.isConnected, "the fold the finger is on still stands");
+  assert.ok(header("a.ts").querySelector("button") === fold, "the fold is the one drawn before");
+});
+
+test("on a touch screen a header's hints stand from the start, so a long press on its fold hangs the fold's", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      fold.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 3,
+          pointerType: "touch",
+          isPrimary: true,
+        }),
+      );
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+
+  assert.ok(header("a.ts").contains(fold), "the hold drew no fold anew");
+  const hint = fold.getAttribute("aria-describedby");
+  assert.ok(hint !== null, "the fold is described by its hint");
+  assert.match(document.getElementById(hint)?.textContent ?? "", /^Collapse file/u);
 });
 
 test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {

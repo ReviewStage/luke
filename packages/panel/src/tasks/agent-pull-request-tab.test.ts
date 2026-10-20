@@ -226,6 +226,8 @@ const DIFF_STAND_IN: DiffViewModule = {
       update: (next) => lists.push(next),
       reveal: (path) => listReveals.push(path),
       revealLine: (path, side, line) => listReveals.push(`${path}:${side}:${line}`),
+      revealLines: (range) =>
+        listReveals.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },

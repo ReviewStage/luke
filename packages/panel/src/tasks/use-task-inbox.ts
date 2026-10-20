@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
@@ -35,6 +36,7 @@ import {
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
   type InboxDraft,
+  type InboxNote,
   type InboxThreadSend,
   inboxBoard,
   inboxMessageOf,
@@ -142,7 +144,9 @@ export interface TaskInboxControl {
   /** The items whose answer is on its way, by id. */
   readonly sending: ReadonlySet<string>;
   /** Why an answer did not go, or was not taken, by item, said on its card until the next send. */
-  readonly notes: ReadonlyMap<string, string>;
+  readonly notes: ReadonlyMap<string, InboxNote>;
+  /** Lets go of an item's note once what it said no longer stands, as an agent unarchived from it; nothing where a later send has said something else since. */
+  readonly onDropNote: (itemId: string, note: InboxNote) => void;
   /** What the developer has put on the item's card so far, at the revision it stands at; an empty card where nothing, or where the agent has changed the item since. */
   readonly draftOf: (item: InboxItem) => InboxDraft;
   /** Whether a card holds a draft for its item as it now stands, which the Inbox tab marks with the pencil (`draft-mark.tsx`). */
@@ -309,7 +313,7 @@ export function useTaskInbox(input: {
   }, [named]);
   const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
-  const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
+  const [notes, setNotes] = useState<ReadonlyMap<string, InboxNote>>(new Map());
   // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
   // shares them, under the plan, or under none where the inbox is an agent's with no plan.
   const ownTask = input.reader === undefined ? taskId : undefined;
@@ -357,14 +361,31 @@ export function useTaskInbox(input: {
     setAttempt((count) => count + 1);
   }, []);
 
-  const note = useCallback((itemId: string, words: string | undefined) => {
+  const note = useCallback((itemId: string, said: InboxNote | undefined) => {
     setNotes((was) => {
       const next = new Map(was);
-      if (words === undefined) next.delete(itemId);
-      else next.set(itemId, words);
+      if (said === undefined) next.delete(itemId);
+      else next.set(itemId, said);
       return next;
     });
   }, []);
+  const onDropNote = useCallback((itemId: string, said: InboxNote) => {
+    setNotes((was) => {
+      if (was.get(itemId) !== said) return was;
+      const next = new Map(was);
+      next.delete(itemId);
+      return next;
+    });
+  }, []);
+
+  // Note that a refusal naming no agent may be an archive the list has not read yet, so the agents are read again for the card to say which.
+  const refused = useCallback(
+    (itemId: string, failure: CodingAgentCallFailure) => {
+      note(itemId, { words: messageFailureWords(failure), failure });
+      if (failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) latest.current.onRetryList();
+    },
+    [note],
+  );
 
   const onAnswer = useCallback(
     (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => {
@@ -397,7 +418,7 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             settler.refuse(sent);
-            note(item.id, messageFailureWords(answer.failure));
+            refused(item.id, answer.failure);
             return;
           }
           // An answer landing after the window moved to another task is that task's no longer.
@@ -408,7 +429,7 @@ export function useTaskInbox(input: {
           );
           if (!answer.taken) {
             settler.refuse(sent);
-            note(item.id, notTakenNote(answer.item));
+            note(item.id, { words: notTakenNote(answer.item) });
             return;
           }
           settler.take(sent, answer.item);
@@ -417,7 +438,7 @@ export function useTaskInbox(input: {
           if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
         });
     },
-    [sending, note, taskId, writer, settler],
+    [sending, note, refused, taskId, writer, settler],
   );
 
   const onMessage = useCallback(
@@ -456,7 +477,7 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             if (sent !== undefined) settler.refuse(sent);
-            note(item.id, messageFailureWords(answer.failure));
+            refused(item.id, answer.failure);
             return;
           }
           setHeld((standing) =>
@@ -474,7 +495,7 @@ export function useTaskInbox(input: {
           latest.current.onRetryList();
         });
     },
-    [sending, note, taskId, writer, settler],
+    [sending, note, refused, taskId, writer, settler],
   );
 
   // An item of an agent the list has not read yet, one started from another
@@ -602,6 +623,7 @@ export function useTaskInbox(input: {
     onRetry,
     sending,
     notes,
+    onDropNote,
     onAnswer,
     onMessage,
     images,

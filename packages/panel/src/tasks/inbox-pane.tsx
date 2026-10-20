@@ -61,7 +61,7 @@ import {
   TextField,
   useMenu,
 } from "@luke/ui";
-import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
+import { type Actor, actorName } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
 import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon, Undo2Icon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -112,7 +112,6 @@ import {
   isUnread,
   itemWorkspaceId,
   knownAsk,
-  messagesWords,
   numberedPick,
   openAskOf,
   proposedOptions,
@@ -216,10 +215,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * viewer, drawn over the window outside it, is out of it on its own.
  *
  * An item from version 5 is drawn as its thread instead (`inbox-model.ts`'s
- * `inboxThreadOf`): under its title, one muted line of how many messages it
- * holds, who wrote them, and "Waiting on you" in the attention ink while an
- * ask is open; then every message, oldest first, each a Markdown document
- * by its writer's face, an agent's tagged so, drawn with the item's own
+ * `inboxThreadOf`): under its title alone, every message, oldest first,
+ * each a Markdown document by its writer's face, an agent's tagged so, drawn with the item's own
  * pictures, pairs, and lone-link cards, and its files. A member's answer
  * leads with its stamp (`inbox-stamp.tsx`). An agent's message that asks
  * ends with the ask's box: its kind and where it stands at its head, and
@@ -1580,48 +1577,6 @@ const ASK_PRESS = {
   ANSWER: "Answer",
 } as const;
 
-/**
- * The thread's subject: the item's title, and under it one muted line of
- * how many messages it holds, who wrote them, and, while an ask waits,
- * who it waits on (`Waiting`), "Waiting on you" in the attention ink, the
- * only colour the line spends.
- */
-function ThreadSubject({
-  item,
-  thread,
-  by,
-  waitingOn,
-}: {
-  item: InboxItem;
-  thread: readonly InboxMessage[];
-  by: ItemAgent;
-  /** The teammate an open ask waits on; none where it waits on the reader. */
-  waitingOn: InboxItem["startedBy"];
-}): React.JSX.Element {
-  const { members, readerId, former } = useMemberDirectory();
-  const writers: string[] = [];
-  for (const message of thread) {
-    const name =
-      message.author === INBOX_MESSAGE_AUTHOR.AGENT
-        ? by.subject.name
-        : actorName(personActor(message.member, members, readerId, former));
-    if (!writers.includes(name)) writers.push(name);
-  }
-  const waiting = openAskOf(thread) !== undefined;
-  return (
-    <header className="inbox-subject">
-      <h2 className="inbox-subject-title" data-inbox-title="">
-        {cardTitle(item.title)}
-      </h2>
-      <p className="inbox-subject-line" data-inbox-subject-line="">
-        <span>{messagesWords(thread.length)}</span>
-        {writers.length === 0 ? null : <span>{writers.join(", ")}</span>}
-        {waiting ? <Waiting on={waitingOn} /> : null}
-      </p>
-    </header>
-  );
-}
-
 /** What an open ask's presses send, and what they are drawn with. */
 interface AskDoors {
   readonly draft: InboxDraft;
@@ -1849,6 +1804,7 @@ function AskBox({
       <div className="inbox-ask" data-inbox-ask="newer">
         <div className="inbox-ask-head">
           <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
+          {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
         </div>
       </div>
     );
@@ -2370,7 +2326,7 @@ export function InboxPane({
                     </>
                   ) : (
                     <>
-                      <ThreadSubject item={item} thread={thread} by={by} waitingOn={waitingOn} />
+                      <Subject item={item} />
                       <AnswerMentions value={mentions}>
                         <ol className="inbox-thread" aria-label="Thread">
                           {thread.map((message, at) => (
@@ -2426,6 +2382,7 @@ export function InboxPane({
               keywords={answerKeywords(holder, item)}
               replyScope={board}
               onMissing={(missing) => focusMissing(pane.current, missing)}
+              onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
             />
           </AnswerMentions>
         )}

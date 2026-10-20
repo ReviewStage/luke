@@ -174,7 +174,7 @@ vocabulary is missing a name.
 
 Spacing in the desktop window comes from one scale, `@luke/ui`'s, read in the
 window's stylesheets as `--luke-space-2` through `--luke-space-48`, and the
-names built from it in `desktop.css`'s `:root`. Every column holds its
+names built from it in `shell.css`'s and `desktop.css`'s `:root`. Every column holds its
 rows `--column-inset` from its edges, every row holds its glyph or words
 `--row-inset` from its own, so a column's words start at `--content-inset`
 whether a row carries them or not: the sidebar's text, the task's tab, the
@@ -182,7 +182,7 @@ side panel's first tab, the transcript, and Settings' page list all read down
 that one edge. Controls in a row stand `--luke-control-gap` apart, a glyph
 `--luke-icon-gap` from its words, a column's groups `--luke-section-gap`, and a page's
 content `--luke-page-inset` from its column, each the desktop profile's role.
-No pixel of padding, margin, or gap in `desktop.css`,
+No pixel of padding, margin, or gap in `shell.css`, `desktop.css`,
 `sign-in.css`, and `tooltip.css` is anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.

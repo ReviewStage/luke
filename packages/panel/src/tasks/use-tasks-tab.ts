@@ -160,12 +160,7 @@ import type { MessageReveal } from "./message-links.js";
 import type { SectionReveal } from "./plan-body.js";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import {
-  FIXTURE_TASKS_CALL,
-  fixtureRepositories,
-  fixtureSidePanel,
-  fixtureTasksView,
-} from "./tasks-fixture.js";
+import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
@@ -1210,6 +1205,8 @@ export function useTasksTab(input: {
       live = false;
     };
   }, [fixtureMode]);
+  // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
+  const tasksFixture = loadedTasksFixture();
   const stage = (
     staged: (held: FixtureChat, staging: ChatStager) => Staged,
   ): Promise<string | undefined> => {
@@ -1240,7 +1237,7 @@ export function useTasksTab(input: {
 
   // A fixture run draws its synthetic tasks in place of the account's,
   // signed out as every fixture run is.
-  const fixture = fixtureTasksView(input.run);
+  const fixture = tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
   // A name given here stands until main's view carries it, so a rename that
   // landed never flickers back while main's copy of the view catches up.
@@ -1469,7 +1466,10 @@ export function useTasksTab(input: {
   // The calls heard on the open task, each held past its end until the
   // record's copy catches up; a fixture's open task is drawn with its own
   // call's words.
-  const reported = fixture === undefined ? voice.view : FIXTURE_TASKS_CALL;
+  const reported =
+    tasksFixture === undefined || fixture === undefined
+      ? voice.view
+      : tasksFixture.FIXTURE_TASKS_CALL;
   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
   useEffect(() => {
     setHeard((held) =>
@@ -1599,7 +1599,7 @@ export function useTasksTab(input: {
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
   const sidePanel = useSidePanel(
-    fixtureSidePanel(input.run),
+    tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
       ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
       : pageAgents === undefined
@@ -2336,8 +2336,8 @@ export function useTasksTab(input: {
     return {
       recent: recentRepositories(offered),
       read: () =>
-        fixture !== undefined
-          ? Promise.resolve(fixtureRepositories(workspaceId))
+        tasksFixture !== undefined && fixture !== undefined
+          ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
           : act(
               ACT_KIND.TASKS_REPOSITORIES,
               workspaceId === undefined ? {} : { workspaceId },

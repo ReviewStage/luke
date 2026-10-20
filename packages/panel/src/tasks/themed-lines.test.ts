@@ -59,6 +59,7 @@ const STAND_IN: DiffViewModule = {
     update: () => 0,
     reveal: () => 0,
     revealLine: () => 0,
+    revealLines: () => 0,
     unmount: () => undefined,
   }),
   colourLines: (request) => {

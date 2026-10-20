@@ -10,7 +10,9 @@ import {
   CHAPTER_RISK,
   type Chapter,
   chapterHunks,
+  chapterPatches,
   LINE_REF_SIDE,
+  type LineRef,
 } from "@luke/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
@@ -29,6 +31,8 @@ import {
   chaptersShown,
   chapterThreadCount,
   chapterViewed,
+  drawnLines,
+  firstLineRef,
   lineRefLabel,
   steppedChapter,
 } from "./chapters-model.js";
@@ -37,7 +41,10 @@ import {
  * chapters-model.test.ts -- the Chapters view draws one state at a time from
  * its read and its own Generate, chapters made for an older head as stale,
  * "Other changes" last; a chapter is viewed once all its files are, and
- * marking it marks the rest or unmarks them all. Synthetic chapters only.
+ * marking it marks the rest or unmarks them all; a key change's press goes
+ * to its first lines in the chapter's order, lit where the chapter's diff
+ * draws them and its file's header where it does not. Synthetic chapters
+ * only.
  */
 
 const HEAD = "b".repeat(40);
@@ -233,6 +240,85 @@ test("a key change's lines are named by path then line, a range by its ends", ()
 
   assert.equal(lineRefLabel(ref), "src/store.ts · L12–20");
   assert.equal(lineRefLabel({ ...ref, endLine: 12 }), "src/store.ts · L12");
+});
+
+test("a key change's press goes to its first lines in the chapter's file order, then by line, a removed line before an added one", () => {
+  const at = (path: string, side: LineRef["side"], startLine: number, endLine = startLine) => ({
+    path,
+    side,
+    startLine,
+    endLine,
+  });
+  const storeAdded = at(STORE.path, LINE_REF_SIDE.ADDITIONS, 10);
+  const storeRemoved = at(STORE.path, LINE_REF_SIDE.DELETIONS, 10);
+  const lockRemoved = at(LOCK.path, LINE_REF_SIDE.DELETIONS, 3);
+  const elsewhere = at("src/elsewhere.ts", LINE_REF_SIDE.ADDITIONS, 1);
+
+  assert.deepEqual(
+    firstLineRef([elsewhere, storeAdded, lockRemoved], [LOCK.path, STORE.path]),
+    lockRemoved,
+  );
+  assert.deepEqual(firstLineRef([elsewhere, storeAdded, lockRemoved], [STORE.path]), storeAdded);
+  assert.deepEqual(firstLineRef([storeAdded, storeRemoved], [STORE.path]), storeRemoved);
+  assert.deepEqual(
+    firstLineRef(
+      [at(STORE.path, LINE_REF_SIDE.ADDITIONS, 2, 9), at(STORE.path, LINE_REF_SIDE.ADDITIONS, 2)],
+      [STORE.path],
+    ),
+    at(STORE.path, LINE_REF_SIDE.ADDITIONS, 2),
+  );
+  assert.deepEqual(
+    firstLineRef([at("src/z.ts", LINE_REF_SIDE.ADDITIONS, 9), elsewhere], []),
+    at("src/z.ts", LINE_REF_SIDE.ADDITIONS, 9),
+    "lines of files the chapter does not draw keep the order they were named in",
+  );
+  assert.equal(firstLineRef([], [STORE.path]), undefined);
+});
+
+test("a key change's lines are lit where a hunk the chapter draws holds the first, up to that hunk's end; elsewhere its file's header is gone to", () => {
+  const ref = (side: LineRef["side"], startLine: number, endLine: number): LineRef => ({
+    path: STORE.path,
+    side,
+    startLine,
+    endLine,
+  });
+
+  assert.deepEqual(drawnLines(STORE, ref(LINE_REF_SIDE.ADDITIONS, 1, 2)), {
+    side: LINE_REF_SIDE.ADDITIONS,
+    startLine: 1,
+    endLine: 2,
+  });
+  assert.deepEqual(drawnLines(STORE, ref(LINE_REF_SIDE.DELETIONS, 2, 2)), {
+    side: LINE_REF_SIDE.DELETIONS,
+    startLine: 2,
+    endLine: 2,
+  });
+  assert.deepEqual(
+    drawnLines(STORE, ref(LINE_REF_SIDE.ADDITIONS, 11, 14)),
+    { side: LINE_REF_SIDE.ADDITIONS, startLine: 11, endLine: 11 },
+    "a run past its hunk is lit to the hunk's last line",
+  );
+  assert.equal(
+    drawnLines(STORE, ref(LINE_REF_SIDE.ADDITIONS, 5, 6)),
+    undefined,
+    "lines between two hunks are drawn by neither",
+  );
+  assert.equal(
+    drawnLines(STORE, ref(LINE_REF_SIDE.DELETIONS, 11, 11)),
+    undefined,
+    "the second hunk counts one old line",
+  );
+  const [secondOnly] = chapterPatches(SECOND, [STORE]);
+  assert.equal(
+    drawnLines(secondOnly, ref(LINE_REF_SIDE.ADDITIONS, 1, 2)),
+    undefined,
+    "a hunk of the file another chapter holds is not drawn in this one",
+  );
+  assert.equal(
+    drawnLines({ ...STORE, patch: null }, ref(LINE_REF_SIDE.ADDITIONS, 1, 2)),
+    undefined,
+  );
+  assert.equal(drawnLines(undefined, ref(LINE_REF_SIDE.ADDITIONS, 1, 2)), undefined);
 });
 
 test("stepping through chapters holds at either end", () => {

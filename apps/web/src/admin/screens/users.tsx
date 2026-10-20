@@ -159,8 +159,6 @@ export function UsersScreen({
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
           </>
         }
-        account={account}
-        onSignOut={signOut}
         loadingLabel="Loading…"
         {...content}
       />,

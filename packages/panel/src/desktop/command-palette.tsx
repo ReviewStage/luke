@@ -97,7 +97,8 @@ import {
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { Highlighted } from "../search-field.js";
-import { settingsPageOf, settingsPageShown } from "../settings/pages.js";
+import { settingsPageOf } from "../settings/pages.js";
+import { settingsPageShown } from "../settings/settings-rows.js";
 import {
   landOnSettingsRow,
   resultPageWord,

@@ -108,6 +108,7 @@ import {
   Result,
   Schema,
 } from "effect";
+import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -239,6 +240,8 @@ export const GITHUB_HTTP_STATUS = {
   /** What a repository with its issues turned off answers on its issues path. */
   GONE: 410,
   UNPROCESSABLE: 422,
+  /** GitHub's primary or secondary rate limit, which it may answer as 403 instead. */
+  TOO_MANY_REQUESTS: 429,
 } as const;
 
 /** The domain of the address GitHub links to an account while keeping the account's own private. */
@@ -332,6 +335,8 @@ type GitHubFailure = (typeof GITHUB_FAILURE)[keyof typeof GITHUB_FAILURE];
 export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
   readonly reason: GitHubFailure;
   readonly status: number | undefined;
+  /** How long GitHub asked to be left alone, where its answer carried a `Retry-After` in seconds. */
+  readonly retryAfter?: Duration.Duration;
 }> {
   override get message(): string {
     return this.status === undefined
@@ -1010,12 +1015,23 @@ function repositoryPath(fullName: string): string {
   return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 }
 
-/** A transport failure as the kind alone: the request it carries holds the bearer, and is left behind. */
+/** A `Retry-After` spelled in seconds, as GitHub spells it; none where it is absent or spelled any other way. */
+function retryAfterOf(
+  response: HttpClientResponse.HttpClientResponse,
+): Duration.Duration | undefined {
+  const spelled = Option.getOrUndefined(Headers.get(response.headers, "retry-after"));
+  if (spelled === undefined || !/^\d+$/u.test(spelled.trim())) return undefined;
+  return Duration.seconds(Number(spelled.trim()));
+}
+
+/** A transport failure as the kind alone, and how long GitHub asked to wait where it said: the request it carries holds the bearer, and is left behind. */
 function unavailable(error: HttpClientError.HttpClientError): GitHubUnavailable {
-  const status = error.response?.status;
+  const response = error.response;
+  const retryAfter = response === undefined ? undefined : retryAfterOf(response);
   return new GitHubUnavailable({
-    reason: status === undefined ? GITHUB_FAILURE.TRANSPORT : GITHUB_FAILURE.STATUS,
-    status,
+    reason: response === undefined ? GITHUB_FAILURE.TRANSPORT : GITHUB_FAILURE.STATUS,
+    status: response?.status,
+    ...(retryAfter === undefined ? undefined : { retryAfter }),
   });
 }
 
