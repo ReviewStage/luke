@@ -25,8 +25,10 @@
  * What the role's policy (`role.ts`) does with the sandbox once open is
  * read here by the store hook that watches the session's stream: whether a
  * turn's end stops it, and whether a step renews the credential the
- * checkout set at its firewall. No effect runs here; the edges that call
- * these run their own.
+ * checkout set at its firewall. A member's own GitHub token is never
+ * renewed, since it does not expire: a turn's end takes it off the firewall
+ * where the sandbox stops, and the next turn's first step sets it again. No
+ * effect runs here; the edges that call these run their own.
  */
 
 import { createHash } from "node:crypto";
@@ -122,13 +124,19 @@ const PREPARE_SCRIPT = [
  * What a session's store hook has told its sandbox, kept in the session's
  * durable state by the root that watches it: when a sandbox tool first ran,
  * which is when the sandbox opened and its checkout set the repository
- * credential at the firewall, and when that credential was last renewed.
+ * credential at the firewall, when that credential was last renewed,
+ * whether it is its starter's own token, and whether a turn's end may have
+ * taken it off since.
  */
 export interface SandboxRecord {
   /** The instant the first sandbox tool of the session was called. */
   readonly openedAt?: number;
   /** The instant the store hook last renewed the credential at the firewall. */
   readonly credentialAt?: number;
+  /** Whether the credential is the agent's starter's own GitHub token rather than an installation's. */
+  readonly memberToken?: boolean;
+  /** Whether a member's token may be off the firewall since a turn ended, for the next step to set again. */
+  readonly credentialLapsed?: boolean;
 }
 
 /** How many snapshots Vercel keeps of a sandbox, as a bounds module names it. */
@@ -270,7 +278,12 @@ export function stopsAtTurnEnd(
   );
 }
 
-/** Whether the role's policy renews the credential at its sandbox's firewall at this event: a step that starts once the credential has aged. */
+/**
+ * Whether the role's policy sets the credential at its sandbox's firewall
+ * again at this event: a step that starts once an installation token has
+ * aged, or once a member's own token lapsed at a turn's end. A member's
+ * token is never renewed for its age, since it does not expire.
+ */
 export function renewsCredential(
   role: AgentRole,
   event: MessageStreamEvent,
@@ -280,6 +293,40 @@ export function renewsCredential(
   return (
     lifecycleOf(role).renewsCredential &&
     event.type === "step.started" &&
-    credentialIsOld(record, now)
+    (record.credentialLapsed === true ||
+      (record.memberToken !== true && credentialIsOld(record, now)))
   );
+}
+
+/**
+ * Whether a turn's end lapses a member's own token: once a sandbox tool has
+ * opened the sandbox, every turn's end does, since it or a terminal's close
+ * may take the token off before the next turn, which sets it again.
+ */
+export function lapsesCredential(
+  role: AgentRole,
+  event: MessageStreamEvent,
+  record: SandboxRecord,
+): boolean {
+  return (
+    lifecycleOf(role).renewsCredential &&
+    endsTurn(event) &&
+    record.openedAt !== undefined &&
+    record.memberToken === true
+  );
+}
+
+/**
+ * Whether a turn's end takes a member's own token off the firewall: where
+ * it stops the sandbox, so nothing stands while nobody uses it. A sandbox a
+ * developer's terminal holds keeps it, for the terminal to take off as it
+ * closes (`terminal/relay.ts`).
+ */
+export function withdrawsCredential(
+  role: AgentRole,
+  event: MessageStreamEvent,
+  record: SandboxRecord,
+  held: boolean,
+): boolean {
+  return lapsesCredential(role, event, record) && stopsAtTurnEnd(role, event, record, held);
 }

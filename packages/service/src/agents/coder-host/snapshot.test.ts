@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { fakeHttpClientLayer, temporaryDirectory } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Fiber, Logger, Redacted } from "effect";
 import { TestClock } from "effect/testing";
@@ -15,6 +16,7 @@ import {
   sourceCheckout,
   sourceSandbox,
 } from "../../testing/source-sandbox.js";
+import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from "./snapshot.js";
 
@@ -30,13 +32,26 @@ import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from ".
  * up, by a stop sent as JSON that the copy never waits on, and a running one
  * is left running; and a sandbox gone, a failed copy, or one past its bound
  * is a miss, a sandbox it was waking stopped again all the same, and a failed
- * copy logs the end of its stderr, bounded and redacted.
+ * copy logs the end of its stderr, bounded and redacted. A member's own
+ * token stands for the push alone where nothing else uses the sandbox.
  */
 
 const SESSION = "wrun_fixture";
 const BRANCH = "luke/fix-invites-continued-0a1b2c3d";
 const MESSAGE = "Snapshot of Fix invites for continued agent";
-const TOKEN = Redacted.make("ghs_fixture_installation_token");
+/** The repository's credential as the App mints it, and as a member's own token stands. */
+const CREDENTIAL = {
+  APP: {
+    token: Redacted.make("ghs_fixture_installation_token"),
+    fullName: "Acme/Relay",
+    access: { kind: GITHUB_ACCESS.APP },
+  },
+  MEMBER: {
+    token: Redacted.make("member-token-fixture"),
+    fullName: "Acme/Relay",
+    access: { kind: GITHUB_ACCESS.TOKEN, githubLogin: "octo-member", githubUserId: "4242" },
+  },
+} as const;
 
 /** A checkout of this test's own. */
 const checkoutFor = (t: TestContext) =>
@@ -51,10 +66,11 @@ function standing({ checkout, sh }: SourceCheckout) {
   };
 }
 
-/** The copy asked of the sandbox over the responder given, the sandbox left up where `keepUp` says so. */
+/** The copy asked of the sandbox over the responder given, through the credential given, the sandbox left up where `keepUp` says so. */
 function copyOver(
   respond: Parameters<typeof fakeHttpClientLayer>[0],
   keepUp: Effect.Effect<boolean> = Effect.succeed(false),
+  credential: RepositoryCredential = CREDENTIAL.APP,
 ) {
   return Effect.flatMap(
     vercelSandboxApi(async () => fixtureOidcToken()),
@@ -63,7 +79,7 @@ function copyOver(
         sessionId: SESSION,
         branch: BRANCH,
         message: MESSAGE,
-        token: Effect.succeed(TOKEN),
+        credential: Effect.succeed(credential),
         keepUp,
       }),
   ).pipe(Effect.provide(fakeHttpClientLayer(respond)));
@@ -85,8 +101,8 @@ async function answerOf(sandbox: SourceSandbox, url: string, init: RequestInit):
 }
 
 /** The copy asked of the double. */
-function copy(sandbox: SourceSandbox, keepUp = false) {
-  return copyOver((url, init) => answerOf(sandbox, url, init), Effect.succeed(keepUp));
+function copy(sandbox: SourceSandbox, keepUp = false, credential?: RepositoryCredential) {
+  return copyOver((url, init) => answerOf(sandbox, url, init), Effect.succeed(keepUp), credential);
 }
 
 /** Every warning logged while the effect runs, its words joined, the fibers it forked included. */
@@ -150,6 +166,26 @@ it.effect(
         { session: SOURCE_SANDBOX.RUNNING, hosts: ["*", "github.com", "api.github.com"] },
       ]);
       assert.deepEqual([sandbox.state.status, sandbox.stops], ["running", []]);
+    }),
+);
+
+it.effect(
+  "a member's own token is set on the repository's paths for the push and taken off again after it, unless a terminal or a turn uses the sandbox",
+  (t) =>
+    Effect.gen(function* () {
+      const idle = sourceSandbox(yield* checkoutFor(t), "running");
+      const used = sourceSandbox(yield* checkoutFor(t), "running");
+
+      const alone = yield* copy(idle, false, CREDENTIAL.MEMBER);
+      const beside = yield* copy(used, true, CREDENTIAL.MEMBER);
+
+      assert.ok(alone.copied && beside.copied);
+      const carried = {
+        session: SOURCE_SANDBOX.RUNNING,
+        hosts: ["*", "github.com", "api.github.com"],
+      };
+      assert.deepEqual(idle.policies, [carried, { session: SOURCE_SANDBOX.RUNNING, hosts: [] }]);
+      assert.deepEqual(used.policies, [carried]);
     }),
 );
 

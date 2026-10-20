@@ -335,6 +335,22 @@ test("an agent writing as its developer is told to end every commit on the trail
   }
 });
 
+test("an agent on its starter's own token reads its checks and its pull request over GitHub's REST API under its repository, never gh pr, and is told a draft cannot be marked ready from its sandbox", () => {
+  const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const words = (memberToken: boolean) =>
+      coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER, false, null, memberToken);
+    const onToken = words(true);
+    for (const cli of ["`gh pr checks", "`gh run view", "marking a draft ready"]) {
+      assert.ok(!onToken.includes(cli), `${brief}: ${cli}`);
+      assert.ok(words(false).includes(cli), `${brief}: ${cli}`);
+    }
+    assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/commits/<sha>/check-runs`"), brief);
+    assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/pulls/<number>/reviews`"), brief);
+    assert.ok(onToken.includes("A draft cannot be marked ready from here"), brief);
+  }
+});
+
 test("an agent whose credential reads its checks waits on them with sleep, which it is offered and its read-only worker is not", () => {
   const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
