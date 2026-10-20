@@ -77,11 +77,34 @@ function namesAccessToken(texts: readonly unknown[]): boolean {
 
 /** An attribute as it may be sent: an address scrubbed already, and any other text naming the token replaced. */
 function attributeWithoutAccessToken([name, value]: [string, unknown]): [string, unknown] {
-  return [name, !isAddressAttribute(name) && namesAccessToken([value]) ? REDACTED : value];
+  if (isAddressAttribute(name)) return [name, value];
+  // Note that an array is read string by string, as the browser's HTTP context sets a header as one.
+  if (Array.isArray(value))
+    return [name, value.map((item) => (namesAccessToken([item]) ? REDACTED : item))];
+  return [name, namesAccessToken([value]) ? REDACTED : value];
 }
 
-/** Where an absolute URL starts inside a word of a span's name, as in `url=https://…`. */
-const URL_START_PATTERN = /[a-z][a-z0-9+.-]*:\/\//i;
+/** What separates a URL's scheme from its authority. */
+const SCHEME_SEPARATOR = "://";
+
+/** A character a URL's scheme may hold, and one it may start with. */
+const SCHEME_CHARACTER = /^[a-z0-9+.-]$/i;
+const SCHEME_START = /^[a-z]$/i;
+
+/**
+ * Where an absolute URL starts inside a word of a span's name, as in
+ * `url=https://…`, or -1. Note that the scheme is read back from its `://`
+ * one character at a time rather than searched for with a pattern, because a
+ * pattern searched across a long word is retried from every offset.
+ */
+function urlStart(word: string): number {
+  const separatorAt = word.indexOf(SCHEME_SEPARATOR);
+  if (separatorAt === -1) return -1;
+  let at = separatorAt;
+  while (at > 0 && SCHEME_CHARACTER.test(word.charAt(at - 1))) at--;
+  while (at < separatorAt && !SCHEME_START.test(word.charAt(at))) at++;
+  return at === separatorAt ? -1 : at;
+}
 
 /**
  * A word of a span's name as it may be sent: from where an absolute URL
@@ -91,7 +114,7 @@ const URL_START_PATTERN = /[a-z][a-z0-9+.-]*:\/\//i;
  * is no fragment.
  */
 function scrubbedWord(word: string): string {
-  const urlAt = word.search(URL_START_PATTERN);
+  const urlAt = urlStart(word);
   if (urlAt !== -1) return `${word.slice(0, urlAt)}${scrubbedUrl(word.slice(urlAt))}`;
   return word.startsWith("/") ? scrubbedUrl(word) : word;
 }

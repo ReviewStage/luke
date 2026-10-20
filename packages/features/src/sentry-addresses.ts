@@ -73,8 +73,10 @@ export function scrubbedUrl(address: string): string {
 /**
  * The attributes that carry an address, a path, or a query, by the names
  * Effect's HTTP spans and the browser's and Electron's request spans
- * (`url.*`), Sentry's HTTP integrations (`http.*`), and a breadcrumb (`url`)
- * give them, each with how it is scrubbed.
+ * (`url.*`), Sentry's HTTP integrations (`http.*`), a breadcrumb (`url`),
+ * and the browser's HTTP context, which sets the page's referrer on every
+ * segment span as a one-string array (`http.request.header.referer`), give
+ * them, each with how it is scrubbed.
  */
 const URL_ATTRIBUTES: ReadonlyMap<string, (value: string) => string> = new Map([
   ["url.full", scrubbedUrl],
@@ -86,6 +88,7 @@ const URL_ATTRIBUTES: ReadonlyMap<string, (value: string) => string> = new Map([
   ["http.query", scrubbedQuery],
   ["http.fragment", () => REDACTED],
   ["url", scrubbedUrl],
+  ["http.request.header.referer", scrubbedUrl],
 ]);
 
 /** Whether an attribute of this name carries an address, and so is scrubbed by `scrubbedAttributes`. */
@@ -93,13 +96,16 @@ export function isAddressAttribute(name: string): boolean {
   return URL_ATTRIBUTES.has(name);
 }
 
-/** Attributes with every address among them scrubbed and the rest as they were. */
+/** Attributes with every address among them, a string or an array of them, scrubbed and the rest as they were. */
 export function scrubbedAttributes<Attributes extends object>(attributes: Attributes): Attributes {
   const entries = Object.entries(attributes).map(([name, value]: [string, unknown]) => {
     const scrub = URL_ATTRIBUTES.get(name);
-    return [name, scrub && Predicate.isString(value) ? scrub(value) : value];
+    if (scrub === undefined) return [name, value];
+    if (Array.isArray(value))
+      return [name, value.map((item) => (Predicate.isString(item) ? scrub(item) : item))];
+    return [name, Predicate.isString(value) ? scrub(value) : value];
   });
-  // SAFETY: each entry keeps its name, and a string value is replaced only by a string.
+  // SAFETY: each entry keeps its name, and a string is replaced only by a string, in an array or not.
   return Object.fromEntries(entries) as Attributes;
 }
 

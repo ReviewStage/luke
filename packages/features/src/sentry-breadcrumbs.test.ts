@@ -97,7 +97,7 @@ test("an event carrying no token is sent as it was", () => {
 });
 
 /** A sent attribute's value, as Sentry's span protocol types it. */
-type AttributeValue = string | number | boolean;
+type AttributeValue = string | number | boolean | readonly string[];
 
 /** A span as it would have been sent: its name and its attributes' values. */
 interface SentSpan {
@@ -266,6 +266,32 @@ test("an address in a span's name is scrubbed, and other words of the name are k
     "proxy url=https://[redacted]@luke.example.test/x",
     "ui.click button#send",
   ]);
+});
+
+test("the page's referrer, an array, is scrubbed, and so is a token in any array", async () => {
+  const spans = await sentSpans(() => {
+    Sentry.startSpan({ name: "/app", op: "pageload" }, (page) => {
+      // Note that the browser's HTTP context sets the referrer on the segment as a one-string array.
+      page.setAttribute("http.request.header.referer", [
+        `https://luke.example.test/cb?access_token=${TOKEN}&code=fixture-code&state=fixture-state`,
+      ]);
+      page.setAttribute("avatar.attempts", [
+        "first",
+        `wss://x.livekit.cloud/rtc?access_token=${TOKEN}`,
+      ]);
+    });
+  });
+  const text = sentText(spans);
+  for (const secret of [TOKEN, "fixture-code", "fixture-state"]) {
+    assert.equal(text.includes(secret), false, secret);
+  }
+  assert.deepEqual(
+    [spans[0]?.attributes["http.request.header.referer"], spans[0]?.attributes["avatar.attempts"]],
+    [
+      ["https://luke.example.test/cb?access_token=[redacted]&code=[redacted]&state=[redacted]"],
+      ["first", "[redacted]"],
+    ],
+  );
 });
 
 test("a token named after a span starts, in its name or any attribute, is replaced", async () => {
