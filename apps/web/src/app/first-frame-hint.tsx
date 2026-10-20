@@ -11,6 +11,7 @@
  * the account is unread or a sign-in is under way.
  */
 
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { useAppState } from "@luke/panel/use-app-state";
 import { useEffect } from "react";
 
@@ -21,9 +22,9 @@ const SIGNED_IN_KEY = "luke.signed-in-here";
 export function FirstFrameHint(): null {
   const status = useAppState()?.account.status;
   useEffect(() => {
-    if (status !== "signed-in" && status !== "signed-out") return;
+    if (status !== ACCOUNT_STATUS.SIGNED_IN && status !== ACCOUNT_STATUS.SIGNED_OUT) return;
     try {
-      if (status === "signed-in") localStorage.setItem(SIGNED_IN_KEY, "true");
+      if (status === ACCOUNT_STATUS.SIGNED_IN) localStorage.setItem(SIGNED_IN_KEY, "true");
       else localStorage.removeItem(SIGNED_IN_KEY);
     } catch {
       // Note that a refused write costs the next load its frame's sidebar and nothing else.
