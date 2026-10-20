@@ -48,6 +48,8 @@ export const LIVE_DELEGATION_TYPE = "client";
 export const LiveDelegationTypeSchema = Schema.Literal(LIVE_DELEGATION_TYPE);
 
 interface LiveSessionOptions {
+  /** The tools the call's backend holds, which its instructions name (`sessionInstructions`). */
+  backendTools: readonly string[];
   /** The model, where a deployment pins one; `LIVE_DEFAULTS.MODEL` otherwise. */
   model?: string | undefined;
   /** Chosen at creation and immutable after startup. */
@@ -74,7 +76,7 @@ export function liveSessionConfig(options: LiveSessionOptions) {
   const input = options.input ?? [];
   return {
     model: options.model ?? LIVE_DEFAULTS.MODEL,
-    instructions: sessionInstructions(),
+    instructions: sessionInstructions(options.backendTools),
     ...(input.length > 0 ? { input: [...input] } : undefined),
     delegation: { type: LIVE_DELEGATION_TYPE },
     store: false,
