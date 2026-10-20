@@ -102,7 +102,12 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * Retry; a deployment holding no key for the model says chapters are not
  * available on it. Chapters made for a head the pull request has moved on
  * from stand as they were, under a line saying new commits came since,
- * with Regenerate (`chapters-model.ts`).
+ * with Regenerate (`chapters-model.ts`): their titles, risks, summaries,
+ * and What to review, but no diff, no lines or threads counted, no Viewed,
+ * and no press to a key change's lines, because a chapter names its hunks
+ * by their file and old start line, which the newest push's files may hold
+ * an unrelated hunk at, and a hunk drawn under the wrong chapter's risk is
+ * worse than none.
  *
  * Ready, the view is a rail of the chapters on its left, as Files changed's
  * tree stands on its right, and the chapter chosen beside it. Each row of
@@ -150,6 +155,8 @@ const CHAPTERS_WORDS = {
   REGENERATE_CHAPTERS: "Regenerate chapters",
   NOTHING: "This pull request has nothing to chapter.",
   NO_FILES: "None of this chapter's changes are in the pull request now.",
+  STALE_DIFF:
+    "These chapters were made before the newest commits. Regenerate to see their changes.",
   STALE: "New commits since these chapters",
   WHAT_TO_REVIEW: "What to review",
   VIEWED: "Viewed",
@@ -430,6 +437,7 @@ function RailToggle({
 function ChapterRail({
   rows,
   at,
+  stale,
   viewed,
   pane,
   leaving,
@@ -437,6 +445,8 @@ function ChapterRail({
 }: {
   rows: readonly ChapterRow[];
   at: number;
+  /** Whether the chapters were made for an older head, whose lines and threads the files now read cannot count. */
+  stale: boolean;
   viewed: (paths: readonly string[]) => boolean;
   pane: React.Ref<HTMLElement>;
   leaving: boolean;
@@ -462,12 +472,14 @@ function ChapterRail({
                     icon={<RiskMark risk={row.chapter.risk} />}
                     current={index === at ? NAV_CURRENT.PAGE : undefined}
                     detail={
-                      <LinesChanged
-                        additions={row.lines.additions}
-                        deletions={row.lines.deletions}
-                      />
+                      stale ? undefined : (
+                        <LinesChanged
+                          additions={row.lines.additions}
+                          deletions={row.lines.deletions}
+                        />
+                      )
                     }
-                    count={{ value: row.threads, noun: CHAPTERS_WORDS.threads }}
+                    count={stale ? undefined : { value: row.threads, noun: CHAPTERS_WORDS.threads }}
                     mark={done ? <CheckIcon aria-hidden="true" /> : undefined}
                     aria-label={CHAPTERS_WORDS.row(index + 1, row.chapter.title, risk, done)}
                     onClick={() => onChoose(index)}
@@ -512,13 +524,13 @@ function ChapterStrip({
   );
 }
 
-/** One change a reviewer should weigh: its words, and the first lines it points at, a press of which brings that file into view. */
+/** One change a reviewer should weigh: its words, and the first lines it points at, a press of which brings that file into view; named alone where there is no diff to bring it into (`onReveal` none). */
 function KeyChangeItem({
   change,
   onReveal,
 }: {
   change: Chapter["keyChanges"][number];
-  onReveal: (path: string) => void;
+  onReveal: ((path: string) => void) | undefined;
 }): React.JSX.Element {
   const [first] = change.lineRefs;
   return (
@@ -526,7 +538,9 @@ function KeyChangeItem({
       <div className="chapter-key-change-words">
         <TranscriptWords text={change.content} />
       </div>
-      {first === undefined ? null : (
+      {first === undefined ? null : onReveal === undefined ? (
+        <span className="chapter-key-change-ref">{lineRefLabel(first)}</span>
+      ) : (
         <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => onReveal(first.path)}>
           {lineRefLabel(first)}
         </TextButton>
@@ -621,7 +635,8 @@ function ChaptersReading({
           },
     [chapter, threads, hunks],
   );
-  const marks = changes.viewedFiles.marks;
+  // Note that stale chapters name hunks of an older head, so they mark no file of this one viewed.
+  const marks = stale ? undefined : changes.viewedFiles.marks;
   const viewed = (paths: readonly string[]) =>
     marks === undefined ? false : chapterViewed(paths, marks.viewed);
   const markChapter = () => {
@@ -689,6 +704,7 @@ function ChaptersReading({
             rows={rows}
             at={at}
             viewed={viewed}
+            stale={stale}
             pane={slide.pane}
             leaving={slide.leaving}
             onChoose={choose}
@@ -764,10 +780,14 @@ function ChaptersReading({
                           // oxlint-disable-next-line react/no-array-index-key -- a chapter's key changes never move.
                           key={index}
                           change={change}
-                          onReveal={(path) => {
-                            asks.current += 1;
-                            setReveal({ path, ask: asks.current });
-                          }}
+                          onReveal={
+                            stale
+                              ? undefined
+                              : (path) => {
+                                  asks.current += 1;
+                                  setReveal({ path, ask: asks.current });
+                                }
+                          }
                         />
                       ))}
                     </ul>
@@ -776,7 +796,9 @@ function ChaptersReading({
               </div>
             </ScrollArea>
           </header>
-          {chapterFiles.length === 0 ? (
+          {stale ? (
+            <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.STALE_DIFF}</EmptyState>
+          ) : chapterFiles.length === 0 ? (
             <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.NO_FILES}</EmptyState>
           ) : (
             <AgentChangesTab

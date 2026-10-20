@@ -2570,6 +2570,11 @@
   align-self: flex-start;
 }
 
+/* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
+.chapter-key-change-ref {
+  color: var(--luke-color-text-muted);
+}
+
 .chapter-foot {
   display: flex;
   flex: none;

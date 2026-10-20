@@ -572,7 +572,7 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
   ]);
 });
 
-test("chapters made for an older head stand under a line saying new commits came since, with Regenerate", async () => {
+test("chapters made for an older head stand under a line saying new commits came since, with Regenerate, drawing no diff, counts, Viewed, or press to their lines, since their hunks name an older head", async () => {
   let generates = 0;
   const tab = await draw(
     controlAnswering({
@@ -589,6 +589,20 @@ test("chapters made for an older head stand under a line saying new commits came
     /New commits since these chapters/u,
   );
   assert.equal(heading(tab), "1. Read the expiry", "the chapters stand as they were");
+  assert.match(tab.textContent ?? "", /Is the expiry read in the member's time zone\?/u);
+  assert.deepEqual(listed(), [], "no diff is drawn for the chapter");
+  assert.match(tab.textContent ?? "", /These chapters were made before the newest commits\./u);
+  const sweepRow =
+    [...tab.querySelectorAll<HTMLButtonElement>(".chapter-rail button")].find((each) =>
+      each.getAttribute("aria-label")?.startsWith("2."),
+    ) ?? assert.fail("the sweep's row stands");
+  assert.doesNotMatch(sweepRow.textContent ?? "", /threads|\+/u, "no lines or threads are counted");
+  assert.equal(tab.querySelector(".chapter-viewed"), null, "no Viewed box stands");
+  assert.equal(
+    [...tab.querySelectorAll("button")].some((each) => each.textContent === "src/store.ts · L1–2"),
+    false,
+    "a key change's lines are named, not pressed",
+  );
   act(() => button(tab, "Regenerate").click());
   await settle();
   assert.equal(generates, 1);
