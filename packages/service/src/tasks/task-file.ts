@@ -13,6 +13,7 @@ import {
   GitHubApp,
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
+  markRefusedToken,
 } from "../github/github-app.js";
 import { logGitHubReadFailure, logWorkspaceReadFailure } from "../github/github-refusal.js";
 import { readBranchHead, readRepositoryFile } from "../github/repository-file.js";
@@ -164,7 +165,7 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
 ) {
   const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
-  const { token, repository: confirmed } = reach.reached;
+  const { token, repository: confirmed, access } = reach.reached;
   const branch = request.ref ?? confirmed.defaultBranch;
   // Note that a read of the default branch reads at the commit its head
   // stands at, and names it, so lines picked from the read are pinned to the
@@ -176,7 +177,9 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
       Effect.catch(() => Effect.succeed(undefined)),
     ));
   const at = commit ?? branch;
-  const file = yield* readRepositoryFile(token, confirmed, at, request.path);
+  const file = yield* readRepositoryFile(token, confirmed, at, request.path).pipe(
+    markRefusedToken(access),
+  );
   const content = file.regular ? file.content : undefined;
   const refusal = shownFileRefusal({
     path: request.path,

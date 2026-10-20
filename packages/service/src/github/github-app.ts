@@ -122,7 +122,11 @@ import {
   mendInstallationStatus,
   type WorkspaceInstallation,
 } from "./github-installations.js";
-import { GITHUB_TOKEN_ABSENCE, openMemberGitHubToken } from "./github-token.js";
+import {
+  GITHUB_TOKEN_ABSENCE,
+  type MemberGitHubToken,
+  openMemberGitHubToken,
+} from "./github-token.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
@@ -429,7 +433,8 @@ interface KeptToken {
  * Whose a repository token is: an installation token the App minted, or the
  * member's own, with the GitHub account it belongs to, whose login git over
  * HTTPS takes as the username beside a personal access token
- * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls).
+ * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls),
+ * and what marks it invalid where GitHub refuses it.
  */
 export type GitHubTokenAccess =
   | { readonly kind: typeof GITHUB_ACCESS.APP }
@@ -437,6 +442,7 @@ export type GitHubTokenAccess =
       readonly kind: typeof GITHUB_ACCESS.TOKEN;
       readonly githubLogin: string;
       readonly githubUserId: string;
+      readonly markInvalid: MemberGitHubToken["markInvalid"];
     };
 
 /** A token for one repository: the repository as GitHub spells it, the token, sealed, and whose it is. */
@@ -1152,6 +1158,23 @@ export function readBody<A>(
   );
 }
 
+/**
+ * The read made on a repository token, where GitHub answering 401 to a
+ * member's own token marks that token invalid, as the reach does
+ * (https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api);
+ * an installation token's failure is left as it is.
+ */
+export function markRefusedToken(access: GitHubTokenAccess) {
+  return <A, E, R>(read: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | DatabaseServices> =>
+    access.kind === GITHUB_ACCESS.APP
+      ? read
+      : Effect.tapError(read, (failure) =>
+          failure instanceof GitHubUnavailable && failure.status === GITHUB_HTTP_STATUS.UNAUTHORIZED
+            ? Effect.ignore(access.markInvalid)
+            : Effect.void,
+        );
+}
+
 /** A token or a refresh token opened from the row, or the sign-in the row's state calls for. */
 function unseal(
   sealed: string,
@@ -1621,6 +1644,7 @@ function githubAppService(
                 kind: GITHUB_ACCESS.TOKEN,
                 githubLogin: held.success.githubLogin,
                 githubUserId: held.success.githubUserId,
+                markInvalid: held.success.markInvalid,
               },
             }),
       );

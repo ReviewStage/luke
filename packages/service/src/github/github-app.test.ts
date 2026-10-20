@@ -883,11 +883,18 @@ it.layer(getTestDB())("a repository on a member's own token", (it) => {
         );
         assert.ok(Option.isSome(write));
         assert.equal(Redacted.value(write.value.token), GITHUB_FIXTURE_MEMBER.TOKEN);
-        assert.deepEqual(write.value.access, {
-          kind: GITHUB_ACCESS.TOKEN,
-          githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
-          githubUserId: GITHUB_FIXTURE_MEMBER.ID,
-        });
+        const { kind, githubLogin, githubUserId } =
+          write.value.access.kind === GITHUB_ACCESS.TOKEN
+            ? write.value.access
+            : { ...write.value.access, githubLogin: undefined, githubUserId: undefined };
+        assert.deepEqual(
+          { kind, githubLogin, githubUserId },
+          {
+            kind: GITHUB_ACCESS.TOKEN,
+            githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
+            githubUserId: GITHUB_FIXTURE_MEMBER.ID,
+          },
+        );
         assert.equal(ci, true);
         assert.equal(reason(fork), REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH);
         assert.equal(reason(hidden), REPOSITORY_UNREACHED.TOKEN_NO_ACCESS);

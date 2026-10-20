@@ -21,7 +21,7 @@ import { TASK_FILE_REFUSAL, type TaskSkillsAnswer } from "@luke/features/task-wi
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { readRepositorySkills, skillFilePath } from "../agents/repository-skills.js";
-import type { GitHubApp } from "../github/github-app.js";
+import { type GitHubApp, markRefusedToken } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { reachTaskRepository, refused } from "./task-file.js";
 
@@ -33,8 +33,8 @@ const readSkills = /* @__PURE__ */ Effect.fn("web/taskSkillsRead")(function* (
 ) {
   const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
-  const { token, repository: confirmed } = reach.reached;
-  const skills = yield* readRepositorySkills(token, confirmed);
+  const { token, repository: confirmed, access } = reach.reached;
+  const skills = yield* readRepositorySkills(token, confirmed).pipe(markRefusedToken(access));
   return {
     skills: {
       repository,

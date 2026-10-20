@@ -7,10 +7,14 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";
 import {
   connectWorkspaceGitHub,
+  GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  GITHUB_FIXTURE_MEMBER,
   githubReaching,
   type InstallationFixture,
+  memberRepositoryJson,
   openGithubUser,
+  openTokenMember,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { type CommandTable, sandboxDouble } from "../testing/repository-sandbox.js";
@@ -171,5 +175,50 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
       assert.deepEqual(sandbox.policies, []);
       assert.equal(elsewhere.sent.some(mintsForRepositories), false);
     }),
+  );
+
+  it.effect(
+    "where no installation reaches the repository, the clone carries the member's own token under their GitHub login, and withdraws it after",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openTokenMember();
+        const started = yield* startTask(userId, {
+          name: "Side work",
+          repository: RELAY_FULL_NAME,
+        });
+        const sandbox = sandboxDouble(COMMANDS);
+        const call: RepositoryCall = {
+          task: { userId, taskId: started.id },
+          repository: RELAY_FULL_NAME,
+          sandbox: sandbox.door,
+        };
+        const github = githubReaching([], GITHUB_APP_WITH_TOKENS, {}, (sent) =>
+          new URL(sent.url).pathname === `/repos/${RELAY_FULL_NAME}` &&
+          sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`
+            ? Response.json(memberRepositoryJson(RELAY, true))
+            : undefined,
+        );
+
+        const answered = yield* run(call, "ls", github.layer);
+
+        assert.deepEqual(answered, { status: REPOSITORY_SHELL_STATUS.RAN, ...LISTING });
+        const basic = Buffer.from(
+          `${GITHUB_FIXTURE_MEMBER.LOGIN}:${GITHUB_FIXTURE_MEMBER.TOKEN}`,
+        ).toString("base64");
+        assert.deepEqual(sandbox.policiesDuringClone, [
+          {
+            allow: {
+              "*": [],
+              "github.com": [
+                {
+                  match: { path: { startsWith: `/${RELAY_FULL_NAME}.git/` } },
+                  transform: [{ headers: { authorization: `Basic ${basic}` } }],
+                },
+              ],
+            },
+          },
+        ]);
+        assert.deepEqual(sandbox.policies, [...sandbox.policiesDuringClone, "allow-all"]);
+      }),
   );
 });
