@@ -563,8 +563,8 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** An item row's workspace: its own, or its task's on a row the backfill has not reached yet. */
-const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${inboxItem.taskId}))`;
+/** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
+const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
 /** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task. */
 function itemReachableBy(userId: string): SQL {

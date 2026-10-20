@@ -1,4 +1,11 @@
-import type { InboxBlock, InboxReply, InboxResponse, InboxStatus } from "@luke/features/inbox-wire";
+import {
+  INBOX_STATUS,
+  type InboxBlock,
+  type InboxReply,
+  type InboxResponse,
+  type InboxStatus,
+} from "@luke/features/inbox-wire";
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -128,6 +135,14 @@ export const inboxItem = pgTable(
     index("inbox_item_task_updated").on(table.taskId, table.updatedAt),
     // A workspace's items of agents with no task are read the latest changed first.
     index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
+    // The open items of agents with no task, which every account's read of what waits names
+    // beside its tasks' items, are read by workspace the latest changed first. The predicate is
+    // DDL, which takes no bound parameter, so the status is inlined rather than passed.
+    index("inbox_item_org_open_taskless_updated")
+      .on(table.organizationId, table.updatedAt)
+      .where(
+        sql`${table.status} = ${sql.raw(`'${INBOX_STATUS.OPEN}'`)} and ${table.taskId} is null`,
+      ),
     // What waits across the account is read on every look of a held read, its open items the latest changed first.
     index("inbox_item_user_status_updated").on(table.userId, table.status, table.updatedAt),
   ],
