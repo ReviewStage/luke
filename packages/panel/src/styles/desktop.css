@@ -6056,6 +6056,15 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 1;
 }
 
+/* A screen with no hover shows both chevrons at rest, since no pointer rests
+   on the summary to bring them and each still takes a press. */
+@media (hover: none) {
+  .task-summary[data-mode="column"] > .task-summary-chevron,
+  .task-summary-collapse {
+    opacity: 1;
+  }
+}
+
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
@@ -6170,6 +6179,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .task-summary-archived-agent:is(:hover, :has(:focus-visible)) .failed-mark {
   visibility: hidden;
+}
+
+/* A screen with no hover shows each archived agent's Unarchive at rest, in
+   place of its failed mark, rather than leaving a press nobody can see. */
+@media (hover: none) {
+  .task-summary-archived-agent > .task-summary-marks {
+    opacity: 1;
+  }
+
+  .task-summary-archived-agent .failed-mark {
+    visibility: hidden;
+  }
 }
 
 /* Its width is the developer's, set inline. The document keeps room to be

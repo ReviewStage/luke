@@ -6837,6 +6837,14 @@ button.picture-frame {
   resize: none;
 }
 
+/* A finger's comment field takes 16px words, or iOS zooms the page into it
+   the moment it is focused, as it does a Browser tab's address. */
+@media (pointer: coarse) {
+  .comment-text {
+    font-size: 16px;
+  }
+}
+
 .comment-text::placeholder {
   color: var(--luke-color-text-muted);
 }

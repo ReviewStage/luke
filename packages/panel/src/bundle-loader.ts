@@ -2,7 +2,7 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
+import type * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
 import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
@@ -20,8 +20,10 @@ import type { WhiteboardModule } from "./whiteboard/contract.js";
  * diagrams (`diagram/`), and a Files changed diff (`diff-view/`) are each
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
- * bundle has a stylesheet, its entry imports it. The answer is kept alive,
- * so leaving the surface and coming back loads nothing. A call's avatar is
+ * bundle has a stylesheet, its entry imports it. A bundle that landed is
+ * kept, so leaving the surface and coming back loads nothing; one that
+ * failed is not, so the next surface to read it imports it again, as a
+ * connection that dropped for a moment has come back. A call's avatar is
  * the shell's to reach, imported through what it installed
  * (`shell-bundles.ts`).
  *
@@ -92,9 +94,10 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
 
 /**
  * A bundle imported the first time it is read, as the module its entry
- * exports, or the failure given. Note that the module is kept by the atom
- * itself as well as by the registry reading it, so a bundle imported once is
- * had at once by every later reader, as a script that has run is.
+ * exports, or the failure given. Note that the module is kept here rather
+ * than by keeping the atom alive, so a bundle imported once is had at once
+ * by every later reader, as a script that has run is, while a failure goes
+ * with the last reader that saw it and the next one imports again.
  */
 function bundleAtom<A>(
   importer: BundleImporter<A>,
@@ -108,10 +111,8 @@ function bundleAtom<A>(
       }),
     ),
   );
-  return Atom.keepAlive(
-    rendererRuntime.atom(
-      Effect.suspend(() => (landed === undefined ? imported : Effect.succeed(landed.module))),
-    ),
+  return rendererRuntime.atom(
+    Effect.suspend(() => (landed === undefined ? imported : Effect.succeed(landed.module))),
   );
 }
 

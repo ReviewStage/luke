@@ -18,7 +18,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them, and an empty Pinned, a place to drag a first pin that a phone cannot drag to, stands nowhere; beside the work the rows stand put over the tasks and the empty Pinned stays.
+ * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them, and an empty Pinned, a place to drag a first pin that a finger cannot drag to, stands nowhere under a finger; beside the work the rows stand put over the tasks, and under a mouse the empty Pinned stays whatever the room.
  */
 
 const WORKSPACE: Workspace = {
@@ -30,16 +30,21 @@ const WORKSPACE: Workspace = {
 
 const roots: Root[] = [];
 
-beforeEach(() => {
-  window.localStorage.clear();
+/** Answers the device's pointer as a finger's where `coarse`, else as a mouse's. */
+function pointer(coarse: boolean): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: () => ({
-      matches: false,
+    value: (query: string) => ({
+      matches: coarse && query === "(pointer: coarse)",
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }),
   });
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  pointer(false);
   fakeAppBridge({});
   handState(experimentsOn(EXPERIMENT.SECTIONS));
 });
@@ -98,17 +103,29 @@ function scrolled(sidebar: HTMLElement) {
   return { home: scroller.contains(home), tasks: scroller.contains(list) };
 }
 
-test("in a phone's drawer the pages' rows scroll with the tasks, and an empty Pinned stands nowhere", async () => {
+/** Whether the sidebar draws Pinned. */
+function pinnedStands(sidebar: HTMLElement): boolean {
+  return sidebar.querySelector('nav[aria-label="Pinned"]') !== null;
+}
+
+test("in a phone's drawer under a finger the pages' rows scroll with the tasks, and an empty Pinned stands nowhere", async () => {
+  pointer(true);
   const sidebar = await mountIn(SHELL_ROOM.NARROW);
 
   assert.deepEqual(scrolled(sidebar), { home: true, tasks: true });
-  assert.equal(sidebar.querySelector('nav[aria-label="Pinned"]'), null);
+  assert.equal(pinnedStands(sidebar), false);
+});
+
+test("a narrow window worked by a mouse, which can drag a first pin, keeps the empty Pinned", async () => {
+  const sidebar = await mountIn(SHELL_ROOM.NARROW);
+
+  assert.equal(pinnedStands(sidebar), true);
 });
 
 test("beside the work the pages' rows stand put over the tasks' scroller, and an empty Pinned waits for a first pin", async () => {
   const sidebar = await mountIn(SHELL_ROOM.WIDE);
 
   assert.deepEqual(scrolled(sidebar), { home: false, tasks: true });
-  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"]'), "Pinned stands");
+  assert.equal(pinnedStands(sidebar), true, "Pinned stands");
   assert.match(sidebar.textContent ?? "", /Drag tasks here to pin them/u);
 });
