@@ -8,6 +8,7 @@ import type { BuildCommit } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, Equal, type Scope, Stream, SubscriptionRef } from "effect";
 import type { AppState, AppStateSnapshot } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
@@ -39,6 +40,8 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  * slices, dropped where it says nothing new, and one write of the resulting
  * document into the ref per applied patch. Nothing else may hold a copy of a
  * slice — a reader takes a snapshot, which is the document as it stands.
+ * A slice that moved keeps the identity of every part of it that did not, so
+ * a reader holding a part that said nothing new still holds the same object.
  *
  * The document itself is a `SubscriptionRef`, so its own `changes` Stream is
  * the one subscription a production caller forks to reach the windows.
@@ -68,11 +71,12 @@ export class AppStateStore {
 
   update(patch: AppStatePatch): void {
     const previous = this.snapshot();
-    // Note that `Equal.equals` remembers its answer per pair of objects, which
-    // holds because a slice is replaced whole and never mutated in place.
-    const moved = patchEntries(patch).filter(
-      ([slice, value]) => !Equal.equals(previous[slice], value),
-    );
+    // Note that a slice kept whole is one that says nothing new, which is the
+    // one walk that both decides that and shares what did not move.
+    const moved = patchEntries(patch).flatMap(([slice, value]) => {
+      const kept = keepIdentity(previous[slice], value);
+      return kept === previous[slice] ? [] : [[slice, kept] as const];
+    });
     if (moved.length === 0) return;
     const next: AppState = {
       ...previous,

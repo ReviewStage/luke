@@ -29,10 +29,10 @@ export type UnparsedWireValue = WireValue | undefined;
  * A record's own shape: not `null`, not an array, and not a boxed primitive
  * or a class instance arriving over structured clone, which carry a
  * prototype no plain object literal has. This is the one place that shape is
- * decided; {@link isWireRecordValue} and {@link WireValueSchema} below both
- * read it back rather than restating it.
+ * decided; {@link isWireRecordValue}, {@link WireValueSchema}, and
+ * {@link isPlainRecord} below all read it back rather than restating it.
  */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is the wire boundary's own decoder, called only from Schema.is below.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is the wire boundary's own decoder, called from Schema.is below and from the typed guard over held data.
 function isPlainWireRecordShape(value: unknown): value is WireRecord {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This predicate is the wire boundary's own decoder; every guard above narrows by calling it.
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -122,6 +122,15 @@ const readsWireRecordShape = Schema.is(Schema.declare(isPlainWireRecordShape));
  */
 export function isRecord(value: UnparsedWireValue): value is WireRecord {
   return readsWireRecordShape(value);
+}
+
+/**
+ * The same shape for data this build holds, read without Schema's own parse
+ * around the predicate: for a walk that asks it of every node of a large
+ * tree, where that parse, not the predicate, is the cost.
+ */
+export function isPlainRecord(value: WireBoundaryInput): value is WireBoundaryRecord {
+  return isPlainWireRecordShape(value);
 }
 
 export function text(value: UnparsedWireValue): string | undefined {
@@ -246,7 +255,10 @@ export type WireBoundaryInput =
   | null
   | undefined
   | readonly WireBoundaryInput[]
-  | { readonly [key: string]: WireBoundaryInput };
+  | WireBoundaryRecord;
+
+/** A record of {@link WireBoundaryInput}, whose fields may stand undefined as a value this build holds may. */
+type WireBoundaryRecord = { readonly [key: string]: WireBoundaryInput };
 
 /** Accepts JSON or structured-clone input before wire guards run. */
 export function unparsedWire(value: WireBoundaryInput): UnparsedWireValue {

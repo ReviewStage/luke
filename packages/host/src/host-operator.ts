@@ -258,7 +258,6 @@ import {
   tasksSkillsAnswerSchema,
   tasksStartAnswerSchema,
   tasksTreeAnswerSchema,
-  tasksViewSchema,
   tasksWorkspaceAnswerSchema,
   tasksWorkspaceGitHubConnectAnswerSchema,
   tasksWorkspaceInvitationAnswerSchema,
@@ -2049,8 +2048,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onTasksChanged: (listener) =>
       on(
         GATEWAY_EVENT.TASKS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(readEither(tasksViewSchema, { excess: EXCESS_KEYS.DROP })(payload)),
+        // Note that the view is the host's own, handed over in this process
+        // (`gatewayHost`), so it is passed on as built: a decode here would
+        // only rebuild the same tree new, and every comparison after it walk it.
+        (payload) => (isRecord(payload) ? answered<TasksView>(payload) : undefined),
         listener,
       ),
     terminalList: (params) =>

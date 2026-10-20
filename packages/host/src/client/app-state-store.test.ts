@@ -122,6 +122,44 @@ it("two slices in one patch are one version", () => {
   assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
 });
 
+it("a slice that moved keeps every part of it that did not, so what a reader held of it is the object it still holds", () => {
+  const app = store();
+  const turn = (turnId: string, said: readonly string[]) => ({
+    turnId,
+    startedAt: 0,
+    state: TASK_WORK_STATE.RUNNING,
+    earlierOmitted: false,
+    journal: said.map((text) => ({ type: "text" as const, text })),
+    workers: [],
+  });
+  app.update({
+    tasks: {
+      ...app.snapshot().tasks,
+      activeTaskId: "plan-1",
+      work: [turn("turn-1", ["Invites live in one file."]), turn("turn-2", ["Reading it."])],
+    },
+  });
+  const held = app.snapshot().tasks;
+
+  // The host's next view: the same data, every object of it new, and the second turn gone on.
+  const next = {
+    ...structuredClone(held),
+    work: [
+      turn("turn-1", ["Invites live in one file."]),
+      turn("turn-2", ["Reading it.", "It expires them."]),
+    ],
+  };
+  app.update({ tasks: next });
+  const now = app.snapshot().tasks;
+
+  assert.equal(app.snapshot().version, 2);
+  assert.deepEqual(now, next);
+  assert.equal(now.document, held.document);
+  assert.equal(now.work?.[0], held.work?.[0]);
+  assert.notEqual(now.work?.[1], held.work?.[1]);
+  assert.equal(now.work?.[1]?.journal[0], held.work?.[1]?.journal[0]);
+});
+
 it.effect("a touch re-announces the document without numbering it again", () =>
   Effect.gen(function* () {
     const app = store();

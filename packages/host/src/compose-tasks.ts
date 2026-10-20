@@ -123,7 +123,7 @@ import {
   invalid,
 } from "@luke/gateway";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
-import { isRecord, unparsedWire } from "@luke/wire";
+import { isRecord, keepIdentity, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
   Cache,
@@ -132,7 +132,6 @@ import {
   Data,
   Duration,
   Effect,
-  Equal,
   Exit,
   FiberHandle,
   Option,
@@ -573,7 +572,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   let published: TasksView = view;
 
   function publish(): void {
-    if (Equal.equals(view, published)) return;
+    // Note that the view keeps the identity of what it shares with the one
+    // last told, so a view that says nothing new is that one, and what is
+    // told shares every part that did not move with what was told before.
+    view = keepIdentity(published, view);
+    if (view === published) return;
     published = view;
     kernel.emit(GATEWAY_EVENT.TASKS_CHANGED, carried(view));
   }
