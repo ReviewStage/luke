@@ -119,7 +119,8 @@ export const INBOX_TOOLS = {
   READ: {
     name: INBOX_TOOL.READ,
     description:
-      "Read your threads in the developer's inbox as they stand now: every one still asking, whole, and the latest settled ones by their last messages. " +
+      "Read your threads in the developer's inbox as they stand now: every one still asking, whole, and the latest settled ones by their last messages and their latest ask and answer; " +
+      `a thread longer than ${INBOX_BOUNDS.MAX_MESSAGES_READ} messages reads its first, its open ask, and its latest ${INBOX_BOUNDS.MAX_MESSAGES_READ}. ` +
       "Each message reads in order with who wrote it, you or a member by name, the ask it ends with and where that stands " +
       "(open, answered, replaced by a newer ask, or withdrawn, with your reason), and the answer a member's message carries. " +
       "A member may close a thread without answering, which withdraws its ask with no reason, and closedBy names them; " +
@@ -129,8 +130,16 @@ export const INBOX_TOOLS = {
   },
 } as const;
 
-/** An ask as the agent reads it back: whole while it is open, since the agent still acts on it, and its type and where it stands once settled. */
-type AgentAskLine = InboxReadAsk | Pick<InboxReadAsk, "type" | "status" | "withdrawnReason">;
+/**
+ * An ask as the agent reads it back: whole while it is open, since the
+ * agent still acts on it, and once settled its type and where it stands,
+ * and an answered `do`'s steps, which the answer names by their places alone.
+ */
+type AgentAskLine =
+  | InboxReadAsk
+  | (Pick<InboxReadAsk, "type" | "status" | "withdrawnReason"> & {
+      readonly steps?: readonly string[];
+    });
 
 /** One message of a thread as the agent reads it back: who wrote it, you or a member by name, its words, its files by name, its ask, and the answer it carries. */
 interface AgentThreadLine {
@@ -227,6 +236,9 @@ function askLineOf(ask: InboxReadAsk): AgentAskLine {
     type: ask.type,
     status: ask.status,
     ...(ask.withdrawnReason === undefined ? undefined : { withdrawnReason: ask.withdrawnReason }),
+    ...(ask.status === INBOX_ASK_STATUS.ANSWERED && ask.type === INBOX_ASK.DO && "steps" in ask
+      ? { steps: ask.steps }
+      : undefined),
   };
 }
 
@@ -284,16 +296,31 @@ function legacyOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<A
 }
 
 /**
+ * The messages a settled thread's read carries: its latest few, and its
+ * latest ask and latest answer however long ago, which say what came of it
+ * once later words push them out, each in the thread's order.
+ */
+function settledMessages(messages: readonly InboxMessage[]): readonly InboxMessage[] {
+  const latest = (has: (message: InboxMessage) => boolean) => messages.findLast(has);
+  const kept = new Set<InboxMessage | undefined>([
+    latest((message) => message.ask !== undefined),
+    latest((message) => message.answers !== undefined),
+    ...messages.slice(-SETTLED_MESSAGES_TOLD),
+  ]);
+  return messages.filter((message) => kept.has(message));
+}
+
+/**
  * A thread as the agent reads it back. Note that one still asking carries
  * its messages whole, as the read holds them, because compaction may have
  * taken the call that posted its ask out of the model's context and the
- * agent still acts on it; a settled one carries its latest few, which say
- * what came of it, and how many it leaves out.
+ * agent still acts on it; a settled one carries what `settledMessages`
+ * keeps, and how many it leaves out.
  */
 function lineOf(item: InboxItem): AgentInboxLine {
   const messages = item.thread ?? item.messages ?? [];
   const open = item.status === INBOX_STATUS.OPEN;
-  const told = open ? messages : messages.slice(-SETTLED_MESSAGES_TOLD);
+  const told = open ? messages : settledMessages(messages);
   const earlier = messages.length - told.length;
   return {
     key: item.key,
@@ -432,6 +459,7 @@ export function postToInbox(
   const read = readPost(input);
   if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
   const post = read.success;
+  if (post.body.trim() === "") return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
   const refused = askRefusal(post.ask);
   if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
   return Effect.flatMap(bodyPictures(post.body, sandbox), (pictures) => {

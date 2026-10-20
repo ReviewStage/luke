@@ -297,6 +297,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           ],
           [{ key: "Not A Slug", title: "T", body: "B" }, INBOX_REFUSAL.UNREADABLE_POST],
           [{ key: "empty", title: "T", body: "" }, INBOX_REFUSAL.UNREADABLE_POST],
+          [{ key: "blank", title: "T", body: " \n\t " }, INBOX_REFUSAL.UNREADABLE_POST],
         ] as const;
         for (const [value, reason] of refusals) {
           assert.equal(refusalOf(yield* post(agent, value)), reason);
@@ -508,6 +509,16 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           clientKey: randomUUID(),
         });
 
+        for (const text of ["Thanks.", "Shipping it."]) {
+          yield* TestClock.adjust(Duration.seconds(1));
+          yield* post(agent, { key: QUEUE.key, body: text });
+        }
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* postInboxMessage(agent.userId, asked.id, {
+          text: "Great.",
+          clientKey: randomUUID(),
+        });
+
         const settled = yield* readOwnInbox(agent);
         assert.equal(settled.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(settled.inbox, [
@@ -515,18 +526,54 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             key: QUEUE.key,
             title: QUEUE.title,
             status: INBOX_STATUS.ANSWERED,
-            earlier: 1,
+            earlier: 2,
             thread: [
-              { from: "Test User", text: "Is Redis free?", files: ["pricing.txt"] },
-              { from: "you", text: "No: it needs a new service." },
+              {
+                from: "you",
+                text: QUEUE.body,
+                ask: { type: INBOX_ASK.DECIDE, status: INBOX_ASK_STATUS.ANSWERED },
+              },
               {
                 from: "Test User",
                 text: "Go with the outbox.",
                 answers: { reply: INBOX_REPLY.CHOSE, choices: ["Postgres outbox"] },
               },
+              { from: "you", text: "Thanks." },
+              { from: "you", text: "Shipping it." },
+              { from: "Test User", text: "Great." },
             ],
           },
         ]);
+      }),
+  );
+
+  it.effect(
+    "a settled do reads back its steps beside the places of those the member ticked, so the agent knows which are left",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        yield* post(agent, SETTINGS);
+        const asked = yield* onlyItem(agent);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* answerInboxAsk(agent.userId, asked.id, {
+          answers: { ask: openAsk(asked).id, reply: INBOX_REPLY.NOT_DONE, steps: [0] },
+          text: "No admin rights for the rule.",
+          clientKey: randomUUID(),
+        });
+
+        const read = yield* readOwnInbox(agent);
+
+        assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.deepEqual(
+          read.inbox?.[0]?.thread.map((line) => [line.ask, line.answers]),
+          [
+            [
+              { type: INBOX_ASK.DO, status: INBOX_ASK_STATUS.ANSWERED, steps: SETTINGS.ask.steps },
+              undefined,
+            ],
+            [undefined, { reply: INBOX_REPLY.NOT_DONE, steps: [0] }],
+          ],
+        );
       }),
   );
 
