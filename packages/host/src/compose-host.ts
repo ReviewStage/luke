@@ -262,7 +262,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const closeCapabilities = Effect.gen(function* () {
       yield* tasks.reset;
       yield* terminals.reset;
-      yield* codingAgents.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });

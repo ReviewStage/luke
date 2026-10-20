@@ -60,7 +60,6 @@ import {
   hostKernelLayer,
   hostStandingLayer,
   IdSource,
-  PageReturns,
   RunMode,
   reporterLayer,
   ServiceOrigin,
@@ -81,7 +80,7 @@ import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
-import { backOnline, followRelease, pageShownAgain } from "./stale-release";
+import { followRelease, pageShownAgain } from "./stale-release";
 import { addressHere } from "./web-address";
 import {
   notificationsOffered,
@@ -197,8 +196,6 @@ function seamLayers(storage: Storage) {
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
     Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere(storage)),
-    // A phone drops the tab's sockets in the background, so its live follows start again as it returns.
-    Layer.succeed(PageReturns, Stream.merge(pageShownAgain(), backOnline())),
   );
 }
 

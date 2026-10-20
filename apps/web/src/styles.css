@@ -26,8 +26,8 @@
    reads is drift waiting to happen. Every value is a shared role's, the one the
    plain-CSS blocks further down read too, and merely aliased here, so the
    utilities and those blocks draw the same vocabulary. The chart slots stay out of this block for the
-   same reason: the admin dashboard's chart configs read `--chart-*` directly,
-   and no utility class does. */
+   same reason: the admin dashboard's chart configs read `--luke-color-chart-*`
+   directly, and no utility class does. */
 @theme inline {
   --color-background: var(--luke-color-ground);
   --color-foreground: var(--luke-color-text);

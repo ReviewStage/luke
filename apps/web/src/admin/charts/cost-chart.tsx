@@ -21,6 +21,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { barTopRadius } from "./bar-radius";
 import { ChartEmpty, ChartFrame } from "./chart-frame";
 
 /** Each source's name and its series colour, in the order the bars stack them from the axis up. */
@@ -121,7 +122,7 @@ export function CostChart({
               dataKey={source}
               stackId="spend"
               fill={COST_CHART[source].color}
-              radius={index === SOURCES.length - 1 ? [4, 4, 0, 0] : 0}
+              radius={index === SOURCES.length - 1 ? barTopRadius() : 0}
             >
               {daily.map((point) => (
                 <Cell

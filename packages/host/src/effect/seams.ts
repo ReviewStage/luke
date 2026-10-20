@@ -82,19 +82,6 @@ export class SettingsChangedElsewhere extends Context.Service<
 >()("@luke/host/SettingsChangedElsewhere") {}
 
 /**
- * Each time the page the host runs in came back: shown again after it was
- * hidden, restored from the browser's back-forward cache, or back online,
- * for a shell whose sockets may drop while it is away, as a phone drops a
- * page's in the background. On each, the account inbox's live follow, where
- * it is not answering, starts again at once rather than waiting out
- * Realtime's backoff. It is optional: the desktop keeps its sockets and
- * provides none.
- */
-export class PageReturns extends Context.Service<PageReturns, Stream.Stream<void>>()(
-  "@luke/host/PageReturns",
-) {}
-
-/**
  * The voice sideband's WebSocket to the service. It arrives rather than being
  * built here, because the only implementation so far is over `ws`
  * (`@luke/host/node`), and a host that imported it could not load where `ws`

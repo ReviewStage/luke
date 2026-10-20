@@ -145,6 +145,8 @@ export interface TaskInboxControl {
   readonly notes: ReadonlyMap<string, string>;
   /** What the developer has put on the item's card so far, at the revision it stands at; an empty card where nothing, or where the agent has changed the item since. */
   readonly draftOf: (item: InboxItem) => InboxDraft;
+  /** Whether a card holds a draft for its item as it now stands, which the Inbox tab marks with the pencil (`draft-mark.tsx`). */
+  readonly drafted: boolean;
   /** Keeps what the developer has put on the item's card, at its revision. */
   readonly onDraft: (item: InboxItem, draft: InboxDraft) => void;
   /** Moves the files on the item's card on from what they are as the write lands, so two reads landing in one render both stand. */
@@ -561,6 +563,7 @@ export function useTaskInbox(input: {
     },
     [drafts],
   );
+  const drafted = drafts.some((kept) => settled.some((item) => draftOfItem(kept.place, item)));
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
       writer.update(draftPlace(item, draftsOn), (was) => ({
@@ -590,6 +593,7 @@ export function useTaskInbox(input: {
   return {
     board,
     draftOf,
+    drafted,
     onDraft,
     onAttachments,
     reading: active && !held.read,

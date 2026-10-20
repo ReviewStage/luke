@@ -126,6 +126,8 @@ export class PanelManager {
   #dark = true;
   /** The windows whose renderer has drawn its first frame, the ones the avatar's grant may reach. */
   readonly #drawn = new WeakSet<BrowserWindow>();
+  /** Whether the avatar's grant stands, so the panel running its session is left unthrottled. */
+  #avatarSession = false;
   readonly #avatar = new PanelAvatarRelay(() => {
     const window = this.primaryPanel();
     if (!window || !this.#drawn.has(window)) return undefined;
@@ -191,7 +193,19 @@ export class PanelManager {
    * its video at the top of the Call tab.
    */
   showAvatarSession(grant: AvatarGrant | undefined): void {
+    this.#avatarSession = grant !== undefined;
+    for (const window of this.windows()) this.#throttle(window);
     this.#avatar.showAvatarSession(grant);
+  }
+
+  /**
+   * A window runs the avatar's session, whose video and lip-sync must go on
+   * while it is hidden or covered, only for as long as a grant stands; any
+   * other time it is throttled as Chromium does by default. Applied to a
+   * page that has just loaded as well, so a reload cannot drop it.
+   */
+  #throttle(window: BrowserWindow): void {
+    window.webContents.setBackgroundThrottling(!this.#avatarSession);
   }
 
   /** One message of Luke's voice feed, for the avatar to lip-sync. */
@@ -356,7 +370,11 @@ export class PanelManager {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: trafficLightsAt(zoomFactor),
       webPreferences: {
-        ...hardenedWebPreferences({ preloadPath: this.#preloadPath, runMode: this.#runMode }),
+        ...hardenedWebPreferences({
+          preloadPath: this.#preloadPath,
+          runMode: this.#runMode,
+          backgroundThrottling: !this.#avatarSession,
+        }),
         zoomFactor,
       },
     };
@@ -371,6 +389,7 @@ export class PanelManager {
     const drew = () => {
       if (window.isDestroyed()) return;
       this.#drawn.add(window);
+      if (this.#avatarSession) this.#throttle(window);
       this.#avatar.pageDrew();
     };
     window.webContents.on("did-finish-load", drew);
