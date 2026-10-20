@@ -29,7 +29,7 @@ import {
   Text,
 } from "@luke/ui";
 import type { SkillOption } from "@luke/ui/skill-mention";
-import { agentPromptOf, taskNameOfIssue } from "@luke/ui/tasks-model";
+import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
@@ -330,17 +330,28 @@ export function NewTaskComposer({
   // A repository or an issue picked in one workspace is none of another's,
   // so the owner's switch, as Home's, lets them go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
+  // The repositories the chip's last read listed, an App's and a member's token's alike.
+  const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
+    setListed(undefined);
     if (scope !== undefined) {
       setChosen(undefined);
       setLinks([]);
     }
     setScope(repositories.scope);
   }
-  // Note that the chip's read decides what may stand chosen, an App's or a
-  // member's token's alike, and hands back a pick it does not list.
-  const repository = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
+  // Note that a pick the read does not list, or one the workspace's GitHub
+  // does not reach before the read lands, is not started on, because the
+  // service would refuse it.
+  const pick =
+    chosen != null &&
+    !(listed === undefined
+      ? workspace === undefined || workspaceReaches(workspace, chosen)
+      : listed.some((each) => each.toLowerCase() === chosen.toLowerCase()))
+      ? null
+      : chosen;
+  const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
   // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
   const [linkedFor, setLinkedFor] = useState(repository);
   if (linkedFor !== repository) {
@@ -490,6 +501,7 @@ export function NewTaskComposer({
       chooser={repositories}
       onChoose={setChosen}
       onUnreached={() => setChosen(null)}
+      onListed={setListed}
     />
   );
   const full = links.length >= TASK_BOUNDS.MAX_ISSUES;

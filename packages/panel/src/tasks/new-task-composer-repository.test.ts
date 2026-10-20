@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -9,7 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -19,7 +20,8 @@ import { NewTaskComposer } from "./new-task-composer.js";
 /**
  * New task's repository chip in a workspace whose GitHub App is on another
  * owner: a repository the picker lists on a member's own GitHub token stays
- * picked once chosen. Synthetic throughout.
+ * picked once chosen, and a preset the workspace's GitHub does not reach is
+ * not started on before the picker's read lands. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -55,8 +57,30 @@ async function settle(): Promise<void> {
   });
 }
 
-test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
+/** A read listing `octo/tools` on a member's token. */
+const TOKEN_LISTING = (): Promise<TasksRepositoriesAnswer> =>
+  Promise.resolve({
+    repositories: {
+      installed: true,
+      repositories: [
+        {
+          owner: "octo",
+          name: "tools",
+          fullName: "octo/tools",
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+          access: GITHUB_ACCESS.TOKEN,
+        },
+      ],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  });
+
+/** The card in Acme over `read`, opened on `preset`, each start's repository written down. */
+async function mount(read: () => Promise<TasksRepositoriesAnswer>, preset?: string) {
   const control = tasksControl();
+  const starts: (string | null)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -69,29 +93,12 @@ test("a repository the picker lists on a member's token, on an owner the workspa
             ...control.newTask,
             workspaces: [ACME],
             workspaceId: ACME.id,
-            repositoriesIn: () => ({
-              ...control.repositories,
-              recent: [],
-              scope: ACME.id,
-              read: () =>
-                Promise.resolve({
-                  repositories: {
-                    installed: true,
-                    repositories: [
-                      {
-                        owner: "octo",
-                        name: "tools",
-                        fullName: "octo/tools",
-                        defaultBranch: "main",
-                        private: true,
-                        updatedAt: 1,
-                        access: GITHUB_ACCESS.TOKEN,
-                      },
-                    ],
-                    installationUrl: "https://github.com/apps/luke/installations/new",
-                  },
-                }),
-            }),
+            ...(preset === undefined ? undefined : { preset: { repository: preset } }),
+            repositoriesIn: () => ({ ...control.repositories, recent: [], scope: ACME.id, read }),
+            start: (_name: string, repository: string | null) => {
+              starts.push(repository);
+              return Promise.resolve(undefined);
+            },
           },
           workspaceId: ACME.id,
           onLeave: () => undefined,
@@ -101,6 +108,11 @@ test("a repository the picker lists on a member's token, on an owner the workspa
     ),
   );
   await settle();
+  return { container, starts };
+}
+
+test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
+  const { container } = await mount(TOKEN_LISTING);
   const chip =
     container.querySelector<HTMLButtonElement>(".luke-chip") ??
     assert.fail("the card draws the repository chip");
@@ -114,4 +126,22 @@ test("a repository the picker lists on a member's token, on an owner the workspa
   await settle();
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+});
+
+test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {
+  const { container } = await mount(TOKEN_LISTING, "octo/tools");
+  const chip =
+    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    assert.fail("the card draws the repository chip");
+
+  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+});
+
+test("a preset the workspace's GitHub does not reach is not started on while the picker's read is out", async () => {
+  window.localStorage.setItem("luke.new-task-mode", "plan");
+  const { container, starts } = await mount(() => new Promise(() => undefined), "alice/private");
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(starts, [null]);
 });
