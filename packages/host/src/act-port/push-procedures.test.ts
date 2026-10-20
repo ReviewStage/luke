@@ -72,3 +72,22 @@ it("each stream of a reloading window keeps its own unsent document", async () =
   await after.return?.(undefined);
   assert.equal(pushes.listening(WINDOW), false);
 });
+
+it("a held window's reload stays held, and its release sends the newest document to the new page", async () => {
+  const pushes = new WindowPushes();
+  pushes.holdState(WINDOW, true);
+  const page = pushes.stream(WINDOW, undefined);
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
+  let read: number | string | undefined;
+  const reading = page.next().then((result) => {
+    read = heard(result);
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(read, undefined);
+
+  pushes.holdState(WINDOW, false);
+  await reading;
+  assert.equal(read, 2);
+  await page.return?.(undefined);
+});
