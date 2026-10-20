@@ -1,6 +1,8 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
+import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -16,63 +18,66 @@ import {
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { useGitHubConnection } from "../github-connect.js";
-import { useIntegrationStatuses } from "../integration-statuses.js";
 import { wholeWordsHint } from "../tooltip.js";
-import { GitHubDialog } from "./github-dialog.js";
+import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
+
+/** The class PostHog's recorder leaves out of a recording, element and children alike. */
+const NO_CAPTURE = "ph-no-capture";
 
 /**
- * The account's GitHub: the login where the connection names one, and
- * Manage, which opens the dialog that picks the Luke GitHub App or the
- * member's own personal access token (`github-dialog.tsx`) while GitHub is
- * connected. Whether it is connected is the integrations' own read, which
- * the dialog's Refresh reads again at once.
+ * The member's own GitHub personal access token: its hint, login, and
+ * expiry once one is saved, nothing while none is, and Manage or Add, which
+ * opens the token's dialog (`github-dialog.tsx`). The token is read as the
+ * row is drawn; a read that fails draws no button, since what stands is
+ * unknown.
  */
-function GitHubRow(): React.JSX.Element {
-  const statuses = useIntegrationStatuses();
-  const { connection } = useGitHubConnection();
+function GitHubTokenRow(): React.JSX.Element {
+  const { act } = useAct();
+  const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
   const [managing, setManaging] = useState(false);
-  const status = statuses.statusOf(INTEGRATION_PROVIDER.GITHUB);
-  const connected = status === INTEGRATION_STATUS.CONNECTED;
-  const login = connected ? (connection?.login ?? null) : null;
-  // Note that only a read that found GitHub unlinked says so, because an unread, failed, or unavailable read found nothing.
-  const line = connected
-    ? (login ?? "Connected")
-    : status === INTEGRATION_STATUS.DISCONNECTED || status === INTEGRATION_STATUS.EXPIRED
-      ? "Not connected"
-      : undefined;
+
+  useEffect(() => {
+    let live = true;
+    act(ACT_KIND.GITHUB_TOKEN_READ).then(
+      (answer) => {
+        if (live && !("failure" in answer)) setToken(answer.token);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [act]);
+
   return (
-    <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.GITHUB_ACCESS)}>
+    <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.GITHUB_ACCESS)} className={NO_CAPTURE}>
       <SettingsRow
         leading={
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
-        label="GitHub"
-        description={line}
+        label="GitHub personal access token"
+        description={token ? <TokenFacts token={token} /> : undefined}
       >
         {() =>
-          connected ? (
+          token === undefined ? null : (
             <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setManaging(true)}>
-              Manage
+              {token === null ? "Add" : "Manage"}
             </Button>
-          ) : null
+          )
         }
       </SettingsRow>
-      {managing ? (
-        <GitHubDialog
-          connected={connected}
-          onRefresh={statuses.read}
-          onClose={() => setManaging(false)}
-        />
+      {managing && token !== undefined ? (
+        <GitHubTokenDialog token={token} onToken={setToken} onClose={() => setManaging(false)} />
       ) : null}
     </div>
   );
 }
 
 /**
- * Who is signed in, the GitHub the account reaches GitHub through, and the
+ * Who is signed in, the member's own GitHub personal access token, and the
  * two ways out of being signed in, at the head of the Account page Settings
  * opens on, and the one place either way out is offered. Both ways out ask
  * first in the confirm dialog: getting back in
@@ -135,7 +140,7 @@ export function AccountSection({
           )}
         </SettingsRow>
       </div>
-      <GitHubRow />
+      <GitHubTokenRow />
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <SettingsRow label="Delete account">
           {() => (

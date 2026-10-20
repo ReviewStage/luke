@@ -26,7 +26,7 @@ export const SETTINGS_SEARCH_ROW = {
   UPDATES: "updates",
   CHANGELOG: "changelog",
   SIGN_OUT: "sign-out",
-  /** Profile's GitHub row, apart from Integrations' own GitHub row, which its provider anchors. */
+  /** Profile's GitHub personal access token row, apart from Integrations' own GitHub row, which its provider anchors. */
   GITHUB_ACCESS: "github-access",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",

@@ -286,32 +286,9 @@
   font-family: var(--luke-font-mono);
 }
 
-/* Settings › Profile › GitHub › Manage (`github-dialog.tsx`): two sections,
-   one under the other, each a head (its name, a badge or a link at its end)
-   over its panel, whose facts stand on one line and its press at the line's
-   end. A login reads beside its avatar. */
-.github-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-section-gap);
-}
-
-.github-dialog-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-}
-
-.github-dialog-head {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-}
-
-.github-dialog-head-end {
-  margin-left: auto;
-}
-
+/* Settings › Profile's GitHub personal access token (`github-dialog.tsx`):
+   a saved token's facts on one line, its press at the line's end, and the
+   login in the text's own ink. */
 .github-dialog-panel {
   display: flex;
   flex-wrap: wrap;

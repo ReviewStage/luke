@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
@@ -9,18 +10,20 @@ import {
 } from "@luke/features/github-token-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { GitHubDialog } from "./github-dialog.js";
+import { AccountSection } from "./account-section.js";
 
 /**
- * Settings › Profile › GitHub › Manage over a bridge answering as the host
- * would: the App and the token stand as two sections at once; a pasted token
- * is sent once and drawn as the service's hint, login, and expiry; Remove
- * asks first; a refused save says why in a short label. Synthetic tokens.
+ * Settings › Profile's GitHub personal access token row and its dialog, over
+ * a bridge answering as the host would: the row offers Add with no token and
+ * Manage with one, drawn as its hint, login, and expiry; a pasted token is
+ * sent once from an unrecorded password field; Remove asks first; a refused
+ * save says why in a short label. Synthetic tokens.
  */
 
 const PASTED = "synthetic-classic-token-0000000000wxyz";
@@ -40,8 +43,6 @@ let stored: GitHubTokenSummary | null = null;
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Why the service keeps nothing of the next save, where it refuses one. */
 let refuseSave: GitHubTokenRejection | undefined;
-/** How many times the dialog asked the integrations to be read again. */
-let refreshes = 0;
 
 const roots: Root[] = [];
 
@@ -50,7 +51,6 @@ beforeEach(() => {
   stored = null;
   sent = [];
   refuseSave = undefined;
-  refreshes = 0;
   fakeActPort({
     [ACT_KIND.GITHUB_TOKEN_READ]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
@@ -81,28 +81,33 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(connected = true): Promise<void> {
+/** Profile's account section, its token row read, with the dialog opened by the row's one button. */
+async function mountAndOpen(): Promise<void> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   act(() =>
     root.render(
-      createElement(GitHubDialog, {
-        connected,
-        onRefresh: () => {
-          refreshes += 1;
-          return Promise.resolve();
+      createElement(AccountSection, {
+        account: {
+          status: ACCOUNT_STATUS.SIGNED_IN,
+          id: "user-ada",
+          email: "ada@example.com",
+          name: "Ada",
+          provider: ACCOUNT_PROVIDER.GOOGLE,
         },
-        onClose: () => undefined,
+        onSignOut: () => Promise.resolve(),
+        onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
       }),
     ),
   );
   await settle();
+  act(() => button(stored === null ? "Add" : "Manage").click());
+  await settle();
 }
 
-const sections = () =>
-  [...document.querySelectorAll("section")].map((each) => each.querySelector("h3")?.textContent);
+const dialog = () => document.querySelector('[role="dialog"]') ?? assert.fail("no dialog");
 
 const tokenField = () =>
   document.querySelector<HTMLInputElement>('input[aria-label="Personal access token"]');
@@ -123,10 +128,10 @@ async function paste(token: string): Promise<void> {
   await settle();
 }
 
-test("the App and the token stand together; a token pasted into the unrecorded field is sent once and drawn as the service's facts", async () => {
-  await mount();
-  assert.deepEqual(sections(), ["Luke GitHub App", "Personal access token"]);
-  assert.match(document.body.textContent ?? "", /Luke GitHub AppRecommendedConnected/u);
+test("with no token the row offers Add, and a token pasted into the unrecorded field is sent once and drawn as the service's facts on the row", async () => {
+  await mountAndOpen();
+  assert.equal(dialog().querySelector("h2")?.textContent, "Personal access token");
+  assert.match(dialog().textContent ?? "", /Create token/u);
 
   const input = tokenField() ?? assert.fail("no token field");
   assert.equal(input.type, "password");
@@ -138,16 +143,21 @@ test("the App and the token stand together; a token pasted into the unrecorded f
     [{ token: PASTED }],
   );
   assert.equal(tokenField(), null);
-  assert.match(document.body.textContent ?? "", /ghp_…wxyz · octo-member · Expires /u);
-  assert.ok(!document.body.innerHTML.includes(PASTED), "the dialog holds the token nowhere");
+  act(() => button("Done").click());
+  assert.match(
+    document.body.textContent ?? "",
+    /GitHub personal access tokenghp_…wxyz · octo-member · Expires /u,
+  );
+  button("Manage");
+  assert.ok(!document.body.innerHTML.includes(PASTED), "the page holds the token nowhere");
 });
 
-test("a saved token is drawn beside the App, and Remove asks first, then takes it away", async () => {
+test("a saved token's Manage opens it with Remove, which asks first, then takes it away", async () => {
   stored = KEPT;
-  await mount();
+  await mountAndOpen();
   assert.equal(tokenField(), null);
 
-  act(() => button("Remove").click());
+  act(() => button("Remove", dialog()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
   const question =
@@ -160,17 +170,9 @@ test("a saved token is drawn beside the App, and Remove asks first, then takes i
 
 test("a refused save says why in a short label and keeps the field", async () => {
   refuseSave = GITHUB_TOKEN_REJECTION.FINE_GRAINED;
-  await mount();
+  await mountAndOpen();
   await paste(PASTED);
 
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");
   assert.ok(tokenField(), "the field stands as pasted");
-});
-
-test("the App's panel says whether GitHub is connected, and Refresh reads it again", async () => {
-  await mount(false);
-  assert.match(document.body.textContent ?? "", /Not connected/u);
-  act(() => button("Refresh").click());
-  await settle();
-  assert.equal(refreshes, 1);
 });

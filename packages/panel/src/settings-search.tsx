@@ -159,9 +159,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.GITHUB_ACCESS,
-          label: "GitHub",
+          label: "GitHub personal access token",
           page: SETTINGS_VIEW.ACCOUNT,
-          haystack: ["GitHub", "personal access token classic token Luke GitHub App manage"],
+          haystack: ["GitHub personal access token", "classic token PAT add manage"],
         }
       : undefined,
     // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.
