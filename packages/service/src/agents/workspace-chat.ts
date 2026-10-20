@@ -196,14 +196,22 @@ const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** Where a person's post goes: the message it replies to, a channel by `#name`, a member's DM by `@handle`, or `#general`. */
+/** Where a person's post says it goes: a `to`, the channel shown, or the message it replies to, one at most. */
+interface PostPlace {
+  readonly to?: string;
+  readonly channelId?: string;
+  readonly replyTo?: number;
+}
+
+/** Where a person's post goes: the message it replies to, the channel the window shows by its id, which the store holds the person to, a channel by `#name`, a member's DM by `@handle`, or `#general`. */
 const placeOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Writer,
-  to: string | undefined,
-  replyTo: number | undefined,
+  post: PostPlace,
 ): Effect.fn.Return<ChatPost["to"], HostedRefusal, DatabaseServices> {
   const { userId, organizationId } = writer;
+  const { to, channelId, replyTo } = post;
   if (replyTo !== undefined) return { replyTo };
+  if (channelId !== undefined) return { channelId };
   const channel =
     to === undefined
       ? yield* hostedStoreOrUnavailable(ensureGeneral(userId, organizationId))
@@ -262,12 +270,10 @@ function picturesOf(
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
   writer: Writer,
-  post: {
+  post: PostPlace & {
     readonly text?: string;
     readonly blocks?: readonly ChatBlock[];
     readonly attachments?: readonly CodingAgentAttachment[];
-    readonly to?: string;
-    readonly replyTo?: number;
     readonly clientKey: string;
   },
 ): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
@@ -280,7 +286,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...words,
     ...pictures.map(({ id, name }) => ({ type: CHAT_BLOCK.IMAGE, attachmentId: id, alt: name })),
   ];
-  const to = yield* placeOf(writer, post.to, post.replyTo);
+  const to = yield* placeOf(writer, post);
   const teller = yield* telling;
   const told = yield* postChat(
     teller,

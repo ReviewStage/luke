@@ -7,6 +7,7 @@ import {
   CHAT_ASK,
   CHAT_BOUNDS,
   CHAT_IMAGE_TYPE,
+  MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
@@ -197,7 +198,7 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "Invite emails •",
     "Luke",
     "Add teammate invitations",
-    "maria",
+    "Maria Chen",
   ]);
   assert.deepEqual(stream(page), [
     "Add teammate invitations in #teammate-invitations",
@@ -293,23 +294,44 @@ function words(page: HTMLElement): string[] {
   });
 }
 
-test("a channel's composer offers its members as an @ is typed, writes the one chosen, and posts to the channel on Enter, leaving the box empty", async () => {
-  const page = mount();
+/** A workspace the window lists, which a chip's link is written in. */
+const ACME: Workspace = {
+  id: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
+  name: "Acme",
+  slug: "acme",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+
+test("a channel's composer offers its members by name as an @ is typed, writes the one chosen as their chip, and posts to the channel on Enter, leaving the box empty", async () => {
+  const page = mount((chat) => chat, ACME);
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInComposer(box, "@age");
+  typeInComposer(box, "@in");
   const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
-  assert.deepEqual(options, ["@agent-1Add teammate invitations", "@agent-2Invite emails"]);
-  pressInComposer(box, "ArrowDown");
+  assert.deepEqual(options, ["@Invite emails", "@Add teammate invitations"]);
   pressInComposer(box, "Enter");
-  assert.equal(boxWords(box), "@agent-2 ");
+  assert.ok(box.querySelector("[data-mention-ref]"), "the agent stands in the box as its chip");
   assert.equal(page.querySelector('[role="listbox"]'), null);
   typeInComposer(box, "hold the template until #214 lands");
   pressInComposer(box, "Enter");
   await settle();
   assert.equal(boxWords(box), "");
-  assert.equal(words(page).at(-1), "@agent-2 hold the template until #214 lands");
+  assert.equal(words(page).at(-1), "Invite emails hold the template until #214 lands");
   assert.equal(stream(page).at(-1), "Dean Stratakos");
+  const last = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.ok(
+    last?.querySelector(".chat-words [data-mention-ref]"),
+    "the sent message draws the agent as its chip",
+  );
+});
+
+test("before the workspace is known, an @ offers no member, since a member is written as their link alone", () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "@in");
+  assert.equal(page.querySelector('[role="option"]'), null);
 });
 
 test("an open choice in For you is answered by a pick and its send, which marks the pick, says who answered, and leaves For you's count one less", async () => {
@@ -441,10 +463,10 @@ test("an Enter that confirms what an input method composed leaves the mention li
 });
 
 test("the arrows and Escape an input method composes with move its candidates, never the mention list", () => {
-  const page = mount();
+  const page = mount((chat) => chat, ACME);
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInComposer(box, "@age");
+  typeInComposer(box, "@in");
   const highlighted = () => page.querySelector('[role="option"][aria-selected="true"]')?.id;
   const before = highlighted();
   for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
@@ -514,8 +536,8 @@ test("a post still out names the composer's send Sending and busy, and the box e
 test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
   const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
   const page = mount((chat) => {
-    const handle = (name: string) => chat.answer.members.find((each) => each.handle === name)?.id;
-    const [one, two] = [handle("agent-1"), handle("agent-2")];
+    const agents = chat.answer.members.filter((each) => each.kind === MEMBER_KIND.AGENT);
+    const [one, two] = agents.map((each) => each.id);
     const first = chat.answer.messages[0];
     if (one === undefined || two === undefined || first === undefined) return undefined;
     const { parentId: _root, ask: _ask, ...sample } = first;
@@ -561,10 +583,16 @@ test("a direct message between two others reads as theirs, named by both, with n
   });
   // Nothing in it waits on the developer, so For you holds what it held.
   assert.equal(rail(page)[0], "▸ For you (4)");
-  act(() => railRow(page, "agent-1 ↔ agent-2").click());
-  assert.equal(page.querySelector(".chat-head h2")?.textContent, "@agent-1 ↔ @agent-2");
+  act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
+  assert.equal(
+    page.querySelector(".chat-head h2")?.textContent,
+    "Add teammate invitations ↔ Invite emails",
+  );
   assert.equal(page.querySelector(".chat-composer"), null);
-  assert.match(page.textContent ?? "", /Only @agent-1 and @agent-2 post in this conversation\./u);
+  assert.match(
+    page.textContent ?? "",
+    /Only Add teammate invitations and Invite emails post in this conversation\./u,
+  );
   assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
   // Its open ask reads as waiting, with nothing to answer it by.
   const ask = page.querySelector('.chat-ask[data-status="open"]');
@@ -584,6 +612,9 @@ test("a # at the start of a word offers the channels, and the one chosen is writ
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
 });
 
+/** An agent as a plain box writes it: its mention link. */
+const INVITE_EMAILS_CHIP = "[@Invite emails](https://tryluke.dev/acme/plan/plan-1/agent/agent-2)";
+
 /** Chat's box where the editor's bundle could not be loaded, every post it makes written down. */
 async function plainChat() {
   const sent: string[] = [];
@@ -601,7 +632,14 @@ async function plainChat() {
           bundles,
           createElement(ChatComposer, {
             label: "Message #general",
-            targets: [{ sigil: "@", name: "agent-1", detail: undefined }],
+            targets: [
+              {
+                sigil: "@",
+                name: "Invite emails",
+                detail: undefined,
+                markdown: INVITE_EMAILS_CHIP,
+              },
+            ],
             keywords: [],
             onSend: (text) => {
               sent.push(text);
@@ -635,12 +673,14 @@ function pressInField(field: HTMLTextAreaElement, init: KeyboardEventInit): bool
   return !event.defaultPrevented;
 }
 
-test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+test("where the editor's bundle could not be loaded, the box is a plain field that still names a member by their link and posts", async () => {
   const { container, field, sent } = await plainChat();
-  writeInto(field, "@agent-1 ship it");
+  writeInto(field, "@Inv");
+  pressInField(field, { key: "Enter" });
+  writeInto(field, `${field.value}ship it`);
   pressInField(field, { key: "Enter" });
   await settle();
-  assert.deepEqual(sent, ["@agent-1 ship it"]);
+  assert.deepEqual(sent, [`${INVITE_EMAILS_CHIP} ship it`]);
   assert.equal(field.getAttribute("enterkeyhint"), "send");
   assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
 });
@@ -657,31 +697,6 @@ test("on a coarse pointer the plain field's Enter is a new line, its return key 
   pressInField(field, { key: "Enter", metaKey: true });
   await settle();
   assert.deepEqual(sent, ["ship it"]);
-});
-
-test("in a listed workspace, an agent chosen from the @ list is written as its chip, sent as its link, and the message names it", async () => {
-  const acme: Workspace = {
-    id: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
-    name: "Acme",
-    slug: "acme",
-    role: WORKSPACE_ROLE.OWNER,
-    github: null,
-  };
-  const page = mount((chat) => chat, acme);
-  act(() => railRow(page, "teammate-invitations").click());
-  const box = boxNamed(page, "Message #teammate-invitations");
-  typeInComposer(box, "@agent-2");
-  pressInComposer(box, "Enter");
-  assert.ok(box.querySelector("[data-mention-ref]"), "the agent stands in the box as its chip");
-  typeInComposer(box, "take the template");
-  pressInComposer(box, "Enter");
-  await settle();
-  const last = [...page.querySelectorAll(".chat-message")].at(-1);
-  assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /take the template/u);
-  assert.ok(
-    last?.querySelector(".chat-words [data-mention-ref]"),
-    "the sent message draws it as its chip",
-  );
 });
 
 /** Types into a field the way a person's typing leaves it. */
@@ -837,7 +852,7 @@ test("words after an @ that read as a date offer it first, said as its chip says
   }
 });
 
-test("an @ word that reads as a date lists it before the members it matches, and words after a handle that name no date open no list", () => {
+test("an @ word that reads as a date lists it before the members it matches, and words after a name that name no date open no list", () => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   try {
     const page = mount();
@@ -991,13 +1006,14 @@ test("in a listed workspace, a person is drawn with their photo from the members
   );
 });
 
-test("an agent's line names it by its title and quietly by its handle, and a press on its name opens its tab", () => {
+test("an agent's line names it by its title alone, as every place of the window names it, and a press on its name opens its tab", () => {
   const opened: ReadLink[] = [];
   const page = mount((chat) => chat, undefined, undefined, opened);
   act(() => railRow(page, "teammate-invitations").click());
   const [byline] = [...page.querySelectorAll(".chat-message .chat-byline")];
   assert.ok(byline);
-  assert.equal(byline.querySelector(".chat-byline-handle")?.textContent, "@agent-1");
+  assert.equal(byline.querySelector(".chat-byline-name")?.textContent, "Add teammate invitations");
+  assert.doesNotMatch(byline.textContent ?? "", /@/u, "no handle beside it");
   const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
   assert.ok(name, "the agent's name is a press");
   act(() => name.click());
@@ -1016,7 +1032,7 @@ test("an agent the plans' summaries do not name opens its tab under the plan the
       answer: {
         ...chat.answer,
         members: chat.answer.members.map((member) =>
-          member.handle === "agent-1"
+          member.name === "Add teammate invitations"
             ? { ...member, agentId: ELSEWHERE, planId: ELSEWHERE }
             : member,
         ),
@@ -1027,9 +1043,12 @@ test("an agent the plans' summaries do not name opens its tab under the plan the
     opened,
   );
   act(() => railRow(page, "teammate-invitations").click());
+  // An agent no summary names is named as the chat read names it.
   const agentLine = [...page.querySelectorAll(".chat-message .chat-byline")].find(
-    (byline) => byline.querySelector(".chat-byline-handle")?.textContent === "@agent-1",
+    (byline) =>
+      byline.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
   );
+  assert.ok(agentLine, "the agent is named by the name the read carries");
   act(() => agentLine?.querySelector<HTMLButtonElement>(".chat-byline-name button")?.click());
   const [link] = opened;
   assert.ok(link !== undefined && "place" in link);
