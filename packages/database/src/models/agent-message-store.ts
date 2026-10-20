@@ -1,16 +1,3 @@
-import { MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
-import { Effect, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
-import { conversations, messages } from "../schemas/storage.js";
-import { MESSAGE_SENDER } from "../storage-vocabulary.js";
-import type { ChatStoreEffect } from "./chat-store.js";
-import { InstantColumnSchema } from "./columns.js";
-import { agentSeenBy, isWorkspaceMember } from "./workspace-store.js";
-
 /**
  * agent-message-store.ts -- the lines one coding agent sent another of its workspace, read for a person watching them talk.
  *
@@ -36,6 +23,19 @@ import { agentSeenBy, isWorkspaceMember } from "./workspace-store.js";
  * repository, so a line to or from one is hidden from everyone else. An
  * agent of a deleted conversation is read as gone.
  */
+
+import { MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { Effect, Schema } from "effect";
+import { SqlSchema } from "effect/sql";
+import { Database } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
+import { conversations, messages } from "../schemas/storage.js";
+import { MESSAGE_SENDER } from "../storage-vocabulary.js";
+import type { ChatStoreEffect } from "./chat-store.js";
+import { InstantColumnSchema } from "./columns.js";
+import { agentSeenBy, isWorkspaceMember } from "./workspace-store.js";
 
 /** The most lines one read answers: the newest, which a window shows oldest first. */
 const MAX_AGENT_MESSAGES = 200;
