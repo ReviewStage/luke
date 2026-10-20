@@ -39,7 +39,9 @@ import type { RunMode } from "./run-mode.js";
  * letting it go ends it. Behind a closed account gate, or on a run that
  * sends nothing, every ask answers unanswered and nothing is followed, and
  * the gate closing, a sign-out or an account switch, ends every follow, so
- * the account that was signed in is subscribed to no more.
+ * the account that was signed in is subscribed to no more; the gate opening
+ * again follows every workspace main still follows, under the account now
+ * signed in, so an Issues page left open is live again without a remount.
  */
 
 /** The service's side of the issues, as this concern asks it. */
@@ -61,12 +63,14 @@ export interface IssuesDependencies {
 export interface IssuesComposer extends Composer {
   /** Every issue follow let go, as a sign-out or an account switch lets them go. */
   readonly reset: Effect.Effect<void>;
+  /** Every workspace main still follows followed again, as a sign-in opens the gate, under the account now signed in. */
+  readonly resume: Effect.Effect<void>;
 }
 
 const UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
 
 /** How long a write's answer waits for its transaction to arrive on the followed list. */
-const TXID_TIMEOUT = Duration.seconds(5);
+const TXID_TIMEOUT = Duration.seconds(10);
 
 export function composeIssues(
   dependencies: IssuesDependencies,
@@ -122,6 +126,31 @@ function composed(
     return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
   };
 
+  /** The workspaces main follows, kept across a sign-out so a sign-in follows them again. */
+  const wanted = new Set<string>();
+
+  /**
+   * A workspace's issues followed behind the gate, under the account signed
+   * in now, unless a follow of it already stands. Note that the account is
+   * read once, as the follow starts, so every renewal names the account it
+   * began for.
+   */
+  const started = (workspaceId: string): Effect.Effect<void> => {
+    if (!gate()) return Effect.void;
+    const userId = dependencies.accountId();
+    const follow = followIssues({
+      live: () =>
+        userId === undefined
+          ? Effect.succeed(LIVE_SIGNED_OUT)
+          : asked(client.listLive(workspaceId, userId)),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: kernel.now,
+      publish: (view) => kernel.emit(GATEWAY_EVENT.ISSUES_CHANGED, carried({ workspaceId, view })),
+      onSubscribed: (wait) => awaiting.set(workspaceId, wait),
+    });
+    return Effect.asVoid(FiberMap.run(follows, workspaceId, follow, { onlyIfMissing: true }));
+  };
+
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.ISSUES_LIST]: (params) =>
       Effect.gen(function* () {
@@ -158,21 +187,8 @@ function composed(
           params,
           "a follow names a workspace",
         );
-        if (!gate()) return {};
-        // Note that the account is read once, as the follow starts, so every renewal names the account it began for.
-        const userId = dependencies.accountId();
-        const follow = followIssues({
-          live: () =>
-            userId === undefined
-              ? Effect.succeed(LIVE_SIGNED_OUT)
-              : asked(client.listLive(workspaceId, userId)),
-          openLive: dependencies.openLive ?? openRealtimeClient,
-          now: kernel.now,
-          publish: (view) =>
-            kernel.emit(GATEWAY_EVENT.ISSUES_CHANGED, carried({ workspaceId, view })),
-          onSubscribed: (wait) => awaiting.set(workspaceId, wait),
-        });
-        yield* FiberMap.run(follows, workspaceId, follow, { onlyIfMissing: true });
+        wanted.add(workspaceId);
+        yield* started(workspaceId);
         return {};
       }),
     [GATEWAY_METHOD.ISSUES_UNFOLLOW]: (params) =>
@@ -182,6 +198,7 @@ function composed(
           params,
           "a follow names a workspace",
         );
+        wanted.delete(workspaceId);
         awaiting.delete(workspaceId);
         yield* FiberMap.remove(follows, workspaceId);
         return {};
@@ -192,5 +209,6 @@ function composed(
     Effect.sync(() => awaiting.clear()),
     FiberMap.clear(follows),
   );
-  return { methods, lifetime: Effect.void, reset };
+  const resume = Effect.suspend(() => Effect.forEach([...wanted], started, { discard: true }));
+  return { methods, lifetime: Effect.void, reset, resume };
 }

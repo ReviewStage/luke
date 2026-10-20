@@ -276,6 +276,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       if (account.signedIn()) yield* settings.reconcileAccountPreferences();
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
+      yield* issues.resume;
     });
 
     /** The gate closing: what a sign-out means. */

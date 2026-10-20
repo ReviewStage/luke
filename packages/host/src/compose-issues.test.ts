@@ -125,7 +125,13 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked, followed, reset: composer.reset };
+    return {
+      call,
+      asked: service.asked,
+      followed,
+      reset: composer.reset,
+      resume: composer.resume,
+    };
   });
 }
 
@@ -438,5 +444,51 @@ it.effect(
 
       assert.deepEqual(asked, [["listLive", WORKSPACE_ID, "user-dana"]]);
       assert.deepEqual(followed, []);
+    }),
+);
+
+it.effect(
+  "a sign-in follows again every workspace still followed across the sign-out, and none let go meanwhile",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const listLive: IssuesLiveAnswer = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          issues: {
+            capability: "issues",
+            queryFingerprint: "issues",
+            expiresAt: LIVE_NOW + 60_000,
+          },
+        },
+      };
+      const kept = yield* subject({ listLive, openLive: realtime.open });
+      const scope = { workspaceId: WORKSPACE_ID };
+
+      yield* kept.call(GATEWAY_METHOD.ISSUES_FOLLOW, scope);
+      yield* settled;
+      yield* kept.reset;
+      yield* settled;
+      const signedOut = realtime.subscribed();
+      yield* kept.resume;
+      yield* settled;
+
+      assert.deepEqual(signedOut, []);
+      assert.deepEqual(realtime.subscribed(), ["issues"]);
+      assert.equal(kept.asked.length, 2, "sealed again under the account signed in now");
+
+      const dropped = yield* subject({ listLive, openLive: fakeRealtime().open });
+      yield* dropped.call(GATEWAY_METHOD.ISSUES_FOLLOW, scope);
+      yield* settled;
+      yield* dropped.reset;
+      yield* dropped.call(GATEWAY_METHOD.ISSUES_UNFOLLOW, scope);
+      yield* dropped.resume;
+      yield* settled;
+
+      assert.equal(
+        dropped.asked.length,
+        1,
+        "a workspace let go while signed out is not followed again",
+      );
     }),
 );
