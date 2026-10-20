@@ -273,7 +273,7 @@ export function runCreateTask(
         asked.success.repository === undefined
           ? yield* workedRepository(call.caller)
           : asked.success.repository;
-      const reached = yield* reachedRepository(workspace.value, named);
+      const reached = yield* reachedRepository(workspace.value, named, userId);
       if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
       const text = planTextOf(plan ?? "");
       // The make and its plan's first revision are one write, so a call run again at once makes one task.
@@ -284,7 +284,8 @@ export function runCreateTask(
               id,
               organizationId: workspace.value,
               name,
-              repository: reached.success,
+              repository: reached.success.repository,
+              githubAccess: reached.success.githubAccess,
               text,
               ...(brief === undefined ? undefined : { brief }),
               ...(status === undefined ? undefined : { status }),

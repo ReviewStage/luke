@@ -43,7 +43,19 @@ export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
   EffectSchema.isPattern(FULL_NAME_PATTERN),
 );
 
-/** One repository the App reaches for the developer. */
+/**
+ * How a repository is reached: through the workspace's Luke GitHub App
+ * installation, or on the member's own personal access token. The App wins
+ * wherever it reaches the repository.
+ */
+export const GITHUB_ACCESS = {
+  APP: "app",
+  TOKEN: "token",
+} as const;
+
+export type GitHubAccess = (typeof GITHUB_ACCESS)[keyof typeof GITHUB_ACCESS];
+
+/** One repository the App, or the developer's own token, reaches for the developer. */
 export const githubRepositorySchema = EffectSchema.Struct({
   /** The user or organization that owns it. */
   owner: EffectSchema.String,
@@ -54,6 +66,8 @@ export const githubRepositorySchema = EffectSchema.Struct({
   private: EffectSchema.Boolean,
   /** Epoch milliseconds GitHub last saw the repository change. */
   updatedAt: countedNumber,
+  /** How a listing reaches it; absent from a service older than tokens, which lists the App's alone. */
+  access: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(GITHUB_ACCESS))),
 });
 
 export type GitHubRepository = typeof githubRepositorySchema.Type;

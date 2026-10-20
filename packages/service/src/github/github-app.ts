@@ -3,9 +3,9 @@
  *
  * A workspace's repositories are the repositories of the installations of
  * the App connected to it (`@luke/service/github/github-installations`), one
- * per GitHub account, and nothing else: nobody's own GitHub account is asked
- * what it reaches, and a repository is reached only through the workspace's
- * installation on its owner. The App speaks
+ * per GitHub account: nobody's own GitHub sign-in is asked what it reaches,
+ * and a repository is reached through the workspace's installation on its
+ * owner, or, below, on a member's own token. The App speaks
  * with a JWT signed by its private key, which reads an installation
  * (`GET /app/installations/{id}`) and mints its tokens (`POST
  * /app/installations/{id}/access_tokens`). A listing is read on a token
@@ -16,8 +16,8 @@
  * contents and pull requests write for its branch and pull request, with
  * what reads its pull request's CI beside the last two where the
  * installation grants it. So what a member of the workspace reaches through
- * Luke is what the installation reaches, whoever they are on GitHub, and
- * what an agent pushes is pushed as the App.
+ * the App is what the installation reaches, whoever they are on GitHub, and
+ * what an agent pushes through it is pushed as the App.
  *
  * A function instance keeps what it reached and minted, so a tab reading
  * one pull request a few times a minute does not read the installation,
@@ -35,6 +35,15 @@
  * installation. A failure, and a repository not reached, are never kept. A write token leaves for a sandbox's whole run
  * rather than for one request, so it is minted afresh with its whole hour
  * every time it is asked for.
+ *
+ * A member who saved their own classic personal access token
+ * (`./github-token.ts`) reaches, beside that, a repository no installation
+ * of the workspace reaches on that token, where GitHub answers the token
+ * with push to it. The installation is always asked first and always wins. A reach and a
+ * token are kept under the member who asked as well as the workspace, so
+ * nothing kept crosses members either, and the member's token itself is
+ * read afresh at every use rather than kept. An automation asks as no
+ * member, so it reaches through the installation alone.
  *
  * A connect is confirmed once on the installer's own say: GitHub's guidance
  * for the Setup URL is that its `installation_id` is not to be trusted
@@ -75,6 +84,7 @@ import {
 } from "@luke/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { account } from "@luke/database/schemas/auth";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -105,12 +115,14 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth/auth-deployment.js";
 import { type GitHubRepository, text } from "../core.js";
+import { HostedEnvironment } from "../environment.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import {
   installationsOfWorkspace,
   mendInstallationStatus,
   type WorkspaceInstallation,
 } from "./github-installations.js";
+import { GITHUB_TOKEN_ABSENCE, openMemberGitHubToken } from "./github-token.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
@@ -358,24 +370,50 @@ type GitHubRepositoryUnreached = Exclude<
   { readonly reason: typeof REPOSITORY_UNREACHED.OTHER_WORKSPACE }
 >;
 
-/** A repository the workspace's installation reaches, spelled as GitHub spells it, or why it does not. */
-type GitHubRepositoryReach = Result.Result<GitHubRepository, GitHubRepositoryUnreached>;
+/** A repository as reached, spelled as GitHub spells it, and how: what a caller records on the rows it writes. */
+export interface ReachedRepository {
+  readonly repository: GitHubRepository;
+  readonly access: GitHubAccess;
+}
 
-/** A repository the workspace's installation reaches, with the installation, or why it does not. */
-type ReachResult = Result.Result<
-  { readonly installation: GitHubInstallation; readonly repository: GitHubRepository },
-  GitHubRepositoryUnreached
->;
+/** A repository the workspace's installation or the member's token reaches, or why neither does. */
+type GitHubRepositoryReach = Result.Result<ReachedRepository, GitHubRepositoryUnreached>;
 
-/** One repository of one workspace as asked, which is what a reach is kept under. */
+/** Why the member's own token does not reach a repository. */
+type TokenUnreached =
+  | typeof REPOSITORY_UNREACHED.NO_TOKEN
+  | typeof REPOSITORY_UNREACHED.TOKEN_INVALID
+  | typeof REPOSITORY_UNREACHED.TOKEN_NO_ACCESS
+  | typeof REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH;
+
+/** A repository reached through the workspace's installation, with the installation. */
+interface ReachedThroughApp {
+  readonly access: typeof GITHUB_ACCESS.APP;
+  readonly installation: GitHubInstallation;
+  readonly repository: GitHubRepository;
+}
+
+/** A repository reached on the member's own token, with whose token it is; the token itself is read again at each use. */
+interface ReachedOnToken {
+  readonly access: typeof GITHUB_ACCESS.TOKEN;
+  readonly member: string;
+  readonly repository: GitHubRepository;
+}
+
+/** A repository reached, and how, or why it is not. */
+type ReachResult = Result.Result<ReachedThroughApp | ReachedOnToken, GitHubRepositoryUnreached>;
+
+/** One repository of one workspace as one member asked, which is what a reach is kept under; none for an automation. */
 class ReachKey extends Data.Class<{
   readonly organizationId: string;
   readonly fullName: string;
+  readonly member: string | undefined;
 }> {}
 
-/** One repository token as minted: for whom, through which installation, for which repository, cut to what. */
+/** One repository token as minted: for which workspace and member, through which installation, for which repository, cut to what. */
 class TokenKey extends Data.Class<{
   readonly organizationId: string;
+  readonly member: string | undefined;
   readonly installationId: number;
   readonly repository: string;
   readonly permissions: InstallationTokenPermissions;
@@ -387,11 +425,26 @@ interface KeptToken {
   readonly keepFor: Duration.Duration;
 }
 
-/** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
+/**
+ * Whose a repository token is: an installation token the App minted, or the
+ * member's own, with the GitHub account it belongs to, whose login git over
+ * HTTPS takes as the username beside a personal access token
+ * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls).
+ */
+export type GitHubTokenAccess =
+  | { readonly kind: typeof GITHUB_ACCESS.APP }
+  | {
+      readonly kind: typeof GITHUB_ACCESS.TOKEN;
+      readonly githubLogin: string;
+      readonly githubUserId: string;
+    };
+
+/** A token for one repository: the repository as GitHub spells it, the token, sealed, and whose it is. */
 export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
-  /** An installation token limited to this one repository, good for an hour from its mint. */
+  /** An installation token limited to this one repository, good for an hour from its mint; or the member's own token. */
   readonly token: Redacted.Redacted;
+  readonly access: GitHubTokenAccess;
 }
 
 /** What the browser is sent to GitHub with to authorize the App once, so the installer is confirmed. */
@@ -456,43 +509,48 @@ export interface GitHubAppService {
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
-   * One repository by `owner/name`, where the workspace's installation
-   * reaches it, spelled as GitHub spells it; none where it does not, which is
-   * also what a workspace with nothing connected answers. Only an
-   * installation on the owner can reach it, and the listing is read only as
-   * far as the repository.
+   * The repositories the member's own token may push to, as GitHub lists
+   * them for the token's user (`GET /user/repos`), most recently updated
+   * first, one page; none where the member keeps no token GitHub accepts.
    */
-  readonly workspaceRepository: (
-    organizationId: string,
-    fullName: string,
+  readonly memberRepositories: (
+    member: string,
   ) => Effect.Effect<
-    Option.Option<GitHubRepository>,
+    Option.Option<readonly GitHubRepository[]>,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
-   * The same read, answering why where the installation does not reach the
-   * repository: none connected, one GitHub no longer runs or that was
-   * suspended, one on another account than the owner, one on the owner never
-   * given the repository, or one given all of the owner's that still does
-   * not list it, which a rename, a transfer, or a delete leaves.
+   * One repository by `owner/name`, spelled as GitHub spells it, where the
+   * workspace's installation reaches it, and else where the member's own
+   * token does (`member`, none for an automation), with which of the two;
+   * or why not. Only an installation on the owner can reach it, and the
+   * listing is read only as far as the repository. The installation's why:
+   * none connected, one GitHub no longer runs or that was suspended, one on
+   * another account than the owner, one on the owner never given the
+   * repository, or one given all of the owner's that still does not list
+   * it, which a rename, a transfer, or a delete leaves. Where the member
+   * keeps a token, the token's why stands in its place.
    */
   readonly repositoryReach: (
     organizationId: string,
     fullName: string,
+    member: string | undefined,
   ) => Effect.Effect<
     GitHubRepositoryReach,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
-   * A token for one repository of the workspace's installation, limited to
-   * that repository and to contents read; none where the installation does
-   * not reach it, on the same terms as `workspaceRepository`.
+   * A token for one repository the workspace's installation reaches,
+   * limited to that repository and to contents read, or the member's own
+   * where only their token reaches it; none where neither does, on the same
+   * terms as `repositoryReach`.
    */
   readonly repositoryReadToken: (
     organizationId: string,
     fullName: string,
+    member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
     GitHubWorkspaceReadFailure,
@@ -502,6 +560,7 @@ export interface GitHubAppService {
   readonly repositoryPullRequestToken: (
     organizationId: string,
     fullName: string,
+    member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
     GitHubWorkspaceReadFailure,
@@ -515,6 +574,7 @@ export interface GitHubAppService {
   readonly repositoryIssueToken: (
     organizationId: string,
     fullName: string,
+    member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
     GitHubWorkspaceReadFailure,
@@ -523,11 +583,12 @@ export interface GitHubAppService {
   /**
    * Whether a write token for the repository will read its pull requests'
    * CI: the workspace's installation grants the App `CI_READ_PERMISSIONS`
-   * whole and reaches the repository.
+   * whole and reaches the repository, or the member's own token reaches it.
    */
   readonly repositoryCiReadable: (
     organizationId: string,
     fullName: string,
+    member: string | undefined,
   ) => Effect.Effect<boolean, GitHubWorkspaceReadFailure, HttpClient.HttpClient | DatabaseServices>;
   /**
    * The same mint with contents and pull requests write, which is what a
@@ -537,6 +598,7 @@ export interface GitHubAppService {
   readonly repositoryWriteToken: (
     organizationId: string,
     fullName: string,
+    member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
     GitHubWorkspaceReadFailure,
@@ -589,12 +651,17 @@ interface GitHubPusher {
 }
 
 export class GitHubApp extends Context.Service<GitHubApp, GitHubAppService>()("GitHubApp") {
-  /** The service over fixed settings, or over none, which is a deployment without the App. */
+  /**
+   * The service over fixed settings, or over none, which is a deployment
+   * without the App, and over the ring members' own tokens are sealed under
+   * (`HostedEnvironment`'s `providerKeyEncryptionKeys`), where none opens no token.
+   */
   static layer(
     settings: GitHubAppSettings | undefined,
     missing: readonly string[] = [],
+    tokenKeys: Redacted.Redacted | undefined = undefined,
   ): Layer.Layer<GitHubApp> {
-    return Layer.effect(GitHubApp, githubAppService(settings, missing));
+    return Layer.effect(GitHubApp, githubAppService(settings, missing, tokenKeys));
   }
 }
 
@@ -668,6 +735,25 @@ type UserRecord = typeof UserSchema.Type;
 const RepositoryPermissionsSchema = Schema.Struct({
   permissions: Schema.optional(Schema.Struct({ push: Schema.Boolean })),
 });
+
+/** A repository as a member's own token reads it: the repository, and whether the token may push to it. */
+const TokenRepositorySchema = Schema.Struct({
+  ...RepositorySchema.fields,
+  ...RepositoryPermissionsSchema.fields,
+});
+
+/**
+ * The one page of the member's own repositories the picker lists, as
+ * GitHub's `GET /user/repos` takes it
+ * (https://docs.github.com/en/rest/repos/repos#list-repositories-for-the-authenticated-user):
+ * the ones they own, collaborate on, and reach as an organization's member,
+ * most recently updated first.
+ */
+const MEMBER_REPOSITORIES_QUERY = {
+  affiliation: "owner,collaborator,organization_member",
+  sort: "updated",
+  per_page: String(PAGING.PER_PAGE),
+} as const;
 
 const AccountTokenRowSchema = Schema.Struct({
   id: Schema.String,
@@ -878,6 +964,12 @@ function combinedRepositories(repositories: readonly GitHubRepository[]): GitHub
 /** GitHub folds case in logins and repository names, so a name is the same name however it is spelled. */
 function sameName(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
+}
+
+/** The API path of one repository by `owner/name`, each part encoded. */
+function repositoryPath(fullName: string): string {
+  const [owner = "", name = ""] = fullName.split("/");
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 }
 
 /** A transport failure as the kind alone: the request it carries holds the bearer, and is left behind. */
@@ -1120,6 +1212,7 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
 function githubAppService(
   settings: GitHubAppSettings | undefined,
   missing: readonly string[],
+  tokenKeys: Redacted.Redacted | undefined,
 ): Effect.Effect<GitHubAppService> {
   const signingKey = settings === undefined ? undefined : privateKeyOf(settings.privateKey);
   const ready: Effect.Effect<ReadySettings, GitHubAppNotConfigured> =
@@ -1139,6 +1232,9 @@ function githubAppService(
     const now = yield* Clock.currentTimeMillis;
     return Redacted.make(signAppJwt(app, now));
   });
+
+  /** The member's own token, opened under the deployment's ring, where they keep one GitHub has not refused. */
+  const memberToken = (member: string) => openMemberGitHubToken(tokenKeys, member);
 
   const userToken = (userId: string) =>
     Effect.gen(function* () {
@@ -1260,7 +1356,7 @@ function githubAppService(
    * lapsed where the one on the owner or every one it holds no longer runs,
    * and is on another account otherwise, named where it holds one alone.
    */
-  const reach = (organizationId: string, fullName: string) =>
+  const installationReach = (organizationId: string, fullName: string) =>
     Effect.gen(function* () {
       const [owner = ""] = fullName.split("/");
       const unreached = (failure: GitHubRepositoryUnreached): ReachResult => Result.fail(failure);
@@ -1289,7 +1385,11 @@ function githubAppService(
       const repositories = yield* repositoriesOf(onOwner, (read) => read.some(isNamed));
       const repository = repositories.find(isNamed);
       if (repository !== undefined) {
-        const reachedThrough: ReachResult = Result.succeed({ installation: onOwner, repository });
+        const reachedThrough: ReachResult = Result.succeed({
+          access: GITHUB_ACCESS.APP,
+          installation: onOwner,
+          repository,
+        });
         return reachedThrough;
       }
       // Note that an installation given only some repositories cannot tell one it was never given from one renamed or deleted, so it asks for the one GitHub can mend.
@@ -1304,9 +1404,71 @@ function githubAppService(
       );
     });
 
-  /** The repository and its installation as `reach` reads them, none where it does not reach it. */
-  const reachableRepository = (organizationId: string, fullName: string) =>
-    Effect.map(reach(organizationId, fullName), Result.getSuccess);
+  /**
+   * The repository as the member's own token reads it
+   * (`GET /repos/{owner}/{repo}`,
+   * https://docs.github.com/en/rest/repos/repos#get-a-repository), reached
+   * only where GitHub answers the token with push to it
+   * (`permissions.push`), or why not: one GitHub refused before, one the
+   * deployment cannot open, no access to the repository, or no push; or
+   * the installation's own why, `throughApp`, for a member who keeps no
+   * token, since they never chose one. A 401 is GitHub refusing the token,
+   * which marks it invalid; the 403 and 404 that page lists are a
+   * repository the token does not reach.
+   */
+  const tokenReach = (member: string, fullName: string, throughApp: ReachResult) =>
+    Effect.gen(function* () {
+      const unreached = (reason: TokenUnreached): ReachResult =>
+        Result.fail({ reason, repository: fullName });
+      const held = yield* memberToken(member);
+      if (Result.isFailure(held)) {
+        if (held.failure === GITHUB_TOKEN_ABSENCE.NONE) return throughApp;
+        return unreached(
+          held.failure === GITHUB_TOKEN_ABSENCE.INVALID
+            ? REPOSITORY_UNREACHED.TOKEN_INVALID
+            : REPOSITORY_UNREACHED.NO_TOKEN,
+        );
+      }
+      const response = yield* send(githubRead(repositoryPath(fullName), held.success.token));
+      if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
+        yield* held.success.markInvalid;
+        return unreached(REPOSITORY_UNREACHED.TOKEN_INVALID);
+      }
+      if (
+        response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
+        response.status === GITHUB_HTTP_STATUS.FORBIDDEN
+      ) {
+        return unreached(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS);
+      }
+      const record = yield* readBody(response, TokenRepositorySchema);
+      if (record.permissions?.push !== true)
+        return unreached(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH);
+      const reachedOn: ReachResult = Result.succeed({
+        access: GITHUB_ACCESS.TOKEN,
+        member,
+        repository: repositoryOf(record),
+      });
+      return reachedOn;
+    }).pipe(Effect.scoped);
+
+  /**
+   * The repository as the workspace's installation reaches it, which always
+   * wins; else as the member's own token reaches it, the token's why
+   * standing where they keep one and it does not.
+   */
+  const reach = (organizationId: string, fullName: string, member: string | undefined) =>
+    Effect.gen(function* () {
+      const throughApp = yield* installationReach(organizationId, fullName);
+      if (Result.isSuccess(throughApp) || member === undefined) return throughApp;
+      return yield* tokenReach(member, fullName, throughApp);
+    });
+
+  /** The repository as `reach` reads it, and how, none where it does not reach it. */
+  const reachableRepository = (
+    organizationId: string,
+    fullName: string,
+    member: string | undefined,
+  ) => Effect.map(reach(organizationId, fullName, member), Result.getSuccess);
 
   /**
    * A token minted for the key's one repository, by its name, which is one
@@ -1372,7 +1534,7 @@ function githubAppService(
    */
   return Effect.gen(function* () {
     const reaches = yield* Cache.makeWith(
-      (key: ReachKey) => reach(key.organizationId, key.fullName),
+      (key: ReachKey) => reach(key.organizationId, key.fullName, key.member),
       {
         capacity: KEPT.CAPACITY,
         requireServicesAt: "lookup",
@@ -1392,7 +1554,10 @@ function githubAppService(
      * Note that we read the links on every ask, because an installation the
      * workspace disconnected, or one GitHub replaced, removed, or suspended
      * as a webhook told the store, must stop minting at once rather than
-     * when the kept reach lapses.
+     * when the kept reach lapses. A reach on the member's token stands
+     * while the workspace links no running installation on the repository's
+     * owner, since the App wins the moment one is connected; the token it
+     * names is read afresh at each use.
      */
     const standingReach = (key: ReachKey) =>
       Effect.gen(function* () {
@@ -1400,37 +1565,61 @@ function githubAppService(
         if (Result.isFailure(kept)) return kept;
         // Note that the links are read after the reach, because a reach afresh mends a stale status first.
         const linked = yield* installationsOfWorkspace(key.organizationId);
-        const throughId = kept.success.installation.id;
-        const stands = linked.some(
-          (one) =>
-            one.installationId === throughId && one.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
-        );
+        const running = linked.filter((one) => one.status === GITHUB_INSTALLATION_STATUS.ACTIVE);
+        const [owner = ""] = key.fullName.split("/");
+        const reached = kept.success;
+        const stands =
+          reached.access === GITHUB_ACCESS.TOKEN
+            ? !running.some((one) => sameName(one.accountLogin, owner))
+            : running.some((one) => one.installationId === reached.installation.id);
         if (stands) return kept;
         yield* Cache.invalidate(reaches, key);
         return yield* Cache.get(reaches, key);
       });
 
+    /** The member's own token for a repository reached on it, read afresh; none where they no longer keep one GitHub accepts. */
+    const memberRepositoryToken = (reached: ReachedOnToken) =>
+      Effect.map(memberToken(reached.member), (held) =>
+        Result.isFailure(held)
+          ? Option.none<GitHubRepositoryToken>()
+          : Option.some<GitHubRepositoryToken>({
+              repository: reached.repository,
+              token: held.success.token,
+              access: {
+                kind: GITHUB_ACCESS.TOKEN,
+                githubLogin: held.success.githubLogin,
+                githubUserId: held.success.githubUserId,
+              },
+            }),
+      );
+
     /**
-     * A token minted as the App for the one repository the workspace
-     * reaches, cut to the permissions chosen for its installation, kept as
-     * asked; none where it does not reach it, or where its installation
-     * grants none of what the token is for, since GitHub refuses a mint
-     * naming a permission not granted.
+     * A token for the one repository the workspace or the member reaches:
+     * minted as the App, cut to the permissions chosen for its installation
+     * and kept as asked, where the installation reaches it, or the member's
+     * own where only their token does; none where neither reaches it, or
+     * where its installation grants none of what the token is for, since
+     * GitHub refuses a mint naming a permission not granted.
      */
     const repositoryToken = (
       organizationId: string,
       fullName: string,
+      member: string | undefined,
       permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions | undefined,
       keeping: TokenKeeping = TOKEN_KEEPING.KEPT,
     ) =>
       Effect.gen(function* () {
-        const reached = yield* standingReach(new ReachKey({ organizationId, fullName }));
-        if (Result.isFailure(reached)) return Option.none();
+        const reached = yield* standingReach(new ReachKey({ organizationId, fullName, member }));
+        if (Result.isFailure(reached)) return Option.none<GitHubRepositoryToken>();
+        if (reached.success.access === GITHUB_ACCESS.TOKEN) {
+          return yield* memberRepositoryToken(reached.success);
+        }
         const { installation: on, repository } = reached.success;
         const permissions = permissionsOn(on);
-        if (permissions === undefined) return Option.none();
+        if (permissions === undefined) return Option.none<GitHubRepositoryToken>();
         const key = new TokenKey({
           organizationId,
+          member,
           installationId: on.id,
           repository: repository.name,
           permissions,
@@ -1439,7 +1628,11 @@ function githubAppService(
           keeping === TOKEN_KEEPING.KEPT
             ? yield* Cache.get(tokens, key)
             : yield* repositoryTokenOf(key);
-        return Option.some({ repository, token });
+        return Option.some<GitHubRepositoryToken>({
+          repository,
+          token,
+          access: { kind: GITHUB_ACCESS.APP },
+        });
       });
 
     const service: GitHubAppService = {
@@ -1477,37 +1670,57 @@ function githubAppService(
           const listed = yield* Effect.forEach(live, (one) => repositoriesOf(one));
           return Option.some(combinedRepositories(listed.flat()));
         }),
-      workspaceRepository: (organizationId, fullName) =>
+      memberRepositories: (member) =>
+        Effect.gen(function* () {
+          const held = yield* memberToken(member);
+          if (Result.isFailure(held)) return Option.none();
+          const response = yield* send(
+            githubRead("/user/repos", held.success.token).pipe(
+              HttpClientRequest.setUrlParams(MEMBER_REPOSITORIES_QUERY),
+            ),
+          );
+          if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
+            yield* held.success.markInvalid;
+            return Option.none();
+          }
+          const listed = yield* readBody(response, Schema.Array(TokenRepositorySchema));
+          const pushed = listed.filter((one) => one.permissions?.push === true);
+          return Option.some(pushed.map(repositoryOf));
+        }).pipe(Effect.scoped),
+      repositoryReach: (organizationId, fullName, member) =>
         Effect.map(
-          reachableRepository(organizationId, fullName),
-          Option.map((reached) => reached.repository),
+          reach(organizationId, fullName, member),
+          Result.map((reached) => ({ repository: reached.repository, access: reached.access })),
         ),
-      repositoryReach: (organizationId, fullName) =>
-        Effect.map(
-          reach(organizationId, fullName),
-          Result.map((reached) => reached.repository),
+      repositoryReadToken: (organizationId, fullName, member) =>
+        repositoryToken(
+          organizationId,
+          fullName,
+          member,
+          () => INSTALLATION_TOKEN_PERMISSIONS.READ,
         ),
-      repositoryReadToken: (organizationId, fullName) =>
-        repositoryToken(organizationId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
-      repositoryPullRequestToken: (organizationId, fullName) =>
-        repositoryToken(organizationId, fullName, (on) =>
+      repositoryPullRequestToken: (organizationId, fullName, member) =>
+        repositoryToken(organizationId, fullName, member, (on) =>
           on.ciReadable
             ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
             : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS,
         ),
-      repositoryIssueToken: (organizationId, fullName) =>
-        repositoryToken(organizationId, fullName, (on) =>
+      repositoryIssueToken: (organizationId, fullName, member) =>
+        repositoryToken(organizationId, fullName, member, (on) =>
           on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
         ),
-      repositoryCiReadable: (organizationId, fullName) =>
-        Effect.map(
-          reachableRepository(organizationId, fullName),
-          (reached) => Option.isSome(reached) && reached.value.installation.ciReadable,
+      repositoryCiReadable: (organizationId, fullName, member) =>
+        Effect.map(reachableRepository(organizationId, fullName, member), (reached) =>
+          Option.match(reached, {
+            onNone: () => false,
+            onSome: (on) => on.access === GITHUB_ACCESS.TOKEN || on.installation.ciReadable,
+          }),
         ),
-      repositoryWriteToken: (organizationId, fullName) =>
+      repositoryWriteToken: (organizationId, fullName, member) =>
         repositoryToken(
           organizationId,
           fullName,
+          member,
           (on) =>
             on.ciReadable
               ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
@@ -1522,10 +1735,8 @@ function githubAppService(
               readBody(response, UserSchema),
             ),
           );
-          const [owner = "", name = ""] = fullName.split("/");
-          const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
           const repository = yield* Effect.scoped(
-            Effect.flatMap(send(githubRead(path, token)), (response) =>
+            Effect.flatMap(send(githubRead(repositoryPath(fullName), token)), (response) =>
               response.status === GITHUB_HTTP_STATUS.NOT_FOUND
                 ? Effect.succeed(Option.none())
                 : Effect.map(readBody(response, RepositoryPermissionsSchema), Option.some),
@@ -1562,9 +1773,14 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
  * `hostedEnvironment`. A deployment missing any of the six values builds the
  * service all the same and every read of it answers `GitHubAppNotConfigured`
  * naming what was missing, because every function bundle loads this layer
- * and a bundle must load with nothing configured.
+ * and a bundle must load with nothing configured. Members' own tokens open
+ * under the ring `HostedEnvironment` read.
  */
-export const githubAppFromEnvironment: Layer.Layer<GitHubApp, Config.ConfigError> = Layer.effect(
+export const githubAppFromEnvironment: Layer.Layer<
+  GitHubApp,
+  Config.ConfigError,
+  HostedEnvironment
+> = Layer.effect(
   GitHubApp,
   Effect.flatMap(
     Config.all({
@@ -1610,7 +1826,9 @@ export const githubAppFromEnvironment: Layer.Layer<GitHubApp, Config.ConfigError
               sessionSecret: values.sessionSecret,
             }
           : undefined;
-      return githubAppService(settings, missing);
+      return Effect.flatMap(HostedEnvironment, (environment) =>
+        githubAppService(settings, missing, environment.providerKeyEncryptionKeys),
+      );
     },
   ).pipe(
     Effect.provideServiceEffect(

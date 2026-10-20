@@ -9,7 +9,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { Effect } from "effect";
-import { agentWorkspace } from "../../github/workspace-repository.js";
+import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import type { RepositorySkill } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
@@ -30,6 +30,7 @@ export function agentSkills(
     target,
     agentWorkspace(target.userId, agent),
     agent.repository,
+    agentMember(agent),
     loadedMarkdown,
   );
 }
