@@ -29,6 +29,7 @@ import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { PortActResult } from "@luke/host/contract";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -153,8 +154,15 @@ let archives: { agentId: string; archived: boolean }[] = [];
 let archiveRefused = false;
 /** What the agent's workspace's members read answers; none refuses it. */
 let members: readonly WorkspaceMember[] | undefined;
-/** What the next read of the agent's transcript answers; none refuses it. */
+/** What the agent's transcript is pushed as once its tab follows it, and what a read of it answers once; none refuses it. */
 let transcript: CodingAgentMessagesAnswerView | undefined;
+/** The pages a transcript's stream pushes, then held open as a followed transcript stays. */
+async function* streamOf(
+  pages: readonly CodingAgentMessagesAnswerView[],
+): AsyncGenerator<CodingAgentMessagesAnswerView> {
+  yield* pages;
+  await new Promise(() => undefined);
+}
 /** Every act the page told or asked, in order. */
 let told: AnyAct[] = [];
 /** What a read of what the agent published answers; none refuses it. */
@@ -205,6 +213,14 @@ beforeEach(() => {
         );
       }
       told.push(request);
+      if (request.kind === ACT_KIND.CODING_AGENTS_TRANSCRIPT) {
+        const pages = transcript === undefined ? [] : [transcript];
+        // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
+        const value = streamOf(pages) as unknown as PortActResult<
+          typeof ACT_KIND.CODING_AGENTS_TRANSCRIPT
+        >;
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const value = {
           skills: {
