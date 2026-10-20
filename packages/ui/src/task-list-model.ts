@@ -323,6 +323,104 @@ export function taskBoardColumns(
 }
 
 /**
+ * The order the Tasks page's list runs its status groups in: the work under
+ * way first, then what waits, then the settled, as a reader scans for what
+ * is moving before what is filed.
+ */
+export const TASKS_LIST_STATUS_ORDER: readonly TaskStatus[] = [
+  TASK_STATUS.IN_PROGRESS,
+  TASK_STATUS.TODO,
+  TASK_STATUS.BACKLOG,
+  TASK_STATUS.DONE,
+  TASK_STATUS.CANCELED,
+];
+
+/** The statuses the Tasks page's list shows until the reader chooses otherwise: every one not yet settled. */
+export const TASKS_LIST_SHOWN_STATUSES: readonly TaskStatus[] = [
+  TASK_STATUS.BACKLOG,
+  TASK_STATUS.TODO,
+  TASK_STATUS.IN_PROGRESS,
+];
+
+/** What heads one group of the Tasks page's list. */
+export const TASKS_LIST_GROUP = {
+  PINNED: "pinned",
+  SECTION: "section",
+  STATUS: "status",
+} as const;
+
+/** One group of the Tasks page's list and the tasks it holds, in the order drawn. */
+export type TasksListGroup =
+  | { readonly kind: typeof TASKS_LIST_GROUP.PINNED; readonly tasks: readonly TaskSummary[] }
+  | {
+      readonly kind: typeof TASKS_LIST_GROUP.SECTION;
+      readonly sectionId: string;
+      readonly tasks: readonly TaskSummary[];
+    }
+  | {
+      readonly kind: typeof TASKS_LIST_GROUP.STATUS;
+      readonly status: TaskStatus;
+      readonly tasks: readonly TaskSummary[];
+    };
+
+/** A section of the account's as the list is handed it: its id and its tasks' ids, in the section's own order. */
+export interface TasksListSection {
+  readonly sectionId: string;
+  readonly taskIds: readonly string[];
+}
+
+/**
+ * The Tasks page's list: the pinned tasks first, in the order handed, never
+ * filtered, since a pin is the reader's own choice; then each of the
+ * account's sections, its tasks of the statuses shown; then the rest by
+ * status in the list's order (`TASKS_LIST_STATUS_ORDER`), each status shown
+ * a group of its own, the most pressing first, as a Board's column orders
+ * them. A task stands in one group alone: a pin before its section, a
+ * section before its status. A task from a service before statuses stands
+ * under Todo, as on the Board. A group left with no task is not drawn.
+ */
+export function tasksListGroups(
+  tasks: readonly TaskSummary[],
+  {
+    pinned,
+    sections,
+    statuses,
+  }: {
+    /** The pinned tasks' ids, in the order the sidebar's Pinned draws them. */
+    pinned: readonly string[];
+    sections: readonly TasksListSection[];
+    statuses: readonly TaskStatus[];
+  },
+): readonly TasksListGroup[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const placed = new Set<string>();
+  const take = (ids: readonly string[], shown: (task: TaskSummary) => boolean) =>
+    ids.flatMap((id) => {
+      const task = byId.get(id);
+      if (task === undefined || placed.has(id) || !shown(task)) return [];
+      placed.add(id);
+      return [task];
+    });
+  const statusOf = (task: TaskSummary) => task.status ?? TASK_STATUS.TODO;
+  const inStatuses = (task: TaskSummary) => statuses.includes(statusOf(task));
+  const groups: TasksListGroup[] = [];
+  const pins = take(pinned, () => true);
+  if (pins.length > 0) groups.push({ kind: TASKS_LIST_GROUP.PINNED, tasks: pins });
+  for (const { sectionId, taskIds } of sections) {
+    // Note that a task held by a section stands there alone, shown or not, so hiding its status never drops it into a status group instead.
+    const held = take(taskIds, () => true).filter(inStatuses);
+    if (held.length > 0) groups.push({ kind: TASKS_LIST_GROUP.SECTION, sectionId, tasks: held });
+  }
+  const rest = tasks.filter((task) => !placed.has(task.id));
+  for (const status of TASKS_LIST_STATUS_ORDER) {
+    if (!statuses.includes(status)) continue;
+    const held = rest.filter((task) => statusOf(task) === status).toSorted(byPriority);
+    if (held.length > 0) groups.push({ kind: TASKS_LIST_GROUP.STATUS, status, tasks: held });
+  }
+  return groups;
+}
+
+/**
  * The rows grouped by who created them, in the order chosen: the reader's
  * own first, then each teammate's, under Last updated or Created the one
  * holding the latest row first, under Name by the creator's name as

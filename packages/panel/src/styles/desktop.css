@@ -8319,3 +8319,53 @@ button.tasks-board-card-press:focus-visible::after {
 .desktop-shell[data-room="narrow"] .tasks-board-column-scroll {
   flex: 1 1 auto;
 }
+
+/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+   List | Board switch stands beside its title, and the List runs its groups
+   down the page, each headed as a Board's column is, its rows the page's
+   own `ListRow`s led by the task's priority, key, and status. */
+.desktop-toolbar-heading:has(.luke-choice-bar) {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-12);
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-16);
+  padding-bottom: var(--luke-space-24);
+}
+
+.tasks-list-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  min-height: var(--luke-control-height);
+  margin: 0;
+  padding: 0 var(--row-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-list-head > svg,
+.tasks-list-head > .luke-task-mark {
+  flex: none;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.tasks-list-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.tasks-list-key {
+  min-width: 7ch;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+}

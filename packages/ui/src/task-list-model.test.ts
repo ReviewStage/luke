@@ -20,6 +20,8 @@ import {
   TASK_GROUPING,
   TASK_ORDER,
   TASK_ROW,
+  TASKS_LIST_GROUP,
+  TASKS_LIST_SHOWN_STATUSES,
   type TaskOrder,
   type TaskRow,
   taskBoardColumns,
@@ -27,6 +29,7 @@ import {
   taskRowName,
   taskRowsCreatedBy,
   taskRowsInStatuses,
+  tasksListGroups,
   taskTime,
   toggledStatus,
 } from "./task-list-model.js";
@@ -377,5 +380,45 @@ test("the board's columns hold their status's tasks, the most pressing first and
       ["Urgent", "High, newer", "High, older", "Low", "Unweighed", "Older service"],
     ],
     [TASK_STATUS.DONE, ["Shipped"]],
+  ]);
+});
+
+test("the Tasks page's list puts the pins first, then each section, then the rest by status from the work under way, a task in one group alone", () => {
+  const tasks = [
+    standing("Filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.LOW, 1),
+    standing("Under way", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.LOW, 2),
+    standing("Urgent and under way", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.URGENT, 3),
+    standing("Pinned and sectioned", TASK_STATUS.TODO, TASK_PRIORITY.HIGH, 4),
+    standing("Sectioned", TASK_STATUS.TODO, TASK_PRIORITY.HIGH, 5),
+    standing("Sectioned, shipped", TASK_STATUS.DONE, TASK_PRIORITY.HIGH, 6),
+    standing("Shipped", TASK_STATUS.DONE, TASK_PRIORITY.HIGH, 7),
+    standing("Pinned and shipped", TASK_STATUS.DONE, TASK_PRIORITY.HIGH, 8),
+    standing("Older service", undefined, undefined, 9),
+  ];
+
+  const groups = tasksListGroups(tasks, {
+    pinned: ["Pinned and shipped", "Pinned and sectioned"],
+    sections: [
+      { sectionId: "launch", taskIds: ["Sectioned, shipped", "Pinned and sectioned", "Sectioned"] },
+      { sectionId: "empty", taskIds: [] },
+    ],
+    statuses: TASKS_LIST_SHOWN_STATUSES,
+  });
+
+  expect(
+    groups.map((group) => [
+      group.kind === TASKS_LIST_GROUP.PINNED
+        ? "Pinned"
+        : group.kind === TASKS_LIST_GROUP.SECTION
+          ? group.sectionId
+          : group.status,
+      group.tasks.map((each) => each.name),
+    ]),
+  ).toEqual([
+    ["Pinned", ["Pinned and shipped", "Pinned and sectioned"]],
+    ["launch", ["Sectioned"]],
+    [TASK_STATUS.IN_PROGRESS, ["Urgent and under way", "Under way"]],
+    [TASK_STATUS.TODO, ["Older service"]],
+    [TASK_STATUS.BACKLOG, ["Filed"]],
   ]);
 });

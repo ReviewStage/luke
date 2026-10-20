@@ -75,6 +75,7 @@ import {
   FolderPlusIcon,
   HouseIcon,
   InboxIcon,
+  ListTodoIcon,
   MessagesSquareIcon,
   SquareKanbanIcon,
   ZapIcon,
@@ -1128,24 +1129,30 @@ function SidebarFactoryRow({
  * The Board's row, under the Inbox's: the board's columns, and its name. A
  * press opens the listed workspace's tasks by status (`tasks-board.tsx`),
  * and the row is the place shown while it stands. It is always offered.
+ * While the account has the inbox-first sidebar on, the same place is the
+ * Tasks page (`tasks-page.tsx`), which holds the Board as one of its views,
+ * and the row is named and drawn for it.
  */
 function SidebarBoardRow({
   current,
   disabled,
+  tasksPage,
   onOpen,
 }: {
   current: boolean;
   disabled: boolean;
+  /** Whether the place is the Tasks page rather than the Board alone. */
+  tasksPage: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
     <NavItem
-      icon={<SquareKanbanIcon />}
+      icon={tasksPage ? <ListTodoIcon /> : <SquareKanbanIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       disabled={disabled}
       onClick={onOpen}
     >
-      Board
+      {tasksPage ? "Tasks" : "Board"}
     </NavItem>
   );
 }
@@ -1377,6 +1384,7 @@ function SidebarColumn({
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
@@ -1665,7 +1673,12 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}
         />
-        <SidebarBoardRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
+        <SidebarBoardRow
+          current={inBoard}
+          disabled={!tasks.signedIn}
+          tasksPage={inboxFirst}
+          onOpen={chosen(openBoard)}
+        />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
           <SidebarChatRow
