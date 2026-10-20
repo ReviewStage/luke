@@ -29,6 +29,7 @@ import {
   ISSUE_STATE,
   workspaceTokenRepositoriesAnswerSchema,
 } from "@luke/features/github-repositories-wire";
+import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
@@ -1645,10 +1646,16 @@ it.layer(getTestDB())("the token repositories route", (it) => {
           added.repositories.map((one) => [one.fullName, one.addedBy, one.removable]),
           [["octo-member/side", member, true]],
         );
-        assert.equal(
-          (refused.body as { error?: string }).error,
-          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-        );
+        assert.deepEqual(refused, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: {
+              reason: REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH,
+              repository: "octo-member/fork",
+            },
+          },
+        });
         assert.deepEqual(
           seenByOther.repositories.map((one) => [one.fullName, one.removable]),
           [["octo-member/side", false]],
@@ -1711,7 +1718,10 @@ it.layer(getTestDB())("the token repositories route", (it) => {
           ),
         );
 
-        assert.equal((byOther.body as { error?: string }).error, HOSTED_API_ERROR.NOT_PERMITTED);
+        assert.deepEqual(
+          byOther,
+          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
         assert.deepEqual(byOwner.repositories, []);
         assert.deepEqual(hidden.repositories, []);
         assert.deepEqual(
