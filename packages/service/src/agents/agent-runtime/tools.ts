@@ -36,15 +36,18 @@ const { BRAIN, BRAIN_WORKER, CODER, CODER_WORKER } = AGENT_ROLE;
  * coding agent is offered the call's own tools, `queue_question`,
  * `withdraw_question`, and `end_call`, on a spoken turn alone
  * (`../coder-host/tool-set.ts`'s `turnToolsOf`), since they mean something
- * only while someone is listening; the brain on every turn.
+ * only while someone is listening; the brain on every turn. `show_code` is
+ * every agent's on every turn, a coding agent's where it has a repository
+ * to read (`repositoryToolsOf`), and the board's two every agent's on a
+ * task (`taskToolsOf`).
  */
 const TOOL_ROLES = {
   [AGENT_TOOL.QUEUE_QUESTION]: [BRAIN, CODER],
   [AGENT_TOOL.WITHDRAW_QUESTION]: [BRAIN, CODER],
-  [AGENT_TOOL.SHOW_CODE]: [BRAIN],
+  [AGENT_TOOL.SHOW_CODE]: [BRAIN, CODER],
   [AGENT_TOOL.RUN_IN_REPOSITORY]: [BRAIN, BRAIN_WORKER],
-  [AGENT_TOOL.DRAW_ON_BOARD]: [BRAIN],
-  [AGENT_TOOL.LOOK_AT_BOARD]: [BRAIN],
+  [AGENT_TOOL.DRAW_ON_BOARD]: [BRAIN, CODER],
+  [AGENT_TOOL.LOOK_AT_BOARD]: [BRAIN, CODER],
   [AGENT_TOOL.LOOK_AT_PICTURE]: [BRAIN, CODER],
   [AGENT_TOOL.LIST_AGENTS]: [BRAIN, CODER],
   [AGENT_TOOL.READ_AGENT]: [BRAIN, CODER],

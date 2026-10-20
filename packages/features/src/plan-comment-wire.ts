@@ -87,10 +87,10 @@ export const planCommentWordsSchema = EffectSchema.String.check(
 );
 
 /** A key the client made for one write, so a write sent again after a lost answer is taken once. */
-export const planCommentClientKeySchema = filledText(PLAN_COMMENT_BOUNDS.MAX_CLIENT_KEY_CHARS);
+const planCommentClientKeySchema = filledText(PLAN_COMMENT_BOUNDS.MAX_CLIENT_KEY_CHARS);
 
 /** Where a thread's words stand in the plan's text: offsets into its Markdown. */
-export const planCommentSpanSchema = EffectSchema.Struct({
+const planCommentSpanSchema = EffectSchema.Struct({
   from: countedNumber,
   to: countedNumber,
 });
@@ -100,7 +100,7 @@ export const planCommentSpanSchema = EffectSchema.Struct({
  * coding agent by its id, whose name the window reads off the task's agents.
  * An entry whose member's account is gone names no member.
  */
-export const planCommentWriterSchema = EffectSchema.Struct({
+const planCommentWriterSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(PLAN_COMMENT_ACTOR)),
   by: EffectSchema.optionalKey(memberRefSchema),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
@@ -109,7 +109,7 @@ export const planCommentWriterSchema = EffectSchema.Struct({
 export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
 
 /** Who a thread was sent to: Luke, or a coding agent by its id. */
-export const planCommentAskedSchema = EffectSchema.Struct({
+const planCommentAskedSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
@@ -117,7 +117,7 @@ export const planCommentAskedSchema = EffectSchema.Struct({
 export type PlanCommentAsked = typeof planCommentAskedSchema.Type;
 
 /** One entry of a thread, as the window and the agents read it. */
-export const planCommentEntrySchema = EffectSchema.Struct({
+const planCommentEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(PLAN_COMMENT_ENTRY)),
   writer: planCommentWriterSchema,
@@ -134,7 +134,7 @@ export const planCommentEntrySchema = EffectSchema.Struct({
 export type PlanCommentEntry = typeof planCommentEntrySchema.Type;
 
 /** One thread, as the window and the agents read it. */
-export const planCommentThreadSchema = EffectSchema.Struct({
+const planCommentThreadSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   scope: EffectSchema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
   /** The words the thread was anchored to, as they stood when it was started or last moved. */

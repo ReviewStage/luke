@@ -148,7 +148,8 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   exempt one by extension, because a test body is its own edge
   (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR.
+  helpers, with the diff explained in the PR. A JSON Schema golden is kept
+  only for a schema a model is shown as a tool's input.
 - Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
   `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
   test. A test that breaks on a refactor because it checks internal

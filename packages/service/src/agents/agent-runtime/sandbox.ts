@@ -38,7 +38,8 @@
  * What the role's policy (`role.ts`) does with the sandbox once open is
  * read here by the store hook that watches the session's stream: whether a
  * turn's end stops it, and whether a step renews the credential the
- * checkout set at its firewall. A member's own GitHub token is never
+ * checkout set at its firewall, which a shallow checkout's deepen sets on
+ * its first write and which stands only from then on. A member's own GitHub token is never
  * renewed, since it does not expire: a turn's end takes it off the firewall
  * where the sandbox stops, and the next turn's first step sets it again. No
  * effect runs here; the edges that call these run their own.
@@ -258,14 +259,24 @@ export const PREPARE_SCRIPT = [
 /**
  * What a session's store hook has told its sandbox, kept in the session's
  * durable state by the root that watches it: when a sandbox tool first ran,
- * which is when the sandbox opened and its checkout set the repository
- * credential at the firewall, when that credential was last renewed,
- * whether it is its starter's own token, and whether a turn's end may have
- * taken it off since.
+ * which is when the sandbox opened, and whether its checkout opened
+ * shallow; when the first write ran, which deepened a shallow checkout and
+ * set the repository credential at the firewall; when that credential was
+ * last renewed, whether it is its starter's own token, and whether a turn's
+ * end may have taken it off since.
  */
 export interface SandboxRecord {
   /** The instant the first sandbox tool of the session was called. */
   readonly openedAt?: number;
+  /**
+   * Whether the sandbox opened on a shallow checkout, with no credential
+   * standing until a write deepens it. A record kept before checkouts
+   * opened shallow says nothing, and its checkout stood whole, its
+   * credential with it, from the instant it opened.
+   */
+  readonly openedShallow?: boolean;
+  /** The instant the first write of the session was called, which deepened its checkout and set the credential at the firewall. */
+  readonly deepenedAt?: number;
   /** The instant the store hook last renewed the credential at the firewall. */
   readonly credentialAt?: number;
   /** Whether the credential is the agent's starter's own GitHub token rather than an installation's. */
@@ -322,7 +333,7 @@ const SANDBOX_LIFECYCLE = {
     renewsCredential: false,
     stopsAtTurnEnd: false,
   },
-  [SANDBOX_POLICY.WRITE_FULL_EAGER]: {
+  [SANDBOX_POLICY.SHALLOW_THEN_DEEP]: {
     open: {
       timeout: CODER.SANDBOX_TIMEOUT_MS,
       resources: { vcpus: CODER.SANDBOX_VCPUS },
@@ -346,9 +357,24 @@ function lifecycleOf(role: AgentRole): SandboxLifecycle {
   return SANDBOX_LIFECYCLE[ROLE_PROFILE[role].sandbox];
 }
 
-/** Whether the credential set at the firewall is old enough to renew: set when the sandbox opened, or when it was last renewed. */
+/**
+ * The instant the repository credential was first set at the firewall: as
+ * the first write deepened a checkout that opened shallow, or as the
+ * sandbox opened on a whole one; none while a shallow checkout stands, which
+ * holds no credential.
+ */
+function credentialSetAt(record: SandboxRecord): number | undefined {
+  return record.openedShallow === true ? record.deepenedAt : record.openedAt;
+}
+
+/** Whether the repository credential stands at the firewall: once it was first set, as the checkout deepened or opened whole. */
+function credentialStands(record: SandboxRecord): boolean {
+  return credentialSetAt(record) !== undefined;
+}
+
+/** Whether the credential set at the firewall is old enough to renew: first set, or last renewed, that long ago. */
 function credentialIsOld(record: SandboxRecord, now: number): boolean {
-  const setAt = record.credentialAt ?? record.openedAt;
+  const setAt = record.credentialAt ?? credentialSetAt(record);
   return setAt !== undefined && now - setAt >= Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
 }
 
@@ -420,7 +446,8 @@ export function stopsAtTurnEnd(
 /**
  * Whether the role's policy sets the credential at its sandbox's firewall
  * again at this event: a step that starts once an installation token has
- * aged, or once a member's own token lapsed at a turn's end. A member's
+ * aged, or once a member's own token lapsed at a turn's end, and only once
+ * the credential stands at all, a shallow checkout's never. A member's
  * token is never renewed for its age, since it does not expire.
  */
 export function renewsCredential(
@@ -432,14 +459,15 @@ export function renewsCredential(
   return (
     lifecycleOf(role).renewsCredential &&
     event.type === "step.started" &&
+    credentialStands(record) &&
     (record.credentialLapsed === true ||
       (record.memberToken !== true && credentialIsOld(record, now)))
   );
 }
 
 /**
- * Whether a turn's end lapses a member's own token: once a sandbox tool has
- * opened the sandbox, every turn's end does, since it or a terminal's close
+ * Whether a turn's end lapses a member's own token: once the token stands
+ * at the firewall, every turn's end does, since it or a terminal's close
  * may take the token off before the next turn, which sets it again.
  */
 export function lapsesCredential(
@@ -450,7 +478,7 @@ export function lapsesCredential(
   return (
     lifecycleOf(role).renewsCredential &&
     endsTurn(event) &&
-    record.openedAt !== undefined &&
+    credentialStands(record) &&
     record.memberToken === true
   );
 }

@@ -425,7 +425,7 @@ export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema
  * the schema says, what it is, the values it may take, and its default, each
  * value written as the JSON it is unless it is a string.
  */
-export const integrationToolParameterSchema = EffectSchema.Struct({
+const integrationToolParameterSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   type: EffectSchema.String,
   required: EffectSchema.Boolean,
