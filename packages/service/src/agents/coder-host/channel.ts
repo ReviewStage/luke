@@ -8,6 +8,7 @@ import type { EveChannelInput } from "eve/channels/eve";
 import {
   type BearerAccount,
   DEPLOYMENT_ACT,
+  DEPLOYMENT_PRESENCE,
   type DeploymentActor,
   type DeploymentTurnTable,
   deploymentActor,
@@ -39,7 +40,9 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * opening that starts an agent, admitted only on a conversation the named
  * account owns, as every other caller is, and the cancel that stops the
  * agent a continue took over from, admitted only on a session the named
- * account reaches. The channel's policy for a message that
+ * account reaches. It carries the voice's spoken ask too, as it does to the
+ * brain: a call on an agent speaks into the agent's own conversation, whose
+ * turn then runs as a spoken one. The channel's policy for a message that
  * arrives while a turn is under way is `steer`: the message joins the turn
  * at its next step, and a model call still generating is cut short and run
  * again with it, because a message to a coding agent is the developer's
@@ -78,48 +81,66 @@ const UPLOAD_POLICY = {
 } as const;
 
 /**
- * The two rows the deployment is admitted for here, each the typed line
- * alone, because a coding agent has no spoken turn. The follow-up is a
- * message the voice brain or another coding agent sends an agent
- * (`coding-agent-tools.ts`'s `message_agent`), delivered exactly as one the
- * developer typed in the message box, on a session the named account's
- * agent recorded. The opening is the start of an agent the voice brain or
- * another coding agent makes for the member (`start_agent`),
- * on the one path a Start takes (`coder-host/start.ts`): the row the Start
- * made stands before eve is asked, so the door's ownership check bounds the
- * opening to a conversation the named account owns, as it bounds every
- * caller. On this channel the deployment presents the account's own
- * identity for everything it does (`DEPLOYMENT_PRESENCE.ACCOUNT`), where the
- * brain's presents it for a typed ask alone: eve steers a running turn only
- * with a message whose principal is the turn's own, and an agent's turn runs
- * under the developer's bearer, so the voice steer is minted as the developer's
- * own tuple, authenticator, type, and id, and the record says the
- * deployment carried it in the `luke:carrier` attribute rather than in the
- * principal; the opening is minted the same way, so the agent's session
- * runs as the developer whether the developer or Luke started it. A caller
- * of another role adds its row here and nowhere else.
+ * The two rows the deployment is admitted for here, each the typed line and
+ * the spoken ask. The typed follow-up is a message the voice brain or
+ * another coding agent sends an agent (`coding-agent-tools.ts`'s
+ * `message_agent`), delivered exactly as one the developer typed in the
+ * message box, on a session the named account's agent recorded. The typed
+ * opening is the start of an agent the voice brain or another coding agent
+ * makes for the member (`start_agent`), on the one path a Start takes
+ * (`coder-host/start.ts`): the row the Start made stands before eve is
+ * asked, so the door's ownership check bounds the opening to a
+ * conversation the named account owns, as it bounds every caller. A typed
+ * message presents the account's own identity (`brain-host/auth.ts`'s
+ * `DEPLOYMENT_PRESENCE`): eve steers a running turn only with a message
+ * whose principal is the turn's own, and an agent's turn runs under the
+ * developer's bearer, so the voice steer is minted as the developer's own
+ * tuple, authenticator, type, and id, and the record says the deployment
+ * carried it in the `luke:carrier` attribute rather than in the principal;
+ * the opening is minted the same way, so the agent's session runs as the
+ * developer whether the developer or Luke started it. The spoken ask is
+ * the voice function's, handed to eve for the account it resolved at its
+ * own handshake, as the brain's channel takes it
+ * (`brain-host/channel.ts`): it opens an agent's session, or follows one
+ * up, as a spoken turn (`CODER_DEPLOYMENT_PRESENCE`). A caller of another
+ * role adds its row here and nowhere else.
  * Note that the table holds no row for a cancel or a reset, and needs none:
  * neither opens a turn, so the deployment's authenticator admits both on
- * every channel without asking the table (`brain-host/auth.ts`), and here
- * mints them as the account's own principal like the rest. What bounds them
- * is the door's ownership check, which admits them only on a session a
- * conversation the named account reaches recorded. A cancel is how a
- * continue the voice brain or a coding agent starts (`start_agent`'s `from`)
- * stops the agent it took over from, as the developer's own Stop would
- * (`coder-host/start.ts`); a reset is how a task's delete or an account's
- * deletion a browser asked for retires an agent's session
+ * every channel without asking the table (`brain-host/auth.ts`). What
+ * bounds them is the door's ownership check, which admits them only on a
+ * session a conversation the named account reaches recorded. A cancel is
+ * how a continue the voice brain or a coding agent starts (`start_agent`'s
+ * `from`) stops the agent it took over from, as the developer's own Stop
+ * would (`coder-host/start.ts`); a reset is how a task's delete or an
+ * account's deletion a browser asked for retires an agent's session
  * (`agents/retire-sessions.ts`).
  */
 export const CODER_DEPLOYMENT_TURNS = {
   [DEPLOYMENT_ACT.OPEN]: {
     [BRAIN_HOST_TURN.TYPED]: true,
-    [BRAIN_HOST_TURN.SPOKEN]: false,
+    [BRAIN_HOST_TURN.SPOKEN]: true,
   },
   [DEPLOYMENT_ACT.FOLLOW_UP]: {
     [BRAIN_HOST_TURN.TYPED]: true,
-    [BRAIN_HOST_TURN.SPOKEN]: false,
+    [BRAIN_HOST_TURN.SPOKEN]: true,
   },
 } as const satisfies DeploymentTurnTable;
+
+/**
+ * Whose identity the deployment presents here for all but a typed message,
+ * which presents the account's whatever this says: its own, as the brain's
+ * channel does. Note that a spoken ask is therefore a principal of the
+ * deployment's type, so eve never steers it into a typed turn running under
+ * the developer's bearer, nor a typed line into a spoken turn: each waits
+ * for the other's turn to end and opens one of its own, which runs under
+ * its own kind's tools and words (`tool-set.ts`'s `turnToolsOf`,
+ * `turn-context.ts`). The cost is that a call on an agent mid-turn waits for that
+ * turn's end before it is answered. It also admits the deployment's read of
+ * a session's stream, which the voice function follows a spoken ask's turn
+ * on; a cancel and a reset are minted as the deployment's principal, which
+ * eve's cancel and reset routes read nothing of.
+ */
+export const CODER_DEPLOYMENT_PRESENCE = DEPLOYMENT_PRESENCE.DEPLOYMENT;
 
 export function coderChannelInput(
   resolveUserId: BearerAccount,

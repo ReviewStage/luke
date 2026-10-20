@@ -30,8 +30,10 @@ import {
   type CODER_TOOL,
   type RepositoryTool,
   repositoryToolsOf,
+  type SpokenTurnTool,
   type TaskTool,
   taskToolsOf,
+  turnToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
@@ -77,7 +79,7 @@ export const seams: CoderHostSeams = Effect.runSync(
 
 export const host: CoderHost = coderHost(seams);
 
-/** What a model resolver reads of eve's `step.started`, which eve hands it unparsed: eve's id for the turn the step is of. */
+/** What a resolver reads of eve's `step.started` or `turn.started`, which eve hands it unparsed: eve's id for the turn the step is of, or the turn opening. */
 const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.String }) });
 
 /**
@@ -88,7 +90,7 @@ const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.S
  */
 export const readStepStarted = Schema.decodeUnknownSync(StepStartedSchema);
 
-/** The store's id for the turn a `step.started` opens a step of in the session. */
+/** The store's id for the turn a `step.started` opens a step of in the session, or a `turn.started` opens. */
 export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.Type): string {
   return hostTurnId(sessionId, started.data.turnId);
 }
@@ -183,6 +185,18 @@ export function offeredPlanTools(
       return taskToolsOf(agent.success);
     }),
   );
+}
+
+/**
+ * The call's own tools the session is offered for the kind of turn it opens,
+ * for those tools' own files (`turnToolsOf`): all three on a spoken turn,
+ * none on a typed one. Note that it is read off the request alone, with no
+ * admission, because the tools reach nothing when they run: the journal
+ * carries their calls to the voice, and a session the host does not admit
+ * runs no model step to call them from.
+ */
+export function offeredTurnTools(auth: SessionAuth): ReadonlySet<SpokenTurnTool> {
+  return turnToolsOf(host.turnKind(auth));
 }
 
 /**
