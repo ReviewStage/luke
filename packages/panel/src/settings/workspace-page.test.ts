@@ -157,6 +157,8 @@ function listedRepository(fullName: string, access: GitHubAccess) {
 
 /** The repositories the reader's own token may push to that the picker's listing answers as addable, by full name. */
 let tokenReach: string[] = [];
+/** Whether the listing answers as a service older than `addable`, the token's repositories among its own. */
+let beforeAddable = false;
 /** The repositories members added to the workspace on their tokens, as the service lists them to the reader. */
 let tokenRepositories: WorkspaceTokenRepository[] = [];
 /** While set, the token repositories' read waits on it before answering what it read. */
@@ -334,10 +336,25 @@ function answer(request: Asked): Promise<Answered> {
           repositories: {
             installed: true,
             installationUrl: "https://github.com/apps/luke/installations/new",
-            repositories: githubRepositories.map((fullName) =>
-              listedRepository(fullName, GITHUB_ACCESS.APP),
-            ),
-            addable: tokenReach.map((fullName) => listedRepository(fullName, GITHUB_ACCESS.TOKEN)),
+            ...(beforeAddable
+              ? {
+                  repositories: [
+                    ...githubRepositories.map((fullName) =>
+                      listedRepository(fullName, GITHUB_ACCESS.APP),
+                    ),
+                    ...tokenReach.map((fullName) =>
+                      listedRepository(fullName, GITHUB_ACCESS.TOKEN),
+                    ),
+                  ],
+                }
+              : {
+                  repositories: githubRepositories.map((fullName) =>
+                    listedRepository(fullName, GITHUB_ACCESS.APP),
+                  ),
+                  addable: tokenReach.map((fullName) =>
+                    listedRepository(fullName, GITHUB_ACCESS.TOKEN),
+                  ),
+                }),
           },
         }),
       );
@@ -433,6 +450,7 @@ beforeEach(() => {
   githubRepositories = [];
   repositoriesHeld = undefined;
   tokenReach = [];
+  beforeAddable = false;
   tokenRepositories = [];
   tokenReadHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
@@ -1614,6 +1632,21 @@ test("Add repository offers the repositories the reader's own token may push to 
   assert.equal(
     rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
     "Token",
+  );
+});
+
+test("Add repository offers the token's repositories from a service older than addable, which lists them among the picker's own", async () => {
+  beforeAddable = true;
+  githubRepositories = ["acme/relay"];
+  tokenReach = ["octo-member/side"];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent),
+    ["octo-member/side"],
   );
 });
 

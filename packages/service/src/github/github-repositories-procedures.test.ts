@@ -437,16 +437,16 @@ it.layer(getTestDB())("the repositories route", (it) => {
           member,
           workspace,
           "octo-member/kept",
-          new Date("2026-10-03T00:00:00Z"),
+          new Date("2026-09-01T00:00:00Z"),
         );
 
         const reached = listed(yield* ask(member, "GET", [workspace]));
 
         assert.deepEqual(
-          reached.repositories.map((one) => [one.fullName, one.access]),
+          reached.repositories.map((one) => [one.fullName, one.access, one.updatedAt]),
           [
-            ["octo-member/kept", GITHUB_ACCESS.TOKEN],
-            ["acme/relay", GITHUB_ACCESS.APP],
+            ["octo-member/kept", GITHUB_ACCESS.TOKEN, Date.parse("2026-10-07T00:00:00Z")],
+            ["acme/relay", GITHUB_ACCESS.APP, Date.parse("2026-10-02T00:00:00Z")],
           ],
         );
         assert.deepEqual(

@@ -1,4 +1,7 @@
-import type { WorkspaceTokenRepository } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  type WorkspaceTokenRepository,
+} from "@luke/features/github-repositories-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Badge, BUTTON_VARIANT, Button, SETTINGS_ROW_INDENT, SettingsRow } from "@luke/ui";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
@@ -119,7 +122,10 @@ export function AddTokenRepository({
           setCandidates({ kind: "failed" });
           return;
         }
-        const rows = (answer.repositories.addable ?? [])
+        // A service older than `addable` lists the token's repositories among the picker's own.
+        const { addable, repositories: listed } = answer.repositories;
+        const offered = addable ?? listed.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
+        const rows = offered
           .filter((one) => !added.has(one.fullName.toLowerCase()))
           .map((one): MenuRow => ({ id: one.fullName, label: one.fullName }));
         setCandidates({ kind: "read", rows });

@@ -220,7 +220,11 @@ function pickedRepositories(
   added: readonly WorkspaceTokenRepositoryRow[],
 ): PickedRepositories {
   const listed = new Set(throughApp.map((one) => nameKey(one.fullName)));
-  const addedOnly = added.filter((row) => !listed.has(nameKey(row.repository))).map(addedEntry);
+  const ownByName = new Map(onToken.map((one) => [nameKey(one.fullName), one]));
+  // Note that an added repository the member's token lists is drawn as GitHub answers it, because its row keeps only its name.
+  const addedOnly = added
+    .filter((row) => !listed.has(nameKey(row.repository)))
+    .map((row) => ownByName.get(nameKey(row.repository)) ?? addedEntry(row));
   for (const one of addedOnly) listed.add(nameKey(one.fullName));
   const byRecent = (left: GitHubRepository, right: GitHubRepository) =>
     right.updatedAt - left.updatedAt;
