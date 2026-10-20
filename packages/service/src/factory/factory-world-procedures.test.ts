@@ -20,11 +20,11 @@ import { factoryWorldAnswerSchema } from "@luke/features/factory-world-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
+import { Clock, type Context, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -33,7 +33,7 @@ import {
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { integrationConnectOver } from "../testing/integration-connect.js";
-import { factoryWorldApp } from "./factory-world-app.js";
+import { factoryProcedures } from "./factory-world-procedures.js";
 
 /**
  * A workspace's Factory world, as the world route answers it to a member:
@@ -289,34 +289,37 @@ const ask = (github: FakeGitHub, userId: string, body: WireBoundaryInput) =>
   Effect.gen(function* () {
     const clock = yield* TestClock.make();
     yield* clock.setTime(NOW);
-    const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, clock),
-      integrationConnectOver(LINEAR_CONNECTORS),
-      github.layer,
+    const services = yield* Effect.context<never>().pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(Clock.Clock, clock),
+          integrationConnectOver(LINEAR_CONNECTORS),
+          github.layer,
+        ),
+      ),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      factoryWorldApp({
+    const handle = hostedFetch({
+      factory: factoryProcedures({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
           ),
-      }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
+      }),
+    });
+    // SAFETY: the world procedure yields the database, the clock, the GitHub App, its HTTP client, and the Linear connectors alone, which the context above holds.
+    const webServices = services as Context.Context<WebServices>;
     const response = yield* Effect.promise(() =>
-      handler(
+      handle(
         new Request(new URL(HOSTED_SERVICE_PATH.FACTORY_WORLD, ORIGIN), {
           method: "POST",
-          headers: { authorization: `Bearer ${userId}` },
+          headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
+        webServices,
       ),
     );
     // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const answered = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-    yield* Effect.promise(() => dispose());
     return { status: response.status, body: answered } satisfies Answer;
   });
 

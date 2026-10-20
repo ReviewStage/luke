@@ -48,7 +48,6 @@ import {
 } from "./plan-comment-wire.js";
 import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
 import {
-  HOSTED_SERVICE_PATH,
   planAttachmentPath,
   planAttachmentsPath,
   planCommentsPath,
@@ -70,7 +69,6 @@ import {
 import {
   type TaskSections,
   type TaskSectionWrite,
-  taskSectionsAnswerSchema,
   taskSectionWriteSchema,
 } from "./task-section-wire.js";
 import {
@@ -78,7 +76,6 @@ import {
   type PlanRevisionsAnswer,
   type RepositoryPin,
   repositoryPinRequestSchema,
-  repositoryPinsAnswerSchema,
   TASK_LIST_ARCHIVED,
   type Task,
   type TaskCreateRequest,
@@ -775,10 +772,7 @@ export class HostedTaskClient {
     HttpClient.HttpClient
   > {
     return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.REPOSITORY_PINS },
-        repositoryPinsAnswerSchema,
-      ),
+      orNothing(askHosted(this.#hosted.repositoryPins.list, undefined)),
       (answer) => answer?.pins,
     );
   }
@@ -797,24 +791,14 @@ export class HostedTaskClient {
     );
     if (asked === undefined) return Effect.succeed(undefined);
     return Effect.map(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.PUT,
-          path: HOSTED_SERVICE_PATH.REPOSITORY_PINS,
-          body: JSON.stringify(asked),
-        },
-        repositoryPinsAnswerSchema,
-      ),
+      orNothing(askHosted(this.#hosted.repositoryPins.set, asked)),
       (answer) => answer?.pins,
     );
   }
 
   /** The sections the account made in its sidebars and the tasks in them; nothing where the service did not answer. */
   taskSections(): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.TASK_SECTIONS },
-      taskSectionsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskSections.list, undefined));
   }
 
   /**
@@ -827,14 +811,7 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
     if (asked === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      {
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.TASK_SECTIONS,
-        body: JSON.stringify(asked),
-      },
-      taskSectionsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskSections.write, asked));
   }
 
   /**

@@ -359,7 +359,7 @@ export function runCreateIssue(
       });
       // Note that the member was just read in the workspace, so a filing refused is their leaving it since.
       if (Option.isNone(filed)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
-      // Counted as the window's own filing is (`issues-app.ts`), so an agent's filing is no less an issue made.
+      // Counted as the window's own filing is (`issues-procedures.ts`), so an agent's filing is no less an issue made.
       yield* recordServerEvent(SERVER_EVENT.ISSUE_CREATE, userId, {});
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,

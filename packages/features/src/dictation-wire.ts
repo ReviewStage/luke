@@ -65,5 +65,3 @@ export const dictationRequestSchema = EffectSchema.Struct({
 export const dictationAnswerSchema = EffectSchema.Struct({
   text: EffectSchema.String,
 });
-
-export type DictationAnswer = typeof dictationAnswerSchema.Type;

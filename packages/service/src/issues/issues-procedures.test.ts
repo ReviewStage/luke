@@ -12,15 +12,15 @@ import {
 } from "@luke/features/issue-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, DateTime, Effect, Layer, Option, Result, type Schema } from "effect";
-import { HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
+import { type Context, DateTime, Effect, Option, Result, type Schema } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { issuesApp } from "./issues-app.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
+import { issuesProcedures } from "./issues-procedures.js";
 
 /**
- * A workspace's issues, answered by the group the way a function answers
- * them, over a real dialect: a member files, lists, reads, and changes
+ * A workspace's issues, answered by the hosted oRPC router the way the web
+ * route answers them, over a real dialect: a member files, lists, reads, and changes
  * them, an account outside the workspace reaches none of them, and a body
  * or a method the paths do not take is refused.
  *
@@ -34,7 +34,7 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group answering one request, as the rewrite hands it a path's id under `id`. */
+/** The issues resource answering one request at its public path, as the web route answers it. */
 const answer = (
   bearers: ReadonlyMap<string, string>,
   path: string,
@@ -42,36 +42,47 @@ const answer = (
   init: { readonly method?: string; readonly body?: unknown },
 ) =>
   Effect.gen(function* () {
-    const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
-    );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      issuesApp({
+    // SAFETY: the issues procedures yield the database, the clock, and the event recorder's services alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    const handle = hostedFetch({
+      issues: issuesProcedures({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-      }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const one = /^\/api\/issues\/([^/?]+)$/u.exec(path);
-    const routed = one === null ? path : `/api/issues/issue?id=${one[1]}`;
+      }),
+    });
     const response = yield* Effect.promise(() =>
-      handler(
-        new Request(`${ORIGIN}${routed}`, {
+      handle(
+        new Request(`${ORIGIN}${path}`, {
           method: init.method ?? "GET",
           headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
           ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
         }),
+        services,
       ),
     );
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test reads it as the wire value it is.
+    // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
+  });
+
+/** One request's status and bytes as the issues resource answers it, the request built whole by the test. */
+const bytes = (bearers: ReadonlyMap<string, string>, request: Request) =>
+  Effect.gen(function* () {
+    // SAFETY: the issues procedures yield the database, the clock, and the event recorder's services alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    const handle = hostedFetch({
+      issues: issuesProcedures({
+        resolveUserId: (incoming) =>
+          Effect.succeed(
+            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+          ),
+      }),
+    });
+    const response = yield* Effect.promise(() => handle(request, services));
+    return { status: response.status, text: yield* Effect.promise(() => response.text()) };
   });
 
 /** A member of a fresh workspace and an account outside it, each behind its own bearer. */
@@ -102,7 +113,8 @@ const openAccounts = Effect.gen(function* () {
     userId: string,
     init: { readonly method?: string; readonly body?: unknown } = {},
   ) => answer(bearers, path, userId, init);
-  return { owner, outsider, workspaceId, ask };
+  const raw = (request: Request) => bytes(bearers, request);
+  return { owner, outsider, workspaceId, ask, raw };
 });
 
 /** The answer read through its schema, failing the test where the status or the body is not what it should be. */
@@ -301,5 +313,49 @@ it.layer(getTestDB())("the issues routes", (it) => {
         refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
       );
     }),
+  );
+
+  it.effect(
+    "refusals answer the old route's bytes: an unsigned caller is refused before its malformed body is read, two workspaces or an id that is no UUID as before, and a body past the bound as too large",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId, raw } = yield* openAccounts;
+        const json = { "content-type": "application/json" };
+        const signed = { ...json, authorization: `Bearer ${owner}` };
+
+        assert.deepEqual(
+          yield* raw(
+            new Request(`${ORIGIN}/api/issues`, {
+              method: "POST",
+              headers: { ...json, authorization: "Bearer nobody" },
+              body: JSON.stringify({ title: 7 }),
+            }),
+          ),
+          { status: HOSTED_HTTP_STATUS.UNAUTHORIZED, text: '{"error":"invalid-token"}' },
+        );
+        assert.deepEqual(
+          yield* raw(
+            new Request(`${ORIGIN}/api/issues?workspaceId=${workspaceId}&workspaceId=other`, {
+              headers: signed,
+            }),
+          ),
+          { status: HOSTED_HTTP_STATUS.BAD_REQUEST, text: '{"error":"invalid-request"}' },
+        );
+        assert.deepEqual(
+          yield* raw(new Request(`${ORIGIN}/api/issues/not-a-uuid`, { headers: signed })),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, text: '{"error":"not-found"}' },
+        );
+        const oversized = JSON.stringify({ workspaceId, title: "Bug" }).padEnd(130_000, " ");
+        assert.deepEqual(
+          yield* raw(
+            new Request(`${ORIGIN}/api/issues`, {
+              method: "POST",
+              headers: { ...signed, "content-length": String(oversized.length) },
+              body: oversized,
+            }),
+          ),
+          { status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, text: '{"error":"request-too-large"}' },
+        );
+      }),
   );
 });

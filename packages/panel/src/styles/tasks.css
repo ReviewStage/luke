@@ -214,6 +214,12 @@
     var(--luke-control-height) -
     var(--luke-space-6)
   );
+  /* What the title keeps of the column for its ⋯ alone, which has no byline. */
+  --plan-unit-menu-room: calc(
+    var(--luke-control-height) +
+    var(--luke-space-4) -
+    var(--luke-space-6)
+  );
 }
 
 .plan-unit-attributed {
@@ -232,6 +238,12 @@
 .plan-unit-attributed > .plan-unit > .markdown-heading:first-child,
 .plan-document-editor .plan-unit > .markdown-heading:is([data-level="1"], [data-level="2"]) {
   padding-right: var(--plan-unit-row-room);
+}
+
+/* The title wraps short of its ⋯ in the same way, read or edited, so a name
+   long enough to fill its line never runs under it. */
+.plan-unit-attributed .task-title > .markdown-heading {
+  padding-right: var(--plan-unit-menu-room);
 }
 
 /* The byline and the section's ⋯ stand in one row at the heading's line, a

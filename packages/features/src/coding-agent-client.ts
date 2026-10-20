@@ -87,7 +87,7 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
-import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { dictationRequestSchema } from "./dictation-wire.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
@@ -495,13 +495,9 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<DictationTranscribeAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(dictationRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.DICTATION,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, dictationAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
+      {},
     );
   }
 
