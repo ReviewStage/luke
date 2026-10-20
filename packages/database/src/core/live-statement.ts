@@ -32,9 +32,16 @@ interface RenderableStatement {
   toSQL(): { readonly sql: string; readonly params: readonly unknown[] };
 }
 
-/** An instant as the wire carries one: whole epoch milliseconds, as a number rather than Postgres's text. */
+/**
+ * An instant as the wire carries one: whole epoch milliseconds, as a number
+ * rather than Postgres's text. Note that the instant is read at UTC first:
+ * `extract` from a `timestamptz` is only stable, since it reads the session's
+ * time zone, and Realtime refuses a statement with any function that is not
+ * immutable ("scalar expression uses a mutable function"). From a `timestamp`
+ * read at UTC it is immutable, and the epoch is the same.
+ */
 function epochMillis(column: SQLWrapper): SQL<number> {
-  return sql<number>`floor(extract(epoch from ${column}) * 1000)::float8`;
+  return sql<number>`floor(extract(epoch from (${column} at time zone 'UTC')) * 1000)::float8`;
 }
 
 /**
@@ -59,9 +66,9 @@ export function liveSelection<
 /** How many rows a group holds, as a number rather than the `bigint` Realtime would carry as text. */
 export const LIVE_COUNT: SQL<number> = sql<number>`count(*)::int`;
 
-/** When a group's latest row changed, as epoch milliseconds. */
+/** When a group's latest row changed, as epoch milliseconds, read at UTC as `epochMillis` reads one. */
 export function liveLatest(column: SQLWrapper): SQL<number> {
-  return sql<number>`floor(extract(epoch from max(${column})) * 1000)::float8`;
+  return epochMillis(sql`max(${column})`);
 }
 
 /** The values Realtime carries as they are, and an instant, which it carries as the text Postgres reads one from. */
