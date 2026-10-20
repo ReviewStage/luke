@@ -49,6 +49,9 @@ export default defineConfig({
     }),
   ],
   build: {
+    // The bundle budget measures what it needs itself, so vite's own gzip
+    // report is only a cost to every build.
+    reportCompressedSize: false,
     rollupOptions: {
       input: {
         main: resolveEntry("./index.html"),

@@ -5,11 +5,12 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { insideCode } from "./skill-mention.js";
 
 /**
- * chat-mention.ts -- a member or a channel named in a chat message as `@handle` or `#name`: where one is being typed, which match it, and what choosing one writes.
+ * chat-mention.ts -- a member or a channel named in a chat message, typed as an `@` or a `#` word: where one is being typed, which match it, and what choosing one writes.
  *
- * A chat message names a member the way every chat does, an `@` at the
- * start of a word and then the handle (`@agent-2`), which tells that
- * member; and links a channel with a `#` the same way (`#general`). The
+ * A chat message names a member as every box of the app does, by the
+ * mention link a chip writes (`[@Ada Lovelace](https://tryluke.dev/…)`),
+ * which tells that member, found by typing an `@` and the start of their
+ * name; and links a channel with a `#` and its name (`#general`). The
  * composer opens its list while the caret stands in such a word, on the
  * same terms a `/` opens the skills (`skill-mention.ts`): an `@` or a `#`
  * inside a word (`dev@example.com`, `a#b`), or in code, opens nothing, and
@@ -35,28 +36,35 @@ export interface ChatMention {
   readonly query: string;
 }
 
-/** A member or a channel as the composer offers it: its sigil, its handle or name, a muted line of what it stands for, and, for a person or an agent, the mention a chip writes it as. */
+/** A member or a channel as the composer offers it: its sigil, its name, a muted line of what it stands for, and, for a member, the mention a chip writes it as and that mention's link. */
 export interface ChatTarget {
   readonly sigil: ChatSigil;
   readonly name: string;
   readonly detail: string | undefined;
-  /** The mention a box that draws chips writes the member as; none for a channel or Luke, written as their word. */
+  /** The mention a member is written as; none for a channel, written as its word. */
   readonly mention?: ChatMemberMention | undefined;
+  /** The link target the member's mention is written with, in the workspace's place, which a box that draws chips writes; none for a channel. */
+  readonly link?: string | undefined;
+  /** The member's mention as Markdown, `[@Name](link)`, which a plain box writes; none for a channel. */
+  readonly markdown?: string | undefined;
   /** The link target of the date the words after an `@` name, written with its detail, the date in full; none for a member or a channel. */
   readonly date?: string | undefined;
 }
 
-/** The characters a handle or a channel's name is spelled in, by its sigil (`chat-wire.ts`'s grammars). */
+/** The characters an `@` word's search for a member, or a channel's name, is spelled in, by its sigil: a name's letters in any case, or `chat-wire.ts`'s channel grammar. */
 const NAME_CHARACTER = {
-  [CHAT_TARGET_SIGIL.MEMBER]: /[a-z0-9-]/u,
+  [CHAT_TARGET_SIGIL.MEMBER]: /[\p{L}\p{N}'-]/u,
   [CHAT_TARGET_SIGIL.CHANNEL]: /[a-z0-9._-]/u,
 } as const satisfies Record<ChatSigil, RegExp>;
 
-/** The most characters a handle or a channel's name may spell, by its sigil, as `post_chat`'s `to` bounds it. */
+/** The most characters an `@` word's search, or a channel's name, may spell, by its sigil. */
 const NAME_BOUND = {
-  [CHAT_TARGET_SIGIL.MEMBER]: CHAT_BOUNDS.MAX_HANDLE_CHARS,
+  [CHAT_TARGET_SIGIL.MEMBER]: 40,
   [CHAT_TARGET_SIGIL.CHANNEL]: CHAT_BOUNDS.MAX_KEY_CHARS,
 } as const satisfies Record<ChatSigil, number>;
+
+/** The characters a word is walked back over to find its sigil: every character either sigil's word is spelled in. */
+const WORD_CHARACTER = /[\p{L}\p{N}._'-]/u;
 
 /** The words and the caret after an edit. */
 interface TextEdit {
@@ -77,7 +85,7 @@ function isSigil(character: string | undefined): character is ChatSigil {
 /** The `@` or `#` word the caret ends, as far as it has been typed; nothing where the caret stands in no such word. */
 export function chatMentionAt(text: string, caret: number): ChatMention | undefined {
   let at = caret;
-  while (at > 0 && /[a-z0-9._-]/u.test(text[at - 1] ?? "")) at -= 1;
+  while (at > 0 && WORD_CHARACTER.test(text[at - 1] ?? "")) at -= 1;
   // Note that a channel's name may hold a dot a handle may not, so the word is walked back on the wider set and checked on its own sigil's.
   const start = at - 1;
   const sigil = text[start];
@@ -131,17 +139,19 @@ export function matchingTargets(
 ): readonly ChatTarget[] {
   const asked = mention.query.toLowerCase();
   const own = targets.filter((target) => target.sigil === mention.sigil);
-  const starts = own.filter((target) => target.name.startsWith(asked));
+  const named = (target: ChatTarget) => target.name.toLowerCase();
+  const starts = own.filter((target) => named(target).startsWith(asked));
   const holds = own.filter(
-    (target) => !target.name.startsWith(asked) && target.name.includes(asked),
+    (target) => !named(target).startsWith(asked) && named(target).includes(asked),
   );
   const describes = own.filter(
-    (target) => !target.name.includes(asked) && (target.detail ?? "").toLowerCase().includes(asked),
+    (target) =>
+      !named(target).includes(asked) && (target.detail ?? "").toLowerCase().includes(asked),
   );
   return [...starts, ...holds, ...describes];
 }
 
-/** The message with the word under the caret written as the target chosen, a date as its link, a space after it, and the caret after that. */
+/** The message with the word under the caret written as the target chosen, a member or a date as its link, a space after it, and the caret after that. */
 export function chooseTarget(text: string, mention: ChatMention, target: ChatTarget): TextEdit {
   // Note that a date's words may hold spaces, so the word is walked on from the end of what was typed.
   let end = mention.start + 1 + mention.query.length;
@@ -149,9 +159,9 @@ export function chooseTarget(text: string, mention: ChatMention, target: ChatTar
   const after = text.slice(end);
   const spaced = after.startsWith(" ") ? after : ` ${after}`;
   const written =
-    target.date === undefined
-      ? `${target.sigil}${target.name}`
-      : `[@${target.detail}](${target.date})`;
+    target.date !== undefined
+      ? `[@${target.detail}](${target.date})`
+      : (target.markdown ?? `${target.sigil}${target.name}`);
   return {
     text: `${text.slice(0, mention.start)}${written}${spaced}`,
     caret: mention.start + written.length + 1,

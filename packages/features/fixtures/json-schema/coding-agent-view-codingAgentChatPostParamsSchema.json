@@ -151,6 +151,11 @@
               "type": "string",
               "maxLength": 81
             },
+            "channelId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
             "replyTo": {
               "type": "number",
               "minimum": 0

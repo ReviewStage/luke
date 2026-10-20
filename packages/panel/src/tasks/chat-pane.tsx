@@ -9,7 +9,6 @@ import {
   type ChatMessage,
   type ChatReadBlock,
   knownBlock,
-  MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
@@ -41,7 +40,6 @@ import {
   forYou,
   placeChannel,
   postsIn,
-  postTarget,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import { AtSignIcon, HashIcon } from "lucide-react";
@@ -63,7 +61,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  *
  * A message is a row led by its author's mark, an agent's own glyph as its
  * tab wears it, Luke's initial in his blue, a person's initial, then a line
- * naming the author, its handle, and when it was posted, and under it the
+ * naming the author and when it was posted, and under it the
  * blocks it carries: Markdown as the transcript draws it, a link by its
  * label, a code block by the file and lines it points at as a transcript
  * names a file (`file-ref.tsx`), a picture drawn as a plan's picture is
@@ -84,9 +82,6 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * the stream is out of it whole besides (`ph-no-capture`).
  */
 
-/** What For you says it holds, under its name. */
-const FOR_YOU_META = "Asks, direct messages, and mentions waiting on you";
-
 /** What For you says with nothing waiting. */
 const NOTHING_WAITS = "Nothing waits on you.";
 
@@ -94,7 +89,7 @@ const NOTHING_WAITS = "Nothing waits on you.";
 const NOTHING_POSTED = "Nothing posted here yet.";
 
 /** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others. */
-const ARCHIVED_CHANNEL = "This channel is archived, so nothing more is posted in it.";
+const ARCHIVED_CHANNEL = "This channel is archived.";
 const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
 
 /** What a row says of a block this build does not know. */
@@ -214,8 +209,6 @@ interface MessageContext {
   readonly targets: readonly ChatTarget[];
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
-  /** The workspace a chip's link is written in. */
-  readonly mentionPlace: MentionPlace | undefined;
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
   readonly actorOf: (memberId: string) => Actor;
   readonly openLink: (url: string) => void;
@@ -253,19 +246,15 @@ function Body({
   );
 }
 
-/** The line over a message's body: its author, its handle, where it was posted where that is said, and when. */
 /** The line over a message's words, as an Inbox comment's head is: its author by name, their card on it, where it was said, and when. */
 function Byline({
   actor,
-  handle,
   at,
   where,
   now,
   action,
 }: {
   actor: Actor;
-  /** An agent's handle, said quietly after its title, since two agents may share a title and the chat names them by it. */
-  handle: string | undefined;
   at: number;
   where: string | undefined;
   now: number;
@@ -281,18 +270,11 @@ function Byline({
           <ActorRef actor={actor} nameOnly />
         )}
       </span>
-      {handle === undefined ? null : <span className="chat-byline-handle">@{handle}</span>}
       {where === undefined ? null : <span className="chat-byline-where">{where}</span>}
       <RelativeTime at={at} now={now} />
       {action}
     </div>
   );
-}
-
-/** An agent author's handle, which tells two agents of one title apart; none for a person or Luke, named by who they are. */
-function agentHandle(context: MessageContext, memberId: string): string | undefined {
-  const member = context.chat.members.find((each) => each.id === memberId);
-  return member?.kind === MEMBER_KIND.AGENT ? member.handle : undefined;
 }
 
 /** The face a message leads with, in a column of its own: the author's photo, Luke, or the agent's harness, as a list row draws them. */
@@ -311,13 +293,7 @@ function Reply({ message, context }: { message: ChatMessage; context: MessageCon
     <li className="chat-reply" data-seq={message.seq}>
       <Face actor={actor} />
       <div className="chat-message-body">
-        <Byline
-          actor={actor}
-          handle={agentHandle(context, message.authorId)}
-          at={message.postedAt}
-          where={undefined}
-          now={context.now}
-        />
+        <Byline actor={actor} at={message.postedAt} where={undefined} now={context.now} />
         <Body message={message} context={context} />
       </div>
     </li>
@@ -359,13 +335,7 @@ function ThreadRow({
       <li className="chat-message" data-seq={message.seq}>
         <Face actor={actor} />
         <div className="chat-message-body">
-          <Byline
-            actor={actor}
-            handle={agentHandle(context, message.authorId)}
-            at={message.postedAt}
-            where={where}
-            now={context.now}
-          />
+          <Byline actor={actor} at={message.postedAt} where={where} now={context.now} />
           <Body message={message} context={context} />
         </div>
       </li>
@@ -377,7 +347,6 @@ function ThreadRow({
       <div className="chat-message-body">
         <Byline
           actor={actor}
-          handle={agentHandle(context, message.authorId)}
           at={message.postedAt}
           where={where}
           now={context.now}
@@ -399,7 +368,6 @@ function ThreadRow({
                 label="Reply in thread"
                 targets={context.targets}
                 keywords={context.keywords}
-                place={context.mentionPlace}
                 compact
                 onSend={(text, attachments) =>
                   context.onPost({ ...postOf(text, attachments), replyTo: message.seq })
@@ -475,18 +443,21 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
   }
 }
 
-/** A direct message's two, each by their handle, as its title and its foot name them where the reader is neither. */
+/** A direct message's two, each by name, as its foot names them where the reader is neither. */
 function dmPair(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
-  return (channel.members ?? []).map((id) => `@${chatWho(chat, names, id).handle}`).join(" and ");
+  return (channel.members ?? []).map((id) => chatWho(chat, names, id).name).join(" and ");
 }
 
-/** A channel's title as its head says it: `# name`, a DM's `@handle`, or a DM between two others' `@a ↔ @b`. */
+/** A channel's title as its head says it: `# name`, or a DM by who it is with, both of its two's names where the reader is neither (`channelLabel`). */
 function channelTitle(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
-  if (channel.kind === CHANNEL_KIND.DM && !(channel.members ?? []).includes(chat.self)) {
-    return (channel.members ?? []).map((id) => `@${chatWho(chat, names, id).handle}`).join(" ↔ ");
-  }
   const label = channelLabel(chat, names, channel);
-  return channel.kind === CHANNEL_KIND.DM ? `@${label}` : `# ${label}`;
+  return channel.kind === CHANNEL_KIND.DM ? label : `# ${label}`;
+}
+
+/** What a channel's composer is called: "Message" and the channel's `#name`, or who a DM is with. */
+function composerLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+  const label = channelLabel(chat, names, channel);
+  return channel.kind === CHANNEL_KIND.DM ? `Message ${label}` : `Message #${label}`;
 }
 
 /** The pane: the place's head, then its messages, or a line saying there are none, and a channel's composer. */
@@ -507,7 +478,7 @@ export function ChatPane({
   chat: ChatAnswer;
   names: ChatNames;
   place: ChatPlace;
-  /** The workspace a chip's link is written in; none where it is not known yet, when members are written as their handles. */
+  /** The workspace a chip's link is written in; none where it is not known yet, when the composer offers no member to name. */
   mentionPlace?: MentionPlace | undefined;
   now: number;
   openLink: (url: string) => void;
@@ -524,7 +495,7 @@ export function ChatPane({
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
 }): React.JSX.Element {
-  const targets = chatTargets(chat, names);
+  const targets = chatTargets(chat, names, mentionPlace);
   const keywords = chatKeywords(chat, names);
   const actorOf = useChatActor(chat, names);
   const context: MessageContext = {
@@ -534,7 +505,6 @@ export function ChatPane({
     now,
     targets,
     keywords,
-    mentionPlace,
     openLink,
     onPost,
     onAnswer,
@@ -545,7 +515,7 @@ export function ChatPane({
     const entries = forYou(chat);
     return (
       <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
-        <PlaceHead title="For you" meta={FOR_YOU_META} lead={lead} />
+        <PlaceHead title="For you" meta={undefined} lead={lead} />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
         ) : (
@@ -601,12 +571,11 @@ export function ChatPane({
       {postsIn(chat, channel) ? (
         <ChatComposer
           key={channel.id}
-          label={`Message ${postTarget(chat, names, channel)}`}
+          label={composerLabel(chat, names, channel)}
           targets={targets}
           keywords={keywords}
-          place={mentionPlace}
           onSend={(text, attachments) =>
-            onPost({ ...postOf(text, attachments), to: postTarget(chat, names, channel) })
+            onPost({ ...postOf(text, attachments), channelId: channel.id })
           }
         />
       ) : (

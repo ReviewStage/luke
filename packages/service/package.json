@@ -172,6 +172,7 @@
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",
     "./maintenance/terminal-lease-sweep": "./src/maintenance/terminal-lease-sweep.js",
     "./observability/sentry": "./src/observability/sentry.js",
+    "./observability/source-maps": "./src/observability/source-maps.js",
     "./orpc/base": "./src/orpc/base.js",
     "./orpc/handler": "./src/orpc/handler.js",
     "./orpc/router": "./src/orpc/router.js",

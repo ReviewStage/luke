@@ -8648,6 +8648,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
       return {
         ...opened,
         ...started,
+        codingAgent: started.agent,
         workspace,
         sessionId,
         agent,
@@ -8658,6 +8659,26 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         agentAsks,
       };
     });
+
+  it.effect(
+    "the window's read names each person by their account's name and each agent as its tab does, and a post names its place by the channel shown",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const answer = yield* chat.read;
+        const named = (id: string) => answer.members.find((member) => member.id === id)?.name;
+        assert.equal(named(answer.self), "Test User");
+        assert.equal(named(chat.agent.id), chat.codingAgent.title ?? chat.codingAgent.model);
+
+        const sent = yield* chat.wrote({
+          text: "Ship it once the migration lands.",
+          channelId: chat.channel.id,
+          clientKey: randomUUID(),
+        });
+        assert.ok("posted" in sent);
+        assert.equal(sent.posted.channelId, chat.channel.id);
+      }),
+  );
 
   it.effect(
     "a person's DM to an agent steers it once as a chat line, the receipt naming it told, and the post repeated under its key steers nothing more",

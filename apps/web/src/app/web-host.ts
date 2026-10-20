@@ -29,12 +29,7 @@ import {
   createActPortHandler,
   refusedPlatformProcedures,
 } from "@luke/host/act-port";
-import {
-  createHostActRouter,
-  type HostActDependencies,
-  type PlatformActRows,
-  refusedRows,
-} from "@luke/host/act-router";
+import { createActRouter, type PlatformActRows, refusedRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
 import { RUN_PROFILE } from "@luke/host/app-state";
@@ -266,12 +261,6 @@ function platformRows(
   };
 }
 
-/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
-function hostRowDependencies(operator: OperatorClient): HostActDependencies {
-  const host = operator.host;
-  return { codingAgents: { host } };
-}
-
 /**
  * The act port's procedures' dependencies, answered for a tab: no keys, so
  * no chord is ever held and no setting has a side effect of the tab's, and
@@ -293,6 +282,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    agentInbox: { host },
     agents: { host, notices },
     automations: { host },
     factory: { host },
@@ -428,8 +418,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       };
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
-        routerFor: () =>
-          createHostActRouter(hostRowDependencies(operator), platformRows(http, doors)),
+        routerFor: () => createActRouter(platformRows(http, doors)),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),

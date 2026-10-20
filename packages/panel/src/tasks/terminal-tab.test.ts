@@ -560,7 +560,7 @@ test("a service it cannot reach shows a bar that says so, whose action asks agai
   main.down.add(ACT_KIND.TERMINAL_LIST);
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
-  assert.equal(tab.bar(), "Couldn’t reach Luke’s service.");
+  assert.equal(tab.bar(), "Luke's service did not answer.");
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();

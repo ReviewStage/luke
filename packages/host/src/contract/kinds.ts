@@ -122,6 +122,36 @@ export const AGENT_ACT_KIND = {
 } as const;
 
 /**
+ * A task's coding agents, what they need of the developer and what they
+ * say in the workspace: the Inbox read past a cursor (held open by the
+ * service while nothing changed), a task's or one agent's; one item
+ * answered, closed, messaged on its thread, or marked read or unread, and
+ * every item marked read; an item's image and an agent's picture read by the
+ * host under the account; and the workspace's chat read past a cursor,
+ * written to as the account's own member, and a message's picture read. The
+ * window holds what it draws; nothing here does.
+ */
+export const AGENT_INBOX_ACT_KIND = {
+  CODING_AGENTS_INBOX: "codingAgents.inbox",
+  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
+  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
+  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
+  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
+  /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
+  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  CODING_AGENTS_PICTURE: "codingAgents.picture",
+  CODING_AGENTS_CHAT: "codingAgents.chat",
+  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
+} as const;
+
+/**
  * Luke's avatar as the windows reach it: the panel's word on it, starting,
  * live on its first frame, or ended and why, taken from the panel alone; and
  * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
@@ -362,6 +392,7 @@ export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
   ...ACCOUNT_ASK_ACT_KIND,
   ...AGENT_ACT_KIND,
+  ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
   ...FACTORY_ACT_KIND,

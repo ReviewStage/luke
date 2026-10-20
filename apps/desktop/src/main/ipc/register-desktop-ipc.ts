@@ -7,7 +7,7 @@ import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
-import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
+import { createActRouter, type PlatformActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { channels } from "@luke/host/bridge";
@@ -172,10 +172,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...voiceRuntimeProcedures(voiceRuntime),
   };
 
-  const router = createHostActRouter<WebContents>(
-    { codingAgents: { host: operator.host } },
-    platformRows,
-  );
+  const router = createActRouter<WebContents>(platformRows);
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
@@ -228,6 +225,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           resumeSessionReplay: operator.resumeSessionReplay,
         },
         accountAsks: { host: operator.host },
+        agentInbox: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
         factory: { host: operator.host },

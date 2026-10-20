@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Context, Effect } from "effect";
-import { hostActRows } from "../act-router/host-act-rows.js";
 import {
   type ActRouter,
-  createHostActRouter,
-  type HostActDependencies,
+  createActRouter,
   type PlatformActRows,
   refusedRows,
 } from "../act-router/index.js";
@@ -18,7 +16,7 @@ import { AppStateStore, createInProcessBridge, initialAppState } from "./index.j
 
 /**
  * The bridge a shell installs when the host runs in its own page: an act
- * reaches the host's real rows and comes back, the document is read and
+ * reaches the real router and comes back, the document is read and
  * pushed from the store, a kind the shell cannot carry is refused in its own
  * words, and a subscription ended hears nothing more.
  */
@@ -35,25 +33,18 @@ const REPORTER = "reporter-1";
 
 const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 
-// SAFETY: the acts these tests send reach a row of the platform's alone, and
-// building the host's rows reads none of these.
-const UNREACHED = {
-  codingAgents: {},
-} as unknown as HostActDependencies;
-
 /**
- * Every kind the host's rows leave, refused, but the copy, which records the
+ * Every kind `app:act` carries, refused, but the copy, which records the
  * reporter its window is named by: the table of a shell that carries one.
  */
 function platformRows(
   reporterOf: (sender: symbol) => string,
   reporters: string[],
 ): PlatformActRows<symbol> {
-  const hosts = new Set<string>(Object.keys(hostActRows(UNREACHED)));
   const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter(
-    (kind): kind is ActKind => !hosts.has(kind) && !isPortActKind(kind),
+    (kind): kind is ActKind => !isPortActKind(kind),
   );
-  // SAFETY: the kinds are exactly those the host's rows leave, each once.
+  // SAFETY: the kinds are exactly those `app:act` carries, each once.
   const refused = refusedRows(kinds) as unknown as PlatformActRows<symbol>;
   return {
     ...refused,
@@ -72,7 +63,7 @@ const bridgeFixture = Effect.gen(function* () {
   const made = yield* createInProcessBridge({
     sender: Symbol("page"),
     routerFor: (reporterOf): ActRouter<symbol> =>
-      createHostActRouter(UNREACHED, platformRows(reporterOf, reporters)),
+      createActRouter(platformRows(reporterOf, reporters)),
     run: (effect) => Effect.runPromiseWith(services)(effect),
     state,
     windowFacts: () => ({ fullScreen: false }),
