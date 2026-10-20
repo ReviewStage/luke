@@ -98,7 +98,12 @@ import {
 import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
-import { GitHubApp, type GitHubWorkspaceReadFailure, ISSUE_ACCESS } from "./github-app.js";
+import {
+  GitHubApp,
+  type GitHubWorkspaceReadFailure,
+  ISSUE_ACCESS,
+  markRefusedToken,
+} from "./github-app.js";
 import { githubReadOrRefusal } from "./github-refusal.js";
 import type { GitHubUnlink } from "./github-unlink.js";
 import { issueByNumber, issuePick, openIssues, searchIssues } from "./issues.js";
@@ -236,7 +241,9 @@ const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
     place.member,
   );
   if (Option.isNone(reached)) return null;
-  const found = yield* issueByNumber(reached.value.token, place.repository, number);
+  const found = yield* issueByNumber(reached.value.token, place.repository, number).pipe(
+    markRefusedToken(reached.value.access),
+  );
   return Option.getOrNull(found);
 });
 
