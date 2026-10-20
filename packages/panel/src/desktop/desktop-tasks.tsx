@@ -275,7 +275,7 @@ function TaskInboxTab({
     active: shown,
     onMark: marks.onMark,
   });
-  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown,
     folded: NO_FOLDS,
   });
@@ -292,6 +292,7 @@ function TaskInboxTab({
     ),
     open,
     NO_FOLDS,
+    direction,
   );
   return (
     <section
