@@ -486,15 +486,17 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
-/* View options wears a dot while the view leaves tasks out, so a filtered
-   list never passes for the whole of it: drawn by the box around the
-   button, over its corner. */
-.sidebar-view-options {
+/* The sidebar's View options and the Tasks page's Filter wear a dot while
+   the view leaves tasks out, so a filtered list never passes for the whole
+   of it: drawn by the box around the button, over its corner. */
+.sidebar-view-options,
+.tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after,
+.tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
