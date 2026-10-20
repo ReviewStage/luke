@@ -165,6 +165,14 @@ function completedItems(messages: readonly RecordedMessage[]): readonly WireReco
   );
 }
 
+/** Every item Codex completed in one app-server process, in order. */
+function completedItemsIn(
+  messages: readonly RecordedMessage[],
+  phase: string,
+): readonly WireRecord[] {
+  return completedItems(messages.filter((one) => one.phase === phase));
+}
+
 /** Every turn Codex completed, in order, with the phase it completed in. */
 function completedTurns(
   messages: readonly RecordedMessage[],
@@ -243,7 +251,7 @@ function workChecks(seen: Observations): readonly CheckResult[] {
   const firstTurn = turns.find((one) => one.phase === "first");
   const interrupted = turns.find((one) => one.turn.status === "interrupted");
   const resumed = turns.find((one) => one.phase === "resumed" && one.turn.status === "completed");
-  const resumedAnswer = items.some(
+  const resumedAnswer = completedItemsIn(seen.messages, "resumed").some(
     (item) => item.type === "agentMessage" && textOf(item, "text").includes(seen.nonce),
   );
   const ciLine = `all checks passed: ${seen.ciMarker}`;
@@ -312,7 +320,10 @@ function workChecks(seen: Observations): readonly CheckResult[] {
         },
     check(
       CHECK.CI_WAIT,
-      ciCommand !== undefined || ciQuoted,
+      ciCommand !== undefined &&
+        ciCommand.status === "completed" &&
+        ciCommand.exitCode === 0 &&
+        ciQuoted,
       ciCommand === undefined
         ? `Codex never saw the end of a ${seen.ciSeconds}s watch`
         : `the ${seen.ciSeconds}s watch ran to its end in ${isWireNumber(ciCommand.durationMs) ? Math.round(ciCommand.durationMs / 1000) : "?"}s (source ${textOf(ciCommand, "source")})`,

@@ -11,7 +11,7 @@ import {
   SIGN_IN_REFUSAL,
   type SignInRefused,
 } from "./oauth.js";
-import { awaitCallback, readCredentialsFile, writeCredentialsFile } from "./sign-in.js";
+import { awaitCallback, readCredentialsFile, signIn, writeCredentialsFile } from "./sign-in.js";
 
 const CREDENTIALS: ChatGptCredentials = {
   issuedClientId: "oaiapp_1",
@@ -61,6 +61,26 @@ describe("awaitCallback", () => {
     const callback = await fetch(`${pending.redirectUri}?state=forged&code=c&client_id=oaiapp_1`);
     expect(callback.status).toBe(400);
     await expect(waiting).resolves.toBe(SIGN_IN_REFUSAL.STATE_MISMATCH);
+  });
+});
+
+describe("signIn", () => {
+  it("listens on a free port when OpenAI's example port is taken", async ({ onTestFinished }) => {
+    const taken = createServer();
+    taken.listen(1455, "127.0.0.1");
+    await Promise.race([once(taken, "listening"), once(taken, "error")]);
+    onTestFinished(() => {
+      taken.close();
+    });
+    // The discovery fetch is where a bound listener goes next, so its refusal shows the bind succeeded.
+    const outcome = await signIn({
+      fetch: async () => {
+        throw new Error("discovery reached");
+      },
+      extAgentHostId: CREDENTIALS.extAgentHostId,
+      say: () => undefined,
+    }).catch((cause: Error) => cause.message);
+    expect(outcome).toBe("discovery reached");
   });
 });
 

@@ -17,7 +17,7 @@ import path from "node:path";
 import { parseArgs, promisify } from "node:util";
 import { formatReport, judge, passed } from "./checks.js";
 import { type ChatGptCredentials, createExtAgentHostId } from "./oauth.js";
-import { PROBE_BOUNDS, runProbe } from "./probe.js";
+import { PROBE_BOUNDS, readGithubRepository, runProbe } from "./probe.js";
 import { findLeaks, type KnownSecret, Sanitizer, SECRET_KIND } from "./sanitize.js";
 import { readCredentialsFile, signIn, writeCredentialsFile } from "./sign-in.js";
 
@@ -70,16 +70,17 @@ async function probe(values: {
   "ci-seconds"?: string | undefined;
 }): Promise<boolean> {
   const file = process.env.LUKE_PROBE_CODEX_CREDENTIALS;
+  const repository = readGithubRepository(values.repository);
   const credentials =
     file === undefined || file.length === 0
       ? await signIn({ fetch, extAgentHostId: createExtAgentHostId(), say })
       : await readCredentialsFile(file);
-  const github = values.repository === undefined ? undefined : await githubToken();
+  const github = repository === undefined ? undefined : await githubToken();
   const run = await runProbe({
     credentials,
     fetch,
     say,
-    githubRepository: values.repository,
+    githubRepository: repository,
     githubToken: github,
     model: values.model,
     ciSeconds: Number(values["ci-seconds"] ?? PROBE_BOUNDS.CI_SECONDS),

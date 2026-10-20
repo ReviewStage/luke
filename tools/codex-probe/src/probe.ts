@@ -77,6 +77,18 @@ export interface ProbeRun {
   readonly notes: readonly string[];
 }
 
+/** A GitHub `owner/name`, as GitHub allows the two: letters, digits, `-`, `_` and `.`. */
+const GITHUB_REPOSITORY = /^[A-Za-z0-9-]+\/[\w.-]+$/u;
+
+/** The `--repository` value read as a GitHub `owner/name`, or a refusal naming what it must look like. */
+export function readGithubRepository(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!GITHUB_REPOSITORY.test(value) || value.includes("..")) {
+    throw new Error(`--repository must be a GitHub owner/name, such as acme/throwaway`);
+  }
+  return value;
+}
+
 /** The firewall policy that sets a GitHub token on GitHub's hosts, as Luke's agents have it today. */
 function githubPolicy(token: string): NetworkPolicy {
   const authorization = `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
@@ -312,12 +324,21 @@ async function prepare(
   const clone =
     options.githubRepository === undefined
       ? `cd ${repository} && git init -q && echo '# Luke probe' > README.md`
-      : `git clone -q https://github.com/${options.githubRepository}.git ${repository}`;
+      : `git clone -q "https://github.com/$1.git" "$2"`;
   await must(
     "repository",
     run(sandbox, {
       cmd: asAgent[0] ?? "setpriv",
-      args: [...asAgent.slice(1), "bash", "-c", clone],
+      // The repository's name reaches the script as an argument, never spliced into its text.
+      args: [
+        ...asAgent.slice(1),
+        "bash",
+        "-c",
+        clone,
+        "clone",
+        options.githubRepository ?? "",
+        repository,
+      ],
       sudo: true,
       env: { HOME: AGENT_USER.HOME },
     }),

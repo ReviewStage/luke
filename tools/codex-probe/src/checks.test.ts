@@ -133,6 +133,33 @@ describe("judge over the hermetic recording", () => {
   });
 });
 
+describe("judge over a restart or a wait it cannot prove", () => {
+  it("fails the resume when only the first turn mentioned the nonce, not the resumed one", () => {
+    const messages = observed().messages.map((one) =>
+      one.phase === "resumed"
+        ? {
+            ...one,
+            message: JSON.parse(JSON.stringify(one.message).replaceAll(NONCE, "I do not know")),
+          }
+        : one,
+    );
+    expect(verdicts(observed({ messages })).get(CHECK.RESUME)).toBe(VERDICT.FAIL);
+  });
+
+  it("fails the CI wait when Codex quotes the line but no watch ran to its end", () => {
+    const ciLine = `all checks passed: ${NONCE}-ci`;
+    const messages = observed().messages.filter(
+      (one) =>
+        !(
+          one.direction === "server" &&
+          JSON.stringify(one.message).includes("commandExecution") &&
+          JSON.stringify(one.message).includes(ciLine)
+        ),
+    );
+    expect(verdicts(observed({ messages })).get(CHECK.CI_WAIT)).toBe(VERDICT.FAIL);
+  });
+});
+
 describe("judge over the token's seats", () => {
   it("fails a seat that read ACCESS_TOKEN from another process, as today's default shell can", () => {
     const terminal = {

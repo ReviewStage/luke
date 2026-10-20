@@ -12,7 +12,8 @@
 
 import { execFile } from "node:child_process";
 import { on, once } from "node:events";
-import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, mkdtemp, open, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -60,8 +61,12 @@ async function listenOnLoopback(preferredPort: number): Promise<Server> {
   for (const port of [preferredPort, 0]) {
     const server = createServer();
     server.listen(port, "127.0.0.1");
-    const [outcome] = await Promise.race([once(server, "listening"), once(server, "error")]);
-    if (outcome === undefined) return server;
+    // Note that `once` rejects on the server's "error" event, so a port already taken settles here as false.
+    const bound = await once(server, "listening").then(
+      () => true,
+      () => false,
+    );
+    if (bound) return server;
     server.close();
   }
   throw new Error("no loopback port could be bound");
@@ -129,16 +134,17 @@ export async function signIn(input: {
     openBrowser(url);
     const grant = await awaitCallback(server, pending, AbortSignal.timeout(LOOPBACK.WAIT_MS));
     const tokens = await exchangeCode(input.fetch, endpoints, grant, pending);
-    if (tokens.idToken !== undefined) {
-      const jwks = valueFromJsonText(await (await input.fetch(endpoints.jwks, {})).text());
-      verifyIdToken({
-        idToken: tokens.idToken,
-        jwks,
-        issuedClientId: grant.issuedClientId,
-        nonce: pending.nonce,
-        nowSeconds: Math.floor(Date.now() / 1000),
-      });
+    if (tokens.idToken === undefined) {
+      throw new SignInRefused(SIGN_IN_REFUSAL.ID_TOKEN, "the token response carried no ID token");
     }
+    const jwks = valueFromJsonText(await (await input.fetch(endpoints.jwks, {})).text());
+    verifyIdToken({
+      idToken: tokens.idToken,
+      jwks,
+      issuedClientId: grant.issuedClientId,
+      nonce: pending.nonce,
+      nowSeconds: Math.floor(Date.now() / 1000),
+    });
     input.say("Signed in: the grant includes ChatGPT plan usage and the ID token verifies.");
     return {
       issuedClientId: grant.issuedClientId,
@@ -214,12 +220,18 @@ export async function writeCredentialsFile(
 
 /** Reads the credentials file back, refusing one another user could read or one its owner did not write. */
 export async function readCredentialsFile(file: string): Promise<ChatGptCredentials> {
-  const facts = await stat(file);
-  if ((facts.mode & 0o077) !== 0 || facts.uid !== process.getuid?.()) {
-    throw new SignInRefused(
-      "token_response",
-      "the credentials file is readable by others or not yours; sign in again",
-    );
+  // Note that we check and read through one open handle, so the file checked is the file read.
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const facts = await handle.stat();
+    if (!facts.isFile() || (facts.mode & 0o077) !== 0 || facts.uid !== process.getuid?.()) {
+      throw new SignInRefused(
+        SIGN_IN_REFUSAL.TOKEN_RESPONSE,
+        "the credentials file is readable by others or not yours; sign in again",
+      );
+    }
+    return readCredentialsJson(valueFromJsonText(await handle.readFile("utf8")));
+  } finally {
+    await handle.close();
   }
-  return readCredentialsJson(valueFromJsonText(await readFile(file, "utf8")));
 }
