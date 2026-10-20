@@ -16,7 +16,12 @@ import {
 } from "@luke/database/models/writer";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import {
+  FetchHttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
 import { type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -30,6 +35,7 @@ import {
   readBodyBytesEffect,
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
+import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { claudeCodeMoments, type HeldCallName } from "./claude-code-moments.js";
@@ -122,6 +128,29 @@ export interface RunnerEventsOptions {
    * stops nothing for a launch since replaced. Nothing where left out.
    */
   readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
+}
+
+/**
+ * A launch's end as the sandbox hears it (`../coder-host/claude-code-sessions.ts`'s
+ * `runnerEnded`): stopped, unless a developer's Terminal holds it or a newer
+ * launch replaced this one. A stop that fails is said in the log and passed
+ * over, because the sandbox then stops at its own timeout or when the
+ * Terminal lease's sweep finds it, and the events it ended are already kept.
+ */
+export function sandboxAtRunnerEnd(
+  ended: RunnerEnded,
+): Effect.Effect<void, never, DatabaseServices> {
+  const { sessionId } = ended;
+  if (sessionId === undefined) return Effect.void;
+  return runnerEnded({ target: ended.target, sessionId, sequence: ended.sequence }).pipe(
+    Effect.provide(FetchHttpClient.layer),
+    Effect.asVoid,
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `runner-events: the sandbox was not stopped at its launch's end: ${failure._tag}`,
+      ),
+    ),
+  );
 }
 
 /** The numbers of the events that end a launch, by the runner's own END. */
