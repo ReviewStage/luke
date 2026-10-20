@@ -1,7 +1,6 @@
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { type Cause, Effect } from "effect";
-import { auth } from "../auth/auth.js";
+import { Effect } from "effect";
 import {
   AUTH_SECRET_ENVIRONMENT,
   authSecrets,
@@ -37,14 +36,23 @@ import { buildAdminUserDetail } from "./admin-user.js";
 import { buildAdminUserList } from "./admin-users.js";
 import { buildAdminWorkspaceList } from "./admin-workspaces.js";
 import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
+import type { AdminViewerResolver } from "./gate.js";
 
 /**
  * The deployment's real seams behind the dashboard's group: the browser
- * session the gate reads, this database, and which integrations the
- * environment has keys for. No secret value crosses into an answer — only
- * whether each key is present, and the analytics project id, which names
- * which console to open.
+ * session the gate reads, through the auth service's own `api` the web
+ * route hands in (`auth.api` on a deployment), this database, and which
+ * integrations the environment has keys for. No secret value crosses into an
+ * answer — only whether each key is present, and the analytics project id,
+ * which names which console to open.
  */
+
+/** The part of a Better Auth `api` the dashboard's viewer read calls: the session's account, with its `role`. */
+export interface AdminSessionApi {
+  readonly getSession: (input: { headers: Headers }) => Promise<{
+    readonly user: { readonly id: string; readonly role?: string | null | undefined };
+  } | null>;
+}
 
 /** An environment value counts as configured only when it holds a non-blank string. */
 function configured(name: string): boolean {
@@ -84,20 +92,20 @@ function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], bo
  * into a 503, where swallowing it here would misreport an auth outage as a
  * signed-out 401 and offer a sign-in that cannot succeed.
  */
-function resolveSessionViewer(
-  request: Request,
-): Effect.Effect<AdminViewer | undefined, Cause.UnknownError> {
-  const credential = sessionCredential(request.headers);
-  if (credential === undefined) return Effect.succeed(undefined);
-  return Effect.tryPromise(async () => {
-    const authenticated = await auth.api.getSession({ headers: credential });
-    const account = authenticated?.user;
-    if (!account) return undefined;
-    return { userId: account.id, role: account.role };
-  });
+function sessionViewer(api: AdminSessionApi): AdminViewerResolver {
+  return (request) => {
+    const credential = sessionCredential(request.headers);
+    if (credential === undefined) return Effect.succeed(undefined);
+    return Effect.tryPromise(async (): Promise<AdminViewer | undefined> => {
+      const authenticated = await api.getSession({ headers: credential });
+      const account = authenticated?.user;
+      if (!account) return undefined;
+      return { userId: account.id, role: account.role };
+    });
+  };
 }
 
-export function hostedAdminSeams(): AdminProcedureSeams {
+export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
   // The sign-in clients are read as the auth service reads them, so the
   // dashboard reports the pair a GitHub sign-in would run on.
   const socialClients = authSecrets(process.env);
@@ -138,7 +146,7 @@ export function hostedAdminSeams(): AdminProcedureSeams {
     : undefined;
 
   return {
-    resolveViewer: resolveSessionViewer,
+    resolveViewer: sessionViewer(api),
     readMetrics: (now, scope, windowDays) =>
       Effect.map(readAdminDashboardSources({ now, scope, windowDays }), (sources) => ({
         ...buildAdminMetrics(sources.metrics, now, windowDays),
