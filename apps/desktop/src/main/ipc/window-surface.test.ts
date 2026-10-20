@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import type { FeedbackSubmission } from "@luke/features/feedback";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/voice/audio";
 import { Effect } from "effect";

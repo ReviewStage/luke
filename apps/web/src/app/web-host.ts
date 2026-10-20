@@ -33,7 +33,6 @@ import {
   refusedPlatformProcedures,
   WindowPushes,
 } from "@luke/host/act-port";
-import { createActRouter } from "@luke/host/act-router";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { AppBridge } from "@luke/host/bridge";
@@ -419,14 +418,9 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       const count: AppPlatform["recordSurfaceEvent"] = (name, properties) => {
         void run(operator.host.recordEvent(name, properties));
       };
-      const made = yield* createInProcessBridge<WebSender>({
-        sender: window,
-        // `app:act` carries no act now that every one rides the act port.
-        routerFor: () => createActRouter({}),
-        run,
+      const made = yield* createInProcessBridge({
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),
-        createId: () => crypto.randomUUID(),
         reports: { notifyReady: () => undefined, recordSurfaceEvent: count },
         report,
       });

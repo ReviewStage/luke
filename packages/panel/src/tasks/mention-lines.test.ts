@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -47,10 +46,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({
-    act: (_request: Act): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

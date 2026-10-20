@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -61,10 +60,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   // A fenced block with a language asks main for its colours; refused, it is drawn plain.
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No colours here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

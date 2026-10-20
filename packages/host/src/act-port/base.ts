@@ -2,7 +2,6 @@ import "@orpc/experimental-effect/extensions/effect";
 import { createORPCErrorConstructorMap } from "@orpc/contract";
 import type { WithEffectContext } from "@orpc/experimental-effect";
 import { type AnyProcedure, implement, ORPCError } from "@orpc/server";
-import type { ActSender } from "../act-router/router.js";
 import { ACT_ERROR, actPortContract } from "../contract/index.js";
 
 /**
@@ -14,6 +13,24 @@ import { ACT_ERROR, actPortContract } from "../contract/index.js";
  * services as `effect/context`, so a row's effect runs on the desktop's
  * runtime rather than under a context of its own.
  */
+
+/**
+ * Who is asking, as the bridge alone can tell: which window sent the act,
+ * and which surface that window is drawing. A renderer cannot claim any of it
+ * — the standing is read from the windows the bridge's own side opened.
+ * `Sender` is the platform's own handle on that window, which nothing here
+ * reads: the desktop's is a `WebContents`, for the procedures of its own that
+ * post to the window or hang a dialog over it.
+ */
+export interface ActSender<Sender = unknown> {
+  sender: Sender;
+  /** A panel: Luke's window, which types asks and presses rows. */
+  panel: boolean;
+  /** The hidden window the conversation lives in, and the one receiver of replies. */
+  voice: boolean;
+  /** The floating call window, which sends the call's controls and nothing else. */
+  call: boolean;
+}
 
 /** What every act procedure is called with, `Sender` being the platform's own handle on the window that asked. */
 export interface ActPortContext<Sender = unknown> extends WithEffectContext<never> {

@@ -48,9 +48,9 @@ fi
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host`, `@luke/host/effect`, `@luke/host/act-router`, and
+# `@luke/host`, `@luke/host/effect`, `@luke/host/act-port`, and
 # `@luke/host/client` are walked the same way, because the host, its act
-# table, and the client core that keeps the app-state document are meant to
+# port's server, and the client core that keeps the app-state document are meant to
 # load in a browser tab: their graphs name no `node:` module, no `ws`, no
 # `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
@@ -70,9 +70,9 @@ node --input-type=module -e '
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host, @luke/host/effect, @luke/host/act-router, and @luke/host/client",
+      name: "@luke/host, @luke/host/effect, @luke/host/act-port, and @luke/host/client",
       root: "packages/host/src",
-      entries: ["index.ts", "effect/index.ts", "act-router/index.ts", "client/index.ts"],
+      entries: ["index.ts", "effect/index.ts", "act-port/index.ts", "client/index.ts"],
       forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
       follows: ["@luke/credentials"],
@@ -329,7 +329,7 @@ fi
 # the one place that may attach it to Electron, the act port included. A
 # handler registered beside its domain logic would bypass the manifest's
 # sender and wire guards, an act registered on a channel of its own would
-# bypass the router, and a renderer port upgraded anywhere else would bypass
+# bypass the act port, and a renderer port upgraded anywhere else would bypass
 # the act port's trust check and context. A port main opens to stream a
 # terminal's bytes to a window is not a door into main, and stays where its
 # act opens it.

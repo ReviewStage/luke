@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import {
   type ActPortClient,
   AUTOMATION_ACT_KIND,
@@ -10,6 +9,7 @@ import {
   type PortActResult,
 } from "../contract/index.js";
 import { automationProcedures } from "./automation-procedures.js";
+import type { ActSender } from "./base.js";
 import type { AutomationProceduresDependencies } from "./index.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 

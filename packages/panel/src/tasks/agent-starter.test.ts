@@ -14,7 +14,7 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -88,10 +88,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
 let root: Root | undefined;
 
 beforeEach(() => {
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
-  });
+  fakeAppBridge({});
   fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
 });
 

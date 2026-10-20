@@ -5,8 +5,8 @@ import {
   type MacRepository,
   type MacTerminalPortOutbound,
 } from "@luke/features/mac-terminal-wire";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Deferred, Effect, Fiber } from "effect";

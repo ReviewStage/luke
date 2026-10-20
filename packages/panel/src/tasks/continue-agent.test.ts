@@ -18,7 +18,6 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -177,10 +176,7 @@ async function drawnTab(input: {
   /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
   usage?: Pick<CodingAgentMessagesAnswer, "usage" | "turnUsage">;
 }) {
-  fakeAppBridge({
-    act: (_request: Act): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   const source = agentOf(SOURCE, { status: input.status, ...input.source });
   const continued: {
     agentId: string;

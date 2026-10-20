@@ -181,7 +181,7 @@ export function composeDesktop(
       const host = yield* HostAssemblyTag;
       // The services this launch stands on, read back out of the fiber
       // building it rather than assembled again: every act's Effect runs
-      // under them, never under a context of act-router's own.
+      // under them, never under a context of their own.
       const services: Context.Context<never> = yield* Effect.context();
       const run = <A>(effect: Effect.Effect<A>): Promise<A> =>
         Effect.runPromiseWith(services)(Effect.withErrorReporting(effect, { defectsOnly: true }));

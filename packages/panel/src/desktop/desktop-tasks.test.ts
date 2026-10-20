@@ -21,7 +21,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -760,9 +760,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const opened: unknown[] = [];
   const onGitHub: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
       onGitHub.push(url);
@@ -954,9 +952,7 @@ test("with Chat off for the account, a Chat tab kept on the task's strip draws n
 
 test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
   const marked: string[] = [];
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
       marked.push(`${unread ? "unread" : "read"}:${itemId}`);

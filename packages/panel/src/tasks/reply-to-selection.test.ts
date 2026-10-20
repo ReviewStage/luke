@@ -11,7 +11,6 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Duration, Effect } from "effect";
@@ -91,10 +90,7 @@ beforeEach(() => {
   answerPointer(false);
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

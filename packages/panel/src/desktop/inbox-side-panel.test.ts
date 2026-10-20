@@ -21,7 +21,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
@@ -34,7 +34,7 @@ import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
-import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -145,30 +145,30 @@ afterEach(() => {
 /** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
-function answer(request: AnyAct): Promise<AnyActOutcome> {
+function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
     case ACT_KIND.CODING_AGENTS_INBOX:
       // A read past the cursor is held open while nothing changes, as the service holds it.
       return request.payload.after === "0"
         ? Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
+            status: FAKE_ANSWER.DONE,
             value: { items: [ITEM], cursor: "1" } satisfies CodingAgentInboxAnswerView,
           })
         : new Promise(() => undefined);
     case ACT_KIND.CODING_AGENTS_LIST:
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: { agents: [ARCHIVED, AGENT] },
       });
     case ACT_KIND.CODING_AGENTS_PULL_REQUEST:
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: {
           repository: REPOSITORY,
           branch: "luke/batch-invitations",
@@ -185,7 +185,7 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
         },
       });
     default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
   }
 }
 

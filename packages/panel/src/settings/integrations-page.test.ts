@@ -20,7 +20,7 @@ import {
   type IntegrationSignInFailure,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -36,7 +36,7 @@ import { runAppCommand } from "../app-commands.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
@@ -76,8 +76,8 @@ const toolReads = new Map<IntegrationProvider, IntegrationToolsView>();
 type PortCall = {
   [Kind in PortActKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[PortActKind];
-/** Every act the page sent, in order, over `app:act` or the act port. */
-let sent: (Act | PortCall)[] = [];
+/** Every act the page sent on the act port, in order. */
+let sent: (AnyAct | PortCall)[] = [];
 /** Every Settings link the page's presses followed. */
 let links: SettingsLink[] = [];
 /** How many times the account's GitHub connect was begun. */
@@ -147,12 +147,7 @@ beforeEach(() => {
   accounts = [];
   addable = [];
   reopenedDuringCancel = false;
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-    },
-  });
+  fakeAppBridge({});
   // What the service answers an act the page sends on the act port.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () => {

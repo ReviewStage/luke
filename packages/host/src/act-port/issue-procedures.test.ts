@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import {
   ACT_ERROR,
   type ActPortClient,
@@ -13,14 +11,9 @@ import {
   type PortActPayload,
   type PortActResult,
 } from "../contract/index.js";
-import {
-  type ActPortDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type PlatformActProcedures,
-  type TasksProceduresDependencies,
-  type WorkspaceProceduresDependencies,
-} from "./index.js";
+import type { ActSender } from "./base.js";
+import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The Issues page's acts, through the act port as a window calls them: only
@@ -58,26 +51,13 @@ const ACTS = [
 
 type HostAsk = IssueProceduresDependencies["host"];
 
-// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
-const UNREACHED = { accountAsks: {}, account: {}, settings: {} } as unknown as Omit<
-  ActPortDependencies,
-  "issues"
->;
-
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];
 
-/** The workspace procedures' host, never asked here. */
-const NO_WORKSPACES: WorkspaceProceduresDependencies = {
-  // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
-  host: {} as WorkspaceProceduresDependencies["host"],
-  openExternal: () => Promise.resolve(),
-};
-
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
 
 /**
@@ -103,38 +83,9 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  // SAFETY: these tests call the issue kinds alone, so no platform procedure is reached.
-  const platform = {} as PlatformActProcedures<unknown>;
-  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
-  const tasks = { host: {} } as TasksProceduresDependencies;
-  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
-  const elsewhere = {
-    agentInbox: { host: {} },
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-    taskIssues: { host: {} },
-  } as Pick<
-    ActPortDependencies,
-    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
-  >;
-  const handler = createActPortHandler(
-    { ...UNREACHED, ...elsewhere, issues: { host }, tasks, workspaces: NO_WORKSPACES },
-    platform,
-  );
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
-    }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  const port = testActPort(issueProcedures({ host }));
+  ports.push(port);
+  const client = port.as(actor, { trusted: options.trusted ?? true });
   return { client, asked };
 }
 

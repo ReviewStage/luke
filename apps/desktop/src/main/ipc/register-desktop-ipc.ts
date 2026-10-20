@@ -7,7 +7,6 @@ import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
-import { createActRouter } from "@luke/host/act-router";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
@@ -167,10 +166,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
   };
 
-  // `app:act` carries no act now that every one rides the act port; it
-  // answers each as unknown until the channel is taken out.
-  const router = createActRouter<WebContents>({});
-
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
@@ -212,8 +207,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       voice: voiceWindow.owns(sender),
       call: callWindow.owns(sender),
     }),
-    router,
-    run,
     actPort: createActPortHandler(
       {
         account: {

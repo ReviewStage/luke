@@ -2,12 +2,13 @@
 
 import assert from "node:assert/strict";
 import { MENTION_KIND, type Mention, type MentionLines } from "@luke/features/mention-link";
-import { ACT_KIND, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
+  type AnyAct,
   fakeActPort,
   fakeAppBridge,
   type OpenedLink,
@@ -43,7 +44,7 @@ const WORDS = [
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
-const told: (Act | OpenedLink)[] = [];
+const told: (AnyAct | OpenedLink)[] = [];
 
 beforeEach(() => {
   told.length = 0;

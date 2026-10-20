@@ -8,8 +8,8 @@
  * are each panel's own, so one panel's tab can reach no other's page.
  */
 
+import type { ActSender } from "@luke/host/act-port";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import type { ActSender } from "@luke/host/act-router";
 import { BROWSER_ACT_KIND } from "@luke/host/contract";
 import { Effect } from "effect";
 import type { WebContents } from "electron";

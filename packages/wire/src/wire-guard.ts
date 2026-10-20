@@ -24,7 +24,7 @@ export interface WireGuard<Value> {
 export type WireGuardValue<Guard> = Guard extends WireGuard<infer Value> ? Value : never;
 
 /** Whether a value is one structured clone can carry: primitives, arrays, and plain records of them. */
-export function isWireValue(value: UnparsedWireValue): boolean {
+function isWireValue(value: UnparsedWireValue): boolean {
   if (value === undefined || value === null || isWireString(value) || isWireBoolean(value))
     return true;
   if (isWireNumber(value)) return Number.isFinite(value);

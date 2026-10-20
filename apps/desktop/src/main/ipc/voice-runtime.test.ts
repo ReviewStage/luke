@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { runModeFor } from "@luke/host";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppStateStore, initialAppState } from "@luke/host/client";
 import { PUSH, type PushEvent } from "@luke/host/contract";

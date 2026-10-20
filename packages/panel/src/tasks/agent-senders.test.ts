@@ -19,7 +19,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,7 +27,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { type AnyAct, type AnyActOutcome, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -158,13 +164,13 @@ afterEach(() => {
 /** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`, every place a press opened kept in `opened`. */
 async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<readonly Element[]> {
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> =>
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
           : request.kind === ACT_KIND.CODING_AGENTS_LIST
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [SENDER_NOW] } }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+            ? { status: FAKE_ANSWER.DONE, value: { agents: [SENDER_NOW] } }
+            : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
   });
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
