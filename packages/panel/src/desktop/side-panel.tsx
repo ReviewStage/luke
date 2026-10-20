@@ -1341,7 +1341,6 @@ function TabContent({
   files,
   pages,
   transcript,
-  work,
   workRows,
   agents,
   standings,
@@ -1380,7 +1379,6 @@ function TabContent({
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
   transcript: SidePanelTranscript;
-  work: SidePanelWork;
   /** The task's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
@@ -2112,7 +2110,6 @@ export function SidePanel({
             files={files}
             pages={taskPages}
             transcript={transcript}
-            work={work}
             workRows={workRows}
             agents={agents}
             standings={standings}
