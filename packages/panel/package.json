@@ -45,7 +45,6 @@
     "./testing/copy-feedback": "./src/testing/copy-feedback.js",
     "./testing/match-media": "./src/testing/match-media.js",
     "./testing/resize-observer": "./src/testing/resize-observer.js",
-    "./toast": "./src/toast.js",
     "./use-app-state": "./src/use-app-state.js",
     "./use-voice-view": "./src/use-voice-view.js",
     "./voice/live-peer": "./src/voice/live-peer.js",
