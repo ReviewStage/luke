@@ -2468,17 +2468,17 @@ ul.actor-stack {
   }
 }
 
-/* Narrower, the controls close up, their discs touching edge to edge, and
-   the working dots go, the line's own words saying Luke works, so Luke's
-   command keeps their room. */
+/* Narrower, the controls close up to the card head's own step, so the call
+   card's mutes and End call stand under its Video on and its way back, each
+   apart from the next, and the working dots go, the line's own words saying
+   Luke works, so Luke's command keeps their room. */
 @container call-bar (max-width: 279px) {
   .call-backend > .thinking-dots {
     display: none;
   }
 
-  .call-controls,
-  .call-mutes {
-    gap: 0;
+  .call-controls {
+    gap: var(--luke-space-4);
   }
 }
 
