@@ -3,7 +3,7 @@ import { AUTOMATION_SCOPE, type AutomationScope } from "@luke/features/automatio
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACTOR_KIND, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
 /**
@@ -38,7 +38,7 @@ export function OwnerMark({
   mine: boolean;
   size: OwnerMarkSize;
 }): React.JSX.Element | null {
-  const account = useAppState()?.account;
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
   if (owner === AUTOMATION_SCOPE.WORKSPACE) {
     if (workspace === undefined) return null;
     return (

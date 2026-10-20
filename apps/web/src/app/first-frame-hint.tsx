@@ -12,7 +12,7 @@
  */
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { useAppState } from "@luke/panel/use-app-state";
+import { APP_SLICE, useAppSlice } from "@luke/panel/use-app-state";
 import { useEffect } from "react";
 
 /** Where the word is kept, as `public/app-theme.js` reads it. */
@@ -20,7 +20,7 @@ const SIGNED_IN_KEY = "luke.signed-in-here";
 
 /** Draws nothing: keeps whether the account last read signed in, for the next load's frame. */
 export function FirstFrameHint(): null {
-  const status = useAppState()?.account.status;
+  const status = useAppSlice(APP_SLICE.ACCOUNT)?.status;
   useEffect(() => {
     if (status !== ACCOUNT_STATUS.SIGNED_IN && status !== ACCOUNT_STATUS.SIGNED_OUT) return;
     try {

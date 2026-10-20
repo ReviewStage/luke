@@ -158,6 +158,76 @@ export function appStateDerivedAtom<A>(
 }
 
 /**
+ * One top-level slice of the snapshot, none before the first read. It tells
+ * its readers only when the slice is a new object, which a delivery that did
+ * not move it never makes (`adopted`), so a reader of one slice is not drawn
+ * again for a patch to another.
+ */
+function sliceAtom<Key extends keyof AppStateSnapshot>(
+  key: Key,
+): Atom.Atom<AppStateSnapshot[Key] | undefined> {
+  return appStateDerivedAtom((state) => state?.[key]);
+}
+
+/**
+ * Every slice of the document, each its own atom, read with `useAppSlice`.
+ * A surface reads the narrowest it draws from, so a patch to the settings
+ * draws the settings' readers again and leaves the tasks' alone; the whole
+ * snapshot (`useAppState`) is for the few readers that hand it on whole.
+ */
+export const APP_SLICE = {
+  RUN: sliceAtom("run"),
+  SETTINGS: sliceAtom("settings"),
+  ACCOUNT: sliceAtom("account"),
+  UPDATE: sliceAtom("update"),
+  AUDIO: sliceAtom("audio"),
+  HOTKEYS: sliceAtom("hotkeys"),
+  VOICE: sliceAtom("voice"),
+  TASKS: sliceAtom("tasks"),
+  CODING_AGENTS: sliceAtom("codingAgents"),
+  INBOX: sliceAtom("inbox"),
+  NOTIFICATIONS: sliceAtom("notifications"),
+  NETWORK: sliceAtom("network"),
+  SESSION_REPLAY: sliceAtom("sessionReplay"),
+  WINDOW: sliceAtom("window"),
+} as const;
+
+/** Whether the first read has answered at all, which redraws its reader once, as it does. */
+export const APP_STATE_HELD: Atom.Atom<boolean> = appStateDerivedAtom(
+  (state) => state !== undefined,
+);
+
+/**
+ * Whether the first read has answered with settings: nothing is drawn over
+ * a document without them, and the window reports itself painted on the
+ * first that holds them.
+ */
+export const SETTINGS_HELD: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.SETTINGS,
+  (settings) => settings !== undefined,
+);
+
+/** The settings as the panel draws them, made once per change to the settings slice for every reader. */
+export const APP_SETTINGS_VIEW: Atom.Atom<AppSettingsView | undefined> = Atom.map(
+  APP_SLICE.SETTINGS,
+  (settings) => (settings === undefined ? undefined : appSettingsView(settings)),
+);
+
+/** Whether the runtime offers voice at all, which redraws its reader only as it turns. */
+export const VOICE_AVAILABLE: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.SETTINGS,
+  (settings) => settings?.status.voiceAvailable === true,
+);
+
+/**
+ * One slice of this window's snapshot, or one field of one (`APP_SLICE`,
+ * or an atom built over one), redrawn only as that moves.
+ */
+export function useAppSlice<A>(slice: Atom.Atom<A>): A {
+  return useAtomValue(slice);
+}
+
+/**
  * The settings as the document holds them, for a callback that cannot wait a
  * render: two actions asked in one breath arrive as two calls in one turn, and
  * the second has to compose against what the first stored.
@@ -166,6 +236,13 @@ export function appSettingsNow(): AppSettingsView | undefined {
   const stored = appStateNow()?.settings;
   return stored ? appSettingsView(stored) : undefined;
 }
+
+/** Whether the account has one experiment on, an atom per experiment, which tells its readers only as that one turns. */
+const experimentAtom = Atom.family((experiment: Experiment) =>
+  Atom.map(APP_SLICE.SETTINGS, (settings) =>
+    experimentOn(settings?.experiments ?? NO_EXPERIMENTS, experiment),
+  ),
+);
 
 /**
  * Whether the signed-in account has an experiment on, redrawn as it moves:
@@ -176,7 +253,7 @@ export function appSettingsNow(): AppSettingsView | undefined {
  * @public Read by Factory's gated surfaces (#2608), above this contract.
  */
 export function useExperiment(experiment: Experiment): boolean {
-  return experimentOn(useAppState()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
+  return useAtomValue(experimentAtom(experiment));
 }
 
 /**
@@ -188,6 +265,11 @@ export function experimentOnNow(experiment: Experiment): boolean {
   return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
 }
 
+/** Whether the platform offers one capability, an atom per capability, which tells its readers only as that one turns. */
+const capabilityAtom = Atom.family((capability: HostCapability) =>
+  Atom.map(APP_SLICE.RUN, (run) => run?.capabilities.includes(capability) === true),
+);
+
 /**
  * Whether the platform this window runs on offers a capability, redrawn as
  * the document arrives: the one way a platform feature's tab, command, or
@@ -195,7 +277,7 @@ export function experimentOnNow(experiment: Experiment): boolean {
  * offered, as no experiment is on.
  */
 export function useCapability(capability: HostCapability): boolean {
-  return useAppState()?.run.capabilities.includes(capability) === true;
+  return useAtomValue(capabilityAtom(capability));
 }
 
 /** The same answer for a callback that cannot wait a render. */

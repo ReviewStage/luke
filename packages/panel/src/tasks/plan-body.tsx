@@ -31,6 +31,7 @@ import {
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { Tooltip } from "../tooltip.js";
 import { prefersReducedMotion } from "../use-reduced-motion.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
@@ -586,25 +587,6 @@ const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
 /** No section's save named, as a plan from a service before sections were named has. */
 const NO_SECTION_EDITS: readonly PlanSectionEdit[] = [];
 
-/**
- * A door that stands while the one handed over is made afresh on every
- * draw, as a page drawn again on each delivery of the window's state makes
- * its callbacks, and calls the newest; none while none is handed over. Note
- * that it stands so that what is drawn from it is not drawn again for
- * nothing.
- */
-function useSteadyDoor<Args extends readonly unknown[]>(
-  door: ((...args: Args) => void) | undefined,
-): ((...args: Args) => void) | undefined {
-  const latest = useRef(door);
-  latest.current = door;
-  const present = door !== undefined;
-  return useMemo(
-    () => (present ? (...args: Args) => latest.current?.(...args) : undefined),
-    [present],
-  );
-}
-
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
 function attributed(
   drawn: React.JSX.Element,
@@ -885,8 +867,12 @@ const DocumentUnit = memo(function DocumentUnit({
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
  * none are. `readMark` is whether the plan is marked unread, which the
  * title's ⋯ offers to flip.
+ *
+ * A memo boundary: the task's page drawn again over the same task and the
+ * same doors, as its column's focus, its side panel's width, and the
+ * minute's clock draw it, leaves the plan as it was.
  */
-export function PlanBody({
+export const PlanBody = memo(function PlanBody({
   task,
   live,
   onShowHistory,
@@ -905,11 +891,11 @@ export function PlanBody({
   task: Task;
   live: boolean;
   onShowHistory?: ShowHistory;
-  onEdit?: PlanEditDoor;
+  onEdit?: PlanEditDoor | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
-  onRename?: (name: string) => Promise<boolean>;
+  onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
-  onDraftName?: (name: string | undefined) => void;
+  onDraftName?: ((name: string | undefined) => void) | undefined;
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
@@ -1268,4 +1254,4 @@ export function PlanBody({
       </DocumentScroll>
     </PlanPictures>
   );
-}
+});
