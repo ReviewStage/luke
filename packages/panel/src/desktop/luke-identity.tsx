@@ -11,9 +11,11 @@ const QUIET = { speaking: false, microphoneLive: false } as const;
  * its call bar on its own task and by the call card everywhere else, so the
  * head neither animates with the voice nor says what it is doing; the face
  * still answers the pointer with its tricks, which are Luke's and not the
- * call's.
+ * call's. A surface that is Luke's but not the app itself, the web's admin
+ * dashboard, names itself under his name (`qualifier`), muted, so the head
+ * reads as the app's and still says where the reader is.
  */
-export function LukeIdentity(): React.JSX.Element {
+export function LukeIdentity({ qualifier }: { qualifier?: string | undefined }): React.JSX.Element {
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
@@ -25,6 +27,9 @@ export function LukeIdentity(): React.JSX.Element {
       </span>
       <span className="sidebar-identity-copy">
         <span className="sidebar-identity-name">Luke</span>
+        {qualifier === undefined ? null : (
+          <span className="sidebar-identity-qualifier">{qualifier}</span>
+        )}
       </span>
     </div>
   );

@@ -341,8 +341,6 @@ export function WorkspacesScreen({
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
           </>
         }
-        account={account}
-        onSignOut={signOut}
         loadingLabel="Loading…"
         {...content}
       />,

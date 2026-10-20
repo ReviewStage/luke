@@ -5,6 +5,7 @@ import desktop from "@luke/panel/styles/desktop.css?raw";
 import entry from "@luke/panel/styles/index.css?raw";
 import markdown from "@luke/panel/styles/markdown.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
+import shell from "@luke/panel/styles/shell.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
 import signIn from "@luke/panel/styles/sign-in.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
@@ -56,6 +57,7 @@ const SHEET_BY_IMPORT = {
   "./tooltip.css": tooltip,
   "./sign-in.css": signIn,
   "./tasks.css": tasks,
+  "./shell.css": shell,
   "./desktop.css": desktop,
   "./call.css": call,
 } as const;

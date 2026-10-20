@@ -32,6 +32,9 @@
 @import "./tooltip.css";
 @import "./sign-in.css";
 @import "./tasks.css";
+/* The shell and its sidebar, which an app drawing the app's sidebar outside
+   the panel imports alone, just ahead of the window's own layout. */
+@import "./shell.css";
 /* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "./desktop.css";

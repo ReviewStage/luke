@@ -428,13 +428,7 @@ export function ReliabilityScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title="Reliability"
-          account={account}
-          onSignOut={signOut}
-          controls={controls}
-          shapes={RELIABILITY_SHAPES}
-        />,
+        <PageSkeleton title="Reliability" controls={controls} shapes={RELIABILITY_SHAPES} />,
       );
     case "signed-out":
       return <SignInCard />;
@@ -451,7 +445,7 @@ export function ReliabilityScreen({
       );
     case "ready":
       return frame(
-        <AdminPage title="Reliability" account={account} onSignOut={signOut} controls={controls}>
+        <AdminPage title="Reliability" controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <ReliabilityBody reliability={state.value} onOpenAccount={onOpenAccount} />
           </Refreshing>
