@@ -10,7 +10,6 @@ import {
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
   RUN_PROFILE,
-  sessionReplayBootstrap,
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
@@ -44,7 +43,6 @@ import { useAct } from "./act.js";
 import { appBridge } from "./app-bridge.js";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
-import { usePrefetchEditorBundle } from "./bundle-loader.js";
 import { type CallCardInput, callControls } from "./call/call-card.js";
 import { useCallCardVideo } from "./call/panel-avatar.js";
 import { useWindowFocused } from "./call/use-window-focused.js";
@@ -59,7 +57,6 @@ import { GitHubConnectProvider } from "./github-connect.js";
 import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
-import { prefetchMarkdownHtmlParser } from "./markdown-html-parser.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
@@ -85,6 +82,7 @@ import { useUpdatedToast } from "./update-toast.js";
 import { useAppState, useExperiment } from "./use-app-state.js";
 import { useCaptionPresentation } from "./use-caption-presentation.js";
 import { useSignIn } from "./use-sign-in.js";
+import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
@@ -151,24 +149,9 @@ export function App(): React.JSX.Element {
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
 
-  /**
-   * Recording follows the account: a sign-out ends it rather than leaving it
-   * filed under the person who just left, and a sign-in can start one without
-   * waiting for a relaunch. The document is the whole of what decides it, so
-   * a halt raised before the account was cleared can never be undone by an
-   * older reading arriving behind it.
-   */
-  const sessionReplay = state?.sessionReplay;
-  const run = state?.run;
-  useEffect(() => {
-    if (!sessionReplay || !run) return;
-    appPlatform().applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
-  }, [run, sessionReplay]);
-  // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
-  const prefetchEditorBundle = usePrefetchEditorBundle();
-  useEffect(prefetchEditorBundle, [prefetchEditorBundle]);
-  // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
-  useEffect(prefetchMarkdownHtmlParser, []);
+  // Session replay and the editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions.
+  useSessionReplay(state?.run, state?.sessionReplay);
+  usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
   // The shell hears the ask too, so its own ways out of the page ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
