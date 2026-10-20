@@ -12,6 +12,12 @@
  * because a dialog is drawn over `document.body`, outside the stage, and must
  * read them too. Where there is no visual viewport nothing is written, and
  * the tokens' own `100vh` and no inset stand.
+ *
+ * A pinch-zoom shrinks the visual viewport too, and pans it as the finger
+ * moves, but covers nothing: the page is only drawn larger. So the values are
+ * written only while the page is drawn at its own scale; zoomed in, the last
+ * ones stand, and the panel keeps its layout under the zoom rather than
+ * re-laying itself into the zoomed box and chasing every pan.
  */
 
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -23,6 +29,14 @@ const VIEWPORT_TOP = "--luke-viewport-top";
 const STAGE_HEIGHT = "--luke-stage-height";
 /** How much of the layout viewport stands below the visible part: the keyboard's height while it is up. */
 const KEYBOARD_INSET = "--luke-keyboard-inset";
+
+/** How far from 1 a visual viewport's scale may stand and still be the page at its own scale, for a phone's rounding. */
+const UNZOOMED_TOLERANCE = 0.01;
+
+/** Whether the page is drawn at its own scale rather than pinch-zoomed. */
+function unzoomed(viewport: VisualViewport): boolean {
+  return Math.abs(viewport.scale - 1) <= UNZOOMED_TOLERANCE;
+}
 
 /**
  * Writes the visual viewport's height and the keyboard's inset on the root
@@ -36,6 +50,7 @@ export function useVisualViewport(): void {
     if (viewport === null || viewport === undefined) return undefined;
     const root = document.documentElement.style;
     const write = () => {
+      if (!unzoomed(viewport)) return;
       // A panned viewport (`offsetTop`) is seen, not covered: what stands
       // above it is the top's, and only what stands below its foot is the
       // keyboard's.

@@ -9,14 +9,18 @@
 
 @layer components {
   /* Held, an element a long press opens a menu on shows the menu rather
-     than iOS's own callout over a link or a picture in it. */
+     than iOS's own callout over a link or a picture in it, or a selection
+     of its words, which iOS starts on a hold of its own that races the
+     menu's. */
   [data-long-press] {
     -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .luke-menu {
     position: fixed;
-    z-index: 20;
+    z-index: var(--luke-z-menu);
     display: flex;
     flex-direction: column;
     min-width: 196px;

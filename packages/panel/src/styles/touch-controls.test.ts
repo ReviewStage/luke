@@ -280,6 +280,20 @@ test("on a touch screen a transcript's floating actions stay hidden, so the tran
   assert.equal(getComputedStyle(bar).pointerEvents, "none");
 });
 
+test("on a touch screen holding an archived agent, whose menu a long press opens, selects none of its words, so iOS's selection does not race the menu's hold", () => {
+  layFor(true);
+  const item = drawn(
+    {
+      tag: "ul",
+      children: [{ tag: "li", className: "task-summary-archived-agent", data: { longPress: "" } }],
+    },
+    "li",
+  );
+
+  assert.equal(getComputedStyle(item).userSelect, "none");
+  assert.equal(getComputedStyle(item).getPropertyValue("-webkit-user-select"), "none");
+});
+
 /** Draws a list of rows offering Archive to the row in hand, their metadata where `metaAt` puts it, the first open; answers each row's acts and metadata. */
 function drawRows(metaAt: (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META]) {
   const container = document.body.appendChild(document.createElement("div"));

@@ -6,15 +6,20 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useVisualViewport } from "./use-visual-viewport.js";
 
-/** A phone's visual viewport, as tall as it is shown and panned as far as it is. */
+/** A phone's visual viewport, as tall as it is shown, panned as far as it is, and zoomed as far as it is. */
 class FakeVisualViewport extends EventTarget {
   height = 800;
   offsetTop = 0;
+  scale = 1;
 
   /** The viewport changed as a phone changes it, announced by the event it fires. */
-  change(next: { readonly height: number; readonly offsetTop?: number }, event: string): void {
+  change(
+    next: { readonly height: number; readonly offsetTop?: number; readonly scale?: number },
+    event: string,
+  ): void {
     this.height = next.height;
     this.offsetTop = next.offsetTop ?? this.offsetTop;
+    this.scale = next.scale ?? this.scale;
     this.dispatchEvent(new Event(event));
   }
 }
@@ -78,6 +83,24 @@ test("a layer over the body is measured by the visible height, above the keyboar
   assert.equal(readOverBody("--luke-viewport-top"), "0px");
   assert.equal(readOverBody("--luke-stage-height"), "800px");
   assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+});
+
+test("a pinch-zoom is not the keyboard: zoomed in and panned, the stage keeps what it was measured by, and the keyboard still lifts it once the zoom is let go", () => {
+  const viewport = new FakeVisualViewport();
+  standViewport(viewport);
+  mount();
+
+  // Zoomed in twice over, the viewport shows half the page and follows the finger down it.
+  act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
+  act(() => viewport.change({ height: 400, offsetTop: 250, scale: 2 }, "scroll"));
+  assert.equal(readOverBody("--luke-viewport-top"), "0px");
+  assert.equal(readOverBody("--luke-stage-height"), "800px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+
+  act(() => viewport.change({ height: 800, offsetTop: 0, scale: 1 }, "resize"));
+  act(() => viewport.change({ height: 480 }, "resize"));
+  assert.equal(readOverBody("--luke-stage-height"), "480px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
 });
 
 test("without a visual viewport nothing is written, so the tokens' own window height stands", () => {

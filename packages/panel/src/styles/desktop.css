@@ -298,8 +298,9 @@ body,
 }
 
 /* A place standing alone in a narrow room leads its head with the way back,
-   so its name keeps the room left and what is said beside it gives way. */
-.desktop-shell[data-room="narrow"] .chat-head > h2 ~ * {
+   so its name keeps the room left and what is said beside it gives way; a
+   topic's menu stays at the head's end, the only way to edit or archive it. */
+.desktop-shell[data-room="narrow"] .chat-head > h2 ~ :not(.chat-head-actions) {
   display: none;
 }
 
