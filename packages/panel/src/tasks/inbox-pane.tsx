@@ -1246,8 +1246,9 @@ function AnswerValues({
 /**
  * The developer's answer as their comment: who answered, by their face and
  * name, when, and where it went, then what they picked as a chip, where
- * the question does not draw it picked already, the files they attached,
- * and what they wrote; a form's values stand in its fields, filled in.
+ * the question does not draw it picked already, a form's values where it
+ * does not draw them in its fields (one of a response this build does not
+ * know), the files they attached, and what they wrote.
  */
 function Answered({
   item,
@@ -1300,6 +1301,10 @@ function Answered({
           <CheckIcon aria-hidden="true" />
           <span>{pick}</span>
         </span>
+      )}
+      {/* The values stand in the question's own fields where it draws them; a response this build does not know lists them here. */}
+      {settled.values === undefined || drawn ? null : (
+        <AnswerValues values={item.answer?.values ?? []} texts={NO_TEXT_LABELS} />
       )}
       <CommentFiles
         itemId={item.id}
@@ -2103,7 +2108,7 @@ function answeredAsk(
   return thread.find((message) => message.id === answers.ask)?.ask;
 }
 
-/** No text fields' labels, for values whose ask the thread read no longer carries, so none is known to be a text field. */
+/** No text fields' labels, for values whose ask or response this build cannot read, so none is known to be a text field. */
 const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
 
 /**

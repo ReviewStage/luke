@@ -37,6 +37,7 @@ import {
   type InboxMessage,
   type InboxReadAsk,
   inboxReadAskSchema,
+  inboxReadResponseSchema,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -3262,6 +3263,33 @@ function answeredFields(within: Element): (string | null | undefined)[][] {
     return [kind, name, words?.textContent];
   });
 }
+
+test("an answered item of a response this build does not know still lists its values under the answer's head, as no fields stand to hold them", async () => {
+  const matrix = Schema.decodeUnknownSync(inboxReadResponseSchema)({ type: "matrix" });
+  inboxes = new Map([
+    [
+      BILLING.id,
+      [
+        THRESHOLD,
+        {
+          ...RETRY,
+          response: matrix,
+          answer: { reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Region", value: "west" }] },
+        },
+      ],
+    ],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+
+  assert.equal(itemPane(page).querySelector("[data-inbox-answered]"), null);
+  assert.equal(
+    wordsOf(itemPane(page).querySelector('[data-inbox-comment="answered"] [data-inbox-values]')),
+    "Regionwest",
+  );
+});
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
   // The strip draws still under reduced motion, which jsdom has no answer to.
