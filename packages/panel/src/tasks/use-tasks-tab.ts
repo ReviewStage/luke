@@ -342,7 +342,12 @@ type StandIn =
       readonly workspaceId: string | undefined;
     }
   | { readonly kind: typeof STAND_IN.FACTORY }
-  | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace }
+  | {
+      readonly kind: typeof STAND_IN.AUTOMATIONS;
+      readonly place: AutomationsPlace;
+      /** Whether an automation's runs stand alone over its setup, which only a narrow room draws apart; a page opened on a run's link does until said otherwise. */
+      readonly runs?: boolean | undefined;
+    }
   | {
       readonly kind: typeof STAND_IN.CHAT;
       readonly place: ChatPlace;
@@ -395,13 +400,27 @@ export type AutomationsPlace =
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 
+/** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
+function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
+  if (place.kind === AUTOMATIONS_PAGE.LIST) return false;
+  return runs ?? (place.kind === AUTOMATIONS_PAGE.EDIT && place.runId !== undefined);
+}
+
 /** The window's Automations pages: whether one stands in the task's place, which, and the presses that open, move between, and leave them. */
 interface AutomationsViewControl {
   readonly open: boolean;
   /** The page standing, the list while none does. */
   readonly place: AutomationsPlace;
-  /** Opens the page asked for, the list where none is. */
-  readonly onOpen: (place?: AutomationsPlace) => void;
+  /**
+   * Whether an automation's page stands its runs alone rather than its
+   * setup, which only a narrow room draws apart: a page opened on a run's
+   * link does, and any other does not until its Runs is chosen.
+   */
+  readonly runs: boolean;
+  /** Opens the page asked for, the list where none is, on its runs where `runs` says so. */
+  readonly onOpen: (place?: AutomationsPlace, runs?: boolean) => void;
+  /** Stands the page's runs alone, or its setup again; it leaves no page, so it asks nothing. */
+  readonly onRuns: (shown: boolean) => void;
   readonly onClose: () => void;
 }
 
@@ -3186,10 +3205,17 @@ export function useTasksTab(input: {
     automationsView: {
       open: standIn?.kind === STAND_IN.AUTOMATIONS,
       place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,
-      onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST) => {
+      runs: standIn?.kind === STAND_IN.AUTOMATIONS && runsStanding(standIn.place, standIn.runs),
+      onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST, runs?: boolean) => {
         setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.AUTOMATIONS, place });
+        setStandIn({ kind: STAND_IN.AUTOMATIONS, place, runs });
       }),
+      onRuns: (shown) =>
+        setStandIn((held) =>
+          held?.kind === STAND_IN.AUTOMATIONS && held.place.kind !== AUTOMATIONS_PAGE.LIST
+            ? { ...held, runs: shown }
+            : held,
+        ),
       onClose: guard(() => setStandIn(undefined)),
     },
     // The Board stands over the plan's place as Factory does, each giving way to the others.

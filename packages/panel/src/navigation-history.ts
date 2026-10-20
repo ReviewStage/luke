@@ -43,7 +43,8 @@
  * A narrow room, a phone's, stands the window as one pane at a time
  * (`shell-room.ts`), and there each pane opened over another is a step of its
  * own, which Back closes: the side panel over the plan, an Inbox item, a
- * Settings page, a version, or a Chat place over its list. Each such step
+ * Settings page, a version, a Chat place over its list, or an automation's
+ * runs over its setup. Each such step
  * holds its sub-step beside its place, and a wide room holds none, so two
  * places are one step there as they always were, and a room turned from one
  * to the other takes the step standing in place. Going to a step stands its
@@ -53,7 +54,9 @@
  * otherwise take the step standing in place, as a link opened on an item
  * leaves no list behind it to go back to. The side panel's ways out do the
  * same, so shutting a panel opened over the plan steps back to the plan
- * rather than adding a step that Back would open the panel again from.
+ * rather than adding a step that Back would open the panel again from. A
+ * step between two such panes of one page leaves no page, so it never asks
+ * first, as leaving an automation with unsaved changes does.
  */
 
 import { linkOf, type ReadLink } from "@luke/features/luke-link";
@@ -116,9 +119,9 @@ interface PanelStep {
  * A place the window can stand on: a task, or its version history where it
  * stands, by its id, so a rename leaves it the same place. A place a narrow
  * room shows one pane of at a time holds which, its sub-step, and none in a
- * wide room: the side panel over a task, and whether Settings, a version
- * history, the Inbox, or Chat stands on its list (`listed`) or the item
- * chosen in it.
+ * wide room: the side panel over a task, an automation's runs over its
+ * setup, and whether Settings, a version history, the Inbox, or Chat stands
+ * on its list (`listed`) or the item chosen in it.
  */
 type Place =
   | {
@@ -154,6 +157,8 @@ type Place =
       readonly page: AutomationsPlace;
       /** The workspace listed as the page stood, whose automations it read. */
       readonly workspaceId: string | undefined;
+      /** Whether an automation's runs stood alone over its setup, in a narrow room alone. */
+      readonly runs?: boolean | undefined;
     }
   | {
       readonly kind: typeof PLACE_KIND.CHAT;
@@ -209,11 +214,13 @@ function madeFromNew(standing: Place, place: Place): boolean {
   );
 }
 
-/** A place's sub-step in a narrow room, as a yes or no: the side panel open, or the list standing; none in a wide room, or for a place with no sub-step. */
+/** A place's sub-step in a narrow room, as a yes or no: the side panel open, an automation's runs standing, or the list standing; none in a wide room, or for a place with no sub-step. */
 function subStepOf(place: Place): boolean | undefined {
   switch (place.kind) {
     case PLACE_KIND.TASK:
       return place.panel?.open;
+    case PLACE_KIND.AUTOMATIONS:
+      return place.runs;
     case PLACE_KIND.VERSION_HISTORY:
     case PLACE_KIND.INBOX:
     case PLACE_KIND.CHAT:
@@ -375,6 +382,33 @@ function nearest(
   return undefined;
 }
 
+/**
+ * Whether two places are one draft's: one page, and for a new automation's
+ * page the same suggestion, since one opened from another suggestion starts
+ * another draft.
+ */
+function sameDraftPage(one: Place, other: Place): boolean {
+  if (!samePage(one, other)) return false;
+  if (one.kind !== PLACE_KIND.AUTOMATIONS || other.kind !== PLACE_KIND.AUTOMATIONS) return true;
+  return one.page.kind !== AUTOMATIONS_PAGE.NEW || sameAutomationsOpening(one.page, other.page);
+}
+
+/**
+ * How a step to `to` asks: as the window's guard asks, unless it moves only
+ * within the draft standing, between a narrow room's sub-steps or to the
+ * same automation on another run, which leaves no page and so loses nothing
+ * written on it; that way out is taken as it is.
+ */
+function asking(
+  latest: { readonly place: Place | undefined; readonly guard: LeaveGuard["guard"] },
+  to: Place | undefined,
+): LeaveGuard["guard"] {
+  const { place } = latest;
+  return place !== undefined && to !== undefined && sameDraftPage(place, to)
+    ? (leave) => leave
+    : latest.guard;
+}
+
 /** The window's history as its buttons and keys use it. */
 export interface NavigationHistory {
   canGoBack: boolean;
@@ -393,6 +427,8 @@ export interface ListBacks {
   readonly settings: () => void;
   readonly versions: () => void;
   readonly chat: () => void;
+  /** Stands an automation's setup again from its runs. */
+  readonly runs: () => void;
   /** Stands the Inbox's list alone, or its item. */
   readonly inbox: (listed: boolean) => void;
   /** Shuts the side panel standing over the plan, the whole pane. */
@@ -439,6 +475,10 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
     history: { ...tasks.history, onList: lists.versions },
     chatView: { ...tasks.chatView, onList: lists.chat },
     inboxView: { ...tasks.inboxView, onListed: lists.inbox },
+    automationsView: {
+      ...tasks.automationsView,
+      onRuns: (shown) => (shown ? tasks.automationsView.onRuns(true) : lists.runs()),
+    },
   };
 }
 
@@ -563,7 +603,10 @@ function useHistory(input: {
         return;
       }
       let followed = false;
-      latest.current.guard(() => {
+      asking(
+        latest.current,
+        target?.state,
+      )(() => {
         followed = true;
         if (target === undefined) {
           arriveNowhere(was);
@@ -593,12 +636,15 @@ function useHistory(input: {
       const at = nearest(asked, by, latest.current.reachable);
       const target = at === undefined ? undefined : asked.entries[at]?.state;
       if (at === undefined || target === undefined) return;
-      guard(() => {
+      asking(
+        latest.current,
+        target,
+      )(() => {
         own(() => history.go(at - history.current().at));
         latest.current.go(target);
       })();
     },
-    [guard, history, own],
+    [history, own],
   );
 
   // A step back to `to`'s step only, answering whether it was the one behind.
@@ -710,6 +756,11 @@ export function useWindowHistory(input: {
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = tasks.automationsView.open;
   const automationsPage = tasks.automationsView.place;
+  // A narrow room stands an automation's runs alone over its setup, as a step of their own.
+  const automationRuns =
+    narrow && automationsPage.kind !== AUTOMATIONS_PAGE.LIST
+      ? tasks.automationsView.runs
+      : undefined;
   const chatOpen = tasks.chatView.open;
   const chatOn = useChatOn();
   const boardOpen = tasks.boardView.open;
@@ -745,7 +796,12 @@ export function useWindowHistory(input: {
     }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (automationsOpen) {
-      return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage, workspaceId: listedWorkspace };
+      return {
+        kind: PLACE_KIND.AUTOMATIONS,
+        page: automationsPage,
+        workspaceId: listedWorkspace,
+        runs: automationRuns,
+      };
     }
     if (chatOpen) {
       return {
@@ -786,6 +842,7 @@ export function useWindowHistory(input: {
     factoryOpen,
     automationsOpen,
     automationsPage,
+    automationRuns,
     chatOpen,
     chatListed,
     chatAlone,
@@ -842,7 +899,22 @@ export function useWindowHistory(input: {
       return;
     }
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
-      tasks.automationsView.onOpen(to.page);
+      // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again;
+      // one that also marks another run of the same automation, as a run's link does, opens it on that run past the ask,
+      // since it keeps the draft. A new automation's page from another suggestion is another draft, so it asks.
+      const here: Place = {
+        kind: PLACE_KIND.AUTOMATIONS,
+        page: automationsPage,
+        workspaceId: listedWorkspace,
+      };
+      const sameDraft = automationsOpen && sameDraftPage(here, to);
+      if (!sameDraft) {
+        tasks.automationsView.onOpen(to.page, to.runs);
+      } else if (!sameAutomationsOpening(automationsPage, to.page)) {
+        tasks.leaveGuard.pass(() => tasks.automationsView.onOpen(to.page, to.runs));
+      } else if (to.runs !== undefined) {
+        tasks.automationsView.onRuns(to.runs);
+      }
       return;
     }
     if (to.kind === PLACE_KIND.CHAT) {
@@ -924,6 +996,16 @@ export function useWindowHistory(input: {
         up(
           { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace, listed: true },
           tasks.chatView.onList,
+        ),
+      runs: () =>
+        up(
+          {
+            kind: PLACE_KIND.AUTOMATIONS,
+            page: automationsPage,
+            workspaceId: listedWorkspace,
+            runs: false,
+          },
+          () => tasks.automationsView.onRuns(false),
         ),
       inbox: (listed) =>
         listed

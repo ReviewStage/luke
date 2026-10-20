@@ -582,6 +582,7 @@ test("the Automations page's sidebar row and its command stand with no experimen
 test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
+    ...tasksControl().automationsView,
     open: false,
     place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
@@ -629,6 +630,7 @@ test("while the Automations pages are still loading their frame stands the list 
 test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
   const closed: string[] = [];
   const automationsView = {
+    ...tasksControl().automationsView,
     open: true,
     place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
