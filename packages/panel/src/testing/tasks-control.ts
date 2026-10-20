@@ -302,6 +302,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      onOpenItem: ignore,
       listed: false,
       onListed: ignore,
       pages: undefined,

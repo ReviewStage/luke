@@ -1,53 +1,33 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxParams,
-} from "@luke/features/coding-agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { EmptyState, ErrorState } from "@luke/ui";
+import { EmptyState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import { TASK_MARK } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useAct } from "../act.js";
+import { useEffect, useMemo, useRef } from "react";
+import type { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import { useInboxCloser } from "../tasks/inbox-close.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
 import {
   anyUnread,
-  EVERYONES,
-  firstChoice,
-  INBOX_GROUPING,
   INBOX_HOLDER,
-  INBOX_SHOW,
-  INBOX_WHOSE,
-  type InboxCounts,
-  type InboxGroup,
   type InboxHolder,
   type InboxListed,
-  inboxCounts,
-  inboxList,
   itemWorkspaceId,
   listedItems,
   NEEDS_YOU,
-  type TasklessInboxAgent,
-  taskHolder,
-  tasklessGroups,
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
-import { useSettledReads } from "../tasks/inbox-settling.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
   type TasklessPlace,
@@ -56,15 +36,12 @@ import {
 } from "../tasks/task-mentions.js";
 import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents.js";
-import { useInboxItems } from "../tasks/use-inbox-items.js";
-import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
+import { useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
-import { useTaskInbox } from "../tasks/use-task-inbox.js";
-import { useTasklessInboxItems } from "../tasks/use-taskless-inbox-items.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { type InboxViewChoices, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -122,83 +99,16 @@ import { taskCardOf } from "./task-card.js";
  * mentions what its repository and workspace hold (`answerPlace`), and
  * its skills are read through its holder and drawn as chips that open
  * their `SKILL.md` on GitHub.
+ *
+ * Its items are read and listed by `use-inbox-listing.ts`. While the account
+ * has the inbox-first sidebar on, the shell reads them once and hands the
+ * listing to the sidebar, which lists them (`sidebar-inbox.tsx`), and here,
+ * where the chosen item then stands alone across the place, with no list of
+ * its own and no way back to one, the list being always in sight.
  */
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
 const BACK_TO_INBOX = "Back to Inbox";
-
-/** What the list says where a task's read did not answer. */
-const NOT_READ = "Some items could not be read.";
-
-/**
- * The tasks the list holds items of, in main's order: each holding one that
- * the listed workspace's list given holds, so one not yet read, or another
- * workspace's, is listed nowhere. Handed the standing tasks, an archived
- * one is listed nowhere either; handed the archived ones, it is what the
- * Archived tab lists.
- */
-function listedHoldings(
-  holdings: TasksControl["inboxTasks"],
-  listed: TasksControl["tasks"],
-): readonly AppInboxTaskHolding[] {
-  return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
-}
-
-/** No task's items are read for the Archived tab while it is not shown. */
-const NO_HOLDINGS: readonly AppInboxTaskHolding[] = [];
-
-/** Each task holding items as the list groups it, with its items as last read; a task the list given does not hold is left out. */
-function holdingGroups(
-  holdings: readonly AppInboxTaskHolding[],
-  listed: TasksControl["tasks"],
-  itemsOf: (taskId: string) => readonly InboxItem[] | undefined,
-): InboxGroup[] {
-  return holdings.flatMap((holding) => {
-    const task = listed.find((each) => each.id === holding.taskId);
-    if (task === undefined) return [];
-    return [{ holder: taskHolder(task), items: itemsOf(holding.taskId) ?? [] }];
-  });
-}
-
-/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the tab's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
-function ListNote({
-  failed,
-  reading,
-  empty,
-  alone,
-  filteredOut,
-  counts,
-  onList,
-  onRetry,
-}: {
-  failed: boolean;
-  reading: boolean;
-  empty: boolean;
-  /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
-  alone: boolean;
-  /** The tab shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
-  filteredOut: InboxViewChoices | undefined;
-  /** How many items each tab lists, for the empty state to offer one that lists something. */
-  counts: InboxCounts;
-  /** Asks for the list, so the tab its empty state shows leaves it standing. */
-  onList: () => void;
-  onRetry: () => void;
-}): React.JSX.Element | null {
-  if (failed) {
-    return (
-      <div className="sidebar-note">
-        <ErrorState onRetry={onRetry}>{NOT_READ}</ErrorState>
-      </div>
-    );
-  }
-  if (!empty) return null;
-  if (reading) return <InboxListSkeleton />;
-  if (filteredOut !== undefined)
-    return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
-  // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
-  if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
-  return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
-}
 
 /** A taskless item's code reads no file, there being no task whose repository it reads through. */
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
@@ -219,251 +129,91 @@ const NO_CALLS = {
 const NO_OPEN_AGENTS: readonly string[] = [];
 
 /** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
-export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
-  const view = tasks.inboxView;
-  const { act } = useAct();
+export function DesktopInbox({
+  tasks,
+  listing,
+}: {
+  tasks: TasksControl;
+  /** The Inbox as the inbox-first sidebar lists it, where the sidebar holds the list and the page shows the chosen item alone; none where the page reads and lists it itself. */
+  listing?: InboxListing | undefined;
+}): React.JSX.Element {
+  return listing === undefined ? (
+    <ListedInbox tasks={tasks} />
+  ) : (
+    <InboxShown tasks={tasks} listing={listing} paneOnly />
+  );
+}
+
+/** The Inbox page reading its own items, its list and the chosen item side by side. */
+function ListedInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const listing = useInboxListing(tasks);
+  return <InboxShown tasks={tasks} listing={listing} paneOnly={false} />;
+}
+
+/**
+ * The Inbox as read: its list and the chosen item beside it, or, where the
+ * sidebar lists it (`paneOnly`), the chosen item alone across the place,
+ * with no way back to a list that is always in sight.
+ */
+function InboxShown({
+  tasks,
+  listing,
+  paneOnly,
+}: {
+  tasks: TasksControl;
+  listing: InboxListing;
+  paneOnly: boolean;
+}): React.JSX.Element {
+  const {
+    view,
+    act,
+    choices,
+    folds,
+    openAutomation,
+    read,
+    archivedRead,
+    taskless,
+    showArchived,
+    asked,
+    chosenTask,
+    taskId,
+    chosenAgentId,
+    agents,
+    live,
+    named,
+    marks,
+    standing,
+    counts,
+    list,
+    steps,
+    chosen,
+    filteredOut,
+    missing,
+    reading,
+    choose,
+    closeItem,
+    onRetry,
+  } = listing;
   const openLink = useOpenLink();
   const now = useMinute();
-  const choices = useInboxViewChoices();
-  const folds = useInboxTaskFolds();
-  const { onOpen: onOpenAutomations } = tasks.automationsView;
-  // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
-  const openAutomation = useCallback(
-    (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
-    [onOpenAutomations],
-  );
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
-  const { inboxTasks, tasks: listedTasks, archived: listedArchived } = tasks.listed;
-  const holdings = useMemo(
-    () => listedHoldings(inboxTasks, listedTasks),
-    [inboxTasks, listedTasks],
-  );
-  const archivedHoldings = useMemo(
-    () => listedHoldings(inboxTasks, listedArchived),
-    [inboxTasks, listedArchived],
-  );
-  const read = useInboxItems({ holdings, readInbox });
-  // Note that the archived tasks' items are read only while the Archived tab is shown, since nothing in them waits on anyone.
-  const showArchived = choices.show === INBOX_SHOW.ARCHIVED;
-  const archivedRead = useInboxItems({
-    holdings: showArchived ? archivedHoldings : NO_HOLDINGS,
-    readInbox,
-  });
-  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
-  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
-  const tasklessItems = useSettledReads(tasklessReads.items);
-  const taskless = { ...tasklessReads, items: tasklessItems };
-  const asked = view.chosen;
-  const chosenTask =
-    asked !== undefined && "taskId" in asked
-      ? (tasks.tasks.find((task) => task.id === asked.taskId) ??
-        tasks.archived.find((task) => task.id === asked.taskId))
-      : undefined;
-  // The chosen task's items are read with the archived tasks' while it is archived, with the rest's otherwise.
-  const chosenArchived = chosenTask?.archivedAt !== undefined;
-  const chosenRead = chosenArchived ? archivedRead : read;
-  const chosenHoldings = chosenArchived ? archivedHoldings : holdings;
-  const taskId = chosenTask?.id;
-  const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
-  const agents = useCodingAgents({
-    acts: { act },
-    taskId,
-    ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
-    repository: chosenTask?.repository ?? null,
-    archived: false,
-    onUnarchive: () => undefined,
-    // The Inbox draws no agent's composer, so nothing here opens Settings.
-    onOpenIntegrations: () => undefined,
-    onOpenApiKeys: () => undefined,
-    onStarted: () => undefined,
-    me: tasks.me,
-  });
-  const readAgentInbox = useCallback(
-    (after: string) =>
-      chosenAgentId === undefined
-        ? Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const)
-        : act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId: chosenAgentId, after }),
-    [act, chosenAgentId],
-  );
-  // Note that an agent with no task holds its own read, by its id, as a task's is held by the task's.
-  const live = useTaskInbox({
-    taskId: taskId ?? chosenAgentId,
-    ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
-    shown: tasks.shown,
-    waiting:
-      tasks.inbox.some((each) => each.taskId === taskId) ||
-      tasks.inboxTaskless.some((each) => each.agentId === chosenAgentId),
-    agents,
-  });
-  // Note that the models come from the open task's agents where this task's have not read them, so an agent is named alike in both.
-  const named = { ...agents, models: agents.models ?? tasks.agents.models };
-  // The chosen holder's own held read stands in for the list's once it answered, so an answer shows
-  // at once, and only while it holds, since one that failed stops hearing what changed.
-  const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
-  const holdsLive = live.read && !live.failed;
-  const itemsOf =
-    (reads: typeof read) =>
-    (each: string): readonly InboxItem[] | undefined =>
-      holdsLive && each === taskId ? liveItems : reads.items.get(each);
-  const taskEntries = holdingGroups(holdings, tasks.tasks, itemsOf(read));
-  const archivedEntries = holdingGroups(archivedHoldings, tasks.archived, itemsOf(archivedRead));
-  const tasklessRead =
-    holdsLive && chosenAgentId !== undefined
-      ? new Map(taskless.items).set(chosenAgentId, liveItems)
-      : taskless.items;
-  // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
-  const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
-  const settledAgent: TasklessInboxAgent[] =
-    chosenAgentId !== undefined &&
-    holdsLive &&
-    pageAgent !== undefined &&
-    !tasks.inboxTaskless.some((each) => each.agentId === chosenAgentId)
-      ? [
-          {
-            agentId: pageAgent.id,
-            agentTitle: pageAgent.title,
-            agentModel: pageAgent.model,
-            automationId: pageAgent.automationId ?? null,
-            automationName: null,
-            repository: "",
-            ...(agents.workspaceId === undefined ? undefined : { workspaceId: agents.workspaceId }),
-          },
-        ]
-      : [];
-  const { onReread: rereadTasks } = read;
-  const { onReread: rereadTaskless } = taskless;
-  // Note that every item marked read moves nothing main hears of, so the Inbox reads its items again once the service took it.
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: tasks.workspace?.id,
-    onMarkedAll: () => {
-      rereadTasks();
-      rereadTaskless();
-    },
-  });
-  // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
-  // The archived tasks' items stand on the Archived tab alone, which counts what main says each holds whether or not it is read yet.
-  const standing: readonly InboxGroup[] = [
-    ...taskEntries,
-    ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
-  ];
-  const entries = showArchived ? archivedEntries : standing;
-  const archivedCount = archivedHoldings.reduce((total, holding) => total + holding.items, 0);
-  const counts = {
-    ...inboxCounts(standing, tasks.me, choices.whose),
-    [INBOX_SHOW.ARCHIVED]: archivedCount,
-  };
-  // Note that the Archived tab lists every archived item, whoever's, as main's count of them does, and
-  // groups by task where Status is chosen, since nothing in it needs anyone or waits on anyone.
-  const filter = {
-    grouping:
-      showArchived && choices.grouping === INBOX_GROUPING.STATUS
-        ? INBOX_GROUPING.TASK
-        : choices.grouping,
-    show: choices.show,
-    sort: choices.sort,
-    whose: showArchived ? EVERYONES : choices.whose,
-    readerId: tasks.me,
-  };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(entries, { ...filter, chosen: undefined });
-  const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
-  const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
-  // Note that a tab leaving out every item listed is said apart from an Inbox holding none, the
-  // archived tasks' items among what another tab would list.
-  const holdsItems = (groups: readonly InboxGroup[]) =>
-    groups.some(({ items }) => items.length > 0);
-  const filteredOut =
-    listedItems(list).length === 0 &&
-    (showArchived
-      ? holdsItems(standing)
-      : ((choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
-          holdsItems(standing)) ||
-        archivedCount > 0);
-  // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
-  // it may be listed once the read lands; one whose task left the list, archived elsewhere, gives way.
-  // A holder whose agents' read answered none, or that it is not there, holds no Inbox to read;
-  // one whose agents are not read yet may still hold the item, until its Inbox's own read answers.
-  const holderEmpty = agents.listMissing || agents.heldIds?.length === 0;
-  const agentsUnread = agents.heldIds === undefined && !agents.listFailed && !agents.listMissing;
-  // Note that a plan's items read before main's latest word of it may lack the item asked for, so only a current read settles it.
-  const chosenWaits =
-    (taskId !== undefined &&
-      !chosenRead.current.has(taskId) &&
-      !live.read &&
-      (chosenHoldings.some((holding) => holding.taskId === taskId) || agentsUnread)) ||
-    (chosenAgentId !== undefined &&
-      !taskless.current.has(chosenAgentId) &&
-      !live.read &&
-      !agents.listMissing);
-  // Note that the holdings are filtered against the task list, so until it is read they hold nothing and prove nothing.
-  const listUnread = !tasks.listRead && !tasks.listFailed;
-  const reading =
-    listUnread ||
-    (showArchived
-      ? archivedHoldings.some((holding) => !archivedRead.items.has(holding.taskId))
-      : holdings.some((holding) => !read.items.has(holding.taskId)) ||
-        tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId)));
-  // An item asked for by a link or a notification that no read holds once every read has landed is
-  // not there for the reader, whether it was deleted or is of a task they cannot read, and its pane
-  // says so rather than giving way to the first item.
-  // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
-  const holderRead =
-    taskId !== undefined
-      ? chosenRead.current.has(taskId) || live.read || holderEmpty
-      : chosenAgentId !== undefined
-        ? live.read || taskless.current.has(chosenAgentId) || holderEmpty
-        : true;
-  // Note that only a task's item waits on the task list, since an agent with no task is read apart from it.
-  const missing =
-    asked?.opened === true &&
-    chosen === undefined &&
-    !chosenWaits &&
-    holderRead &&
-    (chosenAgentId !== undefined || !listUnread);
-  // Note that an item a link or a notification asked for is never given way to, found or not, because the reader asked for that one.
-  const standIn =
-    chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
-      ? firstChoice(list)
-      : undefined;
-  // An item a link or a notification asked for on an archived task is shown on the Archived tab, the one that lists it.
-  const { onShow } = choices;
-  const opensArchived = asked?.opened === true && chosenArchived && !showArchived;
-  useEffect(() => {
-    if (opensArchived) onShow(INBOX_SHOW.ARCHIVED);
-  }, [opensArchived, onShow]);
-  const { onChoose } = view;
-  const choose = useCallback(
-    ({ holder, item }: InboxListed) =>
-      onChoose(
-        holder.kind === INBOX_HOLDER.TASK
-          ? { taskId: holder.task.id, itemId: item.id }
-          : { agentId: item.agentId, itemId: item.id },
-      ),
-    [onChoose],
-  );
-  useEffect(() => {
-    if (standIn !== undefined) choose(standIn);
-  }, [standIn, choose]);
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
   const { listed, onListed, onSingle } = view;
-  const columns = useInboxColumns(chosen?.item.id ?? (missing ? asked?.itemId : undefined), true, {
-    asked: listed,
-    onAsk: onListed,
-    onSingle,
-  });
+  const pageColumns = useInboxColumns(
+    chosen?.item.id ?? (missing ? asked?.itemId : undefined),
+    !paneOnly,
+    { asked: listed, onAsk: onListed, onSingle },
+  );
+  // Note that with the list in the sidebar the place shows the item alone, measured by nothing, with no way back to a list that stays in sight.
+  const columns = paneOnly
+    ? { ...pageColumns, ref: undefined, shown: INBOX_COLUMNS.ITEM, onBack: undefined }
+    : pageColumns;
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
     choose(listed);
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
-  const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
@@ -510,11 +260,6 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     place === undefined
       ? undefined
       : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
-  const onRetry = () => {
-    read.onRetry();
-    archivedRead.onRetry();
-    taskless.onRetry();
-  };
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -602,40 +347,42 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
               hidden={sidePanel.fullScreen}
             >
               <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
-                <InboxList
-                  view={list}
-                  chosen={chosen?.item.id}
-                  columns={columns.shown}
-                  rows={columns.rows}
-                  head={{
-                    shown: tasks.shown,
-                    show: choices,
-                    counts,
-                    view: { choices, folds },
-                    // Note that Mark all as read marks what the service's own mark reaches, which leaves the archived tasks' items be.
-                    readAll: {
-                      unread: anyUnread(standing),
-                      onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
-                    },
-                  }}
-                  models={named.models}
-                  readerId={tasks.me}
-                  note={
-                    <ListNote
-                      failed={showArchived ? archivedRead.failed : read.failed || taskless.failed}
-                      reading={reading}
-                      empty={listedItems(list).length === 0}
-                      alone={columns.shown === INBOX_COLUMNS.LIST}
-                      filteredOut={filteredOut ? choices : undefined}
-                      counts={counts}
-                      onList={columns.onList}
-                      onRetry={onRetry}
-                    />
-                  }
-                  onChoose={open}
-                  onMark={(listed, unread) => markItem(listed.item, unread)}
-                  onClose={closeItem}
-                />
+                {paneOnly ? null : (
+                  <InboxList
+                    view={list}
+                    chosen={chosen?.item.id}
+                    columns={columns.shown}
+                    rows={columns.rows}
+                    head={{
+                      shown: tasks.shown,
+                      show: choices,
+                      counts,
+                      view: { choices, folds },
+                      // Note that Mark all as read marks what the service's own mark reaches, which leaves the archived tasks' items be.
+                      readAll: {
+                        unread: anyUnread(standing),
+                        onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
+                      },
+                    }}
+                    models={named.models}
+                    readerId={tasks.me}
+                    note={
+                      <InboxListNote
+                        failed={showArchived ? archivedRead.failed : read.failed || taskless.failed}
+                        reading={reading}
+                        empty={listedItems(list).length === 0}
+                        alone={columns.shown === INBOX_COLUMNS.LIST}
+                        filteredOut={filteredOut ? choices : undefined}
+                        counts={counts}
+                        onList={columns.onList}
+                        onRetry={onRetry}
+                      />
+                    }
+                    onChoose={open}
+                    onMark={(listed, unread) => markItem(listed.item, unread)}
+                    onClose={closeItem}
+                  />
+                )}
                 {chosen === undefined ? (
                   <section
                     className="inbox-view-items"

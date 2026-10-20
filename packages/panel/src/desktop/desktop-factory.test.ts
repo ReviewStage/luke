@@ -148,6 +148,7 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      onOpenItem: () => undefined,
       listed: false,
       onListed: () => undefined,
       pages: undefined,

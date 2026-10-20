@@ -205,6 +205,7 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        onOpenItem: () => undefined,
         listed: false,
         onListed: ignore,
         pages: undefined,
@@ -590,12 +591,14 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("the Board's sidebar row is the Tasks page's, named Tasks, while the account has the inbox-first sidebar on", async () => {
+test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Board's row is the Tasks page's", async () => {
   handState({});
   const off = mount(false);
   await settle();
   assert.ok(placeRow(off, "Board"));
+  assert.ok(placeRow(off, "Inbox"));
   assert.equal(placeRow(off, "Tasks"), undefined);
+  assert.equal(off.querySelector('aside .inbox-tasks[data-placement="sidebar"]'), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -604,6 +607,20 @@ test("the Board's sidebar row is the Tasks page's, named Tasks, while the accoun
   await settle();
   assert.ok(placeRow(on, "Tasks"));
   assert.equal(placeRow(on, "Board"), undefined);
+  assert.equal(
+    placeRow(on, "Inbox"),
+    undefined,
+    "the sidebar is the Inbox, so it needs no row for it",
+  );
+  assert.ok(
+    on.querySelector('aside .inbox-tasks[data-placement="sidebar"]'),
+    "the sidebar lists the Inbox",
+  );
+  assert.equal(
+    on.querySelector('aside nav[aria-label="Tasks"]'),
+    null,
+    "the task list stands on its page",
+  );
 });
 
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {

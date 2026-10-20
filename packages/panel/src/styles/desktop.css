@@ -3143,6 +3143,22 @@ ul.actor-stack {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
+/* The inbox-first sidebar's list (`sidebar-inbox.tsx`): the sidebar's own
+   section under its places and pins, scrolled by the sidebar's scroller and
+   inset as the sidebar's rows are, with no edge of its own. */
+.inbox-tasks[data-placement="sidebar"] {
+  display: block;
+  border-right: 0;
+}
+
+.inbox-tasks[data-placement="sidebar"] .inbox-tasks-body {
+  padding: 0;
+}
+
+.inbox-tasks[data-placement="sidebar"] .inbox-tasks-chips {
+  padding-inline: 0;
+}
+
 /* An item's row is a sidebar row led by its agent's tile (`actor-ref.tsx`),
    centred on the line as a pinned tab's is, with no Unpin to leave room for. */
 .inbox-row .sidebar-task-line {
