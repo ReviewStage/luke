@@ -19,7 +19,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, type LiveSubscription, liveRows } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
@@ -45,6 +45,8 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 const IDLE = Duration.seconds(30);
 /** How long after a seal the service did not answer, or a subscription that stopped, the transcript is sealed again. */
 const RESEAL = Duration.seconds(1);
+/** How long a send waits for its own row to reach the transcript's subscription before it is confirmed anyway, as Neon's guide waits. */
+const TXID_WAIT = Duration.seconds(10);
 
 /** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. */
 export class TranscriptKey extends Data.Class<{
@@ -60,7 +62,12 @@ type LiveState =
 
 /** What a transcript's read is answered from. */
 type Standing =
-  | { readonly kind: "live"; readonly state: SubscriptionRef.SubscriptionRef<LiveState> }
+  | {
+      readonly kind: "live";
+      readonly state: SubscriptionRef.SubscriptionRef<LiveState>;
+      /** Waits until a write's transaction reached the transcript's messages and its change was delivered, at most `TXID_WAIT`; at once where no subscription stands. */
+      readonly awaitTxId: (txid: string) => Effect.Effect<void>;
+    }
   | { readonly kind: "refused" };
 
 /** A failure as the service answered one. */
@@ -116,6 +123,8 @@ export function transcriptFollows(
         const first = yield* sealedOf(dependencies, key);
         if (Option.isNone(first)) return { kind: "refused" } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
+        /** The transcript's messages part as it stands now, which a send waits on its row reaching. */
+        let messages: LiveSubscription | undefined;
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
@@ -125,6 +134,9 @@ export function transcriptFollows(
                 reseal: () => dependencies.seal(key, false),
                 poll: () => dependencies.seal(key, true),
                 now: dependencies.now,
+                onSubscribed: (part, subscription) => {
+                  if (part === "messages") messages = subscription;
+                },
               },
               sealed,
             ),
@@ -147,7 +159,11 @@ export function transcriptFollows(
             }
           }),
         );
-        return { kind: "live", state } as const;
+        const awaitTxId = (txid: string) =>
+          Effect.promise(async () => {
+            await messages?.awaitTxId?.(txid, Duration.toMillis(TXID_WAIT)).catch(() => undefined);
+          });
+        return { kind: "live", state, awaitTxId } as const;
       }),
   });
 }
@@ -218,4 +234,25 @@ export function followTranscript(
       }
     }),
   );
+}
+
+/**
+ * Waits until a write's transaction has reached the transcript's live
+ * subscription, where one stands, so the page the write moved is told
+ * before the write is confirmed; at once where no window follows the
+ * transcript, and at most `TXID_WAIT` where the transaction never arrives.
+ */
+export function awaitTranscriptTxId(
+  follows: TranscriptFollows,
+  key: TranscriptKey,
+  txid: string,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    if (!(yield* RcMap.has(follows, key))) return;
+    yield* Effect.scoped(
+      Effect.flatMap(RcMap.get(follows, key), (standing) =>
+        standing.kind === "live" ? standing.awaitTxId(txid) : Effect.void,
+      ),
+    );
+  });
 }

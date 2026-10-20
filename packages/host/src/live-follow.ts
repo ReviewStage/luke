@@ -40,7 +40,7 @@ export class LiveBroken extends Data.TaggedError("LiveBroken")<{
 }> {}
 
 /** One part's subscription, the slice of Realtime's client this reads. */
-interface LiveSubscription {
+export interface LiveSubscription {
   onChange(
     listener: (snapshot: {
       readonly status: string;
@@ -50,6 +50,8 @@ interface LiveSubscription {
   ): () => void;
   renew(query: SealedLiveQueryWire): Promise<void>;
   unsubscribe(): void;
+  /** Settles once the transaction has reached this subscription and its change been delivered; rejects past the timeout. */
+  awaitTxId?(txid: string, timeout?: number): Promise<void>;
 }
 
 /** One socket to Realtime, every part's subscription on it. */
@@ -89,6 +91,8 @@ export interface LiveFollowDependencies<Part extends string> {
   >;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /** Hears each part's subscription as it opens, for a caller that waits on a write reaching it. */
+  readonly onSubscribed?: (part: Part, subscription: LiveSubscription) => void;
 }
 
 /** The earliest any of the read's sealed statements expires, in epoch milliseconds. */
@@ -125,6 +129,7 @@ function realtimeRows<Part extends string>(
         Effect.sync(() =>
           parts.map((part) => {
             const subscription = client.subscribe(first.queries[part]);
+            dependencies.onSubscribed?.(part, subscription);
             subscription.onChange((snapshot) => {
               if (snapshot.status === "error") {
                 const code = snapshot.error?.code;

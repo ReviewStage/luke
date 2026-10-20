@@ -94,6 +94,7 @@ import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
+  awaitTranscriptTxId,
   followTranscript,
   type TranscriptFollows,
   TranscriptKey,
@@ -443,7 +444,16 @@ function composed(
           "messaging an agent names the agent, its words, and the send's key",
         );
         const answer = yield* asked(client.message(agentId, request));
-        return carried<CodingAgentAgentAnswer>(answer);
+        if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
+        // The send is confirmed once its row reached the transcript a window follows, so the line never flickers.
+        if (answer.txid !== undefined) {
+          yield* awaitTranscriptTxId(
+            transcripts,
+            new TranscriptKey({ agentId, callId: undefined }),
+            answer.txid,
+          );
+        }
+        return carried<CodingAgentAgentAnswer>({ agent: answer.agent });
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>
       Effect.gen(function* () {

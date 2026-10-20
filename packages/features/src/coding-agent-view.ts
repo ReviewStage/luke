@@ -7,6 +7,7 @@ import {
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentOverviewChecksAnswerSchema,
@@ -256,6 +257,14 @@ export const codingAgentAgentAnswerSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;
+
+/** A message handed to an agent, as the host hears the service answer it: the agent, and the transaction that wrote its row where one did; or why there is none. */
+export const codingAgentMessageAnswerViewSchema = EffectSchema.Union([
+  codingAgentMessageAnswerSchema,
+  failedReaching,
+]);
+
+export type CodingAgentMessageAnswerView = typeof codingAgentMessageAnswerViewSchema.Type;
 
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const codingAgentMessagesParamsSchema = EffectSchema.Struct({

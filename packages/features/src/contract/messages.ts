@@ -25,7 +25,7 @@ import {
 } from "../chat-wire.js";
 import {
   CODING_AGENT_BOUNDS,
-  codingAgentAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
@@ -91,7 +91,7 @@ export const messagesContract = {
       }),
     )
     .input(exactBodyInput(EffectSchema.Struct(byId), codingAgentMessageRequestSchema))
-    .output(EffectSchema.flip(codingAgentAnswerSchema)),
+    .output(EffectSchema.flip(codingAgentMessageAnswerSchema)),
   /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agentWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))

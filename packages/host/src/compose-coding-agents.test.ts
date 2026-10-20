@@ -244,6 +244,8 @@ function fakeService() {
   const asked: string[] = [];
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
+  /** The transaction the service says wrote a sent message's row; none says none was written. */
+  let sentTxid: string | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
   const client: CodingAgentClient = {
@@ -299,7 +301,7 @@ function fakeService() {
     message: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`message:${agentId}:${request.clientKey}:${request.text}`);
-        return { agent: AGENT };
+        return sentTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: sentTxid };
       }),
     choose: (agentId, choice) =>
       Effect.sync(() => {
@@ -588,6 +590,10 @@ function fakeService() {
     pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
       pagesNow = pages;
     },
+    /** The transaction the service answers a sent message with. */
+    sendTxid: (txid: string | undefined) => {
+      sentTxid = txid;
+    },
   };
 }
 
@@ -606,6 +612,8 @@ function sealed(part: string, expiresAt = NOW + 60_000) {
  */
 function fakeRealtime() {
   const opened: string[] = [];
+  /** Every transaction a subscription was asked to wait for, as `capability:txid`. */
+  const awaited: string[] = [];
   const closed: string[] = [];
   const listeners = new Map<
     string,
@@ -625,6 +633,10 @@ function fakeRealtime() {
           return Promise.resolve();
         },
         unsubscribe: () => void listeners.delete(query.capability),
+        awaitTxId: (txid) => {
+          awaited.push(`${query.capability}:${txid}`);
+          return Promise.resolve();
+        },
       }),
       close: () => void closed.push(url),
     };
@@ -632,6 +644,7 @@ function fakeRealtime() {
   return {
     open,
     opened,
+    awaited,
     closed,
     renewed,
     /** Rows delivered to the part's subscription, as Realtime's snapshot carries them. */
@@ -676,6 +689,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       asked: service.asked,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
+      sendTxid: service.sendTxid,
       realtime,
       reset: composer.reset,
     };
@@ -1235,5 +1249,25 @@ it.effect(
       yield* settled;
       assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
       assert.equal(followed.pages().length, 1);
+    }),
+);
+
+it.effect(
+  "a sent message is confirmed once its row's transaction reached the transcript a window follows, and at once where none follows it",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealTranscript, pageNow: script, sendTxid, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      sendTxid("742");
+      const send = { agentId: AGENT_ID, text: "Use seven days.", clientKey: "send-1" };
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send), { agent: AGENT });
+      assert.deepEqual(realtime.awaited, []);
+
+      script(pageNow("1:0", { holds: true }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send), { agent: AGENT });
+      assert.deepEqual(realtime.awaited, ["capability-messages:742"]);
     }),
 );

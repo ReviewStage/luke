@@ -1748,3 +1748,30 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
       }),
   );
 });
+
+it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
+  it.effect(
+    "a line written answers the transaction that wrote it, and one already standing under its key answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const line = {
+          text: "Use seven days.",
+          clientKey: "send-1",
+          sender: { kind: MESSAGE_SENDER.LUKE },
+        };
+        const written = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+        const again = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        assert.match(written.success.value.txid ?? "", /^\d+$/u);
+        assert.ok(Result.isSuccess(again) && Option.isSome(again.success));
+        assert.equal(again.success.value.txid, undefined);
+      }),
+  );
+});

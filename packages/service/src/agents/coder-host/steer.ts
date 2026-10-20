@@ -133,7 +133,7 @@ export const STEER_OUTCOME = {
   REPEATED: "repeated",
 } as const;
 
-export type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
+type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
 
 /** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and anything else is an outage. A session eve no longer runs is no refusal: the message opens a fresh one. */
 const REFUSAL_OF_SEND_OUTCOME = {
@@ -235,15 +235,34 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
 
+/** A steer as its sender's route reads it: what it came to, and the transaction that wrote the line, where this steer wrote it. */
+export interface SteerWritten {
+  readonly outcome: SteerOutcome;
+  readonly txid?: string;
+}
+
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
-export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
+export const steerCodingAgent = (
+  eve: AgentSessions<EveTypedTurn>,
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  agent: CodingAgent,
+  line: SteerLine,
+) =>
+  Effect.map(
+    steerCodingAgentWritten(eve, writer, userId, agent, line),
+    (written) => written.outcome,
+  );
+
+/** As `steerCodingAgent`, with the transaction that wrote the line beside what it came to. */
+export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: CodingAgent,
   line: SteerLine,
 ): Effect.fn.Return<
-  SteerOutcome,
+  SteerWritten,
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
@@ -254,7 +273,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const repeated = yield* hostedStoreOrUnavailable(
     sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
   );
-  if (repeated) return STEER_OUTCOME.REPEATED;
+  if (repeated) return { outcome: STEER_OUTCOME.REPEATED };
   // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
   const held =
     agent.taskId === null
@@ -376,5 +395,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
   if (Option.isNone(written.success))
     return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
-  return STEER_OUTCOME.SENT;
+  const { txid } = written.success.value;
+  return txid === undefined
+    ? { outcome: STEER_OUTCOME.SENT }
+    : { outcome: STEER_OUTCOME.SENT, txid };
 });
