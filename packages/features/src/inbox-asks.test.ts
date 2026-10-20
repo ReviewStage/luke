@@ -405,6 +405,15 @@ test("a form filled in part is taken with a required field left empty, as is one
     inboxAnswersRefusal(REGION, submitted([]), "  "),
     "A required field of the form is empty.",
   );
+  const owner = {
+    type: INBOX_ASK.ANSWER,
+    fields: [{ type: INBOX_FIELD.TEXT, label: "Owner", required: true }],
+  } as const;
+  assert.equal(
+    inboxAnswersRefusal(owner, submitted([{ label: "Owner", value: "  " }]), "Ask ops."),
+    "A required field of the form is empty.",
+    "a required field left empty is absent, never there blank",
+  );
 
   const form = { response: { type: INBOX_RESPONSE.FORM, fields: REGION.fields } };
   const reply = { reply: INBOX_REPLY.SUBMITTED, values: partial.values };

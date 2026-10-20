@@ -1087,12 +1087,16 @@ function filled(value: InboxFieldValue): boolean {
   return !isWireString(value) || value.trim() !== "";
 }
 
+/** The refusal of a form whose required field is empty. */
+const REQUIRED_EMPTY = "A required field of the form is empty.";
+
 /**
  * Why a form's values do not answer the form, or nothing where they do:
- * each names a field once and is of its type, and every required field is
- * filled, unless the answer gives something, a value filled or the
- * developer's own words or files, since a form filled in part still sends
- * what was filled; a field left empty is simply absent from the values.
+ * each names a field once and is of its type, a required one never blank,
+ * and every required field is filled, unless the answer gives something, a
+ * value filled or the developer's own words or files, since a form filled
+ * in part still sends what was filled; a field left empty is simply absent
+ * from the values, never there blank.
  */
 function formRefusal(
   form: Pick<InboxForm, "fields">,
@@ -1106,13 +1110,12 @@ function formRefusal(
     const field = fields.get(label);
     if (field === undefined) return "A value names no field of the form.";
     if (!fieldTakes(field, value)) return "A value is not of its field's type.";
+    if (field.required === true && !filled(value)) return REQUIRED_EMPTY;
   }
   if (said || [...given.values()].some(filled)) return undefined;
   for (const field of form.fields) {
     const value = given.get(field.label);
-    if (field.required === true && (value === undefined || !filled(value))) {
-      return "A required field of the form is empty.";
-    }
+    if (field.required === true && value === undefined) return REQUIRED_EMPTY;
   }
   return undefined;
 }
