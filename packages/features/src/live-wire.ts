@@ -14,6 +14,20 @@ import {
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
 import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import {
+  INBOX_BOUNDS,
+  INBOX_STATUS,
+  type InboxAskStanding,
+  type InboxItem,
+  type InboxMessage,
+  inboxAnswerFileSchema,
+  inboxAnswersSchema,
+  inboxItemSchema,
+  inboxMessageSchema,
+  inboxReadAskSchema,
+  inboxReplySchema,
+  standingAsk,
+} from "./inbox-wire.js";
 import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -495,3 +509,203 @@ export const taskConversationLiveRowsSchema = EffectSchema.Struct({
   mark: EffectSchema.Array(taskConversationMarkSchema),
   workers: EffectSchema.Array(EffectSchema.Struct({ id: EffectSchema.String })),
 });
+
+/**
+ * One plan's inbox, or one agent's, sealed for following: the address, and
+ * its open items and its latest settled ones as one statement, as the held
+ * read reads them, so an item settling moves in one change, with their
+ * threads' latest messages and the files their answers and messages
+ * carried as two more, which the reader joins to them. The service answers
+ * `not-found` for a plan or agent the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const scopeInboxLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    items: sealedLiveQuerySchema,
+    messages: sealedLiveQuerySchema,
+    files: sealedLiveQuerySchema,
+  }),
+});
+
+export type ScopeInboxLiveAnswer = typeof scopeInboxLiveAnswerSchema.Type;
+
+/** One message of an item's thread as its row carries it: its item, and the member by id and name, either null where none stands. */
+const inboxLiveMessageSchema = EffectSchema.Struct({
+  id: inboxMessageSchema.fields.id,
+  itemId: EffectSchema.String,
+  author: inboxMessageSchema.fields.author,
+  userId: EffectSchema.NullOr(EffectSchema.String),
+  name: EffectSchema.NullOr(EffectSchema.String),
+  text: EffectSchema.String,
+  ask: EffectSchema.NullOr(inboxReadAskSchema),
+  answers: EffectSchema.NullOr(inboxAnswersSchema),
+  createdAt: countedNumber,
+});
+
+/** One file as its row carries it: the item whose answer carried it, or the message that did, and where it stands among them. */
+const inboxLiveFileSchema = EffectSchema.Struct({
+  ...inboxAnswerFileSchema.fields,
+  answerOf: EffectSchema.NullOr(EffectSchema.String),
+  messageId: EffectSchema.NullOr(EffectSchema.String),
+  position: EffectSchema.NullOr(countedNumber),
+});
+
+/** One item as its row delivers it: what an item leaves out where it holds nothing is null. */
+const inboxLiveRowSchema = EffectSchema.Struct({
+  ...inboxItemSchema.fields,
+  startedBy: EffectSchema.String,
+  startedByName: EffectSchema.NullOr(EffectSchema.String),
+  answer: EffectSchema.NullOr(inboxReplySchema),
+  answeredBy: EffectSchema.NullOr(EffectSchema.String),
+  answeredByName: EffectSchema.NullOr(EffectSchema.String),
+  closedReason: EffectSchema.NullOr(EffectSchema.String),
+  closedBy: EffectSchema.NullOr(EffectSchema.String),
+  closedByName: EffectSchema.NullOr(EffectSchema.String),
+  openAskMessageId: EffectSchema.NullOr(EffectSchema.String),
+  settledAt: EffectSchema.NullOr(countedNumber),
+  unread: EffectSchema.Boolean,
+});
+
+/** A scope's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const scopeInboxLiveRowsSchema = EffectSchema.Struct({
+  items: EffectSchema.Array(inboxLiveRowSchema),
+  messages: EffectSchema.Array(inboxLiveMessageSchema),
+  files: EffectSchema.Array(inboxLiveFileSchema),
+});
+
+type InboxLiveRows = typeof scopeInboxLiveRowsSchema.Type;
+type InboxLiveRow = typeof inboxLiveRowSchema.Type;
+type InboxLiveMessage = typeof inboxLiveMessageSchema.Type;
+type InboxLiveFile = typeof inboxLiveFileSchema.Type;
+
+/** The rows grouped under a key each names, a row naming none left out. */
+function groupedBy<Row>(
+  rows: readonly Row[],
+  keyOf: (row: Row) => string | null,
+): ReadonlyMap<string, readonly Row[]> {
+  const groups = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (key === null) continue;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return groups;
+}
+
+/** Files in the order they were attached, each as the wire names it, as the held read lists them. */
+function filesInOrder(files: readonly InboxLiveFile[] | undefined) {
+  return (files ?? [])
+    .toSorted((one, other) => (one.position ?? Infinity) - (other.position ?? Infinity))
+    .map(({ attachmentId, name, mediaType }) => ({ attachmentId, name, mediaType }));
+}
+
+/** A message as the wire carries it, the member named where their account stands, no files where it carried none, and its ask as it stands on the item, as the held read writes it. */
+function inboxMessageOfLiveRow(
+  row: InboxLiveMessage,
+  filesOf: ReadonlyMap<string, readonly InboxLiveFile[]>,
+  item: InboxAskStanding,
+): InboxMessage {
+  const files = filesInOrder(filesOf.get(row.id));
+  return {
+    id: row.id,
+    author: row.author,
+    ...(row.userId === null || row.name === null
+      ? undefined
+      : { member: { userId: row.userId, name: row.name } }),
+    text: row.text,
+    ...(files.length === 0 ? undefined : { files }),
+    ...(row.ask === null ? undefined : { ask: standingAsk(row.ask, row.id, item) }),
+    ...(row.answers === null ? undefined : { answers: row.answers }),
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * An item's two threads from its delivered messages, oldest first, as the
+ * held read carries them: the latest `MAX_MESSAGES_READ` that neither ask
+ * nor answer, and the whole thread, its latest messages with its first and
+ * the one whose ask it holds open however many came since.
+ */
+function threadsOf(messages: readonly InboxLiveMessage[], openAskMessageId: string | null) {
+  const ordered = messages.toSorted(threadOrder);
+  const bound = INBOX_BOUNDS.MAX_MESSAGES_READ;
+  const plain = ordered.filter((each) => each.ask === null && each.answers === null).slice(-bound);
+  const latest = new Set(ordered.slice(-bound).map((each) => each.id));
+  const firstId = ordered[0]?.id;
+  const thread = ordered.filter(
+    (each) => latest.has(each.id) || each.id === firstId || each.id === openAskMessageId,
+  );
+  return { plain, thread };
+}
+
+/** A thread's messages oldest first, as the held read orders them. */
+function threadOrder(one: InboxLiveMessage, other: InboxLiveMessage): number {
+  if (one.createdAt !== other.createdAt) return one.createdAt - other.createdAt;
+  return one.id < other.id ? -1 : one.id > other.id ? 1 : 0;
+}
+
+/** A row as the wire carries its item, its threads and files joined to it, each absent field left out rather than null, as the held read writes it. */
+function inboxItemOfLiveRow(
+  row: InboxLiveRow,
+  threads: ReadonlyMap<string, readonly InboxLiveMessage[]>,
+  answerFilesOf: ReadonlyMap<string, readonly InboxLiveFile[]>,
+  messageFilesOf: ReadonlyMap<string, readonly InboxLiveFile[]>,
+): InboxItem {
+  const {
+    startedBy,
+    startedByName,
+    answer,
+    answeredBy,
+    answeredByName,
+    closedReason,
+    closedBy,
+    closedByName,
+    openAskMessageId,
+    settledAt,
+    ...item
+  } = row;
+  const answerFiles = filesInOrder(answerFilesOf.get(row.id));
+  const { plain, thread } = threadsOf(threads.get(row.id) ?? [], openAskMessageId);
+  const message = (each: InboxLiveMessage) =>
+    inboxMessageOfLiveRow(each, messageFilesOf, {
+      status: row.status,
+      response: row.response,
+      openAskMessageId,
+      closedReason,
+    });
+  return {
+    ...item,
+    ...(startedByName === null
+      ? undefined
+      : { startedBy: { userId: startedBy, name: startedByName } }),
+    ...(answer === null ? undefined : { answer }),
+    ...(answerFiles.length === 0 ? undefined : { answerFiles }),
+    ...(answeredBy === null || answeredByName === null
+      ? undefined
+      : { answeredBy: { userId: answeredBy, name: answeredByName } }),
+    ...(closedReason === null ? undefined : { closedReason }),
+    ...(closedBy === null || closedByName === null
+      ? undefined
+      : { closedBy: { userId: closedBy, name: closedByName } }),
+    ...(plain.length === 0 ? undefined : { messages: plain.map(message) }),
+    ...(thread.length === 0 ? undefined : { thread: thread.map(message) }),
+    ...(settledAt === null ? undefined : { settledAt }),
+  };
+}
+
+/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
+export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+  const ordered = latestFirst((item: InboxItem) => item.id);
+  const threads = groupedBy(rows.messages, (message) => message.itemId);
+  const answerFilesOf = groupedBy(rows.files, (file) => file.answerOf);
+  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
+  const items = rows.items.map((row) =>
+    inboxItemOfLiveRow(row, threads, answerFilesOf, messageFilesOf),
+  );
+  return [
+    ...items.filter((item) => item.status === INBOX_STATUS.OPEN).toSorted(ordered),
+    ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
+  ];
+}

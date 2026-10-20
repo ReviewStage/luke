@@ -1,0 +1,96 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "queries": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "messages": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "files": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "items",
+        "messages",
+        "files"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "url",
+    "queries"
+  ],
+  "additionalProperties": false
+}

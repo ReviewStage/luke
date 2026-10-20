@@ -19,6 +19,7 @@ import {
   LIVE_USER_QUERY,
   liveDigestOf,
   macCommandsLiveAnswerSchema,
+  scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
   taskConversationLiveAnswerSchema,
@@ -45,7 +46,8 @@ import { type LiveSealer, LiveSealing, pollSealer, SealRefused } from "./realtim
  * a task's whiteboard sealed for an account that reaches the task and not
  * found for one that does not; and either answered with its rows inline at
  * the poll address where the reader asks to poll or Realtime is off or
- * cannot seal it.
+ * cannot seal it; and a plan's inbox, or an agent's, sealed for an account
+ * that reaches it and not found for one that does not.
  *
  * Synthetic accounts and bearers throughout; the secret is a script that
  * seals a statement as the values it was bound to, so a test can read whose
@@ -1034,6 +1036,115 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         assert.equal(
           Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(polled.body).url,
           LIVE_POLL_URL,
+        );
+      }),
+  );
+});
+
+/** The procedures answering a plan's or an agent's inbox read as `bearer`, over the store and the deployment's Realtime. */
+const askScope = (options: {
+  readonly bearer: string;
+  readonly path: string;
+  readonly id: string;
+  readonly poll?: boolean;
+  /** The account the read names; the bearer's own unless a test names another. */
+  readonly userId?: string;
+  readonly sealing: Option.Option<LiveSealer>;
+}) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(LiveSealing, options.sealing),
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+    );
+    const procedures = liveProcedures({
+      resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+    });
+    const url = new URL(options.path, ORIGIN);
+    url.searchParams.set("id", options.id);
+    url.searchParams.set(LIVE_USER_QUERY, options.userId ?? options.bearer);
+    if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
+    );
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
+    return { status: response.status, body };
+  });
+
+it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
+  it.effect(
+    "a plan's inbox, or an agent's, is sealed as its items, threads, and files for an account that reaches it, answered polled where asked, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        const scopes = [
+          { path: "/api/live/task-inbox", id: task.id },
+          { path: "/api/live/agent-inbox", id: started.value.agent.id },
+        ];
+        for (const scope of scopes) {
+          const sealed = yield* askScope({
+            bearer: owner,
+            ...scope,
+            sealing: Option.some(SCRIPTED),
+          });
+          assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK, scope.path);
+          const answer = Schema.decodeUnknownSync(scopeInboxLiveAnswerSchema)(sealed.body);
+          assert.equal(answer.url, REALTIME_URL);
+          assert.deepEqual(Object.keys(answer.queries).toSorted(), ["files", "items", "messages"]);
+          for (const query of Object.values(answer.queries)) {
+            assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
+          }
+          const polled = yield* askScope({
+            bearer: owner,
+            ...scope,
+            poll: true,
+            sealing: Option.some(SCRIPTED),
+          });
+          const inline = Schema.decodeUnknownSync(scopeInboxLiveAnswerSchema)(polled.body);
+          assert.equal(inline.url, LIVE_POLL_URL);
+          assert.deepEqual(inline.queries.items.rows, []);
+          assert.deepEqual(
+            yield* askScope({ bearer: stranger, ...scope, sealing: Option.some(SCRIPTED) }),
+            { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+          );
+          assert.deepEqual(
+            yield* askScope({
+              bearer: owner,
+              userId: stranger,
+              ...scope,
+              sealing: Option.some(SCRIPTED),
+            }),
+            {
+              status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+              body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+            },
+            "a read naming another account is signed out",
+          );
+        }
+        assert.deepEqual(
+          yield* askScope({
+            bearer: owner,
+            path: "/api/live/task-inbox",
+            id: "not-a-plan",
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
       }),
   );

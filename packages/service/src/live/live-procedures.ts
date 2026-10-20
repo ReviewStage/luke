@@ -33,11 +33,18 @@
  * agent's workspace. A worker's delegation may not be recorded yet, as a
  * tab opened on its call is read before it is, so its statements name the
  * conversation the call will open rather than wait for it.
+ *
+ * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
+ * one plan's inbox, or one agent's, the same way: its open items and its
+ * latest settled ones as one statement, their threads and files as two
+ * more, after the plan or the agent is read as the account, so one it does
+ * not reach is not found, as its held read answers.
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
@@ -66,7 +73,11 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
+import {
+  accountInboxLiveStatements,
+  memberAgentInboxLiveStatements,
+  taskInboxLiveStatements,
+} from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   brainStatusNow,
@@ -278,6 +289,24 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         parent.conversationId,
         taskFollowedBy(taskId, context.userId),
       );
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = taskInboxLiveStatements(context.userId, taskId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    agentInbox: signedIn.agentInbox.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* rowIdOf(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = memberAgentInboxLiveStatements(context.userId, agent.value.id);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),

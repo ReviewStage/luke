@@ -541,6 +541,12 @@ export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
 
+/** Whose inbox is followed: a plan's, or one agent's. */
+export const INBOX_SCOPE_KIND = {
+  PLAN: "plan",
+  AGENT: "agent",
+} as const;
+
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
