@@ -3709,9 +3709,10 @@ ul.actor-stack {
 }
 
 /* The ask closing the message that asks it, once it no longer waits: a
-   bordered card, its head the ask's kind and where it stands. Answered,
-   the card heads the reply that answered it with no head of its own, its
-   controls as the answer left them. A withdrawn ask is its head alone. */
+   bordered card, its head the ask's kind and where it stands. Once
+   answered, its controls alone head the reply that answered it, as the
+   answer left them, with no card around them. A withdrawn ask is its head
+   alone. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3747,16 +3748,15 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
+/* An answered ask's controls stand in the reply itself, at its words' left
+   edge, a step further from the words under them than the reply's own gap
+   so the two do not run together. */
 .inbox-ask-answered {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-}
-
-.inbox-ask-body {
-  border-top: 1px solid var(--luke-color-border);
+  margin-bottom: var(--luke-space-4);
 }
 
 /* An answered ask of words alone, which draws no card, ends the agent's

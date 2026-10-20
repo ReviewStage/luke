@@ -5935,7 +5935,7 @@ function subjectParts(pane: HTMLElement): (string | null)[] {
   return [...subject.children].map((part) => part.textContent);
 }
 
-/** Each ask's box on the thread: where it stands, then its head as a reader hears it, none for an answered card, whose controls say how it was answered. */
+/** Each ask's box on the thread: where it stands, then its head as a reader hears it; an answered ask's controls stand in its reply with no box, so they are none of these. */
 function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
@@ -5943,11 +5943,13 @@ function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   ]);
 }
 
-/** The answered ask's card heading a reply, as a reader hears it: its controls' words alone, with no head over them saying the ask's kind or how it was answered; none where the reply carries no card. */
+/** The answered ask's controls heading a reply, as a reader hears it: their words alone, standing in the reply's body beside its words with no card around them and no head over them; none where the reply carries none. */
 function answeredCard(reply: Element): string | null | undefined {
-  const card = reply.querySelector('.inbox-ask[data-inbox-ask="answered"]');
+  const card = reply.querySelector("[data-inbox-answered]");
   if (card === null) return undefined;
-  assert.equal(card.querySelector(".inbox-ask-head"), null, "the card has no head");
+  assert.equal(card.closest(".inbox-ask"), null, "no card stands around the controls");
+  assert.ok(card.parentElement?.matches(".inbox-comment-body"), "they stand in the reply's body");
+  assert.equal(card.querySelector(".inbox-ask-head"), null, "they have no head");
   return wordsOf(card);
 }
 
@@ -6419,7 +6421,7 @@ test("picking an option in the draft reply stands it picked, the foot no longer 
   assert.equal(reply.querySelector("[data-inbox-stamp]"), null, "the card marks the answer");
   assert.equal(asked?.querySelector(".inbox-ask"), null, "the ask's card left the agent's message");
   assert.equal(askMarker(pane), null, "and its marker");
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.deepEqual(draftReply(pane), ["Youdraft"], "the draft stands at the end, plain");
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply…");
@@ -6468,7 +6470,7 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
     "Request changes",
     "the press given says how it was answered",
   );
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
 });
 
 test("a form's fields attach to the reply as they are filled, with no Submit, and a form filled in part sends what was filled, a required field left empty absent from it", async () => {
@@ -6700,8 +6702,8 @@ function answeredThread(
 function answeredBox(pane: HTMLElement): HTMLElement {
   return (
     pane.querySelector<HTMLElement>(
-      `[data-message-id="${ANSWER_ID}"] .inbox-ask[data-inbox-ask="answered"] [data-inbox-answered]`,
-    ) ?? assert.fail("the reply leads with the ask's card filled in")
+      `[data-message-id="${ANSWER_ID}"] .inbox-comment-body > [data-inbox-answered]`,
+    ) ?? assert.fail("the reply leads with the ask's controls filled in")
   );
 }
 
@@ -6725,7 +6727,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
   ]);
   const pane = await mountThread({ ...shown, status: INBOX_STATUS.OPEN });
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.equal(askMarker(pane), "Waiting on you", "the later ask still waits");
   const asked =
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
@@ -6771,7 +6773,7 @@ test("an answered yes-or-no heads its reply with its two small buttons, the one 
     ),
   );
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(answeredPresses(answeredBox(pane)), [
     ["Approve", false, undefined],
     ["Request changes", true, "back"],
@@ -6798,7 +6800,7 @@ test("an answered do heads its reply with its steps ticked as they were sent, ov
       return [step.textContent, tick.checked];
     });
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(steps(), [
     ["Open the repository's settings", true],
     ["Add the secret", false],
@@ -6868,7 +6870,7 @@ test("an answered form heads its reply with its fields, each holding what it was
   assert.equal(box.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(box.querySelector(".inbox-ask-presses"), null, "no Submit stands");
   assert.equal(pane.querySelector("[data-inbox-values]"), null, "the reply lists no values");
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.equal(pane.querySelector("[data-inbox-stamp]"), null);
 });
 

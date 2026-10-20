@@ -1980,8 +1980,8 @@ function AnsweredPress({
 
 /**
  * The ask a member's reply answered, at the head of that reply under their
- * face and name, in the reply's stamp's place: the ask's card with no head
- * of its own, its controls as the answer left them, in the look they had
+ * face and name, in the reply's stamp's place: the ask's controls alone,
+ * standing in the reply with no card around them, as the answer left them, in the look they had
  * while it waited and taking nothing, which say how it was answered: a
  * `decide`'s options with the picks checked, or its two small buttons with
  * the one pressed marked; a `do`'s steps ticked as they were sent, over
@@ -2002,10 +2002,9 @@ function AnsweredCard({
 }): React.JSX.Element | null {
   const draft = answeredDraft(ask, answers);
   const body = (controls: React.ReactNode) => (
-    <div className="inbox-ask" data-inbox-ask={INBOX_ASK_STATUS.ANSWERED}>
-      <div className="inbox-ask-answered" data-inbox-answered="">
-        {controls}
-      </div>
+    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
+    <div className="inbox-ask-answered" data-inbox-answered="">
+      {controls}
     </div>
   );
   switch (ask.type) {
