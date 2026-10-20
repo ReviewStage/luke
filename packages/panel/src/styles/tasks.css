@@ -1329,8 +1329,8 @@
 }
 
 .files-viewed > svg {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
 }
 
