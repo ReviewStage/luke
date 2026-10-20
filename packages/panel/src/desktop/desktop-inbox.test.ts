@@ -1549,11 +1549,12 @@ test("a to-do is a card of two picks in its question: its step, the item's title
   );
 });
 
-test("a note's Send says Got it while its box is empty and Send once a word is written, and Enter in its box sends the nod, with no Got it at the foot beside it", async () => {
-  onlyAsking({ type: INBOX_RESPONSE.NONE });
+test("a note from before version 5 that asks to be heard back is left open as it is opened, since its nod would message the agent: its Send says Got it while its box is empty and Send once a word is written, and Enter in its box sends the nod, with no Got it at the foot beside it", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.NONE }, { needsReply: true });
+  const sent = heldAnswers();
   const { page } = mount();
   await settle();
-  const sent = heldAnswers();
+  assert.deepEqual(sent, [], "opening it answers nothing");
   const pane = itemPane(page);
   assert.deepEqual(footPresses(pane), ["Dictate", "Got it"]);
   assert.equal(answerSend(pane).textContent, "Got it");
@@ -1569,6 +1570,35 @@ test("a note's Send says Got it while its box is empty and Send once a word is w
     sent.map(({ reply, note }) => ({ reply, note })),
     [{ reply: INBOX_REPLY.ACKNOWLEDGED, note: undefined }],
   );
+});
+
+test("a note from before version 5 that needs no reply is acknowledged as it is opened, and its box offers no Got it", async () => {
+  const note = onlyAsking({ type: INBOX_RESPONSE.NONE }, { needsReply: false });
+  // Unanswered, so the note stands open again with its box.
+  const answered: CodingAgentInboxAnswerParams[] = [];
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
+      answered.push(request.payload);
+      const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+    },
+  });
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(
+    answered.map(({ itemId, reply }) => ({ itemId, reply })),
+    [{ itemId: note.id, reply: INBOX_REPLY.ACKNOWLEDGED }],
+  );
+  const pane = itemPane(page);
+  assert.equal(answerSend(pane).textContent, "Send");
+  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.equal(answered.length, 1, "Enter in the empty box sends no second nod");
 });
 
 test("a settled approval or to-do draws its two cards as they were offered, read-only, the decision given checked in its tone, with no fold and no chip repeating it", async () => {
@@ -6196,19 +6226,32 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
   ]);
 });
 
-test("a notice's box reads Got it while it holds nothing, which answers the notice at its revision and writes no message; with words it reads Reply, and the reply names the notice's revision", async () => {
+/** A notice posted on a thread, asking nothing and needing no reply, as the service writes one, at revision 4. */
+function noticeItem(extra: Partial<InboxItem> = {}): InboxItem {
   const said: InboxMessage = {
     id: "e1b2c3d4-0000-4000-8000-000000000020",
     author: INBOX_MESSAGE_AUTHOR.AGENT,
     text: "The preview is up.",
     createdAt: 1_000,
   };
-  const shown = threadItem([said], {
+  return threadItem([said], {
+    title: "The preview is up",
     response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
     revision: 4,
+    ...extra,
   });
-  const pane = await mountThread(shown);
+}
+
+/**
+ * Every answer and message the Inbox sends from now on, written down: each
+ * answer refused as unanswered while `refusing` says so, the box standing
+ * open again, and held unanswered otherwise; each message held unanswered.
+ */
+function noticeWrites(refusing: () => boolean = () => false): {
+  answered: CodingAgentInboxAnswerParams[];
+  messaged: CodingAgentInboxMessageParams[];
+} {
   const answered: CodingAgentInboxAnswerParams[] = [];
   const messaged: CodingAgentInboxMessageParams[] = [];
   const bridge = appBridge();
@@ -6218,7 +6261,7 @@ test("a notice's box reads Got it while it holds nothing, which answers the noti
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
         answered.push(request.payload);
-        // Unanswered, so the box stands open again for the reply below.
+        if (!refusing()) return new Promise(() => undefined);
         const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
@@ -6227,28 +6270,128 @@ test("a notice's box reads Got it while it holds nothing, which answers the noti
       return new Promise(() => undefined);
     },
   });
-  const submit = () =>
-    act(() =>
-      pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
-    );
+  return { answered, messaged };
+}
 
-  assert.equal(sendWords(pane), "Got it");
-  submit();
+/** What each answer sent says: its item, the revision it names, and the reply. */
+function answersOf(answered: readonly CodingAgentInboxAnswerParams[]) {
+  return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
+}
+
+test("opening the reader's own notice acknowledges it at its revision, once while it is shown, writing no message; its box offers no Got it, and opening it again after the acknowledgement was refused tries again", async () => {
+  const notice = noticeItem();
+  const { answered, messaged } = noticeWrites(() => true);
+  const pane = await mountThread(notice);
+  const acknowledged = { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED };
+  assert.deepEqual(answersOf(answered), [acknowledged]);
+  assert.deepEqual(messaged, [], "the agent is not messaged");
+
+  // Refused, the notice stands open again, its box held until it holds words.
+  const send =
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
+    assert.fail("the box has its button");
+  assert.equal(sendWords(pane), "Reply", "no Got it stands");
+  assert.equal(send.disabled, true);
+  assert.deepEqual(answersOf(answered), [acknowledged], "it is not tried again while it is shown");
+
+  const page = pane.ownerDocument.body;
+  act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  assert.deepEqual(
-    answered.map(({ revision, reply }) => ({ revision, reply })),
-    [{ revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED }],
-  );
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.deepEqual(answersOf(answered), [acknowledged, acknowledged]);
+});
 
+test("a notice shown while its plan's held read has failed reads Got it, since opening it acknowledges nothing then, and Got it answers it", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const notice = noticeItem();
+  const { answered: sent } = noticeWrites();
+  const pane = await mountThread(notice);
+  assert.deepEqual(sent, [], "opening it answers nothing");
+  assert.equal(sendWords(pane), "Got it");
+  act(() => answerSend(pane).click());
+  await settle();
+  assert.deepEqual(answersOf(sent), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
+});
+
+test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {
+  const notice = noticeItem();
+  // The first acknowledgement is refused, so the box stands open to take the draft.
+  let refusals = 1;
+  const { answered, messaged } = noticeWrites(() => {
+    refusals -= 1;
+    return refusals >= 0;
+  });
+  const pane = await mountThread(notice);
+  assert.equal(answered.length, 1);
   typeInComposer(pane, "Looks right.");
-  assert.equal(sendWords(pane), "Reply");
-  submit();
+  const page = pane.ownerDocument.body;
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.equal(answered.length, 1, "opened with a draft, it is not acknowledged");
+  assert.equal(composerEditor(itemPane(page)).textContent, "Looks right.");
+  assert.equal(sendWords(itemPane(page)), "Reply");
+
+  act(() =>
+    itemPane(page)
+      .querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')
+      ?.click(),
+  );
   await settle();
   assert.deepEqual(
     messaged.map(({ text, revision }) => ({ text, revision })),
     [{ text: "Looks right.", revision: 4 }],
   );
   assert.equal(answered.length, 1, "the reply is no second answer");
+});
+
+test("a teammate's notice is left open as it is opened, since acknowledging it settles it for them too, and its box reads Got it, which answers it at its revision; with words it reads Reply", async () => {
+  const notice = noticeItem({ startedBy: TEAMMATE });
+  const { answered, messaged } = noticeWrites();
+  const pane = await mountThread(notice);
+  assert.deepEqual(answered, [], "opening it answers nothing");
+  assert.equal(sendWords(pane), "Got it");
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(answersOf(answered), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
+  assert.deepEqual(messaged, []);
+});
+
+test("an archived task's notice is left open as it is opened, since nothing answers it until the task is back", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const notice = noticeItem({ id: EXPIRY.id, title: "Invites now expire after 7 days" });
+  inboxes.set(INVITES.id, [notice]);
+  const { answered } = noticeWrites();
+  const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
+  await settle();
+  act(() => showTab(page, "Archived").click());
+  await settle();
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.deepEqual(subjectOf(page), [notice.title]);
+  assert.deepEqual(answered, []);
+});
+
+test("with the inbox-first sidebar, opening the reader's own notice from the sidebar acknowledges it", async () => {
+  const notice = noticeItem({ id: EXPIRY.id });
+  inboxes.set(INVITES.id, [notice]);
+  const { answered } = noticeWrites();
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  assert.deepEqual(answered, [], "the item standing chosen is no notice");
+  act(() => rowNamed(page, notice.title).click());
+  await settle();
+  assert.deepEqual(answersOf(answered), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
 });
 
 test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
