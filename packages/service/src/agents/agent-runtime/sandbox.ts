@@ -95,8 +95,8 @@ const INSTALL_GTK =
  */
 const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
 
-/** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
-const PREPARE_SCRIPT = [
+/** The commands `prepare` runs on the snapshot, after the code extension's tooling; the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from the same script. */
+export const PREPARE_SCRIPT = [
   "set -e",
   "git --version",
   "node --version",

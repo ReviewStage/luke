@@ -24,6 +24,7 @@ export default defineConfig({
       "packages/ui",
       "packages/panel",
       "apps/catalog",
+      "tools/claude-code-probe",
     ],
   },
 });

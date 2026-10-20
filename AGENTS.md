@@ -245,7 +245,8 @@ the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.
 foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
-probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
+probe, same terms), `tools/claude-code-probe/src/cli.ts` (the Claude Code
+sandbox probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
 `Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
 `runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
 any of them — which is where a `Runtime<R>` went, v4 having removed the type —
