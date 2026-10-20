@@ -1856,8 +1856,14 @@ ul.actor-stack {
 
 /* Work column ------------------------------------------------------------- */
 
+/* The work column is one layer of the shell's: what it raises inside it,
+   the strip's pinned tab and fades, a floating bar, a menu hung in it,
+   stands among the column's own layers and never over the shell's, so the
+   sidebar floating open over the column, a phone's drawer among it, and the
+   title bar's buttons draw over all of it. */
 .desktop-main {
   position: relative;
+  isolation: isolate;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -6271,9 +6277,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-list-gap);
 }
 
-/* The "+" and the menu it drops, which hangs under it from its left edge,
-   or from its right where the window ends first. The menu falls over the
-   row's drag region, so it claims its presses back from the window frame. */
+/* The "+" and the menu it drops, which hangs under it in `@luke/ui`'s
+   anchored popover, within what is seen of the window (`strip-tabs.tsx`).
+   The menu falls over the row's drag region, so it claims its presses back
+   from the window frame. */
 .tab-add-anchor {
   position: relative;
   display: flex;
@@ -6282,11 +6289,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 [data-luke-profile="desktop"] .tab-add-menu {
   -webkit-app-region: no-drag;
-}
-
-.tab-add-anchor[data-side="end"] .tab-add-menu {
-  right: 0;
-  left: auto;
 }
 
 /* With every tab closed, the panel offers all that the "+" menu offers, as
