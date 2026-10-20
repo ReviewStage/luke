@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -33,7 +34,9 @@ const openTokenAgent = Effect.gen(function* () {
   const workspace = yield* openWorkspace(owner);
   for (const each of [reader, tokenless]) yield* joinWorkspace(workspace, each);
   const now = yield* DateTime.nowAsDate;
-  yield* recordRepositoryReads(reader, [{ repository: "octo-member/side", readable: true }], now);
+  const sealed = (yield* readGitHubTokenRow(reader))?.sealedToken ?? "";
+  const side = [{ repository: "octo-member/side", readable: true }];
+  yield* recordRepositoryReads(reader, sealed, side, now);
   const task = yield* createTask(owner, {
     organizationId: workspace,
     repository: "octo-member/side",

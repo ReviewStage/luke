@@ -1905,7 +1905,7 @@ interface RecordedRepository {
 export const reachedRepository = (
   workspaceId: string,
   repository: string | null,
-  member: string,
+  member: string | undefined,
 ) =>
   repository === null
     ? Effect.succeed<Result.Result<RecordedRepository, string>>(
@@ -1969,10 +1969,12 @@ export function runUpdateTask(
       if (placing !== undefined && Result.isFailure(placing)) {
         return agentToolRejected(placing.failure);
       }
+      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
+      const owner = read.value.ownerId === userId ? userId : undefined;
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository, userId);
+          : yield* reachedRepository(workspace.value, changes.repository, owner);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }

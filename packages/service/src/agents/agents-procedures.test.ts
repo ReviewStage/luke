@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { archiveCodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
@@ -113,7 +114,9 @@ const openTokenAgent = Effect.gen(function* () {
   const workspace = yield* openWorkspace(userId);
   for (const each of [reader, tokenless]) yield* joinWorkspace(workspace, each);
   const now = new Date(yield* Clock.currentTimeMillis);
-  yield* recordRepositoryReads(reader, [{ repository: "octo-member/side", readable: true }], now);
+  const sealed = (yield* readGitHubTokenRow(reader))?.sealedToken ?? "";
+  const side = [{ repository: "octo-member/side", readable: true }];
+  yield* recordRepositoryReads(reader, sealed, side, now);
   const task = yield* createTask(userId, {
     organizationId: workspace,
     repository: "octo-member/side",

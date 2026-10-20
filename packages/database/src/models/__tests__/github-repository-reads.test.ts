@@ -39,16 +39,18 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A token the member keeps, as a save leaves it: verified, its seal synthetic. */
+/** A token the member keeps, as a save leaves it: verified, its seal synthetic. Answers the seal. */
 const keepToken = (userId: string) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
+    const sealedToken = `sealed-${randomUUID()}`;
     yield* saveGitHubToken(
       userId,
-      { keyVersion: 1, sealedDataKey: "sealed-key", sealedToken: `sealed-${randomUUID()}` },
+      { keyVersion: 1, sealedDataKey: "sealed-key", sealedToken },
       { hint: "fixture…abcd", githubUserId: "4242", githubLogin: "octo-member", expiresAt: null },
       now,
     );
+    return sealedToken;
   });
 
 /** A workspace of the owner's with a task and an agent on the owner's token, and a task on the App. */
@@ -85,18 +87,16 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         const tokenless = yield* openAccount;
         const refused = yield* openAccount;
         for (const each of [reader, tokenless, refused]) yield* joinWorkspace(workspace, each);
-        yield* keepToken(reader);
-        yield* keepToken(refused);
+        const readerSeal = yield* keepToken(reader);
+        const refusedSeal = yield* keepToken(refused);
         const now = yield* DateTime.nowAsDate;
-        yield* recordRepositoryReads(
-          reader,
-          [{ repository: "octo-member/side", readable: true }],
-          now,
-        );
-        yield* recordRepositoryReads(
-          refused,
-          [{ repository: "octo-member/side", readable: false }],
-          now,
+        const side = (readable: boolean) => [{ repository: "octo-member/side", readable }];
+        assert.equal(yield* recordRepositoryReads(reader, readerSeal, side(true), now), true);
+        assert.equal(yield* recordRepositoryReads(refused, refusedSeal, side(false), now), true);
+        // Answers asked on a token nobody keeps, as GitHub may be asked on one replaced meanwhile, are not kept.
+        assert.equal(
+          yield* recordRepositoryReads(tokenless, "sealed-gone", side(true), now),
+          false,
         );
         const taskIds = (userId: string) =>
           Effect.map(listTasks(userId), (tasks) => tasks.map((each) => each.id).sort());
@@ -127,8 +127,13 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         assert.ok(row !== undefined);
         yield* setGitHubTokenStatus(reader, row.sealedToken, GITHUB_TOKEN_STATUS.INVALID, now);
         assert.deepEqual(yield* sees(reader), seesAppOnly);
-        yield* keepToken(reader);
+        const replaced = yield* keepToken(reader);
         assert.deepEqual(yield* sees(reader), seesAppOnly);
+        // The token before it was asked about the repository; the one now kept was not.
+        assert.equal(yield* recordRepositoryReads(reader, row.sealedToken, side(true), now), false);
+        assert.deepEqual(yield* sees(reader), seesAppOnly);
+        assert.equal(yield* recordRepositoryReads(reader, replaced, side(true), now), true);
+        assert.deepEqual(yield* sees(reader), seesAll);
       }),
   );
 
@@ -165,6 +170,7 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         const { owner, workspace } = yield* tokenWorkspace;
         const teammate = yield* openAccount;
         yield* joinWorkspace(workspace, teammate);
+        const seal = yield* keepToken(teammate);
         // The teammate's own token task is theirs to see, so nothing is asked about it.
         yield* createTask(teammate, {
           organizationId: workspace,
@@ -178,6 +184,7 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         assert.deepEqual(yield* unaskedTokenRepositories(owner, hourAgo), ["teammate/own"]);
         yield* recordRepositoryReads(
           teammate,
+          seal,
           [{ repository: "Octo-Member/Side", readable: false }],
           now,
         );

@@ -154,7 +154,7 @@ const taskIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspace: Effect.Effect<string, HostedRefusal, DatabaseServices>,
   repository: string | null | undefined,
-  member: string,
+  member: string | undefined,
 ): Effect.fn.Return<
   { readonly repository: string | null; readonly githubAccess: GitHubAccess },
   HostedRefusal,
@@ -533,9 +533,14 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         organizationId === undefined
           ? Effect.map(reachedTask(userId, taskId), (stored) => stored.workspaceId)
           : Effect.succeed(organizationId);
+      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
       const reached =
         "repository" in changes
-          ? yield* reachableRepository(workspace, changes.repository, userId)
+          ? yield* reachableRepository(
+              workspace,
+              changes.repository,
+              (yield* reachedTask(userId, taskId)).ownerId === userId ? userId : undefined,
+            )
           : undefined;
       const archiving = changes.archived === true;
       if (archiving) {

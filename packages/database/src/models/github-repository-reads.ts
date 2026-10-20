@@ -1,10 +1,11 @@
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { and, eq, gte, isNotNull, ne, notExists, type SQLWrapper, sql } from "drizzle-orm";
-import { Effect, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { task } from "../schemas/task.js";
 import type { TaskStoreEffect } from "./task-store.js";
@@ -17,7 +18,9 @@ import type { TaskStoreEffect } from "./task-store.js";
  * member's workspaces, that the member's token was not asked about since a
  * given instant, and the answers the service brings back. A token saved or
  * removed forgets its member's answers (`github-token-store.ts`), so the
- * next read asks afresh. Every function is an effect over the ambient
+ * next read asks afresh, and answers are kept only under the lock of the
+ * token row that still holds the token they were asked on, so a token
+ * replaced while GitHub was asked keeps none of its predecessor's. Every function is an effect over the ambient
  * `SqlClient`, keyed by the account.
  */
 
@@ -108,6 +111,20 @@ const upsertRead = SqlSchema.void({
     ),
 });
 
+/** The member's token row under its own lock, as far as which token it holds; the same lock a save or a removal waits on. */
+const lockTokenSeal = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ sealedToken: Schema.String }),
+  execute: (userId) =>
+    Database.use((db) =>
+      db
+        .select({ sealedToken: githubPersonalToken.sealedToken })
+        .from(githubPersonalToken)
+        .where(eq(githubPersonalToken.userId, userId))
+        .for("update"),
+    ),
+});
+
 const deleteReads = SqlSchema.void({
   Request: Schema.String,
   execute: (userId) =>
@@ -132,22 +149,29 @@ export function unaskedTokenRepositories(
   });
 }
 
-/** Keeps how GitHub answered the member's token for each repository, as of now. */
+/**
+ * Keeps how GitHub answered the member's token for each repository, as of
+ * now, where the member still keeps the token they were asked on (its seal,
+ * `sealedToken`); answers whether they were kept.
+ */
 export function recordRepositoryReads(
   userId: string,
+  sealedToken: string,
   reads: readonly RepositoryRead[],
   now: Date,
-): TaskStoreEffect<void> {
-  return Effect.forEach(
-    reads,
-    (read) =>
-      upsertRead({
-        userId,
-        repository: read.repository.toLowerCase(),
-        readable: read.readable,
-        now,
+): TaskStoreEffect<boolean> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const held = yield* lockTokenSeal(userId);
+        if (Option.getOrUndefined(held)?.sealedToken !== sealedToken) return false;
+        for (const read of reads) {
+          const repository = read.repository.toLowerCase();
+          yield* upsertRead({ userId, repository, readable: read.readable, now });
+        }
+        return true;
       }),
-    { discard: true },
+    ),
   );
 }
 

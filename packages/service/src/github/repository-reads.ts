@@ -64,7 +64,7 @@ export const refreshRepositoryReads = /* @__PURE__ */ Effect.fn("web/refreshRepo
     const read = yield* Effect.forEach(unasked, (repository) => askedRead(userId, repository), {
       concurrency: ASKED_AT_ONCE,
     });
-    yield* recordRepositoryReads(userId, read.flatMap(Option.toArray), now);
+    yield* recordRepositoryReads(userId, token.sealedToken, read.flatMap(Option.toArray), now);
   },
   Effect.catchCause((cause) =>
     Effect.logWarning(`a member's repository reads were not refreshed: ${causeKind(cause)}`),
