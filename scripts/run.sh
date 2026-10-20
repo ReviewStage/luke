@@ -14,7 +14,9 @@ luke_ensure_dependencies
 # new launch then quits on startup and only re-asserts the running panel.
 # `--preview` points the build at this branch's Vercel Preview instead of
 # production, so a web change is tried against the Mac before it merges; an
-# address after it (`--preview https://…`) skips the lookup. `--instance
+# address after it (`--preview https://…`) skips the lookup. A coding agent's
+# branch (`luke/**`) has no Preview to find (the root `vercel.json`'s
+# `git.deploymentEnabled`): push it under another name first. `--instance
 # <name>` launches a named development instance beside the plain one, with
 # its own profile, replacing only its own earlier run; a `--preview` run is
 # one without asking, named for its Preview (`luke_preview_instance`). Every
