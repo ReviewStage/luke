@@ -29,6 +29,7 @@
     "./models/hosted-store": "./src/models/hosted-store.js",
     "./models/ids": "./src/models/ids.js",
     "./models/mac-command-store": "./src/models/mac-command-store.js",
+    "./models/native-projection-store": "./src/models/native-projection-store.js",
     "./models/message-reads": "./src/models/message-reads.js",
     "./models/plan-attachments": "./src/models/plan-attachments.js",
     "./models/plan-comments": "./src/models/plan-comments.js",

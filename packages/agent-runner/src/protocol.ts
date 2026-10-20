@@ -210,12 +210,15 @@ export type InputLine = typeof InputLineSchema.Type;
  * The runner's own events, numbered among the SDK's messages, each a `type`
  * the SDK never uses.
  *
+ * ACCEPTED is posted as a message line Luke wrote is handed to the SDK, under
+ * the `uuid` the line named, so Luke can take the line it wrote into the turn.
  * WAITING follows a `result` the run outlives, because the Stop hook before
  * it reported background work or a scheduled wakeup still to come: the agent
  * is waiting, not done, and the sandbox must stay up. END is the last event a
  * launch posts, with why it ended.
  */
 export const RUNNER_EVENT = {
+  ACCEPTED: "luke_runner_accepted",
   WAITING: "luke_runner_waiting",
   END: "luke_runner_end",
 } as const;
@@ -232,6 +235,16 @@ export const RUNNER_END = {
   FAILED: "failed",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
+
+/**
+ * The ACCEPTED event: the `uuid` of a message line Luke wrote, as the line
+ * named it and the SDK message carries it, which is the client id of the
+ * line's awaiting row.
+ */
+export interface RunnerAccepted {
+  readonly type: typeof RUNNER_EVENT.ACCEPTED;
+  readonly uuid: string;
+}
 
 /** The WAITING event: what the Stop hook before the `result` reported still in flight, as the SDK spells it. */
 export interface RunnerWaiting {
@@ -256,7 +269,12 @@ export interface RunnerEndEvent {
 export type CodexNotification = ServerNotification;
 
 /** What the runner posts: the SDK's message or Codex's notification as it was emitted, or one of the runner's own. */
-export type RunnerMessage = SDKMessage | CodexNotification | RunnerWaiting | RunnerEndEvent;
+export type RunnerMessage =
+  | SDKMessage
+  | CodexNotification
+  | RunnerAccepted
+  | RunnerWaiting
+  | RunnerEndEvent;
 
 /** One event as posted: its number and its message. */
 export interface RunnerEvent {

@@ -1,5 +1,5 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { RETIRED_TOOL } from "@luke/features/agent-tools";
+import { CLAUDE_CODE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { WireValueSchema } from "@luke/wire";
@@ -276,12 +276,6 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 });
 
 /**
- * The coding agent's tools as stored rows are held to them, built once for
- * the deployment, with the retired web reads a transcript written before
- * still names, and the Linear connection's calls beside them
- * (`../connection-tools.ts`), which the agent and its workers alike make.
- */
-/**
  * The two task controls eve adds beside any task, which a coding agent's
  * \`delegate\` is (\`apps/dev/tools/delegate.ts\`): eve runs them, so they are no
  * tool of Luke's, but a turn that waits on its worker or stops one names them.
@@ -292,6 +286,14 @@ const CODER_TASK_TOOL = {
   TASK_CANCEL: "task_cancel",
 } as const;
 
+/**
+ * The coding agent's tools as stored rows are held to them, built once for
+ * the deployment, with the retired web reads a transcript written before
+ * still names, Claude Code's own tools, which an agent running on Claude Code
+ * calls under their CLI names (`native-projection.ts`), and the Linear
+ * connection's calls beside them (`../connection-tools.ts`), which the agent
+ * and its workers alike make.
+ */
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
   ...[
     ...new Set([
@@ -299,6 +301,7 @@ export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
       ...toolsOf(AGENT_ROLE.CODER_WORKER),
       ...Object.values(CODER_TASK_TOOL),
       ...Object.values(RETIRED_CODER_TOOL),
+      ...Object.values(CLAUDE_CODE_TOOL),
     ]),
   ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),
   ...connectionToolEntries(),
