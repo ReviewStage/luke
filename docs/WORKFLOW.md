@@ -6,8 +6,9 @@
    satisfies the issue. Use deterministic fixtures instead of personal data or
    live provider state. Choose the test's size, its doubles, and its
    fixtures by root `AGENTS.md`'s "Testing" section.
-3. Run `pnpm check:affected` for portable-only work, then push and let CI, which
-   runs every check, gate the PR; `./scripts/check.sh` is the full local run,
+3. Push and let CI, which runs every check, gate the PR; running the tests you
+   touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a
+   push is optional, and `./scripts/check.sh` is the full local run,
    for a release, a broad refactor, or on request. For a web UI change, run
    `pnpm --filter @luke/web dev` and inspect the page in a browser. For a
    hosted-service change the Mac talks to, run `./scripts/run.sh --preview`
