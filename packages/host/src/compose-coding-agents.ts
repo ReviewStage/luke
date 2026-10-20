@@ -88,11 +88,11 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { followWorkspaceChat } from "./chat-follow.js";
+import { chatWriteSeen, followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   type TranscriptFollows,
@@ -241,6 +241,8 @@ function composed(
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
   const asked = askedOf(dependencies, http);
 
+  /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
+  const chatTxWaits = new Map<string, TxWait>();
   /** A workspace's chat sealed for the account a follow started for, as every renewal of it names; signed out where none was. */
   const chatLiveFor = (workspaceId: string, userId: string | undefined) => (poll: boolean) =>
     userId === undefined
@@ -726,6 +728,7 @@ function composed(
           "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
         );
         const answer = yield* asked(client.chatPost(workspaceId, write));
+        yield* chatWriteSeen(chatTxWaits.get(workspaceId), answer);
         return carried<CodingAgentChatWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW]: (params) =>
@@ -746,6 +749,10 @@ function composed(
               openLive: dependencies.openLive ?? openRealtimeClient,
               now: kernel.now,
               tell,
+              onTxWait: (wait) => {
+                if (wait === undefined) chatTxWaits.delete(workspaceId);
+                else chatTxWaits.set(workspaceId, wait);
+              },
             })
           : tell(UNANSWERED);
         yield* FiberMap.run(chats, workspaceId, follow);

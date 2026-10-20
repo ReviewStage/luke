@@ -3,7 +3,10 @@ import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentChatWriteAnswerView,
+} from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -249,6 +252,7 @@ function fakeService() {
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
   let chatLive: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let written: CodingAgentChatWriteAnswerView = { readSeq: 4 };
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
   const client: CodingAgentClient = {
@@ -572,7 +576,7 @@ function fakeService() {
     chatPost: (workspaceId, write) =>
       Effect.sync(() => {
         asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
-        return { readSeq: 4 };
+        return written;
       }),
     chatJoin: (workspaceId) =>
       Effect.sync(() => {
@@ -603,6 +607,10 @@ function fakeService() {
     sealChat: (next: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       chatLive = next;
     },
+    /** What the service answers a write to the chat. */
+    answerWrites: (next: CodingAgentChatWriteAnswerView) => {
+      written = next;
+    },
     /** The pages the service answers read at once, in turn. */
     pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
       pagesNow = pages;
@@ -631,6 +639,9 @@ function fakeRealtime() {
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
   const renewed: string[] = [];
+  /** Each wait for a transaction, by txid, until the test says it arrived. */
+  const waiting = new Map<string, () => void>();
+  const awaited: string[] = [];
   const open = (url: string): LiveClient => {
     opened.push(url);
     return {
@@ -643,7 +654,10 @@ function fakeRealtime() {
           renewed.push(next.capability);
           return Promise.resolve();
         },
-        awaitTxId: () => Promise.resolve(),
+        awaitTxId: (txid) => {
+          awaited.push(`${query.capability}:${txid}`);
+          return new Promise<void>((arrived) => waiting.set(txid, arrived));
+        },
         unsubscribe: () => void listeners.delete(query.capability),
       }),
       close: () => void closed.push(url),
@@ -662,6 +676,10 @@ function fakeRealtime() {
     },
     fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
     subscribed: () => [...listeners.keys()].toSorted(),
+    /** Every wait for a transaction, as `capability:txid`, in order. */
+    awaited,
+    /** A transaction arriving on the read, settling whoever waits for it. */
+    arrive: (txid: string) => waiting.get(txid)?.(),
   };
 }
 
@@ -691,6 +709,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       asked: service.asked,
       sealTranscript: service.sealTranscript,
       sealChat: service.sealChat,
+      answerWrites: service.answerWrites,
       /** Every workspace chat the host said changed, in order. */
       chats: () =>
         events.flatMap((event) =>
@@ -1457,5 +1476,43 @@ it.effect(
       assert.deepEqual(closed.chats(), [
         { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
+    }),
+);
+
+it.effect(
+  "a write to a followed chat is answered once its transaction reaches the chat, and a write that changed nothing, or to a chat not followed, at once",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealChat, answerWrites, realtime } = yield* subject();
+      sealChat(SEALED_CHAT);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      deliverChat(realtime, []);
+      yield* settled;
+      const write = (workspaceId: string, request: WireRecord) =>
+        Effect.forkChild(
+          call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, { workspaceId, write: request }),
+        );
+
+      answerWrites({ readSeq: 0, reads: [{ channelId: CHANNEL_ID, readSeq: 3 }], txid: "78" });
+      const read = yield* write(WORKSPACE_ID, { readTo: 3, channelId: CHANNEL_ID });
+      yield* settled;
+      assert.equal(read.pollUnsafe(), undefined, "the write waits for its transaction");
+      realtime.arrive("78");
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(read), {
+        readSeq: 0,
+        reads: [{ channelId: CHANNEL_ID, readSeq: 3 }],
+        txid: "78",
+      });
+      const waits = realtime.awaited.length;
+      assert.ok(waits > 0 && realtime.awaited.every((each) => each.endsWith(":78")));
+
+      // A read to where the cursor stands writes nothing, and another workspace is not followed.
+      answerWrites({ readSeq: 0 });
+      yield* Fiber.join(yield* write(WORKSPACE_ID, { readTo: 3, channelId: CHANNEL_ID }));
+      answerWrites({ readSeq: 0, txid: "79" });
+      yield* Fiber.join(yield* write("3c1e9d2b-7a4f-4e6b-8d0c-1f2a3b4c5d6e", { readTo: 3 }));
+      assert.equal(realtime.awaited.length, waits);
     }),
 );

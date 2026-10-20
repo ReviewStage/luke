@@ -3,6 +3,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
   type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   LIVE_SIGNED_OUT,
@@ -11,7 +12,7 @@ import {
   workspaceChatOfLiveRows,
 } from "@luke/features/live-wire";
 import { Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
 
 /**
  * chat-follow.ts -- a workspace's chat followed over Neon Realtime: joined once, sealed, and each change told whole.
@@ -29,10 +30,19 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  * or a seal the service did not
  * answer is told unanswered, and it, or a follow that stopped, is joined and
  * sealed again after `LIVE_RESTART`.
+ *
+ * A write to a followed chat is confirmed as Neon's mutations guide says:
+ * the service answers the transaction it committed in, and the write waits
+ * for that transaction to arrive on the followed read (`chatWriteSeen`), so
+ * the chat the window is pushed already holds it. A write that changed
+ * nothing answers none, and waits for nothing.
  */
 
 /** How long after a join or seal went unanswered, or a follow stopped, the chat is followed again. */
 const LIVE_RESTART = Duration.seconds(5);
+
+/** How long a write waits for its transaction to reach the followed chat, as Neon's guide waits. */
+const TXID_WAIT = Duration.seconds(10);
 
 /** Why the service answered no join or seal. */
 interface Failed {
@@ -51,6 +61,8 @@ export interface ChatFollowDependencies {
   readonly now: () => number;
   /** The chat whole, or why there is none, each time it changes. */
   readonly tell: (chat: CodingAgentChatAnswerView) => Effect.Effect<void>;
+  /** Hears the wait for a write's transaction while the chat is subscribed over Realtime, and none once it is not. */
+  readonly onTxWait: (wait: TxWait | undefined) => void;
 }
 
 /** The chat sealed again, gone where the account no longer reaches it, so the follow ends. */
@@ -82,6 +94,7 @@ function tellLive(
       reseal: () => resealed(dependencies, false),
       poll: () => resealed(dependencies, true),
       now: dependencies.now,
+      onTxWait: dependencies.onTxWait,
     },
     first,
   );
@@ -120,4 +133,19 @@ export function followWorkspaceChat(dependencies: ChatFollowDependencies): Effec
     ended ? Effect.void : Effect.andThen(Effect.sleep(LIVE_RESTART), loop),
   );
   return loop;
+}
+
+/**
+ * Waits until the write's transaction has reached the followed chat, or
+ * `TXID_WAIT` passed: nothing where the write changed no row or no follow
+ * of the chat stands over Realtime. Note that the write is confirmed either
+ * way, since it committed; past the wait the window keeps the write's own
+ * answer until the chat it is pushed holds it.
+ */
+export function chatWriteSeen(
+  wait: TxWait | undefined,
+  answer: CodingAgentChatWriteAnswerView,
+): Effect.Effect<void> {
+  if (wait === undefined || "failure" in answer || answer.txid === undefined) return Effect.void;
+  return Effect.ignore(wait(answer.txid, TXID_WAIT));
 }
