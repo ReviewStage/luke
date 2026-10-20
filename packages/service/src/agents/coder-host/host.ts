@@ -12,10 +12,10 @@ import {
   recordCodingAgentCompaction,
   recordCodingAgentStep,
   updateCodingAgentBranch,
-  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
 import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask } from "@luke/database/models/task-store";
@@ -34,7 +34,7 @@ import { Effect, Option, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import type { UnparsedWireValue, WireRecord } from "../../core.js";
+import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
@@ -61,7 +61,12 @@ import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-ru
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn, RELAY_TURN } from "../brain-host/bounds.js";
+import {
+  BRAIN_HOST,
+  BRAIN_HOST_TURN,
+  type BrainHostTurn,
+  RELAY_TURN,
+} from "../brain-host/bounds.js";
 import type { ChatSince } from "../brain-host/chat.js";
 import {
   type AdmittedConversation,
@@ -87,6 +92,7 @@ import {
   type RelayStateStore,
   StreamRelay,
 } from "../brain-host/relay.js";
+import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
 import {
   AGENT_CALLER,
@@ -137,6 +143,7 @@ import {
   type CheckoutServices,
   checkOutAgentRepository,
   checkoutBranch,
+  openWorkingFolder,
 } from "./checkout.js";
 import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
@@ -168,7 +175,7 @@ import {
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
-import { CODER_TOOL } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import { savedByAnotherSince, spokenTurnWords, standingWithLead } from "./turn-context.js";
 
 /**
@@ -197,6 +204,12 @@ import { savedByAnotherSince, spokenTurnWords, standingWithLead } from "./turn-c
  * and the plan is read and written as the member whose turn it is; the
  * agent's row, its provider keys, its checkout, and its context stay its
  * starter's, the conversation's owner, whoever is speaking to it.
+ * An agent with no repository runs too: its sandbox opens with an empty
+ * working folder and no credential, it is told of no checkout, branch,
+ * commit, or pull request, and it is offered no repository skills and none
+ * of the repository's tools (`tool-set.ts`'s `repositoryToolsOf`). A session
+ * opened afresh over a conversation whose last session retired is seeded
+ * with what was said in it, as the brain's rotation is (`seed`).
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */
@@ -256,9 +269,7 @@ export interface CoderHost extends HostAdmission {
    */
   admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
-  agent(
-    admitted: AdmittedConversation,
-  ): HostEffect<Result.Result<WithRepository<CodingAgent>, CoderRefusal>>;
+  agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
   /** The model one step of the turn named runs on, read from the agent's row now, with the window the catalog lists for it. */
   model(
     admitted: AdmittedConversation,
@@ -286,25 +297,39 @@ export interface CoderHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | ModelCatalog
   >;
-  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are; the text itself is stored nowhere. */
+  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are, neither asked of GitHub for an agent with no repository; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
-    agent: WithRepository<CodingAgent>,
+    agent: CodingAgent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
-  /** The skills the agent's repository keeps, offered to the session as it starts; none where they could not be read (`skills.ts`). */
+  /** The skills the agent's repository keeps, offered to the session as it starts; none for an agent with no repository, or where they could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
-    agent: WithRepository<CodingAgent>,
+    agent: CodingAgent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
-  /** The agent's repository checked out into the sandbox; answers the credential for the caller to set at the firewall (`credentialPolicy`). */
+  /**
+   * The conversation so far, for a session opened over a conversation with
+   * words already said, as the brain's rotation seeds one (`brain-host/seed.ts`):
+   * a session opened afresh after its last one retired remembers what was
+   * said. A line awaiting its turn is left out, since it is the message the
+   * session opens with; nothing for a conversation with nothing else said.
+   */
+  seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
+  /**
+   * The agent's repository checked out into the sandbox; answers the
+   * credential for the caller to set at the firewall (`credentialPolicy`).
+   * An agent with no repository has an empty working folder made where the
+   * checkout would stand, so its shell and reads start there, and answers no
+   * credential: nothing is set at the firewall.
+   */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<RepositoryCredential, CheckoutFailure, CheckoutServices>;
-  /** A fresh credential for the agent's repository, for the firewall once the standing one is old or was taken off. */
+  ): Effect.Effect<RepositoryCredential | undefined, CheckoutFailure, CheckoutServices>;
+  /** A fresh credential for the agent's repository, for the firewall once the standing one is old or was taken off; none for an agent with no repository, which mints nothing. */
   repositoryCredential(
     admitted: AdmittedConversation,
-  ): Effect.Effect<RepositoryCredential, CheckoutFailure, CheckoutServices>;
+  ): Effect.Effect<RepositoryCredential | undefined, CheckoutFailure, CheckoutServices>;
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
@@ -588,6 +613,16 @@ function asksTitle(event: MessageStreamEvent): boolean {
   );
 }
 
+/** Whether a stored row is a line awaiting its turn: a user's words no turn has taken yet (`writer.ts`'s `takeAwaitingLine`). */
+function awaitsTurn(record: StoredMessageRecord): boolean {
+  return record.message.role === MESSAGE_ROLE.USER && record.turnId === undefined;
+}
+
+/** A stored row's message, as the seed renders it. */
+function messageOf(record: StoredMessageRecord) {
+  return record.message;
+}
+
 /** The host over the deployment's seams. */
 export function coderHost(seams: CoderHostSeams): CoderHost {
   const research = new ResearchBudget();
@@ -597,9 +632,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       (found) =>
         Option.match(found, {
           onNone: () => Result.fail(CODER_REFUSAL.NO_AGENT),
-          // Note that a session here is repository work through and through, so one with none is refused until the agent runtime runs sessions without a checkout.
-          onSome: (agent) =>
-            hasRepository(agent) ? Result.succeed(agent) : Result.fail(CODER_REFUSAL.NO_REPOSITORY),
+          onSome: (agent) => Result.succeed(agent),
         }),
     );
 
@@ -644,7 +677,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
   /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
   const promptOf = (
-    agent: WithRepository<CodingAgent>,
+    agent: CodingAgent,
     ciReadable: boolean,
     coAuthor: string | undefined,
     workspace: string,
@@ -681,7 +714,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   const recordContext = (
     event: MessageStreamEvent,
     userId: string,
-    agent: WithRepository<CodingAgent>,
+    agent: CodingAgent,
     prompt: CoderSessionPromptRecord,
     turn: BrainHostTurn | undefined,
   ) => {
@@ -715,7 +748,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   };
 
   /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where its starter has not turned Chat on, or the read failed. */
-  const digestOf = (admitted: AdmittedConversation, agent: WithRepository<CodingAgent>) =>
+  const digestOf = (admitted: AdmittedConversation, agent: CodingAgent) =>
     Effect.gen(function* () {
       // A turn opens with the chat only where the agent's starter turned Chat on.
       if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
@@ -738,7 +771,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    */
   const handedTask = (
     admitted: AdmittedConversation,
-    agent: WithRepository<CodingAgent>,
+    agent: CodingAgent,
     taskId: string,
     spoken: boolean,
   ) =>
@@ -760,11 +793,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    * or one whose task is gone. The chat is left out of it, since the agent's
    * own digest of it follows (`digestOf`).
    */
-  const standingOf = (
-    admitted: AdmittedConversation,
-    agent: WithRepository<CodingAgent>,
-    spoken: boolean,
-  ) =>
+  const standingOf = (admitted: AdmittedConversation, agent: CodingAgent, spoken: boolean) =>
     Effect.gen(function* () {
       const turn = spoken ? BRAIN_HOST_TURN.SPOKEN : BRAIN_HOST_TURN.TYPED;
       const clock = { now: seams.now(), timeZone: admitted.timeZone };
@@ -930,8 +959,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     prompt: (admitted, agent) =>
       Effect.map(
         Effect.all([
-          agentCiReadable(admitted.target, agent),
-          agentCoAuthor(admitted.target, agent),
+          // An agent with no repository has no CI to read and makes no commits, so GitHub is asked neither.
+          hasRepository(agent) ? agentCiReadable(admitted.target, agent) : Effect.succeed(false),
+          hasRepository(agent) ? agentCoAuthor(admitted.target, agent) : Effect.succeed(undefined),
           // A slug that cannot be read is written as the workspace's id, which finds the same things.
           workspaceStepOf(admitted.target.userId, agent.organizationId).pipe(
             Effect.tapError(logStoreFailure),
@@ -947,21 +977,43 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           promptOf(agent, ciReadable, coAuthor, workspace, chatOn),
       ),
 
-    skills: (admitted, agent) => agentSkills(admitted.target, agent),
+    skills: (admitted, agent) =>
+      hasRepository(agent) ? agentSkills(admitted.target, agent) : Effect.succeed([]),
+
+    seed: (admitted) =>
+      Effect.map(
+        listRecentMessages(
+          admitted.target.userId,
+          admitted.target.conversationId,
+          CODER_TOOL_SET,
+          BRAIN_HOST.SEED_MESSAGES,
+        ),
+        (read) =>
+          rotationSeedText(
+            read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
+            seams.now(),
+          ),
+      ),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        checkOutAgentRepository(admitted.target, agent, sandbox),
+        hasRepository(agent)
+          ? checkOutAgentRepository(admitted.target, agent, sandbox)
+          : Effect.as(openWorkingFolder(sandbox), undefined),
       ),
 
     repositoryCredential: (admitted) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        agentRepositoryToken(admitted.target, agent),
+        hasRepository(agent)
+          ? agentRepositoryToken(admitted.target, agent)
+          : Effect.succeed(undefined),
       ),
 
     recordBranch: (admitted, sandbox) =>
       Effect.gen(function* () {
         const agent = yield* agentOrRefused(admitted);
+        // An agent with no repository has no checkout, so no branch to record.
+        if (!hasRepository(agent)) return;
         const branch = yield* checkoutBranch(sandbox);
         // Note that the branch the agent was started on is another's, such as a stacked pull
         // request's, so standing on it is recorded as no branch of its own: no pull request
@@ -1069,6 +1121,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return pullRequestRejected(found.failure);
+        // Note that the tool is not offered to an agent with no repository (`repositoryToolsOf`), so this refuses only a call made across a change of its row.
+        if (!hasRepository(found.success)) return pullRequestRejected(CODER_REFUSAL.NO_REPOSITORY);
         return yield* openPullRequest(admitted.target, found.success, input);
       }).pipe(
         Effect.tapError(logStoreFailure),

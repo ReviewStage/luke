@@ -140,10 +140,31 @@ export type SpokenTurnTool = (typeof SPOKEN_TURN_TOOLS)[number];
  * and eve's `task_wait` are offered on every turn, spoken or not, because
  * eve offers a workflow tool on every turn (a resolver returns plain tools
  * alone) and adds `task_wait` beside any task tool, with no way to withhold
- * it; a spoken turn's words tell the model never to wait (`spoken.ts`).
+ * it; a spoken turn's words tell the model never to wait (`turn-context.ts`).
  */
 export function turnToolsOf(turn: BrainHostTurn | undefined): ReadonlySet<SpokenTurnTool> {
   return turn === BRAIN_HOST_TURN.SPOKEN ? new Set(SPOKEN_TURN_TOOLS) : new Set();
+}
+
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, and the two that write into its checkout. */
+export type RepositoryTool =
+  | typeof CODER_TOOL.OPEN_PULL_REQUEST
+  | typeof CODER_TOOL.WRITE_FILE
+  | typeof CODER_TOOL.APPLY_PATCH;
+
+/**
+ * The repository's tools an agent is offered: all of them for one working
+ * in a repository, and none for one with no repository, whose sandbox holds
+ * no checkout to write into and which has no branch to open a pull request
+ * from. Note that its shell and its reads stay, in the empty working folder
+ * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function repositoryToolsOf(
+  agent: Pick<CodingAgent, "repository">,
+): ReadonlySet<RepositoryTool> {
+  if (agent.repository === null) return new Set();
+  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.WRITE_FILE, CODER_TOOL.APPLY_PATCH]);
 }
 
 /**

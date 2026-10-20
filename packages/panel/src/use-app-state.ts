@@ -275,8 +275,6 @@ const capabilityAtom = Atom.family((capability: HostCapability) =>
  * sidebar offers the admin dashboard by. Signed out, before the first read,
  * or where the host's read of it failed, no account is. It only draws: the
  * dashboard's own gate on the service decides every admin read.
- *
- * @public Read by the sidebar's Admin row, which lands above this contract.
  */
 export function useAdminAccess(): boolean {
   return useAppState()?.access.admin === true;

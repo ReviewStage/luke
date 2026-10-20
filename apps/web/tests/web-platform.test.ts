@@ -10,8 +10,9 @@ import { downloadText, webPlatform } from "../src/app/web-platform";
  * only where its address is on the web, never as script or another app's
  * scheme, and a GitHub link only where its address is GitHub's; a download's
  * file stays readable after its press returns, for a browser that reads it
- * only then, and is let go of as the next download starts; and the way to
- * the Mac app is offered only on a Mac.
+ * only then, and is let go of as the next download starts; the way to
+ * the Mac app is offered only on a Mac; and the admin dashboard is a link
+ * to its page on the tab's own origin.
  */
 
 /** The platform as the tab builds it, counting nothing. */
@@ -102,4 +103,12 @@ test("the way to the Mac app is offered on a Mac, and on no other platform", () 
   assert.equal(webPlatform(COUNTING, LINK_PLATFORM.OTHER).macAppLink, undefined);
   // jsdom's browser says it runs on Linux, where the Mac app cannot open.
   assert.equal(webPlatform(COUNTING).macAppLink, undefined);
+});
+
+test("the admin dashboard is a link to its page on the tab's own origin, whatever page the tab stands on", () => {
+  window.history.replaceState(null, "", "/acme/plan/3f6c1b2a?tab=agent#rollout");
+
+  assert.deepEqual(webPlatform(COUNTING).adminDashboard(), {
+    href: `${location.origin}/admin`,
+  });
 });

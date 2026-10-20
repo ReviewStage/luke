@@ -79,6 +79,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.GITHUB_OPEN]: "Could not open GitHub on this system.",
   [TASKS_ACT_KIND.WEB_OPEN]: "Could not open that link on this system.",
   [TASKS_ACT_KIND.GITHUB_CONNECT]: "Could not open GitHub's connection page on this system.",
+  [TASKS_ACT_KIND.ADMIN_OPEN]: "Could not open the admin dashboard on this system.",
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
   [TASKS_ACT_KIND.TASKS_TALK]: "Could not talk about that task on this system.",
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
@@ -182,6 +183,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay" } },
   { kind: TASKS_ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
   { kind: TASKS_ACT_KIND.GITHUB_CONNECT, payload: undefined },
+  { kind: TASKS_ACT_KIND.ADMIN_OPEN, payload: undefined },
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_TALK, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
@@ -243,7 +245,10 @@ afterEach(() => {
  * A window's act port serving the task procedures alone, opened as the bridge opens one, over a fake host:
  * the window standing as `actor`, trusted or not.
  */
-function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
+function windowPort(
+  actor: ActSender,
+  options: { trusted?: boolean; serviceBaseUrl?: string } = {},
+) {
   const asked: string[] = [];
   const browsed: string[] = [];
   const talked: string[] = [];
@@ -383,7 +388,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
         browsed.push(url);
         return Promise.resolve();
       },
-      serviceBaseUrl: SERVICE,
+      serviceBaseUrl: options.serviceBaseUrl ?? SERVICE,
       activeTaskId: () => script.activeTaskId,
       talkAboutTask: (taskId) => {
         talked.push(taskId);
@@ -613,6 +618,33 @@ it("Connect GitHub opens the page the host named in the browser, Disconnect asks
     "github-connect",
     "github-disconnect",
   ]);
+});
+
+it("the admin dashboard opens the service's own page in the browser, and an address a window hands in is refused with nothing opened", async () => {
+  const { client, asked, browsed } = windowPort(PANEL);
+
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
+    answer: undefined,
+  });
+  for (const url of ["https://evil.test/admin", "file:///etc/passwd", `${SERVICE}/admin`]) {
+    assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, { url }), {
+      refused: REFUSAL[TASKS_ACT_KIND.ADMIN_OPEN],
+    });
+  }
+
+  assert.deepEqual(browsed, [`${SERVICE}/admin`]);
+  assert.deepEqual(asked, []);
+});
+
+it("the admin dashboard is refused, and nothing opens, where the service's origin is no web address", async () => {
+  for (const serviceBaseUrl of ["file:///srv/luke", "luke-evil://service", "not an address"]) {
+    const { client, browsed } = windowPort(PANEL, { serviceBaseUrl });
+
+    assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
+      refused: REFUSAL[TASKS_ACT_KIND.ADMIN_OPEN],
+    });
+    assert.deepEqual(browsed, []);
+  }
 });
 
 it("a GitHub page the host names off the service's own origin is refused and nothing opens", async () => {

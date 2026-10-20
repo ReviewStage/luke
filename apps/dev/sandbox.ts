@@ -28,7 +28,10 @@ import { runAgent } from "./runtime.js";
  * (`terminal/agent-sandbox.ts`): it never enters the sandbox's filesystem or
  * environment, so no command, and no output of one, can carry it. A checkout
  * that fails fails the call that opened the sandbox, in the host's own
- * words, and the next call tries again.
+ * words, and the next call tries again. An agent with no repository has no
+ * checkout and no token: its sandbox opens on the same first need with an
+ * empty working folder where the checkout would stand, and nothing is set
+ * at the firewall.
  */
 export { environment };
 
@@ -49,6 +52,8 @@ export default defineSandbox(async ({ session }) => {
       ),
     ),
   );
+  // An agent with no repository checked nothing out and has no credential to set.
+  if (credential === undefined) return sandbox;
   // The token is revealed only into the firewall rules set for GitHub.
   await sandbox.setNetworkPolicy(credentialPolicy(credential));
   return sandbox;

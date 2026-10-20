@@ -19,6 +19,15 @@ import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import type { AppCommand } from "@luke/settings/shortcuts";
 import type { NotificationsGrantor } from "@luke/voice/settings-controls";
 
+/**
+ * The way the sidebar's Admin row takes an admin to the dashboard: a link
+ * to its address (`href`), where the window's own origin serves it, as a
+ * browser tab's does, so a modified click opens it as any link does; or a
+ * press (`open`), where the shell opens it outside the window, as the Mac
+ * app does in the default browser, where the developer's session is.
+ */
+type AdminDashboardWay = { readonly href: string } | { readonly open: () => void };
+
 /** The capabilities a window's shell answers, each as the panel asks for it. */
 export interface AppPlatform {
   /** Puts the words on the system clipboard; rejects where the clipboard refused them. */
@@ -48,6 +57,8 @@ export interface AppPlatform {
   openGitHub(url: string): void;
   /** Opens a web page outside the window. */
   openWeb(url: string): void;
+  /** How the admin dashboard is reached from this window: a link to it, or a press the shell answers. */
+  adminDashboard(): AdminDashboardWay;
   /**
    * Brings the shell's session recording into line with what the run allows,
    * in either direction; the panel calls it at bootstrap and on every account

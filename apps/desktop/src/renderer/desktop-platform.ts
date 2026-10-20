@@ -30,5 +30,7 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
   openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
   openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),
+  // The host names the dashboard's address on the service's origin, and main opens it in the default browser.
+  adminDashboard: () => ({ open: () => tellAct(ACT_KIND.ADMIN_OPEN) }),
   applySessionReplay,
 };

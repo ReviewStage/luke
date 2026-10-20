@@ -37,6 +37,8 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  * A NavItemLink is a row's look on a link, for a place with an address of
  * its own: the browser follows it, so a modified click opens it in a new tab
  * as any link does, and its caller's `onClick` may take a plain one instead.
+ * One that leaves the page (`newTab`) opens in a tab of its own, which
+ * reaches nothing of this one.
  *
  * A row that drops a menu takes the props `useMenu().trigger()` hands out
  * (`menu`), and is lit while its menu stands. It takes an app's hint's
@@ -201,6 +203,7 @@ export function NavItemLink({
   children,
   current,
   title,
+  newTab,
   onClick,
   ...props
 }: {
@@ -213,6 +216,8 @@ export function NavItemLink({
   current?: NavCurrent | undefined;
   /** Its name as a pointer's hint, where its words are not drawn whole. */
   title?: string | undefined;
+  /** Whether it opens in a tab of its own rather than in this one. */
+  newTab?: boolean | undefined;
   /** Called as the press leaves, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
@@ -223,6 +228,8 @@ export function NavItemLink({
       className="luke-nav-item"
       data-variant={NAV_ITEM_VARIANT.ROW}
       href={href}
+      target={newTab === true ? "_blank" : undefined}
+      rel={newTab === true ? "noopener" : undefined}
       title={title}
       aria-label={props["aria-label"]}
       aria-current={current}

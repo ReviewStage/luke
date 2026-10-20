@@ -134,7 +134,7 @@ export const CODER_DEPLOYMENT_TURNS = {
  * the developer's bearer, nor a typed line into a spoken turn: each waits
  * for the other's turn to end and opens one of its own, which runs under
  * its own kind's tools and words (`tool-set.ts`'s `turnToolsOf`,
- * `spoken.ts`). The cost is that a call on an agent mid-turn waits for that
+ * `turn-context.ts`). The cost is that a call on an agent mid-turn waits for that
  * turn's end before it is answered. It also admits the deployment's read of
  * a session's stream, which the voice function follows a spoken ask's turn
  * on; a cancel and a reset are minted as the deployment's principal, which
