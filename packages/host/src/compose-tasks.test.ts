@@ -982,9 +982,19 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
-function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
+function subject(
+  service: FakeService,
+  options: {
+    signedIn?: boolean;
+    call?: StandingCall;
+    /** A view the window's channel throws on, the first time one is told. */
+    breaksOn?: (view: TasksView) => boolean;
+  } = {},
+) {
   return Effect.gen(function* () {
     const told: TasksView[] = [];
+    const reported: string[] = [];
+    let broken = false;
     const waiters: {
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
@@ -998,11 +1008,18 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
           const read = readEither(tasksViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
+          if (!broken && options.breaksOn?.(read.success) === true) {
+            broken = true;
+            throw new Error("the window's channel broke");
+          }
           told.push(read.success);
           for (const waiter of waiters) {
             if (waiter.wanted(read.success))
               Deferred.doneUnsafe(waiter.seen, Effect.succeed(read.success));
           }
+        },
+        report: (message) => {
+          reported.push(message);
         },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
@@ -1035,7 +1052,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, last, viewWhere, viewLands, conversations };
+    return { tasks, call, told, reported, last, viewWhere, viewLands, conversations };
   });
 }
 
@@ -1699,6 +1716,40 @@ it.effect(
       assert.ok(line.length > 1, "a TypeScript line is coloured in runs");
       assert.equal(line.map((run) => run.text).join(""), "const answer = 42;");
     }),
+);
+
+it.effect("code whose drawing dies is reported, and code shown after it is still drawn", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.works[INVITES] = { turns: [] };
+    const { call, tasks, viewLands, reported } = yield* subject(service, {
+      breaksOn: (view) => (view.shownCode ?? []).some((code) => code.callId === "call-1"),
+    });
+    yield* tasks.lifetime;
+    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+    const shown = {
+      callId: "call-1",
+      turnId: "turn-1",
+      shownAt: 10,
+      code: {
+        ref: { path: "notes.txt" },
+        repository: "acme/api",
+        firstLine: 1,
+        lineCount: 1,
+        lines: ["plain words"],
+      },
+    };
+
+    const drawn = yield* viewLands((view) =>
+      (view.shownCode ?? []).some((code) => code.callId === "call-2"),
+    );
+    tasks.showCode(INVITES, shown);
+    tasks.showCode(INVITES, { ...shown, callId: "call-2" });
+
+    assert.ok((yield* drawn).shownCode?.some((code) => code.callId === "call-2"));
+    assert.equal(reported.length, 1);
+    assert.match(reported[0] ?? "", /^Drawing code a call showed failed/);
+  }),
 );
 
 it.effect(

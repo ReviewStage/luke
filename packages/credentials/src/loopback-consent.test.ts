@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import { it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber } from "effect";
+import { vi } from "vitest";
 import type { LoopbackAuthorization, LoopbackConsentOptions, LoopbackExchange } from "./consent.js";
 import { loopbackConsent } from "./loopback-consent.js";
 
@@ -220,4 +221,23 @@ it.effect("another path, or a state this trip never issued, is refused without s
     assert.equal(genuine.status, 200);
     assert.deepEqual(yield* Fiber.join(waiting), { token: "granted" });
   }),
+);
+
+it.effect(
+  "a challenge Web Crypto refuses to digest ends the trip with its reason, and no browser is opened",
+  () =>
+    Effect.gen(function* () {
+      vi.spyOn(crypto.subtle, "digest").mockRejectedValue(
+        new DOMException("The operation is insecure.", "SecurityError"),
+      );
+      const armed = yield* Deferred.make<LoopbackAuthorization>();
+      const { consent, opened } = harness(armed);
+
+      const outcome = yield* Fiber.join(yield* trip(consent));
+
+      assert.deepEqual(outcome, {
+        reason: "Luke could not prepare a secure sign-in on this machine.",
+      });
+      assert.deepEqual(opened, []);
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.restoreAllMocks()))),
 );

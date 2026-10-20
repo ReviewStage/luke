@@ -122,9 +122,11 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@luke/gateway";
+import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
+  Cause,
   Clock,
   Data,
   Duration,
@@ -403,7 +405,7 @@ export type TasksClient = Pick<
 export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "report"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
@@ -2230,7 +2232,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // the tasks is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
-        Effect.forever(Effect.flatMap(Queue.take(codeShows), drawShownCode)),
+        // A showing that dies is reported and dropped, and the next is still drawn.
+        Effect.forever(
+          Effect.flatMap(Queue.take(codeShows), (show) =>
+            catchAllButInterrupt(drawShownCode(show), (cause) =>
+              Effect.sync(() => {
+                kernel.report(`Drawing code a call showed failed: ${Cause.pretty(cause)}`);
+              }),
+            ),
+          ),
+        ),
       );
       yield* Effect.forkScoped(
         Effect.forever(

@@ -412,8 +412,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
      * Each setting's value as its host side effect last carried it, kept
      * apart from the store's held copy: a write re-reads the file, so the
      * held copy may already hold a value another tab chose that no side
-     * effect here has carried yet. Kept only where the file has another
-     * writer (`SettingsChangedElsewhere`), and filled when that watch starts.
+     * effect here has carried yet. Written by every side effect, but read
+     * only where the file has another writer (`SettingsChangedElsewhere`),
+     * whose watch also fills it as it starts.
      */
     const carriedValues = new Map<AppSettingField, string>();
     const carry = (field: AppSettingField, stored: StoredSettings): void => {

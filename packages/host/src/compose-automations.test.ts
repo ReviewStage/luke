@@ -12,6 +12,7 @@ import { unparsedWire, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Effect, Result } from "effect";
+import { vi } from "vitest";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 
 /**
@@ -197,4 +198,22 @@ it.effect(
       assert.deepEqual(unasked, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(closed.asked, []);
     }),
+);
+
+it.effect(
+  "a webhook secret Web Crypto cannot hash is never sent, and the window hears the call unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      vi.spyOn(crypto.subtle, "digest").mockRejectedValue(
+        new DOMException("The operation is insecure.", "SecurityError"),
+      );
+
+      const answered = yield* call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, {
+        automationId: AUTOMATION_ID,
+      });
+
+      assert.deepEqual(answered, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, []);
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.restoreAllMocks()))),
 );
