@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { expect, test } from "vitest";
 import { pageLeave } from "../src/app/page-leave";
 
@@ -54,6 +53,32 @@ test("a way out while a page holds unsaved work asks the panel, and Leave goes w
 
   asked[0]?.();
   expect(gone).toEqual([false]);
+});
+
+test("a Leave whose send never unloads lets one beforeunload pass, and the next close or reload is asked about again", () => {
+  const page = new EventTarget();
+  const tab = pageLeave(page);
+  const asked: (() => void)[] = [];
+  tab.unsavedWork((leave) => asked.push(leave));
+  // The send is stopped before it commits, so the page never goes.
+  tab.leave(() => undefined);
+  asked[0]?.();
+
+  expect(holdsBack(page)).toBe(false);
+  expect(holdsBack(page)).toBe(true);
+});
+
+test("a newly stood ask holds back a close or reload though an earlier Leave's send never went", () => {
+  const page = new EventTarget();
+  const tab = pageLeave(page);
+  const asked: (() => void)[] = [];
+  tab.unsavedWork((leave) => asked.push(leave));
+  tab.leave(() => undefined);
+  asked[0]?.();
+
+  tab.unsavedWork(() => undefined);
+
+  expect(holdsBack(page)).toBe(true);
 });
 
 test("a page the back-forward cache brings back holds its unsaved work back again", () => {

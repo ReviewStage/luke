@@ -10,7 +10,9 @@
  * tab's sends ask through the panel's question first; once none stands the
  * listener comes down, because one always registered keeps the page out of
  * the back-forward cache. A send the developer said to take goes past the
- * browser's question too, since they were just asked.
+ * browser's question too, since they were just asked, and past it once
+ * only: a send that never unloads (stopped, or never committed) leaves the
+ * next close or reload asked about again.
  */
 
 import type { AppPlatform } from "@luke/panel/app-platform";
@@ -18,17 +20,10 @@ import type { AppPlatform } from "@luke/panel/app-platform";
 /** The ask the panel stands while a page holds unsaved work. */
 type LeaveAsk = Parameters<NonNullable<AppPlatform["unsavedWork"]>>[0];
 
-/** What leaving reaches of the page: its `beforeunload`, and its `pageshow` on a return from the back-forward cache. */
+/** What leaving reaches of the page: its `beforeunload`. */
 export interface LeavingPage {
-  readonly addEventListener: (
-    type: "beforeunload" | "pageshow",
-    listener: (event: Event) => void,
-    options?: { readonly once: boolean },
-  ) => void;
-  readonly removeEventListener: (
-    type: "beforeunload" | "pageshow",
-    listener: (event: Event) => void,
-  ) => void;
+  readonly addEventListener: (type: "beforeunload", listener: (event: Event) => void) => void;
+  readonly removeEventListener: (type: "beforeunload", listener: (event: Event) => void) => void;
 }
 
 export interface PageLeave {
@@ -40,11 +35,14 @@ export interface PageLeave {
 
 export function pageLeave(page: LeavingPage): PageLeave {
   let standing: LeaveAsk;
-  // Whether a way out the developer said to take is under way, which the browser asks nothing more about.
+  // Whether a way out the developer said to take is under way, whose one `beforeunload` the browser asks nothing about.
   let leaving = false;
 
   const holdBack = (event: Event): void => {
-    if (leaving) return;
+    if (leaving) {
+      leaving = false;
+      return;
+    }
     event.preventDefault();
     // Note that Chrome and Edge before 119 ask only where `returnValue` is set too.
     event.returnValue = true;
@@ -57,19 +55,13 @@ export function pageLeave(page: LeavingPage): PageLeave {
     if (ask === undefined && standing !== undefined) {
       page.removeEventListener("beforeunload", holdBack);
     }
+    // A newly stood ask is work the developer has not yet said to leave.
+    if (ask !== undefined) leaving = false;
     standing = ask;
   };
 
   const take = (go: () => void): void => {
     leaving = true;
-    // A page the back-forward cache brings back stands where it was, so its ask holds again.
-    page.addEventListener(
-      "pageshow",
-      () => {
-        leaving = false;
-      },
-      { once: true },
-    );
     go();
   };
 
