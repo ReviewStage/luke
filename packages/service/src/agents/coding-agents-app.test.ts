@@ -9955,6 +9955,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(served.headers.get("content-type"), CHAT_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
 
         const again = yield* chat.wrote(send);

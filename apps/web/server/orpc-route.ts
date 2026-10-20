@@ -67,7 +67,7 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
 /** The deployment's resolvers, and what the resources ask of the deployment beside them. */
 const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   ...accountProcedureSeams(),
-  ...hostedAdminSeams(),
+  ...hostedAdminSeams(auth.api),
   ...integrationsAppSeams(),
   ...workspaceLinearProcedureSeams(),
   resolveUserId: resolveHostedUserId,

@@ -1,13 +1,13 @@
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { type Cause, Effect } from "effect";
-import { auth } from "../auth/auth.js";
+import { Effect } from "effect";
 import {
   AUTH_SECRET_ENVIRONMENT,
   authSecrets,
   GITHUB_APP_ENVIRONMENT,
   socialClientConfigured,
 } from "../auth/auth-deployment.js";
+import { sessionCredential } from "../auth/session-credential.js";
 import { WORKSPACE_LINEAR_CONNECTOR_VARIABLE } from "../integrations/integration-connect.js";
 import { INTEGRATION, type IntegrationDefinition } from "../integrations/integrations.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
@@ -36,14 +36,23 @@ import { buildAdminUserDetail } from "./admin-user.js";
 import { buildAdminUserList } from "./admin-users.js";
 import { buildAdminWorkspaceList } from "./admin-workspaces.js";
 import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
+import type { AdminViewerResolver } from "./gate.js";
 
 /**
  * The deployment's real seams behind the dashboard's group: the browser
- * session the gate reads, this database, and which integrations the
- * environment has keys for. No secret value crosses into an answer — only
- * whether each key is present, and the analytics project id, which names
- * which console to open.
+ * session the gate reads, through the auth service's own `api` the web
+ * route hands in (`auth.api` on a deployment), this database, and which
+ * integrations the environment has keys for. No secret value crosses into an
+ * answer — only whether each key is present, and the analytics project id,
+ * which names which console to open.
  */
+
+/** The part of a Better Auth `api` the dashboard's viewer read calls: the session's account, with its `role`. */
+export interface AdminSessionApi {
+  readonly getSession: (input: { headers: Headers }) => Promise<{
+    readonly user: { readonly id: string; readonly role?: string | null | undefined };
+  } | null>;
+}
 
 /** An environment value counts as configured only when it holds a non-blank string. */
 function configured(name: string): boolean {
@@ -71,27 +80,34 @@ function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], bo
 }
 
 /**
- * The browser session an admin request rides in on — the maintainer's own
- * sign-in on this site, carrying that account's `role`, never the desktop's
- * bearer token. Better Auth's `getSession` is a promise of somebody else's,
- * so it is wrapped once here, where the seam is built, and the gate yields
- * the effect on the request's own fiber. A getSession failure must propagate:
- * the gate turns a refused viewer seam into a 503, where swallowing it here
- * would misreport an auth outage as a signed-out 401 and offer a sign-in that
- * cannot succeed.
+ * The Better Auth session an admin request rides in on, carrying that
+ * account's `role`: the maintainer's own sign-in on this site, or the same
+ * account's session as the signed bearer the bearer plugin reads as its
+ * cookie (the Mac's own), and never the desktop's OAuth token, which names
+ * no session. It is read from the request's one credential
+ * (`auth/session-credential.ts`), so a junk `Authorization` beside the
+ * cookie is signed out rather than read past, and a request carrying neither
+ * is signed out without asking the auth service. Better Auth's `getSession`
+ * is a promise of somebody else's, so it is wrapped once here, where the seam
+ * is built, and the gate yields the effect on the request's own fiber. A
+ * getSession failure must propagate: the gate turns a refused viewer seam
+ * into a 503, where swallowing it here would misreport an auth outage as a
+ * signed-out 401 and offer a sign-in that cannot succeed.
  */
-function resolveSessionViewer(
-  request: Request,
-): Effect.Effect<AdminViewer | undefined, Cause.UnknownError> {
-  return Effect.tryPromise(async () => {
-    const authenticated = await auth.api.getSession({ headers: request.headers });
-    const account = authenticated?.user;
-    if (!account) return undefined;
-    return { userId: account.id, role: account.role };
-  });
+function sessionViewer(api: AdminSessionApi): AdminViewerResolver {
+  return (request) => {
+    const credential = sessionCredential(request.headers);
+    if (credential === undefined) return Effect.succeed(undefined);
+    return Effect.tryPromise(async (): Promise<AdminViewer | undefined> => {
+      const authenticated = await api.getSession({ headers: credential });
+      const account = authenticated?.user;
+      if (!account) return undefined;
+      return { userId: account.id, role: account.role };
+    });
+  };
 }
 
-export function hostedAdminSeams(): AdminProcedureSeams {
+export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
   // The sign-in clients are read as the auth service reads them, so the
   // dashboard reports the pair a GitHub sign-in would run on.
   const socialClients = authSecrets(process.env);
@@ -132,7 +148,7 @@ export function hostedAdminSeams(): AdminProcedureSeams {
     : undefined;
 
   return {
-    resolveViewer: resolveSessionViewer,
+    resolveViewer: sessionViewer(api),
     readMetrics: (now, scope, windowDays) =>
       Effect.map(readAdminDashboardSources({ now, scope, windowDays }), (sources) => ({
         ...buildAdminMetrics(sources.metrics, now, windowDays),

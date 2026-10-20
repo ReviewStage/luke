@@ -9,9 +9,7 @@ import {
 } from "../core.js";
 import { auth } from "./auth.js";
 import { resolveBrowserSessionUserId } from "./browser-session.js";
-
-/** The request headers an account is read from: the bearer's, and only where it is absent, the session cookie's. */
-const REQUEST_HEADER = { AUTHORIZATION: "authorization", COOKIE: "cookie" } as const;
+import { CREDENTIAL_HEADER, sessionCredential } from "./session-credential.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {
@@ -52,7 +50,7 @@ export function hostedUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
 ): Effect.Effect<Option.Option<string>> {
-  return userIdForAuthorization(request.headers.get(REQUEST_HEADER.AUTHORIZATION), userInfo);
+  return userIdForAuthorization(request.headers.get(CREDENTIAL_HEADER.AUTHORIZATION), userInfo);
 }
 
 /**
@@ -81,7 +79,8 @@ export function userIdForAuthorization(
  * than falling to a cookie beside it, because Better Auth's bearer plugin
  * leaves the cookie in place under any `Authorization` it did not sign, so
  * a junk header would otherwise pass for the caller's own while the cookie's
- * session answered for it. The session is read from the cookie alone, so
+ * session answered for it. The session is read from the cookie alone
+ * (`session-credential.ts`, the rule every session read follows), so
  * nothing else the request carries names an account on that path, and a
  * failure of the auth service resolves nobody, as a bearer's does.
  */
@@ -90,12 +89,10 @@ export function requestUserId(
   userInfo: UserInfoEndpoint,
   session: SessionEndpoint,
 ): Effect.Effect<Option.Option<string>> {
-  if (request.headers.has(REQUEST_HEADER.AUTHORIZATION)) return hostedUserId(request, userInfo);
-  const cookie = request.headers.get(REQUEST_HEADER.COOKIE)?.trim();
-  if (!cookie) return Effect.succeedNone;
-  return session({ headers: new Headers({ cookie }) }).pipe(
-    Effect.orElseSucceed(Option.none<string>),
-  );
+  if (request.headers.has(CREDENTIAL_HEADER.AUTHORIZATION)) return hostedUserId(request, userInfo);
+  const cookie = sessionCredential(request.headers);
+  if (cookie === undefined) return Effect.succeedNone;
+  return session({ headers: cookie }).pipe(Effect.orElseSucceed(Option.none<string>));
 }
 
 /**

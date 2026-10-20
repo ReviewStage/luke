@@ -223,8 +223,11 @@ answering `{ workspace }` with its new `photoVersion` or none; any other
 photo is `invalid-request`. They are the plugin's own
 `removeMember`, `updateMemberRole`, `leaveOrganization`, and `updateOrganization` (`memberSeams`
 in `workspace-seams.ts`, the last handed the name alone or the logo alone), called with the
-request's headers, which carry the Mac's own Better Auth session as a signed
-bearer token that the bearer plugin reads as the session cookie. So these six
+request's one credential (`packages/service/src/auth/session-credential.ts`):
+its `Authorization` alone wherever it carries one, which carries the Mac's own
+Better Auth session as a signed bearer token that the bearer plugin reads as
+the session cookie, and the browser's cookie only where it carries none, so a
+bearer the plugin did not sign is never read past to a cookie beside it. So these six
 paths take the session, not the OAuth token, and the plugin checks the
 caller's role and membership again behind Luke's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,

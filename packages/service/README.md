@@ -295,7 +295,9 @@ answers for its own parameters with its own refusals (`invalid-window`,
 `missing-user-id`, …, in `src/admin/http-effect.ts`), which the hosted
 handler answers as `{ error: slug }` under their own statuses, and its
 answer is written as the read built it. `src/admin/admin-route.ts` is the
-one place that hands the resource this deployment's real session resolver,
+one place that hands the resource this deployment's real session resolver
+(over the auth service's `api` the web route hands it, read from the
+request's one credential, `src/auth/session-credential.ts`),
 database, and integration presence booleans. Every query behind it is an
 effect over the ambient `SqlClient`, and so is every seam the resource is
 handed (`AdminSeamEffect` in `src/admin/seam.ts`): each read composes its

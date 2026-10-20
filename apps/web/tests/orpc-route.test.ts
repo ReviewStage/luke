@@ -11,15 +11,19 @@
  * holds the signed-in read, which needs a catalog and a database), and a plan's routes refuse the
  * same way, an unsigned caller before its body is read (`tasks-app.test.ts` holds the signed-in
  * reads and writes), and the inbox's paths reach theirs the same way, each with an id among
- * its segments.
+ * its segments. And every procedure the contract declares is reached the same way and refuses
+ * a caller who names no account as unauthenticated, over the deployment's own seams, so a
+ * procedure built without a caller check answers something else and is named.
  */
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HOSTED_ERRORS } from "@luke/features/contract";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { ADMIN_ERROR } from "@luke/features/admin-wire";
+import { HOSTED_ERRORS, type hostedContract } from "@luke/features/contract";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { HostedContext } from "@luke/service/orpc/base";
 import { hostedFetch } from "@luke/service/orpc/handler";
+import { POSTHOG_ENVIRONMENT } from "@luke/service/providers/posthog";
 import { recordingSentry } from "@luke/service/testing/sentry-transport";
 import { HTTP_METHOD } from "@luke/wire";
 import { oc } from "@orpc/contract";
@@ -39,6 +43,9 @@ const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/luke";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
+  // The deployed route reads the runtime's services once for its instance's life, so whichever test reaches it first fixes the environment its procedures read.
+  // A deployment that names an analytics project takes the desktop's batch, so that procedure asks for its caller; one that names none refuses every caller first (`events-procedures.ts`).
+  vi.stubEnv(POSTHOG_ENVIRONMENT.PROJECT_API_KEY, "posthog-placeholder");
 });
 
 afterEach(async () => {
@@ -51,6 +58,21 @@ const ORIGIN = "https://luke.test";
 const ORPC_ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
 
 const GROUPED = { file: "default", routes: [ORPC_ROUTE_KEY], dispatches: true } as const;
+
+/** The value a path parameter is written as: an id, but for a revision's number, which reads as one before its caller is asked for. */
+const PATH_PARAMETER_VALUES: ReadonlyMap<string, string> = new Map([["seq", "3"]]);
+const PATH_PARAMETER_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
+
+/** The dashboard's resource, which answers a signed-out caller in its own words. */
+const ADMIN_RESOURCE: keyof typeof hostedContract = "admin";
+
+/** A procedure's public path, every parameter written as a value it reads. */
+function readablePath(procedure: ProcedureRoute): string {
+  return procedure.path.replaceAll(
+    /\{\+?([^{}]+)\}/gu,
+    (_parameter, name: string) => PATH_PARAMETER_VALUES.get(name) ?? PATH_PARAMETER_ID,
+  );
+}
 
 const partContract = {
   part: oc
@@ -372,22 +394,27 @@ it.effect(
     }),
 );
 
-test("a path of every hosted resource reaches its own procedure through the committed fallback and the deployed router, which answers it rather than not finding it", async () => {
-  const firstOfResource = new Map<string, ProcedureRoute>();
-  for (const procedure of hostedProcedureRoutes()) {
-    const [resource = ""] = procedure.key;
-    if (!firstOfResource.has(resource)) firstOfResource.set(resource, procedure);
-  }
-  for (const procedure of firstOfResource.values()) {
-    const path = procedure.path.replaceAll(
-      /\{\+?[^{}]+\}/gu,
-      "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60",
-    );
+test("every procedure the contract declares is reached through the committed fallback and the deployed router, and refuses a caller who names no account as unauthenticated", async () => {
+  const unauthenticated = {
+    status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+    text: JSON.stringify({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
+  };
+  const signedOut = {
+    status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+    text: JSON.stringify({ error: ADMIN_ERROR.NOT_SIGNED_IN }),
+  };
+  const procedures = hostedProcedureRoutes();
+  assert.ok(procedures.length > 0);
+  for (const procedure of procedures) {
     const answer = await dispatched(
-      new Request(`${ORIGIN}${path}`, { method: procedure.method }),
+      new Request(`${ORIGIN}${readablePath(procedure)}`, { method: procedure.method }),
       ORPC_ROUTES,
     );
-    const text = await answer.text();
-    assert.notEqual(text, '{"error":"not-found"}', procedure.key.join("."));
+    const [resource] = procedure.key;
+    assert.deepEqual(
+      { status: answer.status, text: await answer.text() },
+      resource === ADMIN_RESOURCE ? signedOut : unauthenticated,
+      procedure.key.join("."),
+    );
   }
 });
