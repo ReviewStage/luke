@@ -70,7 +70,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
     });
     // SAFETY: a repository change yields the store, the clock, and GitHub alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
-    return (taskId: string, bearer: string, body: object) =>
+    return (taskId: string, bearer: string, body: { readonly repository: string }) =>
       Effect.promise(async () => {
         const response = await handle(
           new Request(new URL(`/api/plans/${taskId}`, ORIGIN), {
