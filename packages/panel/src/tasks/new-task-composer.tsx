@@ -343,14 +343,14 @@ export function NewTaskComposer({
   }
   const isListed = (name: string) =>
     listed === undefined || listed.some((each) => each.toLowerCase() === name.toLowerCase());
-  // A pick a read does not list is let go, so a later read listing it does
+  // A pick or the recent default a read does not list is let go, so a later read listing it does
   // not bring it back; a read made before the workspace resolved, or for the
   // one before a switch still under way, judges none.
   const judged = repositories.scope !== undefined && repositories.scope === scope;
-  if (chosen != null && !isListed(chosen) && judged) setChosen(null);
+  const candidate = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
+  if (candidate !== null && !isListed(candidate) && judged) setChosen(null);
   // Note that a repository is not started on before the read lands unless
   // the workspace's GitHub reaches it, because the service would refuse it.
-  const candidate = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
   const repository =
     candidate !== null &&
     (!isListed(candidate) ||

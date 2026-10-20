@@ -82,6 +82,7 @@ async function mount(
   read: () => Promise<TasksRepositoriesAnswer>,
   preset?: string,
   scope: { id: string | undefined } = { id: ACME.id },
+  recent: readonly string[] = [],
 ) {
   const control = tasksControl();
   const starts: (string | null)[] = [];
@@ -99,7 +100,7 @@ async function mount(
             workspaces: [ACME],
             workspaceId: scope.id,
             ...(preset === undefined ? undefined : { preset: { repository: preset } }),
-            repositoriesIn: () => ({ ...control.repositories, recent: [], scope: scope.id, read }),
+            repositoriesIn: () => ({ ...control.repositories, recent, scope: scope.id, read }),
             start: (_name: string, repository: string | null) => {
               starts.push(repository);
               return Promise.resolve(undefined);
@@ -203,4 +204,33 @@ test("a preset survives a read made before the workspace resolved and stands onc
     assert.fail("the card draws the repository chip");
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+});
+
+test("a recent default a read does not list is let go, so a later read listing it does not bring it back", async () => {
+  let reads = 0;
+  const { container } = await mount(
+    () => {
+      reads += 1;
+      return reads === 1
+        ? Promise.resolve({
+            repositories: {
+              installed: true,
+              repositories: [],
+              installationUrl: "https://github.com/apps/luke/installations/new",
+            },
+          })
+        : TOKEN_LISTING();
+    },
+    undefined,
+    { id: ACME.id },
+    ["octo/tools"],
+  );
+  act(() => window.dispatchEvent(new Event("focus")));
+  await settle();
+  const chip =
+    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    assert.fail("the card draws the repository chip");
+
+  assert.equal(reads, 2);
+  assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
 });
