@@ -20,6 +20,7 @@ describe("isRepositoryName", () => {
       "octo-dev/scratch?x=1",
       "https://github.com/octo-dev/scratch",
       "-octo/scratch",
+      "octo-dev/scratch\n",
       "",
     ]) {
       expect(isRepositoryName(text)).toBe(false);
