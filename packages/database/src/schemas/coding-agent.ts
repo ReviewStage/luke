@@ -3,6 +3,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentArchiver,
   type CodingAgentAuthor,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
@@ -90,6 +91,11 @@ import { task } from "./task.js";
  * settled once as its first session starts and never moved after, so its
  * instructions and its checkout agree; null before then, and for an agent
  * from before the column, which writes as the App.
+ * `payer` is who pays for the agent's model calls (`CODING_AGENT_PAYER`),
+ * the starter's Claude or ChatGPT plan, their own API key, or Luke's,
+ * recorded as it starts and never moved after; null for an agent from
+ * before the column. What answers its conversation is the conversation's
+ * own `runtime`.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -249,6 +255,8 @@ export const codingAgent = pgTable(
     author: text("author").$type<CodingAgentAuthor>(),
     /** How the agent's repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
+    /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
+    payer: text("payer").$type<CodingAgentPayer>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

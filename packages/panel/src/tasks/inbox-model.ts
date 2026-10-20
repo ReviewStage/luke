@@ -567,6 +567,19 @@ export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefi
   return message?.ask === undefined ? undefined : { message, ask: message.ask };
 }
 
+/**
+ * Whether the item is a notice waiting on the reader's nod: open, asking
+ * nothing, and its thread holding no ask open, so Got it settles it and
+ * reaches nobody, and a reply settles it as it reaches the agent.
+ */
+export function awaitsNod(item: InboxItem, thread: readonly InboxMessage[]): boolean {
+  return (
+    item.status === INBOX_STATUS.OPEN &&
+    item.response.type === INBOX_RESPONSE.NONE &&
+    openAskOf(thread) === undefined
+  );
+}
+
 /** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
 

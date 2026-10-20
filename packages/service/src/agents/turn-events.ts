@@ -24,6 +24,7 @@ import {
   withdrawnQuestionOf,
 } from "../tasks/queue-question.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "../tasks/show-code.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 
 /**
@@ -33,7 +34,10 @@ import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
  * their own: the store keeps the turn row and the turn's journal, the
  * assistant message the writer opens under the turn's id and amends as each
  * call is written ahead of its run, and the events are a projection over
- * those two, read again on every poll. The projection only grows while the
+ * those two, read again on every poll. A turn is projected the same way
+ * whichever backend ran it, the task's brain or an agent a call speaks into,
+ * since both journal their calls under the registry's names
+ * (`agent-runtime/tools.ts`). The projection only grows while the
  * turn runs, because the journal only gains parts and the turn row only
  * moves forward, so the events a reader heard stay where they were numbered
  * and the ones it has not heard come after. A turn that did not complete
@@ -82,10 +86,16 @@ function replyTextOf(parts: readonly JournalPart[]): string {
   return parts.flatMap((part) => (part.type === UI_PART_TYPE.TEXT ? [part.text] : [])).join("\n");
 }
 
+/** The calls that run a shell command in a checkout: the brain's read of the task's repository, and an agent's own shell. */
+const SLOW_STEP_TOOLS: ReadonlySet<string> = new Set([
+  RUN_IN_REPOSITORY_TOOL.name,
+  AGENT_TOOL.BASH,
+]);
+
 /**
  * What one call tells while the turn runs: a question a brain call queued
- * or withdrew, code it showed, its ask to end the call, or a repository
- * command, the one slow step. A queued or withdrawn question or an end is told
+ * or withdrew, code it showed, its ask to end the call, or a shell command
+ * in a checkout, the one slow step. A queued or withdrawn question or an end is told
  * once its input is whole, never while it streams, and
  * shown code once its call has answered with the lines, so none is told
  * twice.
@@ -111,7 +121,7 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
       ? undefined
       : { kind: TURN_EVENT_KIND.CODE_SHOWN, callId: part.toolCallId, code: shown };
   }
-  return name === RUN_IN_REPOSITORY_TOOL.name
+  return SLOW_STEP_TOOLS.has(name)
     ? { kind: TURN_EVENT_KIND.SLOW_STEP, step: SLOW_STEP_KIND.REPOSITORY_READ }
     : undefined;
 }

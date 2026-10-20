@@ -6,6 +6,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
@@ -28,7 +29,11 @@ import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { voiceSessions } from "../../schemas/voice.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  CONVERSATION_RUNTIME,
+  MESSAGE_SENDER,
+} from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, linearIssueLink } from "../../testing/index.js";
 import { VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
 import {
@@ -52,11 +57,15 @@ import {
   listWorkspaceCodingAgentLines,
   listWorkspaceCodingAgents,
   listWorldCodingAgents,
+  type NewCodingAgent,
   pinCodingAgent,
   readCodingAgent,
   readCodingAgentPublished,
+  readCodingAgentRouting,
   recordCodingAgentAuthor,
+  recordCodingAgentNativeSession,
   recordCodingAgentPublished,
+  recordCodingAgentRunnerToken,
   recordTurnFastRefused,
   renameCodingAgent,
   settleCodingAgentAuthor,
@@ -83,6 +92,8 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And who an agent writes as on GitHub, settled once by its first session.
  * And an agent's pin, which is its reader's own, as a plan's is.
  * And an agent with no repository, started blank, which a call names.
+ * And how an agent is run: its runtime, its harness's session, its
+ * runner's bearer digest, and who pays for it.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -1616,6 +1627,124 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
             .where(eq(voiceSessions.id, call)),
         );
         assert.deepEqual(calls, [{ agentId: null }]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
+  const startIn = (
+    starter: string,
+    organizationId: string,
+    routing: Pick<NewCodingAgent, "runtime" | "payer"> = {},
+  ) =>
+    Effect.map(
+      createCodingAgent(starter, {
+        taskId: null,
+        organizationId,
+        planSnapshot: null,
+        prompt: "Sweep the flaky tests.",
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: "acme/api",
+        ...routing,
+      }),
+      (started) => Option.getOrThrow(started).agent,
+    );
+
+  it.effect(
+    "an agent started on a harness reads back its runtime and payer, its session and bearer digest as recorded, and a retired bearer as none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+
+        const fresh = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
+        const recordedSession = yield* recordCodingAgentNativeSession(
+          starter,
+          agent.id,
+          "session-1",
+        );
+        const recordedToken = yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
+        const recorded = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
+        yield* recordCodingAgentRunnerToken(starter, agent.id, null);
+        const retired = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
+
+        assert.deepEqual(fresh, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          nativeSession: null,
+          runnerTokenHash: null,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        assert.deepEqual([recordedSession, recordedToken], [true, true]);
+        assert.deepEqual(recorded, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          nativeSession: "session-1",
+          runnerTokenHash: "digest-1",
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        assert.equal(retired.runnerTokenHash, null);
+        assert.equal(retired.nativeSession, "session-1");
+      }),
+  );
+
+  it.effect(
+    "an agent started with neither named runs on eve with no payer, and one from before the columns reads as eve too",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const unnamed = yield* startIn(starter, workspace);
+        const { agentId: older } = yield* tasklessAgent(starter, workspace);
+
+        const expected = {
+          runtime: CONVERSATION_RUNTIME.EVE,
+          nativeSession: null,
+          runnerTokenHash: null,
+          payer: null,
+        };
+        assert.deepEqual(
+          Option.getOrThrow(yield* readCodingAgentRouting(starter, unnamed.id)),
+          expected,
+        );
+        assert.deepEqual(
+          Option.getOrThrow(yield* readCodingAgentRouting(starter, older)),
+          expected,
+        );
+      }),
+  );
+
+  it.effect(
+    "an account outside the agent's workspace reads none of its routing and writes neither its session nor its bearer",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* openWorkspace(outsider);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentNativeSession(starter, agent.id, "thread-1");
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
+
+        const read = yield* readCodingAgentRouting(outsider, agent.id);
+        const wroteSession = yield* recordCodingAgentNativeSession(outsider, agent.id, "thread-2");
+        const wroteToken = yield* recordCodingAgentRunnerToken(outsider, agent.id, "digest-2");
+
+        assert.ok(Option.isNone(read));
+        assert.deepEqual([wroteSession, wroteToken], [false, false]);
+        assert.deepEqual(Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id)), {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          nativeSession: "thread-1",
+          runnerTokenHash: "digest-1",
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
       }),
   );
 });

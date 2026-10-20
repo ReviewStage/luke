@@ -1,5 +1,5 @@
 /**
- * call-video-tile.tsx -- Luke's avatar on the call, as a 16:9 tile with its video's controls, and the voice it plays.
+ * call-video-tile.tsx -- Luke's avatar on the call, as a tile with its video's controls, and the voice it plays.
  *
  * The tile draws what it is handed and decides nothing: the avatar's video
  * track and its status. While the avatar connects it
@@ -13,6 +13,9 @@
  * here. The avatar's lip-synced voice is played apart
  * from the tile (`AvatarVoice`), because the tile is drawn only while the
  * Call tab is, and the voice is what the developer hears whatever is shown.
+ * The video is drawn whole, never cut: where the tile is wider than the
+ * avatar's square picture, a blurred copy of the same track fills the
+ * sides behind it (call.css).
  */
 
 import {
@@ -57,8 +60,23 @@ function useTrack(
 /** The avatar's video, muted, since its sound is the audio element's to play. */
 function AvatarVideo({ track }: { track: MediaStreamTrack }): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null);
+  const fill = useRef<HTMLVideoElement>(null);
   useTrack(video, track);
-  return <video ref={video} className="call-video-frame" autoPlay muted playsInline />;
+  useTrack(fill, track);
+  return (
+    <>
+      <video ref={video} className="call-video-frame" autoPlay muted playsInline />
+      <video
+        ref={fill}
+        className="call-video-fill"
+        aria-hidden="true"
+        tabIndex={-1}
+        autoPlay
+        muted
+        playsInline
+      />
+    </>
+  );
 }
 
 /** Luke's face where there is no video to draw, with what the tile is waiting on, if anything. */

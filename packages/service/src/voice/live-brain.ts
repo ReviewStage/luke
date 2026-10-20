@@ -41,8 +41,9 @@ import {
   Stream,
 } from "effect";
 import { SqlClient } from "effect/sql";
+import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
-import { BRAIN_DELEGATION_TOOLS, BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
+import { BRAIN_DELEGATION_TOOLS } from "../agents/brain-host/brain.js";
 import {
   ASK_REFUSAL,
   type AskInput,
@@ -71,7 +72,6 @@ import {
   type TurnEventKind,
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { subagentRecordsByCall } from "../tasks/child-models.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import {
@@ -82,6 +82,7 @@ import {
   workerSessionCallsOf,
 } from "../tasks/task-work.js";
 import { brainDelegationJournalsOf } from "../tasks/task-work-store.js";
+import type { CallBackend } from "./call-backend.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
 /**
@@ -344,11 +345,17 @@ interface TurnTold {
   settled: boolean;
 }
 
-const isRepositoryCommand = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
+/** The calls that run a shell command in a checkout: the brain's read of the task's repository, and an agent's own shell. */
+const SHELL_TOOL_NAMES: ReadonlySet<string> = new Set([
+  RUN_IN_REPOSITORY_TOOL.name,
+  AGENT_TOOL.BASH,
+]);
+
+const isShellCommand = Schema.is(Schema.Struct({ command: Schema.String }));
 
 /**
  * What the turn is doing now, read off its journal: the latest call not yet
- * answered, as its command where it is a repository command and as its
+ * answered, as its command where it runs a shell command and as its
  * tool's name otherwise, cut to what a `plan.activity` frame carries; nothing
  * while every call is answered. Note that we read the call's input and never
  * its output, because the line is shown on the developer's Mac and a
@@ -359,9 +366,10 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
     .filter(isStoredToolPart)
     .findLast((part) => !isSettledToolPartState(part.state));
   if (pending === undefined) return undefined;
-  const action = isRepositoryCommand(pending.input)
-    ? pending.input.command
-    : storedToolName(pending);
+  const action =
+    SHELL_TOOL_NAMES.has(storedToolName(pending)) && isShellCommand(pending.input)
+      ? pending.input.command
+      : storedToolName(pending);
   if (action.length <= TASK_ACTIVITY_ACTION_MAX_CHARS) return action;
   return `${action.slice(0, TASK_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
 }
@@ -387,7 +395,7 @@ const QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
 
 /**
  * The turn's settled calls, oldest first, as the kind of step each was: a
- * repository command as a repository read, and every other call as no named
+ * shell command as a repository read, and every other call as no named
  * kind. A queued or withdrawn question is the task's next question and no
  * step of the work, so it is not counted. Note that we read which tool was called and
  * nothing of its input or output, so a settled step tells the voice no
@@ -399,9 +407,7 @@ function settledStepsOf(journal: StoredUIMessage | undefined): readonly (string 
     .filter((part) => isSettledToolPartState(part.state))
     .filter((part) => !QUESTION_TOOL_NAMES.has(storedToolName(part)))
     .map((part) =>
-      storedToolName(part) === RUN_IN_REPOSITORY_TOOL.name
-        ? SLOW_STEP_KIND.REPOSITORY_READ
-        : undefined,
+      SHELL_TOOL_NAMES.has(storedToolName(part)) ? SLOW_STEP_KIND.REPOSITORY_READ : undefined,
     );
 }
 
@@ -429,8 +435,10 @@ function cancelOf(outcome: StopOutcome): LiveBrainCancel {
 export interface HostedLiveBrainOptions {
   /** The account the voice session was opened for, resolved at the handshake: every ask is admitted as theirs. */
   readonly accountId: string;
-  /** The conversation every ask lands in: the task's, the same one its record writes, under the member who opened it. */
+  /** The conversation every ask lands in: the task's or the agent's, the same one its record writes, under the member who opened it. */
   readonly conversation: ConversationTarget;
+  /** Who answers the asks in that conversation: the tools its journals are read under, and the ask a fresh call explores with, where it explores. */
+  readonly backend: Pick<CallBackend, "tools" | "explore">;
   /** The developer's time zone, handed with every ask so the turn reads the day in it; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The ask door's seams: the ask record, and eve under the deployment principal for this account, which sends a spoken ask and nothing else. */
@@ -669,7 +677,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       const read = yield* listJournals(
         options.conversation.userId,
         child,
-        HOSTED_TOOL_SET,
+        options.backend.tools,
         SUBAGENT_JOURNALS,
       ).pipe(
         Effect.tapError(logStoreFailure),
@@ -696,7 +704,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * earlier turn started was started; none where they could not be read.
    */
   const workerJournalsOf = (conversationId: string) =>
-    brainDelegationJournalsOf(options.conversation.userId, conversationId).pipe(
+    brainDelegationJournalsOf(
+      options.conversation.userId,
+      conversationId,
+      options.backend.tools,
+    ).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): StoredUIMessage[] => []),
     );
@@ -753,12 +765,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       [turn.id],
     );
     told.asked = asked.get(turn.id) ?? [];
-    // A task call's turns call the brain's tools, so the journal is read
-    // under every tool a hosted conversation's rows may name.
+    // A task call's turns call the brain's tools and an agent call's the
+    // agent's, so the journal is read under every tool the backend's rows may name.
     const journal = yield* options.store.messages.byClientId(
       options.conversation.userId,
       turn.conversationId,
-      HOSTED_TOOL_SET,
+      options.backend.tools,
       turn.id,
     );
     if (!journal.ok) {
@@ -914,7 +926,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     const journal = yield* options.store.messages.byClientId(
       options.conversation.userId,
       turn.conversationId,
-      HOSTED_TOOL_SET,
+      options.backend.tools,
       turn.id,
     );
     if (!journal.ok) return undefined;
@@ -1070,9 +1082,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     // answers no delegation a re-attached connection could take up, and it
     // is followed under revision zero, below every spoken ask's, so the
     // developer's first ask tells a turn the two share. Every later call
-    // takes up what earlier calls left instead, and asks eve nothing.
+    // takes up what earlier calls left instead, and asks eve nothing, and so
+    // does every call into an agent, which explores nothing of its own.
     join(sessionId) {
       return Effect.gen(function* () {
+        const explore = options.backend.explore;
+        if (explore === undefined) return yield* takeUp();
         const latest = yield* options.asks.asks.latestSession(
           options.conversation.userId,
           options.conversation.conversationId,
@@ -1082,7 +1097,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           {
             accountId: options.accountId,
             userId: options.conversation.userId,
-            question: BRAIN_EXPLORE_ASK,
+            question: explore,
             origin: ASK_ORIGIN.SPOKEN,
             clientId: sessionId,
             conversationId: options.conversation.conversationId,

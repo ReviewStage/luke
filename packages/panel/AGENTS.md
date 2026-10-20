@@ -65,7 +65,9 @@ it (the window under it is the shell's: `apps/desktop/src/renderer/AGENTS.md`):
 
 ## Confirms
 
-Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. In the
+Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. The one
+exception is merging a pull request from its merge control, which acts on the press,
+as GitHub-style review tools do; removing one from a merge queue still asks. In the
 desktop window it asks through `<ConfirmDialog>`, a modal over the window held by
 `useConfirmDialog`: title, what goes, Cancel focused and the act in red.
 Settings asks the same way, from a row's button or its ⋯ menu. A question does not

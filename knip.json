@@ -15,7 +15,7 @@
   "ignore": [".opencode/**"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/fixtures/discarded-effect/*.ts", "scripts/fixtures/task-names/*.ts"],
+      "entry": ["scripts/fixtures/discarded-effect/*.ts"],
       "project": ["scripts/**"]
     },
     "apps/desktop": {
@@ -116,6 +116,10 @@
         "evals/*.eval.ts"
       ],
       "project": ["**/*.ts"]
+    },
+    "packages/agent-runner": {
+      "entry": ["src/main.ts"],
+      "project": ["src/**"]
     },
     "tools/claude-code-probe": {
       "entry": ["src/cli.ts", "src/sandbox/driver.mjs"],

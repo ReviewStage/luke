@@ -425,12 +425,14 @@ function keptText(max: number): Schema.Codec<string, string> {
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
- * `voice.createLiveSession`: the peer's SDP offer, and the task the call is
- * about. The host creates a call only for the task the panel has open.
+ * `voice.createLiveSession`: the peer's SDP offer, the task the call is
+ * about, and the agent of that task it speaks into, where it names one. The
+ * host creates a call only for the task the panel has open.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
   taskId: text,
+  agentId: Schema.optionalKey(text),
 });
 
 /**

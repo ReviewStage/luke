@@ -206,6 +206,11 @@
           "minLength": 1,
           "maxLength": 36
         },
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
         "timeZone": {
           "type": "string",
           "maxLength": 64

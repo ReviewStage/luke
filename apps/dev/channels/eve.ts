@@ -1,5 +1,8 @@
-import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
-import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "@luke/service/agents/coder-host/channel";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "@luke/service/agents/coder-host/channel";
 import { hostedUserId } from "@luke/service/auth/bearer";
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
@@ -23,7 +26,7 @@ export default eveChannel(
     {
       secret: seams.deploymentSecret(),
       admits: CODER_DEPLOYMENT_TURNS,
-      presents: DEPLOYMENT_PRESENCE.ACCOUNT,
+      presents: CODER_DEPLOYMENT_PRESENCE,
     },
     // The end of a session eve tells the channel alone, run here on the edge's runner; the host logs its own failures.
     (sessionId) => runAgent(host.sessionEnded(sessionId)),

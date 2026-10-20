@@ -87,6 +87,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 interface Answer {

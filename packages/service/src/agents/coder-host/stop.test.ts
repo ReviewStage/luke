@@ -29,7 +29,7 @@ import {
   type EveTypedTurn,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type EveReach, eveFor } from "./stop.js";
 
 /**
@@ -79,6 +79,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 const WITH_SECRET = Layer.succeed(HostedEnvironment, {
@@ -109,7 +110,7 @@ const DOORS = {
     {
       secret: Redacted.make(SECRET),
       admits: CODER_DEPLOYMENT_TURNS,
-      presents: DEPLOYMENT_PRESENCE.ACCOUNT,
+      presents: CODER_DEPLOYMENT_PRESENCE,
     },
     async () => undefined,
   ).auth,

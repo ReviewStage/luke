@@ -6,8 +6,9 @@
    satisfies the issue. Use deterministic fixtures instead of personal data or
    live provider state. Choose the test's size, its doubles, and its
    fixtures by root `AGENTS.md`'s "Testing" section.
-3. Run `pnpm check:affected` for portable-only work, then push and let CI, which
-   runs every check, gate the PR; `./scripts/check.sh` is the full local run,
+3. Push and let CI, which runs every check, gate the PR; running the tests you
+   touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a
+   push is optional, and `./scripts/check.sh` is the full local run,
    for a release, a broad refactor, or on request. For a web UI change, run
    `pnpm --filter @luke/web dev` and inspect the page in a browser. For a
    hosted-service change the Mac talks to, run `./scripts/run.sh --preview`
@@ -15,10 +16,10 @@
    the services build from (`scripts/vercel-ignore.sh --paths`) builds no
    Preview, and `run.sh --preview` finds the nearest one that did. A Preview run is
    an instance of its own beside the running Luke Dev, with its own sign-in
-   (`CONTRIBUTING.md`'s "Running more than one Luke Dev"). CI's jobs are Linux only;
-   the release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the
-   only Mac gate, so do not wait for a macOS check and do not read a green PR
-   as covering the Mac.
+   (`CONTRIBUTING.md`'s "Running more than one Luke Dev"). CI's jobs are Linux only,
+   and no workflow runs the tests on a Mac: `release.yml`'s `macos-15` job on a
+   tag push only builds, signs, notarizes, and verifies the app. Do not wait for
+   a macOS check and do not read a green PR as covering the Mac.
 4. Review the complete diff for secrets, machine-specific paths, generated
    files, unsafe IPC, unsupported provider behavior, and accidental scope
    expansion.

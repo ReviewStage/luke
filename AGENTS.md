@@ -8,17 +8,17 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | Command | What it does |
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
-| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; run before pushing |
+| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
 | `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
 | `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
-CI runs the portable check on Linux alone. The release rehearsal
-(`release.yml`'s `macos-15` job, run on a `v*` tag push or a manual dispatch)
-is the only Mac gate, so a green PR says nothing about the Mac and there is no
-macOS check to wait for.
+CI runs the portable check on Linux alone, and no workflow runs the tests on a
+Mac: the release job (`release.yml`'s `macos-15` job, run on a `v*` tag push or
+a manual dispatch) only builds, signs, notarizes, and verifies the app. A green
+PR says nothing about the Mac and there is no macOS check to wait for.
 
 ## Layout
 
@@ -108,16 +108,17 @@ token and wakes the agent with them, as the webhook does for the App.
 ## Testing
 
 ```
-pnpm check:affected                      # before pushing: the checks for what changed
+pnpm check:affected                      # optional: the checks for what changed
 ./scripts/check.sh                       # CI's checks, bar the Postgres job
 pnpm exec vitest run <path>              # one file
 pnpm --filter @luke/web test:store       # store tests on a real Postgres (CI's postgres job runs it)
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
-`pnpm check:affected` must exit 0 before a push; then push and let CI, which
-runs every check, gate the PR. `check.sh` is the full local run, for a
-release, a broad refactor, or on request, and must exit 0 when it is run.
+Push and let CI, which runs every check, gate the PR. Running the tests you
+touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
+is optional. `check.sh` is the full local run, for a release, a broad
+refactor, or on request, and must exit 0 when it is run.
 
 The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
 testing guide, and the rules below agree with it. Its `bunx vitest` is
@@ -246,7 +247,9 @@ foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
 probe, same terms), `tools/claude-code-probe/src/cli.ts` (the Claude Code
-sandbox probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
+sandbox probe, same terms), `packages/agent-runner/src/main.ts` (the coding
+agent's runner, its own process in the agent's sandbox, same terms), and
+`tools/trace-export/src/cli.ts` (the trace command).
 `Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
 `runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
 any of them — which is where a `Runtime<R>` went, v4 having removed the type —

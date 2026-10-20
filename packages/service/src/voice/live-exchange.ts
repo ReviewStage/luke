@@ -20,6 +20,7 @@ import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { AgentSessions } from "../agents/brain-host/eve-sessions.js";
+import type { CallBackend } from "./call-backend.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
@@ -53,8 +54,10 @@ export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake: it owns the voice row, is metered, and the deployment acts for it at eve's door. */
   readonly accountId: string;
   readonly liveSessionId: string;
-  /** The conversation the spoken asks and the record land in: the task's, under the member who opened it, whoever is calling. */
+  /** The conversation the spoken asks and the record land in: the task's, or the agent's the call names, under the member who opened it, whoever is calling. */
   readonly conversation: ConversationTarget;
+  /** Who answers the call's asks in that conversation: the task's brain, or the agent (`call-backend.ts`). */
+  readonly backend: CallBackend;
   /** The developer's time zone, which every spoken ask hands the brain's turn; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The store writer, which the voice writer writes through. */
@@ -83,8 +86,10 @@ export interface HostedLiveExchangeOptions {
 export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
-  /** The task the call is bound to, which its asks and its record land in. */
+  /** The task the call is bound to, whose conversation its asks and its record land in where it names no agent. */
   readonly taskId: string;
+  /** The agent of the task the call speaks into, whose conversation its asks and its record land in instead; none for a call about the task alone. */
+  readonly agentId?: string | undefined;
   /** The developer's time zone as the connection's opening frame named it, which the brain's turns read the day in; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The socket the service attached to the session, which the relay pipes and the exchange reads its sideband over. */
@@ -195,6 +200,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   const brain = yield* hostedLiveBrain({
     accountId,
     conversation,
+    backend: options.backend,
     timeZone: options.timeZone,
     asks: {
       asks: askRecord(),

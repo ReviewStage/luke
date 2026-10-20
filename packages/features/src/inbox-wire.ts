@@ -97,8 +97,9 @@ import {
  * new keys as nothing, and its `messages` leave out every message that
  * asks or answers, which those fields stand for, so such a desktop draws
  * neither twice; its `thread` carries every message, for a desktop from
- * version 5. A thread whose agent asks nothing waits on nobody, and stands
- * to an older desktop as a note already settled. The functions at the end
+ * version 5. A thread whose agent asks nothing, a notice, holds no ask and
+ * waits open on the developer's nod alone, which its agent never hears, and
+ * stands to an older desktop as a note to answer with Got it. The functions at the end
  * of this file map an ask to the version 4 response nearest it, a stored
  * response to the ask it stands for, and an older desktop's answer to the
  * answer of the open ask.
@@ -926,6 +927,8 @@ export const inboxMessageRequestSchema = EffectSchema.Struct({
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
   /** The answer to the thread's open ask, which names it; absent on a plain reply. */
   answers: EffectSchema.optionalKey(inboxAnswersSchema),
+  /** The revision of the notice the reply was written on, which it settles where the notice still stands there; absent where it settles none, as from a client before it. */
+  revision: EffectSchema.optionalKey(countedNumber),
 }).check(
   EffectSchema.makeFilter(
     ({ text, attachments, answers }) => answers !== undefined || hasWordsOrFiles(text, attachments),

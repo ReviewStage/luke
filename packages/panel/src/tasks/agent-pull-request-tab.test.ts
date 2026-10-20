@@ -584,7 +584,7 @@ function buttonWith(container: HTMLElement, label: RegExp): HTMLButtonElement | 
 
 /** The labels a thread's head wears beside its path, in order. */
 function threadLabels(thread: HTMLElement): string[] {
-  const head = thread.querySelector(".pull-request-thread-head")?.textContent ?? "";
+  const head = thread.querySelector(".annotation-card-head")?.textContent ?? "";
   return ["Resolved", "Outdated"].filter((label) => head.includes(label));
 }
 
@@ -1023,8 +1023,9 @@ test("a review that only left line comments draws each thread under it: its file
   const [open, folded] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
   assert.ok(open !== undefined && folded !== undefined, "both threads stand under the review");
   assert.equal(
-    open.querySelector(".pull-request-thread-head")?.textContent,
-    "src/invite.tslines 12–13",
+    open.querySelector(".annotation-card-where")?.textContent,
+    "src/invite.tsL12–13",
+    "the strip over the head names its file and lines",
   );
   const [preview] = previews;
   assert.ok(open.querySelector(".pull-request-thread-lines"), "the open thread's lines are drawn");
@@ -1057,19 +1058,18 @@ test("a review that only left line comments draws each thread under it: its file
     "once",
   );
   const more =
-    open.querySelector<HTMLButtonElement>(".pull-request-thread-more button") ??
+    open.querySelector<HTMLButtonElement>(".annotation-card-more button") ??
     assert.fail("the replies left on GitHub are counted");
   assert.equal(more.textContent, "2 more replies on GitHub");
   await act(async () => more.click());
   assert.deepEqual(opened, [`${PAGE}#discussion_r1`]);
 
-  const head =
-    folded.querySelector<HTMLElement>(".pull-request-thread-head") ?? assert.fail("a head");
+  const head = folded.querySelector<HTMLElement>(".annotation-card-head") ?? assert.fail("a head");
   assert.deepEqual(threadLabels(folded), ["Resolved", "Outdated"]);
   assert.match(
-    head.textContent ?? "",
-    /src\/old\.tsline 9/u,
-    "an outdated thread names the line it was made on",
+    folded.querySelector(".annotation-card-where")?.textContent ?? "",
+    /src\/old\.tsL9/u,
+    "an outdated thread names the line it was made on, folded too",
   );
   assert.equal(folded.querySelector(".pull-request-thread-comment"), null, "folded closed");
   act(() => head.click());
@@ -2591,12 +2591,12 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
   );
 });
 
-test("Review stands at the end of the tabs' row while the pull request is open or a draft, and nowhere once it is closed or merged", async () => {
+test("Review stands at the end of the tabs' row however the pull request stands, open, a draft, closed, or merged, as GitHub takes a review of each", async () => {
   const states = [
     [PULL_REQUEST_STATE.OPEN, true],
     [PULL_REQUEST_STATE.DRAFT, true],
-    [PULL_REQUEST_STATE.CLOSED, false],
-    [PULL_REQUEST_STATE.MERGED, false],
+    [PULL_REQUEST_STATE.CLOSED, true],
+    [PULL_REQUEST_STATE.MERGED, true],
   ] as const;
   for (const [state, offered] of states) {
     const tab = await draw(
@@ -2710,7 +2710,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   );
 });
 
-test("a review GitHub refuses says so in GitHub's own words inside the panel, never over the header, and the words written stand for another try; a merged pull request offers no Review", async () => {
+test("a review GitHub refuses says so in GitHub's own words inside the panel, never over the header, and the words written stand for another try", async () => {
   changeAnswer = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
     words: "Review Can not approve your own pull request",
@@ -2727,16 +2727,32 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
   );
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
   assert.equal(panel.querySelector("textarea")?.value, "LGTM");
-  act(() => root?.unmount());
-  root = undefined;
+});
 
+test("a merged pull request still takes a review, sent for the agent as one on an open one is, and keeps its comment box, as GitHub does", async () => {
   const merged = await draw(
-    controlAnswering({
-      pullRequest: () =>
-        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
-    }),
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED, mergedAt: 5_000 },
+          }),
+      },
+      PULL_REQUEST_STATE.MERGED,
+    ),
   );
-  assert.equal(buttonWith(merged, /^Review$/u), undefined);
+  assert.ok(merged.querySelector(".pull-request-comment-box"), "its comment box stands");
+  const panel = openReview(merged);
+  writeReview(panel, "Late, but LGTM");
+  await submitReview(panel, "Approve");
+  assert.deepEqual(changes.at(-1), [
+    AGENT.id,
+    {
+      action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+      event: REVIEW_EVENT.APPROVE,
+      body: "Late, but LGTM",
+    },
+  ]);
 });
 
 test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
@@ -3336,7 +3352,7 @@ test("a thread is replied on, resolved, and opened again from under its comments
   await settle();
   assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
   assert.match(
-    card().querySelector(".pull-request-thread-comments")?.textContent ?? "",
+    card().querySelector(".annotation-comments")?.textContent ?? "",
     /Renamed in the next push\./u,
     "the reply is drawn under the thread once read again",
   );
@@ -3752,6 +3768,20 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     );
   });
   assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go");
+  // The keyboard in the card lights its lines as the pointer does, and lets them go as it leaves.
+  const summary = note.querySelector<HTMLElement>("summary") ?? assert.fail("the card's head");
+  document.documentElement.dataset.keyboard = "true";
+  act(() => {
+    summary.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  assert.equal(lists.at(-1)?.selected?.selection.end, 13, "the focus lights its lines");
+  act(() => {
+    summary.dispatchEvent(
+      new FocusEvent("focusout", { bubbles: true, relatedTarget: document.body }),
+    );
+  });
+  assert.equal(lists.at(-1)?.selected, undefined, "the focus leaving lets them go");
+  delete document.documentElement.dataset.keyboard;
 
   act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
   await settle();
@@ -3796,6 +3826,13 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     );
   });
   assert.equal(litFrom(), 3, "back on the chip, the chip's lines light again");
+  // The keyboard in a thread the chip shows lights that thread's lines, not the chip's.
+  document.documentElement.dataset.keyboard = "true";
+  act(() => {
+    shown.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  delete document.documentElement.dataset.keyboard;
+  assert.equal(litFrom(), 12, "the focused thread lights its own lines");
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
@@ -4836,14 +4873,14 @@ test("every review thread's head leads with its chevron and ends with its ⋯, i
     ["its line", inline],
   ] as const) {
     const head =
-      root.querySelector<HTMLElement>("summary.pull-request-thread-head") ??
+      root.querySelector<HTMLElement>("summary.annotation-card-head") ??
       assert.fail(`the thread on ${where} has a head`);
     assert.ok(
       head.firstElementChild?.classList.contains("luke-disclosure-turn"),
       `on ${where}, the chevron leads the head`,
     );
     assert.ok(
-      head.lastElementChild?.classList.contains("pull-request-thread-menu"),
+      head.lastElementChild?.querySelector(".pull-request-thread-menu"),
       `on ${where}, the ⋯ ends it`,
     );
     assert.equal(head.getAttribute("aria-expanded"), "true");
@@ -5285,11 +5322,10 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
   const card = list.renderAnnotation(INVITE_FILE.path, "PRRC_start");
   assert.match(card.textContent ?? "", /dana.*Pending/u);
-  assert.deepEqual(
-    [...card.querySelectorAll(".pull-request-thread-head, .changes-comment-head")].map((head) =>
-      /Pending/u.test(head.textContent ?? ""),
-    ),
-    [true, false],
+  assert.match(card.querySelector(".annotation-card-head")?.textContent ?? "", /Pending/u);
+  assert.equal(
+    (card.textContent ?? "").split("Pending").length - 1,
+    1,
     "the card it starts wears Pending in its head alone",
   );
   assert.match(card.textContent ?? "", /Why four\?/u, "its words as GitHub rendered them");

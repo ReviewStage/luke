@@ -2,8 +2,10 @@ import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_PAYER,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
   type ContextWindow,
@@ -54,7 +56,12 @@ import {
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  CONVERSATION_RUNTIME,
+  type ConversationRuntime,
+  MESSAGE_SENDER,
+} from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
   awaitingLinesOf,
@@ -285,7 +292,26 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly mentionedServers?: readonly string[] | undefined;
   /** How the repository was reached for the Start; the App's where none is named. */
   readonly githubAccess?: GitHubAccess | undefined;
+  /** What answers the agent's conversation; eve where none is named. */
+  readonly runtime?: ConversationRuntime | undefined;
+  /** Who pays for the agent's model calls; none recorded where none is named. */
+  readonly payer?: CodingAgentPayer | undefined;
 };
+
+/**
+ * How an agent is run, as its rows hold it: what answers its conversation,
+ * eve for a conversation from before the column, the harness's own session
+ * or thread id, the digest of its runner's bearer, and who pays for it.
+ */
+export interface CodingAgentRouting {
+  readonly runtime: ConversationRuntime;
+  /** The harness's session or thread id; null on eve and before the harness answers one. */
+  readonly nativeSession: string | null;
+  /** The digest of the runner's bearer at Luke's MCP server; null where no runner holds one. */
+  readonly runnerTokenHash: string | null;
+  /** Who pays for the agent's model calls; null for an agent from before the column. */
+  readonly payer: CodingAgentPayer | null;
+}
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const CODING_AGENT_COLUMNS = {
@@ -533,16 +559,22 @@ const findAgentByKey = SqlSchema.findOneOption({
     ),
 });
 
+/** A runtime as a conversation's row holds it. */
+const RuntimeColumnSchema = Schema.Literals(Object.values(CONVERSATION_RUNTIME));
+/** A payer as the agent's row holds it. */
+const PayerColumnSchema = Schema.Literals(Object.values(CODING_AGENT_PAYER));
+
 const insertAgentConversation = SqlSchema.findOne({
-  Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({ userId: Schema.String, runtime: RuntimeColumnSchema, now: Schema.Date }),
   Result: IdRowSchema,
-  execute: ({ userId, now }) =>
+  execute: ({ userId, runtime, now }) =>
     Database.use((db) =>
       db
         .insert(conversations)
         .values({
           userId,
           kind: CONVERSATION_KIND.CODING_AGENT,
+          runtime,
           createdAt: now,
           lastActivityAt: now,
         })
@@ -571,6 +603,7 @@ const insertAgent = SqlSchema.findOne({
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
+    payer: Schema.NullOr(PayerColumnSchema),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -598,6 +631,7 @@ const insertAgent = SqlSchema.findOne({
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,
           githubAccess: write.githubAccess,
+          payer: write.payer,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -819,6 +853,75 @@ const updateAgentAuthor = SqlSchema.void({
   execute: ({ userId, agentId, author }) =>
     Database.use((db) =>
       db.update(codingAgent).set({ author }).where(reachableAgent(userId, agentId)),
+    ),
+});
+
+const findAgentRouting = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({
+    runtime: Schema.NullOr(RuntimeColumnSchema),
+    nativeSession: Schema.NullOr(Schema.String),
+    runnerTokenHash: Schema.NullOr(Schema.String),
+    payer: Schema.NullOr(PayerColumnSchema),
+  }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          runtime: conversations.runtime,
+          nativeSession: conversations.nativeSession,
+          runnerTokenHash: conversations.runnerTokenHash,
+          payer: codingAgent.payer,
+        })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(reachableAgent(userId, agentId))
+        .limit(1),
+    ),
+});
+
+/** The agent's conversation, where the account reaches the agent, as a write to the conversation's own columns picks it. */
+function reachableAgentConversation(userId: string, agentId: string): SQL {
+  return inArray(
+    conversations.id,
+    queryBuilder
+      .select({ id: codingAgent.conversationId })
+      .from(codingAgent)
+      .where(reachableAgent(userId, agentId)),
+  );
+}
+
+const updateAgentNativeSession = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    nativeSession: Schema.String,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, nativeSession }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ nativeSession })
+        .where(reachableAgentConversation(userId, agentId))
+        .returning({ id: conversations.id }),
+    ),
+});
+
+const updateAgentRunnerToken = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    runnerTokenHash: Schema.NullOr(Schema.String),
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, runnerTokenHash }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ runnerTokenHash })
+        .where(reachableAgentConversation(userId, agentId))
+        .returning({ id: conversations.id }),
     ),
 });
 
@@ -1370,7 +1473,11 @@ export function createCodingAgent(
         }
         if (reached.value.archived) return yield* new TaskArchived();
         const now = yield* DateTime.nowAsDate;
-        const conversation = yield* insertAgentConversation({ userId, now }).pipe(
+        const conversation = yield* insertAgentConversation({
+          userId,
+          runtime: started.runtime ?? CONVERSATION_RUNTIME.EVE,
+          now,
+        }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
@@ -1394,6 +1501,7 @@ export function createCodingAgent(
           disabledServers: storedServers(started.disabledServers ?? []),
           mentionedServers: storedServers(started.mentionedServers ?? []),
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
+          payer: started.payer ?? null,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -2049,6 +2157,41 @@ export function recordCodingAgentAuthor(
   author: CodingAgentAuthor,
 ): CodingAgentStoreEffect<void> {
   return updateAgentAuthor({ userId, agentId, author });
+}
+
+/** How the agent is run (`CodingAgentRouting`); nothing for an agent of a workspace the account is not in. */
+export function readCodingAgentRouting(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentRouting>> {
+  return Effect.map(
+    findAgentRouting({ userId, agentId }),
+    Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
+  );
+}
+
+/** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */
+export function recordCodingAgentNativeSession(
+  userId: string,
+  agentId: string,
+  nativeSession: string,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(
+    updateAgentNativeSession({ userId, agentId, nativeSession }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** The digest of the runner's bearer recorded on the agent's conversation, or null to retire it; answers whether the account reached the agent. */
+export function recordCodingAgentRunnerToken(
+  userId: string,
+  agentId: string,
+  runnerTokenHash: string | null,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(
+    updateAgentRunnerToken({ userId, agentId, runnerTokenHash }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */

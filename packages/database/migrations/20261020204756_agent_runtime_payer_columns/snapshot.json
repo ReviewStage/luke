@@ -1,15 +1,13 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "6c9502df-5da4-4adc-b10e-05df43af7b92",
-  "prevIds": ["64cc9604-448c-4f9c-85c0-9e3cc554989b"],
+  "id": "3a783747-d5be-4954-a5cf-cefaa500def7",
+  "prevIds": [
+    "45b99cda-d287-477b-954d-dc19cf8acb94",
+    "64cc9604-448c-4f9c-85c0-9e3cc554989b",
+    "9eac810c-3385-45ab-8eac-e63c88defb11"
+  ],
   "ddl": [
-    {
-      "isRlsEnabled": false,
-      "name": "account_chatgpt_host",
-      "entityType": "tables",
-      "schema": "public"
-    },
     {
       "isRlsEnabled": false,
       "name": "account_provider_key",
@@ -431,43 +429,10 @@
       "schema": "public"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account_chatgpt_host"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ext_agent_host_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account_chatgpt_host"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account_chatgpt_host"
+      "isRlsEnabled": false,
+      "name": "workspace_token_repository",
+      "entityType": "tables",
+      "schema": "public"
     },
     {
       "type": "text",
@@ -595,19 +560,6 @@
       "generated": null,
       "identity": null,
       "name": "fast_access",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account_provider_key"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "access_expires_at",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -4294,7 +4246,7 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -4469,6 +4421,19 @@
       "generated": null,
       "identity": null,
       "name": "github_access",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payer",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
@@ -7503,6 +7468,45 @@
       "table": "conversations"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runtime",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_session",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runner_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -9115,6 +9119,19 @@
       "table": "voice_sessions"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -9425,6 +9442,71 @@
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_integration_connection"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
     },
     {
       "nameExplicit": true,
@@ -12237,6 +12319,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "voice_sessions_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "detached_at",
           "isExpression": false,
           "asc": true,
@@ -12276,17 +12379,32 @@
       "table": "workspace_integration_connection"
     },
     {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "account_chatgpt_host_user_id_user_id_fkey",
-      "entityType": "fks",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "lower(\"repository\")",
+          "isExpression": true,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "workspace_token_repository_organization_repository",
+      "entityType": "indexes",
       "schema": "public",
-      "table": "account_chatgpt_host"
+      "table": "workspace_token_repository"
     },
     {
       "nameExplicit": false,
@@ -14019,6 +14137,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "voice_sessions_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["voice_session_id"],
       "schemaTo": "public",
       "tableTo": "voice_sessions",
@@ -14055,6 +14186,32 @@
       "entityType": "fks",
       "schema": "public",
       "table": "workspace_integration_connection"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "workspace_token_repository_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["added_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "workspace_token_repository_added_by_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "workspace_token_repository"
     },
     {
       "columns": ["user_id", "provider"],
@@ -14159,14 +14316,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "workspace_integration_connection"
-    },
-    {
-      "columns": ["user_id"],
-      "nameExplicit": false,
-      "name": "account_chatgpt_host_pkey",
-      "schema": "public",
-      "table": "account_chatgpt_host",
-      "entityType": "pks"
     },
     {
       "columns": ["id"],
@@ -14622,6 +14771,14 @@
       "name": "voice_sessions_pkey",
       "schema": "public",
       "table": "voice_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "workspace_token_repository_pkey",
+      "schema": "public",
+      "table": "workspace_token_repository",
       "entityType": "pks"
     },
     {
