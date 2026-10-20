@@ -223,10 +223,12 @@ import { TASK_RECORD_PART, type TaskRecordPart, taskRecordMoves } from "./task-r
 const NAME_SETTLE = Duration.seconds(5);
 
 /**
- * How long after a call's end the open plan's parked conversation read is
- * woken a second time. Note that the call's last journal can land after its
- * end, because the service closes the device's socket first and only then
- * waits on the writes it already started; this is that wait's margin.
+ * How long after a call's end its work is read, and the open plan's parked
+ * conversation read woken, a second time. Note that the turn's last work and
+ * journal can land after the call's end, because the service closes the
+ * device's socket first and only then waits on the writes it already
+ * started; this is that wait's margin. The transcript is read as the call's
+ * live mark moves instead (`followRecord`).
  */
 const TRANSCRIPT_SETTLE = Duration.seconds(5);
 
@@ -675,10 +677,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The tasks whose pages' mark moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
 
-  /** The tasks a call just ended about, whose parked conversation read the loop below wakes, and again once the call's last writes have had time to land. */
+  /** The tasks a call just ended about, whose work the loop below reads and whose parked conversation read it wakes, and both again once the call's last writes have had time to land. */
   const callEndWakes = yield* Queue.sliding<string>(1);
 
-  /** The tasks whose ended calls' marks moved, whose transcript and work are read once by the loop below. */
+  /** The tasks whose ended calls' marks moved, whose transcript is read once by the loop below. */
   const callRecordReads = yield* Queue.sliding<string>(1);
 
   /** The tasks whose plan one of Luke's plan edits may have moved, read one at a time by the loop below. */
@@ -1258,8 +1260,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Follows `taskId`'s pages and calls live while it is the open task: the
-   * pages read again once theirs move, and the transcript and the work once
-   * an ended call's do, every part on each seal's first delivery.
+   * pages read again once theirs move, and the transcript once an ended
+   * call's do, every part on each seal's first delivery.
    */
   function followRecord(taskId: string) {
     return followLive(taskId, {
@@ -2668,9 +2670,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(callEndWakes), (taskId) => {
-            // Note that the conversation's last journal may land after the call's end, so it is woken again after a wait.
-            const wake = Effect.sync(() => wakeConversation(taskId));
-            return Effect.andThen(wake, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), wake));
+            // Note that the turn's last work and journal may land after the call's end, so both are read again after a wait.
+            const read = Effect.suspend(() =>
+              gate() && view.activeTaskId === taskId
+                ? serial(readWork(taskId)).pipe(
+                    Effect.andThen(Effect.sync(() => wakeConversation(taskId))),
+                  )
+                : Effect.void,
+            );
+            return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
         ),
       );
@@ -2678,9 +2686,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.forever(
           Effect.flatMap(Queue.take(callRecordReads), (taskId) =>
             Effect.suspend(() =>
-              gate() && view.activeTaskId === taskId
-                ? serial(Effect.andThen(readTranscript(taskId), readWork(taskId)))
-                : Effect.void,
+              gate() && view.activeTaskId === taskId ? serial(readTranscript(taskId)) : Effect.void,
             ),
           ),
         ),

@@ -3468,7 +3468,7 @@ function callRow(lastSegment: number, closedAt: number | null) {
 }
 
 it.effect(
-  "the open task's pages are read again as their mark moves, and its transcript and work once an ended call's does, not on the call's activity or end",
+  "the open task's pages are read again as their mark moves and its transcript once an ended call's does, not on the call's activity, while its end reads the work now and once more after its writes settle",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
@@ -3497,30 +3497,37 @@ it.effect(
       // The first delivery reads every part, since the reads the task opened with may have missed it.
       yield* deliver([page(1)], []);
       assert.deepEqual(taken(), ["pages", "transcript"]);
-      assert.deepEqual(worked(), [INVITES]);
+      assert.deepEqual(worked(), []);
 
       yield* deliver([page(2)], []);
       assert.deepEqual(taken(), ["pages"]);
 
-      // A call's words landing while it stands, its activity, and its end read nothing.
+      // A call's words landing while it stands, and its activity, read nothing.
       yield* deliver([page(2)], [callRow(3, null)]);
       tasks.showActivity({
         type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
         planId: INVITES,
         notes: false,
       });
-      tasks.callEnded(INVITES);
-      yield* TestClock.adjust(Duration.minutes(1));
       yield* boardSettled;
       assert.deepEqual(taken(), []);
       assert.deepEqual(worked(), []);
 
-      // Its end, and its last words after, each read the transcript and the work.
+      // Its end reads the work, and again once a turn's later writes have had time to land, but not the transcript.
+      tasks.callEnded(INVITES);
+      yield* boardSettled;
+      assert.deepEqual(worked(), [INVITES]);
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* boardSettled;
+      assert.deepEqual(worked(), [INVITES]);
+      assert.deepEqual(taken(), []);
+
+      // Its end, and its last words after, each read the transcript as the ended call's mark moves.
       yield* deliver([page(2)], [callRow(3, 5_000)]);
       assert.deepEqual(taken(), ["transcript"]);
-      assert.deepEqual(worked(), [INVITES]);
       yield* deliver([page(2)], [callRow(4, 5_000)]);
       assert.deepEqual(taken(), ["transcript"]);
+      assert.deepEqual(worked(), []);
 
       // Leaving the task lets the subscriptions go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
