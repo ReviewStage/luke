@@ -6,7 +6,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { emitJsonSchema } from "@luke/wire/effect";
+import type { Schema } from "effect";
 import { expect, test } from "vitest";
+import developerTools from "../../../../../apps/dev/tools/developer.js";
+import reachTools from "../../../../../apps/dev/tools/reach.js";
+import workspaceTools from "../../../../../apps/dev/tools/workspace.js";
 import { bundleAuthoredModuleCode } from "../../../node_modules/eve/dist/src/internal/authored-module-loader.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
@@ -45,24 +49,19 @@ const TOOL_DIRECTORIES = ["tools", "subagents/worker/tools"] as const;
 /** The packages that are the store and the auth service, which only the host's own files reach. */
 const HOST_RUNTIME_PACKAGES = ["better-auth", "drizzle-orm", "pg"] as const;
 
-/** One tool as a resolver answers it, read for what the model is told of it. */
-interface ResolvedTool {
-  readonly description: string;
-  readonly inputSchema: unknown;
-}
-
-/** A tool file's export, read for its `session.started` resolver. */
-interface SessionToolFile {
-  readonly events: {
-    readonly "session.started"?: (event: unknown, ctx: unknown) => Promise<unknown>;
-  };
-}
+/** What a resolver is handed as a session starts, for the resolvers that read none of it. */
+const SESSION_START = {
+  model: null,
+  session: { id: "coder-session", auth: { current: null, initiator: null } },
+  channel: {},
+  messages: [],
+} as const;
 
 /** What each tool the agent is offered once its session starts is described by, as its own file once wrote it. */
-const SESSION_TOOL_DESCRIPTORS: ReadonlyMap<
+const SESSION_TOOL_DESCRIPTORS = new Map<
   string,
-  { readonly description: string; readonly inputSchema: Parameters<typeof emitJsonSchema>[0] }
-> = new Map([
+  { readonly description: string; readonly inputSchema: Schema.Top }
+>([
   [CODER_TOOL.CLOSE_INBOX_ITEM, INBOX_TOOLS.CLOSE],
   [CODER_TOOL.CREATE_ISSUE, CREATE_ISSUE_TOOL],
   [CODER_TOOL.CREATE_SECTION, CREATE_SECTION_TOOL],
@@ -146,15 +145,13 @@ test("the coding agent's tool files offer each of its tools once, and nothing el
  * neighbour's.
  */
 test("each tool resolved at a session's start is described by its own descriptor", async () => {
-  const resolved = new Map<string, ResolvedTool>();
-  for (const file of toolFiles("tools")) {
-    if (!readFileSync(`${CODER_ROOT}${file}`, "utf8").includes('"session.started"')) continue;
-    const module: { readonly default: SessionToolFile } = await import(`${CODER_ROOT}${file}`);
-    const tools = await module.default.events["session.started"]?.(undefined, undefined);
-    for (const [name, tool] of Object.entries(tools as Readonly<Record<string, ResolvedTool>>)) {
-      resolved.set(name, tool);
-    }
-  }
+  const resolved = new Map(
+    Object.entries({
+      ...(await developerTools.events["session.started"]?.(undefined, SESSION_START)),
+      ...(await reachTools.events["session.started"]?.(undefined, SESSION_START)),
+      ...(await workspaceTools.events["session.started"]?.(undefined, SESSION_START)),
+    }),
+  );
 
   expect([...resolved.keys()].sort()).toEqual([...SESSION_TOOL_DESCRIPTORS.keys()].sort());
   for (const [name, descriptor] of SESSION_TOOL_DESCRIPTORS) {
