@@ -21,8 +21,8 @@ import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, vi } from "vitest";
+import { orpcRoute } from "../server/orpc-route.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
-import macCommandsRoute from "../server/routes/mac-commands.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 
 /**
@@ -197,7 +197,7 @@ it.effect("the Mac's commands route refuses a session cookie every account route
       new Request(new URL(HOSTED_SERVICE_PATH.MAC_COMMANDS, OWN_ORIGIN), { headers: { cookie } });
 
     assert.deepEqual(yield* resolveHostedUserId(asked()), Option.some(userId));
-    assert.deepEqual(yield* answered(macCommandsRoute, asked()), {
+    assert.deepEqual(yield* answered(orpcRoute, asked()), {
       status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
       body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
     });

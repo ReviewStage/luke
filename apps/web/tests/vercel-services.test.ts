@@ -224,15 +224,24 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
   assert.equal(servedFile("/changelog"), "/changelog.html");
   assert.equal(servedFile("/changelog/page/2"), "/changelog/page/2.html");
   assert.equal(servedFile("/admin"), "/admin.html");
-  // An API path still reaches its function's route with the id it names, however its rewrite spells the rest.
+  // An API path still reaches the oRPC route with the whole path it names, and an exception its own route with the id.
+  for (const path of [
+    "/api/plans/x/board",
+    "/api/inbox/i1",
+    "/api/automations/x1/runs",
+    "/api/agents/a1",
+  ]) {
+    const served = new URL(servedFile(path) ?? "/", "https://tryluke.dev");
+    assert.equal(served.pathname, "/api/default.js", path);
+    assert.equal(served.searchParams.get("route"), "orpc", path);
+    assert.equal(served.searchParams.get("route-path"), path.slice("/api/".length), path);
+  }
   for (const [path, route] of [
-    ["/api/plans/x/board", "plans/board"],
-    ["/api/inbox/i1", "inbox/item"],
-    ["/api/automations/x1/runs", "automations/runs"],
-    ["/api/agents/a1", "agents/agent"],
+    ["/api/workspaces/w1/photo", "workspaces/photo"],
+    ["/api/automations/x1/webhook", "automations/webhook"],
   ] as const) {
     const served = new URL(servedFile(path) ?? "/", "https://tryluke.dev");
-    assert.match(served.pathname, /^\/api\//u, path);
+    assert.equal(served.pathname, "/api/default.js", path);
     assert.equal(served.searchParams.get("route"), route, path);
     assert.equal(served.searchParams.get("id"), path.split("/")[3], path);
   }

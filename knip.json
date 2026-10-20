@@ -41,6 +41,7 @@
     "apps/web": {
       "entry": [
         "server/routes/**/*.ts",
+        "server/orpc-route.ts",
         "src/*.tsx",
         "src/app/main.tsx",
         "src/entry-server.tsx",
