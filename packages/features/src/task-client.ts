@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -16,6 +16,7 @@ import {
 import type { Board, BoardElement } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
@@ -36,7 +37,6 @@ import {
 import { imageBodyOf } from "./image-body.js";
 import type { TaskBoardLiveAnswer } from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
-import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
@@ -134,6 +134,9 @@ export interface HostedTaskClientOptions {
 }
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
+/** The types a plan's attachment is served as: a picture's, or any a comment's file may be. */
+const attachmentTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
 
 /** A comment call that answered nothing to draw. */
 const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
@@ -641,11 +644,13 @@ export class HostedTaskClient {
   }
 
   /**
-   * One picture of one plan, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with a type a picture
-   * may be; not found where the plan is not one the account reaches or holds
-   * no such picture; unanswered for anything else, another media type
-   * included, so nothing a window draws is a type it did not expect.
+   * One attachment of one plan, a picture its text names or a file one of
+   * its comments carries, fetched under the account: its bytes in base64
+   * under its media type, where the service answered with a type a coding
+   * agent's file may be; not found where the plan is not one the account
+   * reaches or holds no such attachment; unanswered for anything else,
+   * another media type included, so nothing a window draws is a type it did
+   * not expect.
    */
   readPicture(
     taskId: string,
@@ -662,7 +667,7 @@ export class HostedTaskClient {
         const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
         return { failure: refused.ok ? TASK_CALL_FAILURE.UNANSWERED : refused.failure };
       }
-      const picture = yield* imageBodyOf(answer.response, pictureTypeSchema);
+      const picture = yield* imageBodyOf(answer.response, attachmentTypeSchema);
       return picture ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
   }

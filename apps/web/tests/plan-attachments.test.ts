@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createTask } from "@luke/database/models/task-store";
+import { PLAN_COMMENT_OUTCOME, startPlanCommentThread } from "@luke/database/models/plan-comments";
+import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import { PICTURE_BOUNDS, PICTURE_TYPE } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_BOUNDS,
   PLAN_ATTACHMENT_REFUSAL,
   planAttachmentAnswerSchema,
 } from "@luke/features/plan-attachment-wire";
+import { PLAN_COMMENT_ACTOR, PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { UserIdResolver } from "@luke/service/http/http-effect";
 import { hostedFetch } from "@luke/service/orpc/handler";
@@ -43,7 +46,9 @@ import { SqlClient } from "effect/sql";
  * and reads nothing, exactly as for a plan that does not exist; bytes that
  * are not the image their label names are refused; and a plan at its bound
  * refuses in band. An upload is answered by the hosted oRPC router at the
- * plan's public path, and refuses exactly as the old route did.
+ * plan's public path, and refuses exactly as the old route did. A file a
+ * comment on the plan carries is served at the same path, under the type
+ * it travelled as, to the same members alone.
  *
  * Synthetic accounts, bearers, and pictures throughout.
  */
@@ -160,6 +165,51 @@ const openSharedTask = Effect.gen(function* () {
 });
 
 it.layer(getTestDB())("a plan's picture routes", (it) => {
+  it.effect(
+    "a file a teammate's comment carries is served to every member as its bytes, and to nobody else",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, outsider, planId: taskId } = yield* openSharedTask;
+        const text = "## Goal\n\nInvites expire in seven days.\n";
+        yield* savePlanText(owner, taskId, text);
+        const pdf = new TextEncoder().encode("%PDF-1.4\n");
+        const from = text.indexOf("seven days");
+        const started = yield* startPlanCommentThread(
+          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: teammate },
+          taskId,
+          {
+            clientKey: randomUUID(),
+            scope: PLAN_COMMENT_SCOPE.WORDS,
+            quote: "seven days",
+            anchor: { from, to: from + "seven days".length },
+            text,
+            words: "The flow is attached.",
+            attachments: [
+              {
+                name: "flow.pdf",
+                mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF,
+                data: Buffer.from(pdf).toString("base64"),
+              },
+            ],
+          },
+        );
+        assert.ok(started.status === PLAN_COMMENT_OUTCOME.DONE && "thread" in started.answer);
+        const fileId = started.answer.thread.entries[0]?.files?.[0]?.attachmentId;
+        assert.ok(fileId !== undefined);
+
+        const served = yield* ask(read(taskId, fileId, owner));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.contentType, CODING_AGENT_ATTACHMENT_TYPE.PDF);
+        assert.equal(served.cache, "private, no-store");
+        assert.deepEqual(served.policy, SANDBOXED_PAGE);
+        assert.deepEqual([...served.bytes], [...pdf]);
+        assert.equal(
+          (yield* ask(read(taskId, fileId, outsider))).status,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+        );
+      }),
+  );
+
   it.effect(
     "a picture a teammate keeps on the plan is served to every member as its bytes, and to nobody else",
     () =>

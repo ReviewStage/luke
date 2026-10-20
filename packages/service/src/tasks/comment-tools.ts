@@ -80,7 +80,7 @@ export const READ_COMMENTS_TOOL = {
   name: AGENT_TOOL.READ_COMMENTS,
   description:
     "Read the comment threads on this task's plan: each thread's id, the words of the plan it is on and their section, " +
-    "whether those words were since deleted, and every comment with who wrote it and when. Open threads unless you ask " +
+    "whether those words were since deleted, and every comment with who wrote it, when, and the names of the files it carries. Open threads unless you ask " +
     "for resolved ones. Reading asks nothing of you: reply only to a thread someone sent you.",
   inputSchema: READ_INPUT,
 } as const;
@@ -149,6 +149,9 @@ function threadRead(thread: PlanCommentThread): WireRecord {
       by: writerOf(entry),
       at: new Date(entry.at).toISOString(),
       words: entry.words ?? "",
+      ...(entry.files === undefined
+        ? undefined
+        : { files: entry.files.map((file) => ({ name: file.name, type: file.mediaType })) }),
     }));
   const asked = thread.entries
     .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.asked !== undefined)
