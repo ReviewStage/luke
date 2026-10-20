@@ -56,6 +56,8 @@ import {
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
+  type GitHubTokenAnswerView,
+  githubTokenSaveParamsSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionsAnswerView,
@@ -136,6 +138,9 @@ export type CodingAgentClient = Pick<
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
+  | "readGitHubToken"
+  | "saveGitHubToken"
+  | "removeGitHubToken"
   | "readPlanTemplate"
   | "writePlanTemplate"
   | "readPlanTemplateRevisions"
@@ -296,6 +301,21 @@ function composed(
         const answer = yield* asked(client.removeProviderKey(removal));
         return carried<ProviderKeysAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
+      Effect.map(asked(client.readGitHubToken()), (answer) =>
+        carried<GitHubTokenAnswerView>(answer),
+      ),
+    [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
+      Effect.gen(function* () {
+        // Note that the sentence names the shape and never the value, because the value is a token.
+        const save = yield* read(githubTokenSaveParamsSchema, params, "a save names a token");
+        const answer = yield* asked(client.saveGitHubToken(save));
+        return carried<GitHubTokenAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
+      Effect.map(asked(client.removeGitHubToken()), (answer) =>
+        carried<GitHubTokenAnswerView>(answer),
+      ),
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* read(

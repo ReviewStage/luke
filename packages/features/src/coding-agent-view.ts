@@ -24,6 +24,7 @@ import {
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
+import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
@@ -154,6 +155,16 @@ export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
 });
 
 export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;
+
+/** The member's own GitHub token, as the window hears it read, saved, or removed: what it is, or why there is no answer. */
+export const githubTokenAnswerViewSchema = EffectSchema.Union([githubTokenAnswerSchema, failed]);
+
+export type GitHubTokenAnswerView = typeof githubTokenAnswerViewSchema.Type;
+
+/** Saving a token, as the window asks it: the token, once. */
+export const githubTokenSaveParamsSchema = githubTokenSaveRequestSchema;
+
+export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
 /** The account's plan template, as the window hears it read or written: the template as kept and whether the account wrote it, or why there is none. */
 export const planTemplateAnswerViewSchema = EffectSchema.Union([planTemplateAnswerSchema, failed]);

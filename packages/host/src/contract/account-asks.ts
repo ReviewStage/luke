@@ -1,6 +1,8 @@
 import {
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
+  githubTokenAnswerViewSchema,
+  githubTokenSaveParamsSchema,
   planTemplateAnswerViewSchema,
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionParamsSchema,
@@ -39,6 +41,21 @@ export const accountAskActsContract = {
   )
     .input(exactInput(providerKeyRemoveParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actProcedure(
+    "Could not read your GitHub token on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE]: actProcedure(
+    "Could not save your GitHub token on this system.",
+  )
+    .input(exactInput(githubTokenSaveParamsSchema))
+    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE]: actProcedure(
+    "Could not remove your GitHub token on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actProcedure(
     "Could not read your plan template on this system.",
   )

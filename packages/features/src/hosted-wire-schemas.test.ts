@@ -208,6 +208,8 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
     providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
     providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,
+    githubTokenAnswerViewSchema: codingAgentView.githubTokenAnswerViewSchema,
+    githubTokenSaveParamsSchema: codingAgentView.githubTokenSaveParamsSchema,
     dictationTranscribeParamsSchema: codingAgentView.dictationTranscribeParamsSchema,
     dictationTranscribeAnswerViewSchema: codingAgentView.dictationTranscribeAnswerViewSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,

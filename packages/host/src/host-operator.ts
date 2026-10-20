@@ -100,6 +100,9 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
+  type GitHubTokenAnswerView,
+  type GitHubTokenSaveParams,
+  githubTokenAnswerViewSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -649,6 +652,12 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key removed; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** The member's own GitHub token as its login, hint, and status; or why there is none. */
+  githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+  /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
+  githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
+  /** The member's GitHub token removed; none then stands. */
+  githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
   /** The account's plan template and whether it wrote it; or why there is none. */
   planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
   /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
@@ -1869,6 +1878,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    githubTokenRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
+        codingAgentAnswer(githubTokenAnswerViewSchema),
+      ),
+    githubTokenSave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: params.token }),
+        codingAgentAnswer(githubTokenAnswerViewSchema),
+      ),
+    githubTokenRemove: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
+        codingAgentAnswer(githubTokenAnswerViewSchema),
       ),
     planTemplateRead: () =>
       Effect.map(
