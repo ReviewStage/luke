@@ -294,6 +294,14 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
       refused() ??
       Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
     updateNetworkPolicy: () => Effect.void,
+    // What the browser never asks of its sandbox: a sandbox opened, retagged, or written, or a detached command.
+    create: () => Effect.fail(new SandboxUnavailable({})),
+    updateTags: () => Effect.void,
+    writeFiles: () => Effect.void,
+    start: () => Effect.fail(new SandboxUnavailable({})),
+    writeStdin: () => Effect.fail(new SandboxUnavailable({})),
+    commandExit: () => Effect.fail(new SandboxUnavailable({})),
+    kill: () => Effect.void,
   };
   return { api, ran };
 }
