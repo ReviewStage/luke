@@ -7406,6 +7406,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   height: 16px;
 }
 
+/* A finger opens a row on Home, so on a coarse pointer each row stands a
+   touch target tall, its words centred in it as at the pointer's height. */
+@media (pointer: coarse) {
+  .home-section .luke-list-row-main {
+    min-height: var(--luke-touch-target);
+  }
+}
+
 /* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
    Home's sections, headed by their face at the page's size beside their
    name and who they are here, and each block a section's gap under the
@@ -7623,6 +7631,37 @@ polygon.factory-campus-edge[data-edge="selected"] {
 ) {
   display: flex;
   flex-shrink: 0;
+}
+
+/* A card too narrow for every press's words, as on a phone, keeps its
+   round Start at the row's end: the Plan toggle and File for later draw
+   their marks alone (`new-task-composer.tsx`), the model chip's words are
+   what give way, cut short, and the microphone stands in the row in place
+   of a ⋯ that would hold it alone. */
+@container composer (max-width: 399px) {
+  .new-task-composer .agent-composer-actions .agent-model-chip {
+    flex-shrink: 1;
+  }
+
+  .new-task-composer .agent-composer > form:not(.inbox-answer) .dictate-button {
+    display: flex;
+  }
+
+  .new-task-composer .agent-composer-actions .agent-composer-more {
+    display: none;
+  }
+}
+
+/* The narrowest, where the + goes into the ⋯ too, the ⋯ stands again and
+   takes the microphone in with it. */
+@container composer (max-width: 239px) {
+  .new-task-composer .agent-composer > form:not(.inbox-answer) .dictate-button {
+    display: none;
+  }
+
+  .new-task-composer .agent-composer-actions .agent-composer-more {
+    display: inline-flex;
+  }
 }
 
 /* The issue picked, over the words inside the card: drawn as a
