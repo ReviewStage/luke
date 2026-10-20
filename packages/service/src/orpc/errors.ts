@@ -14,11 +14,23 @@ import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire"
 import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
 import { ORPCError } from "@orpc/server";
 import { Effect, Schema } from "effect";
-import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS, type HostedRefusal } from "../http/http-effect.js";
+import { ADMIN_REFUSAL_STATUS } from "../admin/http-effect.js";
+import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS } from "../http/http-effect.js";
 import type { HostedContext } from "./base.js";
 
+/**
+ * The status each refusal is answered with: the hosted vocabulary's, and the
+ * admin dashboard's own (`admin/http-effect.ts`), which a browser alone reads.
+ * A slug both spell (`not-found`, `method-not-allowed`, `unavailable`) has
+ * the same status in each.
+ */
+const REFUSAL_STATUS = { ...ADMIN_REFUSAL_STATUS, ...HOSTED_REFUSAL_STATUS };
+
 /** Every slug a refusal may carry, which is every slug that has a status. */
-const HOSTED_REFUSAL_SLUGS = Object.values(HOSTED_REFUSAL).map((refusal) => refusal.error);
+const REFUSAL_SLUGS = [
+  ...Object.values(HOSTED_REFUSAL).map((refusal) => refusal.error),
+  ...Object.keys(ADMIN_REFUSAL_STATUS),
+];
 
 /** oRPC's own code for an input that failed its schema, which the hosted vocabulary calls an invalid request. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -27,12 +39,12 @@ const ORPC_BAD_REQUEST = "BAD_REQUEST";
 const ORPC_PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE";
 
 /** The status each error code is answered with: oRPC's own codes as oRPC answers them, and every refusal as the hosted vocabulary does. */
-export const HOSTED_ERROR_STATUS = { ...COMMON_ERROR_STATUS_MAP, ...HOSTED_REFUSAL_STATUS };
+export const HOSTED_ERROR_STATUS = { ...COMMON_ERROR_STATUS_MAP, ...REFUSAL_STATUS };
 
 /** A refusal as the failure channel carries it: a slug that has a status, the reason a repository is out of reach, and an upstream's status, where it has them. */
 const isHostedRefusal = Schema.is(
   Schema.Struct({
-    error: Schema.Literals(HOSTED_REFUSAL_SLUGS),
+    error: Schema.Literals(REFUSAL_SLUGS),
     unreached: Schema.optionalKey(repositoryUnreachedSchema),
     upstreamStatus: Schema.optionalKey(Schema.Int),
   }),
@@ -42,13 +54,13 @@ const isHostedRefusal = Schema.is(
 const isRefusalFields = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
 /** The refusal as the error the contract declares: its slug the code, everything beside it the data. */
-function refusalError(refusal: HostedRefusal): ORPCError<string, object> {
+function refusalError(refusal: { readonly error: string }): ORPCError<string, object> {
   const { error, ...data } = refusal;
   return new ORPCError(error, { data });
 }
 
 /**
- * Runs around every effectful handler and middleware: a `HostedRefusal` in
+ * Runs around every effectful handler and middleware: a `HostedRefusal` (or an admin `AdminRefusal`) in
  * the failure channel becomes its declared error, and anything else passes
  * through as it was, so a failure that comes back through an outer layer is
  * left as the inner one made it.
@@ -71,7 +83,7 @@ export const hostedRefusalWrap: NonNullable<HostedContext["effect/wrap"]> = <A, 
  * groups answered a defect).
  */
 export function encodeHostedError(error: ORPCError<string, unknown>): object | null {
-  if (Object.hasOwn(HOSTED_REFUSAL_STATUS, error.code)) {
+  if (Object.hasOwn(REFUSAL_STATUS, error.code)) {
     return isRefusalFields(error.data)
       ? { error: error.code, ...error.data }
       : { error: error.code };

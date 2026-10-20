@@ -1,4 +1,3 @@
-import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   CONNECT_STEP,
   type ConnectStep,
@@ -7,11 +6,11 @@ import {
   LINK_FAILED,
   linkErrorWords,
 } from "@luke/features/connect-github-step";
+import { browserClient, browserRefusal } from "@luke/features/contract/browser-client";
 import {
   GITHUB_CONNECT_CLAIM,
   GITHUB_CONNECT_PAGE,
   type GitHubConnectClaim,
-  githubConnectClaimAnswerSchema,
 } from "@luke/features/github-connection-wire";
 import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
 import {
@@ -25,7 +24,6 @@ import {
   TextLink,
 } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
-import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BACK_TO_LUKE, CONNECT_RETURN, useConnectReturn } from "./connect-return";
@@ -52,8 +50,6 @@ import "./styles.css";
  */
 
 const authClient = createAuthClient();
-
-const decodeClaim = Schema.decodeUnknownOption(githubConnectClaimAnswerSchema);
 
 /** What the card shows: the work under way, a sign-in to choose, or how the work settled. */
 const VIEW = { WORKING: "working", SIGN_IN: "sign-in", SAID: "said" } as const;
@@ -91,17 +87,13 @@ function signIn(title: string, body: string): View {
 
 /** The intent claimed on this browser's session: how it settled, or why it did not. */
 async function claimIntent(intent: string): Promise<GitHubConnectClaim | ClaimUnsettled> {
-  const response = await fetch(HOSTED_SERVICE_PATH.GITHUB_CONNECT_CLAIM, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ intent }),
-  }).catch(() => undefined);
-  if (response === undefined) return CLAIM_UNSETTLED.UNANSWERED;
-  if (response.status === 401) return CLAIM_UNSETTLED.SIGNED_OUT;
-  if (!response.ok) return CLAIM_UNSETTLED.UNANSWERED;
-  const answer = decodeClaim(await response.json().catch(() => undefined));
-  return Option.isSome(answer) ? answer.value.claim : CLAIM_UNSETTLED.UNANSWERED;
+  try {
+    return (await browserClient.github.claim({ intent })).claim;
+  } catch (failure) {
+    return browserRefusal(failure)?.status === 401
+      ? CLAIM_UNSETTLED.SIGNED_OUT
+      : CLAIM_UNSETTLED.UNANSWERED;
+  }
 }
 
 /** Carries out a connect: claims the intent, then hands the browser to Better Auth's link. */

@@ -1,15 +1,13 @@
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { browserClient } from "@luke/features/contract/browser-client";
 import {
   INVITATION_OFFER_QUERY,
   INVITATION_OFFER_REFUSAL,
   type InvitationAcceptQuery,
   invitationAcceptQuery,
-  invitationOfferAnswerSchema,
 } from "@luke/features/workspace-invitation-wire";
 import { AuthPage, BUTTON_VARIANT, Button } from "@luke/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
@@ -40,8 +38,6 @@ const INVITATION_ERROR = {
   NOT_RECIPIENT: "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION",
   UNVERIFIED_ACCEPT: "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION",
 } as const;
-
-const decodeOffer = Schema.decodeUnknownOption(invitationOfferAnswerSchema);
 
 /** The HTTP status Better Auth answers an expired, used, canceled, or unknown invitation with. */
 const SPENT_STATUS = 400;
@@ -130,14 +126,10 @@ function refused(
 async function readInvitation(query: InvitationAcceptQuery, signedIn: string): Promise<View> {
   const { id } = query;
   if (id === undefined) return said("Nothing to accept", "Open the invitation link you were sent.");
-  const search = new URLSearchParams({ [INVITATION_OFFER_QUERY.ID]: id });
-  const response = await fetch(`${HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER}?${search}`, {
-    credentials: "same-origin",
-  }).catch(() => undefined);
-  if (response === undefined || !response.ok) return UNREACHED;
-  const read = decodeOffer(await response.json().catch(() => undefined));
-  if (Option.isNone(read)) return UNREACHED;
-  const answer = read.value;
+  const answer = await browserClient.workspaceInvitations
+    .offer({ [INVITATION_OFFER_QUERY.ID]: id })
+    .catch(() => undefined);
+  if (answer === undefined) return UNREACHED;
   if ("refused" in answer) {
     if (answer.refused === INVITATION_OFFER_REFUSAL.NOT_RECIPIENT) {
       return otherAddress({ invited: query.email, signedIn });

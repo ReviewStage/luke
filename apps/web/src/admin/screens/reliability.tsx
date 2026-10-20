@@ -1,5 +1,6 @@
 import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
 import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
+import { browserClient } from "@luke/features/contract/browser-client";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
@@ -14,6 +15,7 @@ import {
   ADMIN_ATTENTION_KIND,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
+  type AdminWindowedQuery,
 } from "@luke/service/admin/http";
 import {
   BADGE_TONE,
@@ -40,9 +42,9 @@ import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { RELIABILITY_PATH, reliabilityWindow, windowedReadPath } from "../routing";
+import { reliabilityWindow, windowedReadQuery } from "../routing";
 import { CHART_PAIR_EVEN, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 /**
  * reliability.tsx -- the admin Reliability screen: how often the service's
@@ -53,9 +55,12 @@ import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-r
 
 const RELIABILITY_ERROR = "The reliability endpoint did not answer.";
 
-// SAFETY: a 200 from the admin reliability endpoint is an AdminReliability body by its contract.
-const readReliability: AdminReader<AdminReliability> = async (response) =>
-  (await response.json()) as AdminReliability;
+/** The window's health, as the admin reliability procedure answers it. */
+const readReliability =
+  (query: AdminWindowedQuery): AdminReader<AdminReliability> =>
+  async (signal) =>
+    // SAFETY: the admin reliability procedure answers an AdminReliability (`@luke/service/admin/admin-reliability`), which the contract cannot name.
+    (await browserClient.admin.reliability(query, { signal })) as AdminReliability;
 
 /** How many providers the health list's bones stand for, about the list a deployment draws. */
 const HEALTH_BONE_ROWS = 12;
@@ -402,9 +407,10 @@ export function ReliabilityScreen({
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const shownWindow = reliabilityWindow(windowDays);
+  const query = windowedReadQuery(hideAdmins, shownWindow);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    windowedReadPath(RELIABILITY_PATH, hideAdmins, shownWindow),
-    readReliability,
+    { procedure: ADMIN_READ.RELIABILITY, query: query },
+    readReliability(query),
     RELIABILITY_ERROR,
   );
   const signOut = () => void withdraw(onSignOut);

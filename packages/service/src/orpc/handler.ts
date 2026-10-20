@@ -3,7 +3,9 @@
  *
  * Beside the encoder (`errors.ts`), three answers the handler alone would
  * give differently are made here: a success carries `cache-control:
- * private, no-store`, as `hostedJsonResponse` set it, and a refusal does not;
+ * private, no-store`, as `hostedJsonResponse` set it, unless its procedure
+ * set a `cache-control` of its own through the context's `resHeaders` (the
+ * admin gate's `no-store`, on its refusals too), and a refusal does not;
  * a request the router does not match is the hosted vocabulary's own 405 when
  * the path is a procedure's under another method and its 404 otherwise, as
  * `hostedMethod` and `hostedNotFoundRoute` answered them, where the handler
@@ -21,7 +23,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIMatcher } from "@orpc/openapi/standard";
 import type { Router } from "@orpc/server";
-import { RequestLimitHandlerPlugin } from "@orpc/server/plugins";
+import { RequestLimitHandlerPlugin, ResponseHeadersHandlerPlugin } from "@orpc/server/plugins";
 import type { Context } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
@@ -38,6 +40,7 @@ export type HostedFetch = (
   services: Context.Context<WebServices>,
 ) => Promise<Response>;
 
+const CACHE_CONTROL = "cache-control";
 const HOSTED_CACHE_CONTROL = "private, no-store";
 
 /**
@@ -71,8 +74,8 @@ function settled(response: Response): Response {
   if (response.status === HOSTED_HTTP_STATUS.INTERNAL_ERROR) {
     return new Response(null, { status: HOSTED_HTTP_STATUS.INTERNAL_ERROR });
   }
-  if (response.status < HOSTED_HTTP_STATUS.BAD_REQUEST) {
-    response.headers.set("cache-control", HOSTED_CACHE_CONTROL);
+  if (response.status < HOSTED_HTTP_STATUS.BAD_REQUEST && !response.headers.has(CACHE_CONTROL)) {
+    response.headers.set(CACHE_CONTROL, HOSTED_CACHE_CONTROL);
   }
   return response;
 }
@@ -82,7 +85,10 @@ export function hostedFetch(router: HostedRouter): HostedFetch {
   const handler = new OpenAPIHandler<HostedContext>(router, {
     errorStatusMap: HOSTED_ERROR_STATUS,
     customErrorResponseBodyEncoder: encodeHostedError,
-    plugins: [new RequestLimitHandlerPlugin({ maxBodySize: HOSTED_BODY_CEILING_BYTES })],
+    plugins: [
+      new RequestLimitHandlerPlugin({ maxBodySize: HOSTED_BODY_CEILING_BYTES }),
+      new ResponseHeadersHandlerPlugin(),
+    ],
   });
   const matcher = new OpenAPIMatcher(router);
   const servedUnderAnotherMethod = async (request: Request): Promise<boolean> => {

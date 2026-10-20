@@ -1,11 +1,9 @@
-import { adminApp } from "@luke/service/admin/admin-app";
-import { hostedAdminSeams } from "@luke/service/admin/admin-route";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
 /**
- * The Cost screen's read: what the hosted service spent over the window,
- * priced at read time from the usage its own tables keep. It lives behind
- * the group in `@luke/service/admin/admin-app`; this file only hands it the
- * deployment's real seams.
+ * The Cost screen's read (GET): what the hosted service spent over the window,
+ * priced at read time from the usage its own tables keep. Answered by the
+ * hosted oRPC router behind the admin gate
+ * (`packages/service/src/admin/admin-procedures.ts`).
  */
-export default routeFromHttpRouter(adminApp(hostedAdminSeams()));
+export default orpcRoute;

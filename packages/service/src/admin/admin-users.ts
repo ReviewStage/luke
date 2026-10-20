@@ -3,16 +3,14 @@ import { Clock, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import type { AdminSignInMethods } from "./admin-metrics.js";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
   type AdminMetricsWindow,
+  type AdminUsersQuery,
   adminMetricsScope,
   adminMetricsWindow,
   adminUsersSearch,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -131,7 +129,7 @@ export function buildAdminUserList(
 }
 
 export interface AdminUsersOptions {
-  request: Request;
+  query: AdminUsersQuery;
   /** The signed-in admin the roster is read for: the favorites are theirs. */
   viewer: AdminViewer;
   /** Reads the roster as one viewer sees it: the favorites are theirs. */
@@ -151,31 +149,24 @@ export interface AdminUsersOptions {
  */
 export function handleAdminUsers(
   options: AdminUsersOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminUserList, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
-  const search = adminUsersSearch(request.url);
-  if (search === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH));
-  }
+  const search = adminUsersSearch(query.search);
+  if (search === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_SEARCH);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     options
       .readUsers(
         now,
-        adminMetricsScope(request.url),
+        adminMetricsScope(query.scope),
         options.viewer.userId,
         windowDays,
         search.term,
       )
-      .pipe(
-        Effect.map((users) => jsonResponse(ADMIN_HTTP_STATUS.OK, users)),
-        Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause)),
-      ),
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause))),
   );
 }
