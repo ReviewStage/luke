@@ -571,7 +571,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     model: (admitted) => modelFor(admitted),
 
-    relaysQuietly: foldedQuietly,
+    relaysQuietly: (event, state) => foldedQuietly(event, state, seams.now()),
 
     relay: (event, admitted, session, state, prompt, chat) =>
       Effect.gen(function* () {
