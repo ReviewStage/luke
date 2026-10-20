@@ -142,6 +142,18 @@
     min-width: 0;
   }
 
+  /* A dense row's description is a label beside its title, so it fades as
+     the title does (below) rather than ending in an ellipsis. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  .luke-list-row-description[data-overflow] {
+    text-overflow: clip;
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-description[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     > .luke-list-row-actions {
     padding-inline-end: var(--luke-space-8);
@@ -243,16 +255,16 @@
     font-weight: var(--luke-weight-medium);
   }
 
-  /* A title that fades rather than ending in an ellipsis (a row whose acts
-     come in on hover) fades out over its last few pixels only while it is
-     measured cut short, so a short one ends on its last letter. The mask
-     fades the words themselves, so it reads alike over every fill the row
-     wears. */
-  .luke-list-row-title[data-end="fade"] {
+  /* A title fades rather than ending in an ellipsis, as a browser's tab
+     does, out over its last few pixels only while it is measured cut short,
+     so a short one ends on its last letter; a row whose acts come in on
+     hover reads the cut sliding as they come and go. The mask fades the
+     words themselves, so it reads alike over every fill the row wears. */
+  .luke-list-row-title[data-overflow] {
     text-overflow: clip;
   }
 
-  .luke-list-row-title[data-end="fade"][data-overflow="true"] {
+  .luke-list-row-title[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
@@ -309,8 +321,12 @@
   .luke-list-row-lead-label {
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The name of what a row belongs to fades where its chip cuts it short. */
+  .luke-list-row-lead-label[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
   /* The title gives way first; past it, the metadata is cut short rather
@@ -502,6 +518,39 @@
     }
   }
 
+  /* Where the metadata stands on the title's line, the acts that come in
+     stand over that line's end, and the metadata gives its room up to the
+     title, which is cut where the acts begin (`--luke-list-row-acts`, the
+     width the row measured them at) and fades out there, as a row whose
+     metadata stands at its middle cuts it; so a long title never runs under
+     the acts and a short one never jumps. */
+  .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):is(
+    :has(:focus-visible),
+    [data-menu-open="true"]
+  ) .luke-list-row-meta {
+    display: none;
+  }
+
+  .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):is(
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
+    .luke-list-row-head {
+    padding-inline-end: max(0px, var(--luke-list-row-acts, 0px) - var(--luke-space-12));
+  }
+
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):hover
+      .luke-list-row-meta {
+      display: none;
+    }
+
+    .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):hover
+      .luke-list-row-head {
+      padding-inline-end: max(0px, var(--luke-list-row-acts, 0px) - var(--luke-space-12));
+    }
+  }
+
   /* A screen with no hover never has a row in hand, so each row there keeps
      its metadata at rest, its acts offered by its menu on a long press
      (`menu.tsx`), and the open row alone shows its acts in the room the
@@ -520,6 +569,20 @@
     .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"])
       .luke-list-row-actions {
       position: static;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"][data-meta="title"]:has(
+        .luke-list-row-actions
+      )
+      .luke-list-row-meta {
+      display: none;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"][data-meta="title"]:has(
+        .luke-list-row-actions
+      )
+      .luke-list-row-head {
+      padding-inline-end: max(0px, var(--luke-list-row-acts, 0px) - var(--luke-space-12));
     }
 
     .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"]):has(

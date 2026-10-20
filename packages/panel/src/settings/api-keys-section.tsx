@@ -94,6 +94,8 @@ function keyStatusWords(provider: ProviderKeyProvider, status: ProviderKeyStatus
       return `Out of quota or credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return "This key can no longer be read.";
+    case PROVIDER_KEY_STATUS.UNVERIFIED:
+      return "Not checked yet";
   }
 }
 

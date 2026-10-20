@@ -10,12 +10,13 @@ import {
   turnsBefore,
 } from "@luke/database/models/message-reads";
 import { conversationOwnerOf } from "@luke/database/models/recorded-session";
-import { readTask, type TaskStoreEffect } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   TASK_WORK_BOUNDS,
   type TaskShownCode,
   type TaskWorkAnswer,
 } from "@luke/features/tasks-view";
+import type { ToolSet } from "ai";
 import { Effect, Option } from "effect";
 import { BRAIN_DELEGATION_TOOLS } from "../agents/brain-host/brain.js";
 import { isStoredToolPart, storedToolName } from "../core.js";
@@ -57,18 +58,25 @@ import {
 export const brainDelegationJournalsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
 ) {
-  const rows = yield* brainDelegationRowsOf(userId, conversationId);
+  const rows = yield* brainDelegationRowsOf(userId, conversationId, tools);
   return rows.map((row) => row.message);
 });
 
-/** The rows of the conversation's journals that delegate to the worker, as `brainDelegationJournalsOf` reads them, each with the turn it is the journal of. */
+/**
+ * The rows of the conversation's journals that delegate to the worker, as
+ * `brainDelegationJournalsOf` reads them, each with the turn it is the
+ * journal of: read under the brain's tools, or under the tools given for a
+ * conversation another backend runs, such as an agent's a call speaks into.
+ */
 export const brainDelegationRowsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
 ) {
   const reads = yield* Effect.forEach([...BRAIN_DELEGATION_TOOLS], (name) =>
-    listJournalsCalling(userId, conversationId, HOSTED_TOOL_SET, name),
+    listJournalsCalling(userId, conversationId, tools, name),
   );
   return reads
     .flatMap((read) => (read.ok ? read.value : []))
@@ -146,7 +154,7 @@ export function readTaskWork(
   before: string | undefined,
 ): TaskStoreEffect<Option.Option<TaskWorkAnswer>> {
   return Effect.gen(function* () {
-    const task = yield* readTask(userId, taskId);
+    const task = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(task)) return Option.none();
     const { conversationId } = task.value;
     const newest = before === undefined;
@@ -189,7 +197,7 @@ export function readTaskCode(
   taskId: string,
 ): TaskStoreEffect<Option.Option<{ readonly code: readonly TaskShownCode[] }>> {
   return Effect.gen(function* () {
-    const task = yield* readTask(userId, taskId);
+    const task = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(task)) return Option.none();
     const { conversationId } = task.value;
     const owner =

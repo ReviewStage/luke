@@ -4,7 +4,7 @@ import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } fro
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
-import { microphoneAccessRow, voiceAttentionNote } from "@luke/voice/microphone-access";
+import { voiceAttentionNote } from "@luke/voice/microphone-access";
 import type {
   MicrophoneControl,
   NotificationsControl,
@@ -12,7 +12,6 @@ import type {
   UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
-import type { SettingsSearchInput } from "../settings-search.js";
 import { AccountSection } from "./account-section.js";
 import { AppearanceSection } from "./appearance-page.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
@@ -21,11 +20,12 @@ import { type IntegrationsFilter, IntegrationsSection } from "./integrations-pag
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
 import { NotificationsSection } from "./notifications-section.js";
+import { settingsRowsInput } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { UpdatesSection } from "./updates.js";
 import { ShortcutSection } from "./voice-keys.js";
 import { VoiceSection } from "./voice-page.js";
-import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
+import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 import { useSettingsWrites } from "./writes.js";
 
 /**
@@ -56,39 +56,6 @@ export interface SettingsPanelProps {
   capabilities: readonly HostCapability[];
   /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
-}
-
-/**
- * What the pages currently offer, read afresh each render: every row's own
- * condition is judged from this one record, by the rows the pages draw and by
- * the search corpus alike, so a result never leads to a page without its row.
- * Absent until the settings have arrived.
- */
-export function settingsRowsInput({
-  settings,
-  microphone,
-  account,
-  capabilities,
-  workspace,
-}: {
-  settings?: AppSettingsView | undefined;
-  microphone: MicrophoneControl;
-  account: AccountSnapshot;
-  capabilities: readonly HostCapability[];
-  workspace?: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId"> | undefined;
-}): SettingsSearchInput | undefined {
-  if (!settings) return undefined;
-  const accountDrawn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  return {
-    settings,
-    voiceControlsDrawn: microphoneAccessRow({
-      voiceAvailable: microphone.voiceAvailable,
-      status: microphone.status,
-    }).ready,
-    accountDrawn,
-    capabilities,
-    workspace: accountDrawn && workspace ? shownWorkspace(workspace) : undefined,
-  };
 }
 
 /**

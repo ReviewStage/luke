@@ -3,7 +3,7 @@ import { SHOW_PAGE_TOOL } from "@luke/service/tasks/page-tool";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { offeredPlanTools, runShowPageTool } from "../host.js";
+import { offeredTaskTools, runShowPageTool } from "../host.js";
 
 /**
  * show_page.ts -- the agent shows the developer an interactive HTML page in the task's side panel, or a new version of one.
@@ -19,7 +19,7 @@ import { offeredPlanTools, runShowPageTool } from "../host.js";
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.SHOW_PAGE)
+      (await offeredTaskTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.SHOW_PAGE)
         ? defineTool({
             description: SHOW_PAGE_TOOL.description,
             inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),

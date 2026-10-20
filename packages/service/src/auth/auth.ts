@@ -20,6 +20,7 @@ import {
   JWT_KEY_STORAGE,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
+  SESSION_COOKIE_CACHE,
   USER_FIELDS,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
@@ -81,6 +82,7 @@ export const auth = betterAuth({
   database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
   user: USER_FIELDS,
+  session: SESSION_COOKIE_CACHE,
   disabledPaths: [...DISABLED_AUTH_PATHS],
   socialProviders: socialProviders(secrets),
   plugins: [

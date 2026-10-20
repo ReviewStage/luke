@@ -29,6 +29,7 @@ import { listTaskSections, writeTaskSections } from "@luke/database/models/task-
 import {
   listTasks,
   readTask,
+  readTaskHeader,
   type StoredTask,
   type TaskChanges,
   updateTask,
@@ -101,8 +102,9 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
+import { agentStarterName, controlsAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import type { EveSessions } from "./brain-host/eve-sessions.js";
+import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
@@ -457,7 +459,7 @@ type AgentCaller =
 export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
-  readonly eve: EveSessions | undefined;
+  readonly eve: AgentSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -1070,7 +1072,8 @@ interface AgentReading {
   readonly effort: string;
   readonly status: CodingAgentStatus;
   readonly failureReason?: CodingAgentFailure;
-  readonly repository: string;
+  /** The repository it works in; null for an agent with none. */
+  readonly repository: string | null;
   readonly branch: string | null;
   readonly activity: string | null;
   /** The agent's mention, `[@title](link)`, as the caller writes it to name the agent in its words. */
@@ -1250,9 +1253,10 @@ function agentMention(agent: CodingAgent, workspace: string): string {
   );
 }
 
-/** How a coding agent names itself to another: its title, its id to answer it by, and its repository. */
+/** How a coding agent names itself to another: its title, its id to answer it by, and its repository where it has one. */
 function agentIntroduction(agent: CodingAgent): string {
-  return `"${agentName(agent)}" (agent id ${agent.id}), working in ${agent.repository}`;
+  const working = agent.repository === null ? "" : `, working in ${agent.repository}`;
+  return `"${agentName(agent)}" (agent id ${agent.id})${working}`;
 }
 
 /** The words a coding agent's message hands the other: who sent them and how to answer, then its own. */
@@ -1304,8 +1308,8 @@ export const orStoreRefusal = <R>(
 export const workedRepository = (caller: AgentCaller) =>
   caller.kind === AGENT_CALLER.AGENT
     ? Effect.succeed<string | null>(caller.agent.repository)
-    : Effect.map(readTask(caller.plan.userId, caller.plan.taskId), (read) =>
-        Option.isSome(read) ? read.value.task.repository : null,
+    : Effect.map(readTaskHeader(caller.plan.userId, caller.plan.taskId), (read) =>
+        Option.isSome(read) ? read.value.repository : null,
       );
 
 /**
@@ -1487,6 +1491,9 @@ export function runMessageAgent(
       const { agent } = found.value;
       if (agent.archivedAt !== null)
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED);
+      if (!controlsAgent(callerUserId(caller), agent)) {
+        return agentToolRejected(`Not sent: only ${yield* agentStarterName(agent)} can do this.`);
+      }
       const sent = yield* steerCodingAgent(eve, call.writer, callerUserId(caller), agent, {
         ...line,
         clientKey: call.clientKey,
@@ -1558,6 +1565,9 @@ const sourceLanding = (
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
     const { agent: source, task, workspaceId } = found.value;
+    if (!controlsAgent(callerUserId(caller), source)) {
+      return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
+    }
     if (source.taskId === null) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_TASK);
     if (named !== undefined && named !== source.taskId) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
@@ -1897,7 +1907,7 @@ interface RecordedRepository {
 export const reachedRepository = (
   workspaceId: string,
   repository: string | null,
-  member: string,
+  member: string | undefined,
 ) =>
   repository === null
     ? Effect.succeed<Result.Result<RecordedRepository, string>>(
@@ -1961,10 +1971,12 @@ export function runUpdateTask(
       if (placing !== undefined && Result.isFailure(placing)) {
         return agentToolRejected(placing.failure);
       }
+      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
+      const owner = read.value.ownerId === userId ? userId : undefined;
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository, userId);
+          : yield* reachedRepository(workspace.value, changes.repository, owner);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }
@@ -2065,7 +2077,7 @@ export function runUpdateTask(
 }
 
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
-function stopRefusalWords(refusal: HostedRefusal, eve: EveSessions | undefined): string {
+function stopRefusalWords(refusal: HostedRefusal, eve: AgentSessions | undefined): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
   return eve === undefined ? STOP_AGENT_REFUSAL.NO_SERVICE : STOP_AGENT_REFUSAL.UNAVAILABLE;
 }
@@ -2088,7 +2100,7 @@ function stopStands(turn: CodingAgentLatestTurn | undefined): boolean {
  * so a deployment with no eve still answers an idle agent as idle.
  */
 const stopOf = (
-  eve: EveSessions | undefined,
+  eve: AgentSessions | undefined,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key: string,

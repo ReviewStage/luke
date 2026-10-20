@@ -25,7 +25,9 @@ import {
   deleteTask,
   listTasks,
   nameUntitledTask,
+  openTaskConversation,
   readTask,
+  readTaskHeader,
   readTaskWorkspace,
   TaskArchived,
   updateTask,
@@ -353,6 +355,44 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         yield* updateTask(dean, taskId, { organizationId: elsewhere });
         assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(elsewhere));
         assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a plan's header names where it stands and whose it is to every member, follows its archive and its conversation, and names nothing to an account outside it or for a plan that is none",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const stranger = yield* openAccount;
+        const workspace = Option.getOrThrow(yield* readTaskWorkspace(dean, taskId));
+        const started = {
+          workspaceId: workspace,
+          ownerId: dean,
+          name: SHARED_TASK.name,
+          repository: null,
+          archived: false,
+          conversationId: undefined,
+        };
+
+        assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
+        assert.deepEqual(yield* readTaskHeader(charles, taskId), Option.some(started));
+        assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
+        assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
+
+        const { conversationId } = Option.getOrThrow(yield* openTaskConversation(charles, taskId));
+        yield* updateTask(dean, taskId, { archived: true });
+        const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
+        assert.deepEqual(header, { ...started, archived: true, conversationId });
+        // The header agrees with the whole read on everything it answers.
+        const whole = Option.getOrThrow(yield* readTask(charles, taskId));
+        assert.deepEqual(header, {
+          workspaceId: whole.task.workspaceId,
+          ownerId: whole.ownerId,
+          name: whole.task.name,
+          repository: whole.task.repository,
+          archived: whole.task.archivedAt !== undefined,
+          conversationId: whole.conversationId,
+        });
       }),
   );
 });

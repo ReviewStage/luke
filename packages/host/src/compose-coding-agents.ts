@@ -53,9 +53,12 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentTranscriptKeySchema,
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
+  type GitHubTokenAnswerView,
+  githubTokenSaveParamsSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionsAnswerView,
@@ -65,6 +68,7 @@ import {
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
@@ -73,24 +77,41 @@ import {
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
 } from "@luke/features/pull-request-chapters-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
+import {
+  followTranscript,
+  type TranscriptFollows,
+  TranscriptKey,
+  transcriptFollows,
+  transcriptPast,
+} from "./transcript-follow.js";
 
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
- * Nothing is held here. The window holds the agents it draws and the
- * cursor it reads from, asks when a task opens, when it starts or stops an
- * agent, and while an agent's tab shows its running transcript, and every
- * ask is one call of the service answered whole. The transcript read is
- * one the service holds open while the agent runs and nothing new stands,
- * and the inbox read another, held while nothing in it changed, and the
+ * Nothing is held here but the transcripts' subscriptions. The window holds
+ * the agents it draws and the cursor it reads from, asks when a task opens,
+ * when it starts or stops an agent, and while an agent's tab shows its
+ * running transcript, and every ask is one call of the service answered
+ * whole. The transcript read is held open here while the agent runs and
+ * nothing new stands, on a Neon Realtime subscription to what its pages are
+ * read from (`transcript-follow.ts`), which a sign-out lets go; the inbox
+ * read is one the service holds open, held while nothing in it changed, and the
  * chat read a third, held while nothing in the workspace's chat moved, so each of
  * the window's loops is one held read after another rather than a clock of
  * its own, and a loop ends when the window stops asking. What waits across
@@ -114,7 +135,8 @@ export type CodingAgentClient = Pick<
   | "list"
   | "listWorkspace"
   | "start"
-  | "messages"
+  | "messagesNow"
+  | "agentTranscriptLive"
   | "message"
   | "choose"
   | "rename"
@@ -136,6 +158,9 @@ export type CodingAgentClient = Pick<
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
+  | "readGitHubToken"
+  | "saveGitHubToken"
+  | "removeGitHubToken"
   | "readPlanTemplate"
   | "writePlanTemplate"
   | "readPlanTemplateRevisions"
@@ -158,12 +183,17 @@ export type CodingAgentClient = Pick<
 >;
 
 export interface CodingAgentsDependencies {
-  kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
+  /** Realtime's client at an address, which a transcript is followed over; Realtime's own outside a test. */
+  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
-export type CodingAgentsComposer = Composer;
+export interface CodingAgentsComposer extends Composer {
+  /** Every transcript's subscription let go, as a sign-out lets them go. */
+  readonly reset: Effect.Effect<void>;
+}
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
@@ -171,23 +201,39 @@ export function composeCodingAgents(
   dependencies: CodingAgentsDependencies,
 ): Effect.Effect<CodingAgentsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    return composed(dependencies, yield* HttpClient.HttpClient);
+    const http = yield* HttpClient.HttpClient;
+    const asked = askedOf(dependencies, http);
+    const transcripts = yield* transcriptFollows({
+      seal: (key, poll) =>
+        asked(dependencies.client.agentTranscriptLive(key.agentId, key.callId, poll)),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: dependencies.kernel.now,
+    });
+    const followed = yield* FiberMap.make<TranscriptKey>();
+    return composed(dependencies, http, transcripts, followed);
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(
-  dependencies: CodingAgentsDependencies,
-  http: HttpClient.HttpClient,
-): CodingAgentsComposer {
-  const { kernel, account, client } = dependencies;
+/** The service asked behind the gate, over the host's own HTTP client. */
+function askedOf({ kernel, account }: CodingAgentsDependencies, http: HttpClient.HttpClient) {
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
-
-  /** The service asked behind the gate, over the host's own HTTP client. */
-  const asked = <Answer>(
+  return <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
     gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+}
+
+/** The composer's one table, built from its seams; nothing here starts anything but a transcript's subscription, while a window reads it. */
+function composed(
+  dependencies: CodingAgentsDependencies,
+  http: HttpClient.HttpClient,
+  transcripts: TranscriptFollows,
+  /** The transcripts main follows for its windows, one fiber each. */
+  followed: FiberMap.FiberMap<TranscriptKey>,
+): CodingAgentsComposer {
+  const { kernel, account, client } = dependencies;
+  const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+  const asked = askedOf(dependencies, http);
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -198,6 +244,20 @@ function composed(
     const result = readEither(schema)(unparsedWire(params));
     return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
   };
+
+  /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
+  const agentTranscriptOf = (
+    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
+  ) =>
+    Effect.gen(function* () {
+      const sentence = "following a transcript names an agent, and a worker's call where it is one";
+      const transcript = yield* read(codingAgentTranscriptKeySchema, params, sentence);
+      if (transcript.kind !== TRANSCRIPT_KIND.AGENT) return yield* invalid(sentence);
+      return {
+        transcript,
+        key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
+      };
+    });
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -296,6 +356,21 @@ function composed(
         const answer = yield* asked(client.removeProviderKey(removal));
         return carried<ProviderKeysAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
+      Effect.map(asked(client.readGitHubToken()), (answer) =>
+        carried<GitHubTokenAnswerView>(answer),
+      ),
+    [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
+      Effect.gen(function* () {
+        // Note that the sentence names the shape and never the value, because the value is a token.
+        const save = yield* read(githubTokenSaveParamsSchema, params, "a save names a token");
+        const answer = yield* asked(client.saveGitHubToken(save));
+        return carried<GitHubTokenAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
+      Effect.map(asked(client.removeGitHubToken()), (answer) =>
+        carried<GitHubTokenAnswerView>(answer),
+      ),
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* read(
@@ -332,8 +407,36 @@ function composed(
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
-        const answer = yield* asked(client.messages(agentId, after, callId));
+        const answer = gate()
+          ? yield* transcriptPast(transcripts, new TranscriptKey({ agentId, callId }), {
+              now: asked(client.messagesNow(agentId, after, callId)),
+            })
+          : UNANSWERED;
         return carried<CodingAgentMessagesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { transcript, key } = yield* agentTranscriptOf(params);
+        const tell = (page: CodingAgentMessagesAnswerView) =>
+          Effect.sync(() =>
+            kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
+          );
+        const follow = gate()
+          ? followTranscript(
+              transcripts,
+              key,
+              (after) => asked(client.messagesNow(key.agentId, after, key.callId)),
+              tell,
+            )
+          : tell(UNANSWERED);
+        yield* FiberMap.run(followed, key, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { key } = yield* agentTranscriptOf(params);
+        yield* FiberMap.remove(followed, key);
+        return {};
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
       Effect.gen(function* () {
@@ -673,5 +776,10 @@ function composed(
       }),
   };
 
-  return { methods, lifetime: Effect.void };
+  const reset = Effect.gen(function* () {
+    yield* FiberMap.clear(followed);
+    for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
+  });
+
+  return { methods, lifetime: Effect.void, reset };
 }

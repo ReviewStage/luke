@@ -1,5 +1,9 @@
-import type { FileChip } from "@luke/features/attachment-model";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
+} from "@luke/features/coding-agent-view";
+import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   inboxAttachmentOf,
@@ -81,7 +85,8 @@ import { plainWords } from "./tool-call-model.js";
  * choice, the fields filled on a form, their note, and the files they
  * attached to it; on a thread, the steps ticked in its open `do` ask and the
  * answer pressed in it and attached to the reply (Mark done, Couldn't do it,
- * Submit, or Answer), a `decide`'s pick being its choices.
+ * or Answer), a `decide`'s pick being its choices and an `answer`'s fields
+ * filled its values.
  */
 export interface InboxDraft {
   readonly choices: readonly string[];
@@ -93,6 +98,39 @@ export interface InboxDraft {
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
+
+/** Why a card's last send did not go, or was not taken: its words, and the refusal they say where the service refused it. */
+export interface InboxNote {
+  readonly words: string;
+  readonly failure?: CodingAgentCallFailure | undefined;
+}
+
+/** What a card says under its box: the note's words, and whether Unarchive follows them. */
+export interface InboxNoteReading {
+  readonly words: string;
+  readonly unarchive: boolean;
+}
+
+/** What a card says of a send refused because its agent is archived on its own. */
+const AGENT_ARCHIVED_NOTE = "This agent is archived.";
+
+/**
+ * What a card says of its last send, by its agent as the window lists it.
+ * Note that the service refuses a send to an agent archived on its own as
+ * one that names nothing, so a refusal naming no agent says the agent is
+ * archived, with Unarchive after it, where the list reads it archived, and
+ * that the agent no longer exists only where it does not.
+ */
+export function inboxNoteReading(
+  note: InboxNote,
+  agent: CodingAgentSummary | undefined,
+): InboxNoteReading {
+  const archived =
+    note.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
+  return archived
+    ? { words: AGENT_ARCHIVED_NOTE, unarchive: true }
+    : { words: note.words, unarchive: false };
+}
 
 /** One file an answer or a message on the thread carried, as an item read names it. */
 type InboxFile = NonNullable<InboxItem["answerFiles"]>[number];
@@ -116,6 +154,39 @@ export function inboxFileChips(
       url: read !== undefined && "url" in read ? read.url : "",
     };
   });
+}
+
+/** A comment's files as they are drawn after its words: its pictures, and every other file. */
+export interface InboxCommentFiles {
+  readonly pictures: readonly InboxFile[];
+  readonly others: readonly InboxFile[];
+}
+
+/**
+ * A comment's files as they are drawn after its words, each in the order
+ * attached: a picture its words already draw left out, since it stands
+ * where they draw it, as an agent's pictures do, then the pictures and
+ * every other file apart, as each is drawn in its own way. Note that only
+ * a picture the words draw as one is left out (`picturesDrawn`): a file
+ * they only link to, quote in code, or name as a picture though it is
+ * none is still drawn here, so it can still be opened.
+ */
+export function inboxCommentFiles(
+  files: readonly InboxFile[],
+  words: string | undefined,
+  itemId: string,
+): InboxCommentFiles {
+  const picture = (file: InboxFile) =>
+    attachmentView({ name: file.name, mediaType: file.mediaType, url: "" }) ===
+    ATTACHMENT_VIEW.IMAGE;
+  const drawn = new Set(
+    words === undefined ? [] : picturesDrawn(words, itemId).map((each) => each.attachmentId),
+  );
+  const after = files.filter((file) => !(picture(file) && drawn.has(file.attachmentId)));
+  return {
+    pictures: after.filter(picture),
+    others: after.filter((file) => !picture(file)),
+  };
 }
 
 /** The board as the tab draws it. */
@@ -170,7 +241,9 @@ function replyKindOf(
   }
   if (response.type === INBOX_RESPONSE.NONE) return INBOX_REPLY.ACKNOWLEDGED;
   if (response.type === INBOX_RESPONSE.CHOICE && draft.choices.length > 0) return INBOX_REPLY.CHOSE;
-  if (response.type === INBOX_RESPONSE.FORM) return INBOX_REPLY.SUBMITTED;
+  if (response.type === INBOX_RESPONSE.FORM) {
+    return formSendable(response, draft) ? INBOX_REPLY.SUBMITTED : undefined;
+  }
   return draft.note.trim() === "" && draft.attachments.length === 0
     ? undefined
     : INBOX_REPLY.ANSWERED;
@@ -186,6 +259,27 @@ function sentValues(form: Pick<InboxForm, "fields">, draft: InboxDraft): readonl
     const sent = isWireString(value) ? value.trim() : value;
     return sent === "" ? [] : [{ label: field.label, value: sent }];
   });
+}
+
+/**
+ * Whether the developer filled any field of a form: a value of theirs it
+ * sends. Note that a switch left alone fills nothing, though it is sent as no.
+ */
+function formFilledIn(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
+  const held = new Set(draft.values.map((value) => value.label));
+  return sentValues(form, draft).some((value) => held.has(value.label));
+}
+
+/**
+ * Whether a form holds something to send: every required field filled, or,
+ * where some are left empty, a field the developer filled, or words or
+ * files of their own, since a form filled in part sends what was filled.
+ */
+function formSendable(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
+  const sent = new Set(sentValues(form, draft).map((value) => value.label));
+  if (form.fields.every((field) => field.required !== true || sent.has(field.label))) return true;
+  if (draft.note.trim() !== "" || draft.attachments.length > 0) return true;
+  return formFilledIn(form, draft);
 }
 
 /**
@@ -246,9 +340,10 @@ const MISSING_LINE = {
 /**
  * What the card's answer still lacks, the first thing in the item's order,
  * or nothing where it lacks nothing it can be told to fill: a choice with
- * no pick and no words of the developer's own lacks an option, a form its
- * first required field left empty, an approval or a to-do its decision,
- * and words their words. A note lacks nothing, its nod being its answer.
+ * no pick and no words of the developer's own lacks an option, a form with
+ * nothing to send its first required field left empty, an approval or a
+ * to-do its decision, and words their words. A note lacks nothing, its nod
+ * being its answer.
  */
 export function inboxMissing(
   item: Pick<InboxItem, "response">,
@@ -265,6 +360,7 @@ export function inboxMissing(
         line: response.multiple === true ? MISSING_LINE.MANY : MISSING_LINE.ONE,
       };
     case INBOX_RESPONSE.FORM: {
+      if (formSendable(response, draft)) return undefined;
       const sent = new Set(sentValues(response, draft).map((value) => value.label));
       const empty = response.fields.find(
         (field) => field.required === true && !sent.has(field.label),
@@ -471,6 +567,19 @@ export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefi
   return message?.ask === undefined ? undefined : { message, ask: message.ask };
 }
 
+/**
+ * Whether the item is a notice waiting on the reader's nod: open, asking
+ * nothing, and its thread holding no ask open, so Got it settles it and
+ * reaches nobody, and a reply settles it as it reaches the agent.
+ */
+export function awaitsNod(item: InboxItem, thread: readonly InboxMessage[]): boolean {
+  return (
+    item.status === INBOX_STATUS.OPEN &&
+    item.response.type === INBOX_RESPONSE.NONE &&
+    openAskOf(thread) === undefined
+  );
+}
+
 /** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
 
@@ -500,30 +609,44 @@ function tickedSteps(draft: InboxDraft): readonly number[] {
   return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
 }
 
-/** Whether every step the ask shows is ticked, which Mark done waits for. */
-export function everyStepTicked(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): boolean {
-  const ticked = new Set(draft.steps ?? []);
-  return Array.from({ length: shownSteps(ask) }, (_, at) => at).every((at) => ticked.has(at));
+/** Every step a `do` ask shows, by place, in order. */
+function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
+  return Array.from({ length: shownSteps(ask) }, (_, at) => at);
 }
 
-/** The draft with the step at `at` ticked, or let go where it was. */
-export function withStep(draft: InboxDraft, at: number): InboxDraft {
-  const ticked = tickedSteps(draft);
-  const steps = ticked.includes(at) ? ticked.filter((each) => each !== at) : [...ticked, at];
-  return { ...draft, steps };
+/**
+ * The steps a `do` ask's card shows ticked: every one while Mark done is
+ * pressed, which ticks them all, or else those the reader ticked by hand,
+ * which the draft keeps apart so Couldn't do it still sends only those.
+ */
+export function shownTicks(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): readonly number[] {
+  return draft.press === INBOX_REPLY.DONE ? everyStep(ask) : tickedSteps(draft);
 }
 
-/** Whether a form's required fields are filled as the draft holds them, which Submit waits for. */
-export function formFilled(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
-  const sent = new Set(sentValues(form, draft).map((value) => value.label));
-  return form.fields.every((field) => field.required !== true || sent.has(field.label));
+/**
+ * The draft with the step at `at` ticked, or let go where the card shows
+ * it ticked. Note that letting a step go under Mark done takes the press
+ * off and keeps the others ticked, as the card showed them.
+ */
+export function withStep(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: InboxDraft,
+  at: number,
+): InboxDraft {
+  const ticked = shownTicks(ask, draft);
+  if (!ticked.includes(at)) return { ...draft, steps: [...ticked, at] };
+  const steps = ticked.filter((each) => each !== at);
+  return draft.press === INBOX_REPLY.DONE
+    ? { ...draft, steps, press: undefined }
+    : { ...draft, steps };
 }
 
 /**
  * The answer the draft attaches to the reply for the open ask, or none: a
- * `decide`'s options picked, a `do`'s Mark done or Couldn't do it with the
- * steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
- * whose words are the reply's own. Note that the title standing as a `do`'s
+ * `decide`'s options picked, a `do`'s Mark done with every step ticked or
+ * Couldn't do it with the steps ticked, an `answer`'s fields' values once
+ * any is filled, as a form filled in part sends what was filled, or its
+ * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
  */
 export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
@@ -538,12 +661,16 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
     case INBOX_ASK.DO: {
       if (draft.press !== INBOX_REPLY.DONE && draft.press !== INBOX_REPLY.NOT_DONE)
         return undefined;
-      const steps = tickedSteps(draft).filter((at) => at < ask.steps.length);
+      const steps =
+        draft.press === INBOX_REPLY.DONE
+          ? everyStep(ask).filter((at) => at < ask.steps.length)
+          : tickedSteps(draft).filter((at) => at < ask.steps.length);
       return { ask: id, reply: draft.press, steps };
     }
     case INBOX_ASK.ANSWER:
+      // A form's fields attach as they are filled, with no press, any filled in part sending what was filled.
       if (ask.fields !== undefined) {
-        return draft.press === INBOX_REPLY.SUBMITTED
+        return formFilledIn({ fields: ask.fields }, draft)
           ? {
               ask: id,
               reply: INBOX_REPLY.SUBMITTED,
@@ -555,6 +682,49 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
         ? { ask: id, reply: INBOX_REPLY.ANSWERED }
         : undefined;
   }
+}
+
+/**
+ * A settled ask's answer as the draft its controls held when it was sent,
+ * which its box draws them filled in with: a `decide`'s picks, a `do`'s
+ * steps ticked and its press, the title standing as the one step of a
+ * `do` that names none ticked where it was marked done, and an `answer`'s
+ * values. A field or a step the answer left empty stands empty.
+ */
+export function answeredDraft(ask: InboxKnownAsk, answers: InboxAnswers): InboxDraft {
+  const titleStep = ask.type === INBOX_ASK.DO && ask.steps.length === 0;
+  const done = answers.reply === INBOX_REPLY.DONE;
+  return {
+    ...EMPTY_INBOX_DRAFT,
+    choices: answers.choices ?? [],
+    values: answers.values ?? [],
+    steps: titleStep ? (done ? [0] : []) : (answers.steps ?? []),
+    press: answers.reply,
+  };
+}
+
+/** The decisions an approval's or a to-do's answer may be, each held as the card's one pick. */
+const DECISION_REPLIES: ReadonlySet<InboxReplyKind> = new Set([
+  INBOX_REPLY.APPROVED,
+  INBOX_REPLY.DECLINED,
+  INBOX_REPLY.DONE,
+  INBOX_REPLY.NOT_DONE,
+]);
+
+/**
+ * A settled item's answer, from before version 5, as the draft its card
+ * held when it was sent, which its question draws its controls filled in
+ * with: a choice's picks, an approval's or a to-do's decision, and a form's
+ * values; a choice answered in the developer's own words picks nothing.
+ */
+export function repliedDraft(answer: InboxReply): InboxDraft {
+  const choices =
+    answer.reply === INBOX_REPLY.CHOSE
+      ? (answer.choices ?? [])
+      : DECISION_REPLIES.has(answer.reply)
+        ? [answer.reply]
+        : [];
+  return { ...EMPTY_INBOX_DRAFT, choices, values: answer.values ?? [] };
 }
 
 /**
@@ -570,11 +740,6 @@ export function askNumberedPick(
   if (!knownAsk(ask) || ask.type !== INBOX_ASK.DECIDE) return undefined;
   const option = ask.options[number - 1];
   return option === undefined ? undefined : withChoice(ask, draft, option.label);
-}
-
-/** The draft with its attached answer taken off: the pick let go, or the press. */
-export function withoutAnswer(draft: InboxDraft): InboxDraft {
-  return { ...draft, choices: [], press: undefined };
 }
 
 /** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
@@ -612,7 +777,7 @@ export const ANSWER_TONE = {
   BACK: "back",
 } as const;
 
-type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
+export type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
 
 /** An answer as words: what the reply's stamp says, attached or sent, and which way it goes. */
 export interface AnswerStamp {
@@ -673,18 +838,6 @@ const SENT_WORDS = {
   [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged",
 } as const satisfies Record<InboxReplyKind, string>;
 
-/** What each press attached to a reply says, and what the send it renames reads. */
-const PRESS_WORDS = {
-  [INBOX_REPLY.CHOSE]: "Choose",
-  [INBOX_REPLY.APPROVED]: "Approve",
-  [INBOX_REPLY.DECLINED]: "Decline",
-  [INBOX_REPLY.ANSWERED]: "Answer",
-  [INBOX_REPLY.DONE]: "Mark done",
-  [INBOX_REPLY.NOT_DONE]: "Couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "Submit",
-  [INBOX_REPLY.ACKNOWLEDGED]: "Got it",
-} as const satisfies Record<InboxReplyKind, string>;
-
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
  * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
@@ -710,48 +863,12 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
   return { tone, words };
 }
 
-/**
- * What an attached answer's stamp says over the box, and what the send it
- * renames reads: the button pressed, "Approve" or "Request changes", the
- * options picked, `Choose "7 days"`, or the press, "Mark done", "Submit".
- */
-export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
-  const tone = toneOf(answers, ask);
-  const pick = buttonPick(answers, ask);
-  if (pick !== undefined) return { tone, words: pick.label };
-  if (answers.reply === INBOX_REPLY.CHOSE) {
-    const picked = (answers.choices ?? []).map((choice) => `"${choice}"`).join(", ");
-    return { tone, words: `${PRESS_WORDS[INBOX_REPLY.CHOSE]} ${picked}` };
-  }
-  return { tone, words: PRESS_WORDS[answers.reply] };
-}
-
-/**
- * What a settled ask's line says its answerer did, after who they are:
- * "requested changes", "chose 7 days", "marked it done", or what any other
- * answer is called on an item (`REPLY_WORDS`).
- */
-export function answeredWords(answers: InboxAnswers, ask: InboxReadAsk | undefined): string {
-  const pick = buttonPick(answers, ask);
-  const done = pick === undefined ? undefined : DONE_WORDS.get(pick.label);
-  if (done !== undefined) return done.toLowerCase();
-  if (answers.reply === INBOX_REPLY.CHOSE) {
-    return `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answers.choices ?? []).join(", ")}`;
-  }
-  return REPLY_WORDS[answers.reply];
-}
-
 /** The message that answers an ask, where the thread read carries it. */
 export function answerOf(
   thread: readonly InboxMessage[],
   messageId: string,
 ): InboxMessage | undefined {
   return thread.find((message) => message.answers?.ask === messageId);
-}
-
-/** How many messages a thread's line counts, "1 message", "6 messages". */
-export function messagesWords(count: number): string {
-  return counted(count, "message");
 }
 
 /**

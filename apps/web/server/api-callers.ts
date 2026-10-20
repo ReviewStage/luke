@@ -290,7 +290,7 @@ async function sourceFilesUnder(directory: string): Promise<readonly string[]> {
  * enumerated, so the walk itself still fails loudly on a `readdir` that fails
  * for any other reason.
  */
-export async function callerDirectories(repoRoot: string): Promise<readonly string[]> {
+async function callerDirectories(repoRoot: string): Promise<readonly string[]> {
   const directories: string[] = [];
   for (const root of CALLER_ROOTS) {
     if (root !== PACKAGES_ROOT) {

@@ -21,11 +21,11 @@ import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "
 import { Effect, Option, Stream } from "effect";
 import { test } from "vitest";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import {
   connectWorkspaceGitHub,
@@ -135,7 +135,7 @@ function turn(settledAt: number | undefined): CodingAgentLatestTurn {
 /** eve's coding-agent service as the deployment reaches it for each account, writing down every message sent. */
 function fakeEve() {
   const sent: { readonly sessionId: string; readonly message: EveMessage }[] = [];
-  const sessions: EveSessions = {
+  const sessions: AgentSessions = {
     open: () =>
       Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` }),
     send: (sessionId, message) =>

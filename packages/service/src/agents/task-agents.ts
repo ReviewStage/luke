@@ -5,7 +5,7 @@ import {
   latestTurnsOfReached,
   listPublishedCodingAgents,
   listTasklessCodingAgents,
-  type PublishedCodingAgent,
+  type PublishedCodingAgentLine,
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
@@ -24,9 +24,9 @@ import {
 import { Clock, Effect } from "effect";
 import {
   codingAgentActivityAt,
-  codingAgentPage,
   codingAgentRunStartedAt,
   codingAgentStatusOf,
+  codingAgentSummary,
   summaryAccounts,
 } from "./coder-host/status.js";
 
@@ -56,12 +56,12 @@ interface ReadAgent {
   readonly createdAt: number;
   readonly activityAt: number;
   readonly archived: boolean;
-  readonly published: PublishedCodingAgent["published"];
+  readonly published: PublishedCodingAgentLine["published"];
 }
 
 /** One agent as its row names it, its status read at `now`: since its run began while it works, since its newest turn ended once it has; its starter named by `names`, and left unnamed once their account is gone. */
 function agentLine(
-  held: PublishedCodingAgent,
+  held: PublishedCodingAgentLine,
   turn: CodingAgentLatestTurn | undefined,
   awaitingLineAt: Date | undefined,
   now: number,
@@ -191,8 +191,8 @@ export function withTaskAgents(
 
 /**
  * The agents with no plan in the account's workspaces, whichever member
- * started each, newest started first, each read as its own page reads it,
- * with its automation's name, when it last moved, and when the account
+ * started each, newest started first, each read as its own page reads it
+ * but for the run that started it, with its automation's name, when it last moved, and when the account
  * pinned it where it did, the archived ones only where `includeArchived`
  * asks: the sidebar's rows beside the plans.
  */
@@ -212,14 +212,12 @@ export function listTasklessAgents(
     return agents.map((agent) => {
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
-      const { origin: _origin, ...page } = codingAgentPage(
-        agent,
-        { turn, awaitingLineAt },
-        now,
-        names,
-      );
       return {
-        ...page,
+        ...codingAgentSummary(agent, { turn, awaitingLineAt }, now, names),
+        // The fields its own page names beside the summary; the run that started it is that page's alone.
+        automationId: agent.automationId,
+        workspaceId: agent.organizationId,
+        repository: agent.repository,
         activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
         ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),

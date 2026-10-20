@@ -8,6 +8,7 @@ import {
   socialClientConfigured,
 } from "../auth/auth-deployment.js";
 import { sessionCredential } from "../auth/session-credential.js";
+import { eveDeploymentSecretIn } from "../environment.js";
 import { WORKSPACE_LINEAR_CONNECTOR_VARIABLE } from "../integrations/integration-connect.js";
 import { INTEGRATION, type IntegrationDefinition } from "../integrations/integrations.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
@@ -135,6 +136,8 @@ export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
       configured(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY) &&
       configured(POSTHOG_ENVIRONMENT.PROJECT_ID),
     sweep: configured(CRON_ENVIRONMENT.CRON_SECRET),
+    // Read by the rule every reader of the eve secret shares, so one that is blank or the cron's own shows as unset.
+    eveDeployment: eveDeploymentSecretIn(process.env) !== undefined,
     ownKeys: configured(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
     workspaceLinear: configured(WORKSPACE_LINEAR_CONNECTOR_VARIABLE),
     connectors: connectorPresence(),

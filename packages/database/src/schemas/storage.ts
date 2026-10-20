@@ -21,7 +21,11 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { CONVERSATION_KIND, type MessageSender } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  type ConversationRuntime,
+  type MessageSender,
+} from "../storage-vocabulary.js";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -81,6 +85,12 @@ export const conversations = pgTable(
     label: text("label"),
     /** Whether a settled child owes its parent a completion; false on every child opened now, eve handing its findings to the parent turn itself. */
     expectsCompletion: boolean("expects_completion").notNull().default(true),
+    /** What answers the conversation's turns, settled as it is opened; null on a conversation from before the column, which runs on eve. */
+    runtime: text("runtime").$type<ConversationRuntime>(),
+    /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on eve's and before the harness answers one. */
+    nativeSession: text("native_session"),
+    /** The digest of the bearer the conversation's runner presents at Luke's MCP server, never the bearer itself; null where no runner holds one. */
+    runnerTokenHash: text("runner_token_hash"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
@@ -98,6 +108,11 @@ export const conversations = pgTable(
       .where(sql`${table.deletedAt} is not null`),
     // The children and agents reads pick one account's rows of one kind.
     index("conversations_user_kind").on(table.userId, table.kind),
+    // A recorded session is found by the runtime's own id, by the session's reads and by the sweep
+    // that settles an ended session's turns.
+    index("conversations_runtime_session")
+      .on(table.runtimeSessionId)
+      .where(sql`${table.runtimeSessionId} is not null`),
   ],
 );
 

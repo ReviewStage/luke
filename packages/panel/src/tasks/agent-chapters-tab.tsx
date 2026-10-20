@@ -4,6 +4,7 @@ import {
   chapterHunks,
   chapterLineCounts,
   chapterPatches,
+  type LineRef,
   threadInChapter,
 } from "@luke/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@luke/features/pull-request-chapters-wire";
@@ -33,6 +34,7 @@ import {
   SkeletonRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
+  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
@@ -66,9 +68,12 @@ import {
   type ChaptersShown,
   chapterMarks,
   chapterPaths,
+  chaptersModelLabel,
   chaptersShown,
   chapterThreadCount,
   chapterViewed,
+  drawnLines,
+  firstLineRef,
   lineRefLabel,
   steppedChapter,
 } from "./chapters-model.js";
@@ -149,6 +154,8 @@ const CHAPTERS_WORDS = {
   NO_FILES: "None of this chapter's changes are in the pull request now.",
   STALE_DIFF:
     "These chapters were made before the newest commits. Regenerate to see their changes.",
+  /** Which model told the chapters, as quiet meta text above them. */
+  madeBy: (model: string) => `Made by ${model}`,
   STALE: "New commits since these chapters",
   WHAT_TO_REVIEW: "What to review",
   VIEWED: "Viewed",
@@ -440,15 +447,18 @@ function ChapterStrip({
   );
 }
 
-/** One change a reviewer should weigh: its words, and the first lines it points at, a press of which brings that file into view; named alone where there is no diff to bring it into (`onReveal` none). */
+/** One change a reviewer should weigh: its words, and the first lines it points at in the chapter's reading order, a press of which brings them into view; named alone where there is no diff to bring them into (`onReveal` none). */
 function KeyChangeItem({
   change,
+  paths,
   onReveal,
 }: {
   change: Chapter["keyChanges"][number];
-  onReveal: ((path: string) => void) | undefined;
+  /** The paths of the files the chapter draws, in its order. */
+  paths: readonly string[];
+  onReveal: ((ref: LineRef) => void) | undefined;
 }): React.JSX.Element {
-  const [first] = change.lineRefs;
+  const first = firstLineRef(change.lineRefs, paths);
   return (
     <li className="chapter-key-change">
       <div className="chapter-key-change-words">
@@ -457,7 +467,7 @@ function KeyChangeItem({
       {first === undefined ? null : onReveal === undefined ? (
         <span className="chapter-key-change-ref">{lineRefLabel(first)}</span>
       ) : (
-        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => onReveal(first.path)}>
+        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => onReveal(first)}>
           {lineRefLabel(first)}
         </TextButton>
       )}
@@ -482,6 +492,7 @@ function ChaptersReading({
   repository,
   tree,
   chapters,
+  model,
   stale,
   generatable,
   read,
@@ -496,6 +507,8 @@ function ChaptersReading({
   repository: string | null;
   tree: TreeShown;
   chapters: readonly Chapter[];
+  /** The provider's id of the model that told the chapters. */
+  model: string;
   stale: boolean;
   generatable: boolean;
   read: ChaptersRead;
@@ -614,6 +627,11 @@ function ChaptersReading({
           ) : null}
         </div>
       ) : null}
+      <p className="chapters-made-by">
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
+        </Text>
+      </p>
       <div className="chapters-body">
         {slide.drawn || over ? (
           <ChapterRail
@@ -696,12 +714,20 @@ function ChaptersReading({
                           // oxlint-disable-next-line react/no-array-index-key -- a chapter's key changes never move.
                           key={index}
                           change={change}
+                          paths={row?.paths ?? []}
                           onReveal={
                             stale
                               ? undefined
-                              : (path) => {
+                              : (ref) => {
                                   asks.current += 1;
-                                  setReveal({ path, ask: asks.current });
+                                  setReveal({
+                                    path: ref.path,
+                                    ask: asks.current,
+                                    lines: drawnLines(
+                                      chapterFiles.find((file) => file.path === ref.path),
+                                      ref,
+                                    ),
+                                  });
                                 }
                           }
                         />
@@ -877,6 +903,7 @@ export function AgentChaptersTab({
       repository={repository}
       tree={tree}
       chapters={state.chapters}
+      model={state.model}
       stale={state.stale}
       generatable={state.generatable}
       read={chapters}

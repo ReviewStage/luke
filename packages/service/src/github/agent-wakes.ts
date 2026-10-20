@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   type CodingAgentLatestTurn,
+  hasRepository,
   latestTurnsOfReached,
   listCodingAgentsOnBranches,
   listCodingAgentsOnPullRequest,
@@ -416,14 +417,16 @@ function inlineCommentsOf(
   if (
     wake.kind !== AGENT_WAKE.REVIEW ||
     told === undefined ||
+    !hasRepository(told.agent) ||
     reviewId === undefined ||
     pullRequest === undefined
   ) {
     return Effect.succeed(Option.some([]));
   }
-  return agentPullRequestReach(told.userId, told.agent).pipe(
+  const agent = told.agent;
+  return agentPullRequestReach(told.userId, agent).pipe(
     Effect.flatMap(({ token }) =>
-      reviewLineComments(token, told.agent.repository, pullRequest, reviewId),
+      reviewLineComments(token, agent.repository, pullRequest, reviewId),
     ),
     Effect.map(Option.some),
     // The kind alone: nothing of the review or the token rides the line.

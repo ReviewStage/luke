@@ -9,6 +9,13 @@
  * (`@luke/service/admin/http` re-exports them), and the page reads them.
  */
 
+/**
+ * Where the dashboard's page is served on the service's own origin: what the
+ * app sidebar's Admin row opens, a browser tab's as a link beside it and the
+ * Mac app's in the default browser, where the developer's session is.
+ */
+export const ADMIN_PAGE_PATH = "/admin";
+
 /** The addresses the dashboard's reads and its one write are served at. */
 export const ADMIN_ROUTE_PATH = {
   METRICS: "/api/admin/metrics",

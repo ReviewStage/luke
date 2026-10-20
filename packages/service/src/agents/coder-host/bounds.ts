@@ -1,5 +1,5 @@
 import { Duration } from "effect";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
 /**
  * bounds.ts -- the bounds and names the coding-agent host runs under.
@@ -102,6 +102,8 @@ export const CODER = {
 export const CODER_ENVIRONMENT = {
   /** Selects the scripted fixture model in place of the providers; set only by the fixture eval. */
   MODEL_FIXTURE: "LUKE_CODER_MODEL_FIXTURE",
+  /** The accounts, by user id, comma- or whitespace-separated, whose plan-paid agents may run on a provider's own harness; unset admits none. */
+  NATIVE_AGENT_ACCOUNTS: "LUKE_NATIVE_AGENT_ACCOUNTS",
 } as const;
 
 /** The one fixture the model environment may name, and the model id its turns are recorded under. */
@@ -113,6 +115,7 @@ export const CODER_MODEL_FIXTURE = {
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
+  NO_REPOSITORY: "Not run: the agent works in no repository.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
   NO_FAST_VERSION:

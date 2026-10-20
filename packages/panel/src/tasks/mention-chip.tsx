@@ -57,7 +57,7 @@ import { InlineRef } from "../inline-ref.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -310,7 +310,7 @@ function KnownAgentMark({
   known: KnownNames;
 }): React.JSX.Element {
   const workspaceId = useWordsWorkspaceId(where);
-  const held = useAppState() !== undefined;
+  const held = useAppSlice(APP_STATE_HELD);
   const model = known.agentModels.get(agentId);
   // Note that nothing is read before main's document lands, because the agent may be among those it lists.
   if (model !== undefined || !held) return harnessMark(model);
@@ -710,6 +710,7 @@ function MentionChip({
             }
       }
       card={card}
+      linkHref={press === undefined ? undefined : target}
       data-mention-ref=""
       data-kind={mention.kind}
       data-state={state}
@@ -868,6 +869,7 @@ function PlaceChip({
         openLink(href);
       }}
       card={card}
+      linkHref={href}
       data-mention-ref=""
       data-kind={MENTION_KIND_PLACE}
     />

@@ -17,6 +17,7 @@
 
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SettingsRow } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
@@ -98,7 +99,7 @@ export function PictureChoiceRow<Value extends string>({
                     <span className="picture-choice-photo">
                       <img src={option.picture} alt="" draggable={false} />
                     </span>
-                    <span className="picture-choice-name">{option.label}</span>
+                    <PictureName name={option.label} />
                   </label>
                 );
               })}
@@ -107,5 +108,15 @@ export function PictureChoiceRow<Value extends string>({
         )}
       />
     </div>
+  );
+}
+
+/** A face's name under its picture, faded where the face is too narrow to hold it. */
+function PictureName({ name }: { name: string }): React.JSX.Element {
+  const [box, clipped] = useClipped(name);
+  return (
+    <span ref={box} className="picture-choice-name" data-overflow={String(clipped)}>
+      {name}
+    </span>
   );
 }

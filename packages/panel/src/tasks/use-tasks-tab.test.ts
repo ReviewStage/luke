@@ -51,15 +51,18 @@ import {
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
+  type VoiceCallTranscript,
+  type VoiceCallTranscriptChange,
   type VoiceCommand,
   type VoiceView,
+  withCallTranscriptChange,
 } from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
 import {
@@ -76,6 +79,7 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
+import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
@@ -132,6 +136,8 @@ interface Standing {
   profile: string;
   fixtureMode: boolean;
   voice: VoiceView;
+  /** The document's `voice.callTranscript`, held whole beside the view. */
+  callTranscript: VoiceCallTranscript | undefined;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxTask[];
   inboxTasks: readonly AppInboxTaskHolding[];
@@ -177,6 +183,7 @@ function mount(
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
+    callTranscript: undefined,
     unseenAgents: [],
     inboxWaiting: [],
     inboxTasks: [],
@@ -253,7 +260,12 @@ function mount(
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
       failedRuns: [],
-      voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
+      voice: {
+        view: held.voice,
+        callTranscript: held.callTranscript,
+        listening: false,
+        requestMicrophoneAccess: () => undefined,
+      },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
@@ -268,8 +280,10 @@ function mount(
   document.body.append(container);
   // The window's toast stands beside the tab, as the app draws it.
   const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
+  const root = createRoot(container);
+  roots.push(root);
   act(() => {
-    createRoot(container).render(registry === undefined ? surface : onRegistry(registry, surface));
+    root.render(registry === undefined ? surface : onRegistry(registry, surface));
   });
   return {
     told,
@@ -294,8 +308,22 @@ function mount(
   };
 }
 
-afterEach(() => {
+/**
+ * Every root a test mounted. Note that each is unmounted inside `act` before
+ * its page is cleared, because a root left standing keeps React's scheduler
+ * working after the file ends, and its next tick, landing after the
+ * environment is torn down, throws `window is not defined` outside any test.
+ */
+const roots: Root[] = [];
+
+/** Takes down every tab mounted so far and clears the page: the window closed, as a quit or the test's end leaves it. */
+function closeWindow(): void {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+}
+
+afterEach(() => {
+  closeWindow();
   window.localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -581,7 +609,7 @@ test("a planning worker's tab reads its session as an agent's worker's tab reads
 });
 
 /** The words of every call the transcript draws, in order, with whether each call stands now. */
-function _callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
+function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
   if (region.kind !== TRANSCRIPT_REGION.READY) return [];
   return region.calls.map((call) => [call.live, call.messages.map(messageText)] as const);
 }
@@ -618,7 +646,7 @@ const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
 ];
 
 /** A call in progress about the open task, which is what puts code on screen. */
-const _ON_CALL: VoiceView = {
+const ON_CALL: VoiceView = {
   ...IDLE_VOICE_VIEW,
   callTaskId: TASK.id,
   voiceStatus: LIVE_STATUS.LISTENING,
@@ -1438,6 +1466,34 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
 });
 
+test("a render that hands the same plans keeps the lists the tab hands out, and a new list of plans hands out new ones", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const lists = () => {
+    const control = tab.control();
+    return [
+      control.tasks,
+      control.archived,
+      control.listed.tasks,
+      control.listed.archived,
+      control.taskSections,
+      control.newTask.tasks,
+    ];
+  };
+  const before = lists();
+
+  tab.stand({ unseenAgents: ["agent-1"] });
+  const after = lists();
+  tab.stand({ tasks: { ...TWO_WORKSPACES, tasks: [row("launch", 5), ...TWO_WORKSPACES.tasks] } });
+
+  for (const [index, list] of after.entries())
+    assert.equal(list, before[index], `list ${index} kept`);
+  assert.notEqual(tab.control().tasks, before[0]);
+  assert.deepEqual(
+    tab.control().listed.tasks.map((task) => task.id),
+    ["launch", "notes", "billing"],
+  );
+});
+
 test("the sidebar lists the first workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
@@ -1910,7 +1966,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
   });
   act(() => active.control().onChooseWorkspace(ACME.id));
   const reached = active.control().repositories.recent;
-  document.body.innerHTML = "";
+  closeWindow();
 
   const suspended = mount({
     shown: true,
@@ -1929,7 +1985,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
 test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the first one", () => {
   const first = mount({ shown: true, tasks: TWO_WORKSPACES });
   act(() => first.control().onChooseWorkspace(ACME.id));
-  document.body.innerHTML = "";
+  closeWindow();
 
   const relaunched = mount({ shown: true, tasks: TWO_WORKSPACES });
   const kept = relaunched.control().workspace?.id;
@@ -2094,8 +2150,10 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
+  const chipRoot = createRoot(chip);
+  roots.push(chipRoot);
   act(() =>
-    createRoot(chip).render(
+    chipRoot.render(
       createElement(RepositoryChip, {
         value: null,
         chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2285,7 +2343,9 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   );
 });
 
-test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", async () => {
+  // The window is drawn once the synthetic tasks have landed (`App`).
+  await loadTasksFixture();
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
   const staged = fixture.control().listed.tasks.map((task) => task.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));
@@ -2357,7 +2417,7 @@ test("a plan archived or deleted since the quit, or kept by another account, lea
     tab.stand({ tasks: listRead(tasks) });
     assert.deepEqual(selected(tab), [], why);
     assert.equal(tab.control().restoring, false, why);
-    document.body.innerHTML = "";
+    closeWindow();
     window.localStorage.clear();
   }
 });
@@ -2415,7 +2475,7 @@ test("a launch whose list read failed rests on the home page, and opens the plan
 
 test("another account signing in after a sign-out keeps its own plan, and has it opened", () => {
   quitWithTaskOpen("other@example.com");
-  document.body.innerHTML = "";
+  closeWindow();
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -3087,7 +3147,7 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   act(() => tab.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
   await settle();
   const landed = refreshes(tab) - before;
-  document.body.innerHTML = "";
+  closeWindow();
 
   const named = mount(
     { shown: true, tasks: OPEN },
@@ -3100,4 +3160,55 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
 
   assert.equal(landed, 1);
   assert.equal(refreshes(named) - namedBefore, 0);
+});
+
+test("the live transcript draws the call's lines from the changes main splices into the document, and a panel opened mid-call draws the same", () => {
+  const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
+  const line = (rowId: string, speaker: "user" | "assistant", words: string) => ({
+    rowId,
+    speaker,
+    words,
+    startMs: 0,
+    endMs: 1_000,
+  });
+  // As the voice window reports them: a line once, then only the line still growing.
+  const changes: readonly VoiceCallTranscriptChange[] = [
+    { voiceSessionId: session, from: 0, lines: [line("row-1", "user", "Invites should expire.")] },
+    { voiceSessionId: session, from: 1, lines: [line("row-2", "assistant", "After how")] },
+    {
+      voiceSessionId: session,
+      from: 1,
+      lines: [line("row-2", "assistant", "After how many days?")],
+    },
+  ];
+  const tasks: TasksView = { ...OPEN, transcript: NO_CALLS };
+  const tab = mount({ shown: true, tasks, voice: ON_CALL });
+  let held: VoiceCallTranscript | undefined;
+  for (const change of changes) {
+    held = withCallTranscriptChange(held, change);
+    tab.stand({ callTranscript: held });
+  }
+  const live = [[true, ["Invites should expire.", "After how many days?"]]];
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
+  // The last report heard again changes nothing.
+  const last = changes.at(-1);
+  assert.ok(last);
+  tab.stand({ callTranscript: withCallTranscriptChange(held, last) });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
+
+  const opened = mount({ shown: true, tasks, voice: ON_CALL, callTranscript: held });
+  assert.deepEqual(callsDrawn(opened.control().transcript.region), live);
+
+  // The call gone clears the slice, and its words stay drawn until the record has them.
+  tab.stand({
+    voice: IDLE_VOICE_VIEW,
+    callTranscript: withCallTranscriptChange(held, {
+      voiceSessionId: undefined,
+      from: 0,
+      lines: [],
+    }),
+  });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
+    [false, ["Invites should expire.", "After how many days?"]],
+  ]);
 });

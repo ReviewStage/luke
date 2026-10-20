@@ -8,6 +8,7 @@ import {
   type WireBoundaryInput,
 } from "../core.js";
 import { auth } from "./auth.js";
+import { BearerCallers } from "./bearer-callers.js";
 import { resolveBrowserSessionUserId } from "./browser-session.js";
 import { CREDENTIAL_HEADER, sessionCredential } from "./session-credential.js";
 
@@ -95,18 +96,25 @@ export function requestUserId(
   return session({ headers: cookie }).pipe(Effect.orElseSucceed(Option.none<string>));
 }
 
-/**
- * The auth service's own userinfo endpoint, read at the hosted API boundary.
- * The call is the auth service's promise, wrapped once here so the
- * resolution below is an effect a route yields rather than a promise each
- * route rewraps.
- */
-export const hostedUserInfo: UserInfoEndpoint = (input) =>
+/** The auth service's own answer, asked afresh. */
+const askedUserInfo: UserInfoEndpoint = (input) =>
   Effect.tryPromise(async () => {
     // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
     const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
     return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
   });
+
+/**
+ * The auth service's own userinfo endpoint, read at the hosted API boundary.
+ * The call is the auth service's promise, wrapped once here so the
+ * resolution below is an effect a route yields rather than a promise each
+ * route rewraps. Where the instance keeps its callers (`bearer-callers.ts`), a
+ * subject it resolved within the last minute is answered from there.
+ */
+export const hostedUserInfo: UserInfoEndpoint = (input) =>
+  Effect.flatMap(Effect.serviceOption(BearerCallers), (kept) =>
+    Option.isSome(kept) ? kept.value.through(askedUserInfo)(input) : askedUserInfo(input),
+  );
 
 /**
  * The account a request names against the deployment's own account store,

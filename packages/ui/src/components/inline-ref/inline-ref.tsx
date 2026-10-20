@@ -6,6 +6,7 @@ import type {
   ReactElement,
   ReactNode,
 } from "react";
+import { useLinkAddress } from "../menu/link-address.js";
 
 /**
  * inline-ref.tsx -- a thing named inside a line of words: its glyph, its name, and where it stands, as one target that hangs its card and, where it can, opens it.
@@ -95,6 +96,8 @@ interface InlineRefFace {
   onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** What a reader is told its press does, where its name alone would not say: "Open src/app.ts, lines 4–9". */
   pressLabel?: string | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
+  linkHref?: string | undefined;
 }
 
 /** The token itself, which takes what a hint hands it on its root. */
@@ -109,8 +112,10 @@ function InlineRefRoot({
   gone = false,
   onPress,
   pressLabel,
+  linkHref,
   ...rest
 }: InlineRefFace & InlineRefHintProps & DataAttributes): React.JSX.Element {
+  const linkAddress = useLinkAddress(linkHref);
   const face = (
     <>
       {glyph === undefined ? null : (
@@ -138,7 +143,14 @@ function InlineRefRoot({
       {face}
     </span>
   ) : (
-    <button type="button" {...own} {...goneProps} aria-label={pressLabel} onClick={onPress}>
+    <button
+      type="button"
+      ref={linkAddress}
+      {...own}
+      {...goneProps}
+      aria-label={pressLabel}
+      onClick={onPress}
+    >
       {face}
     </button>
   );

@@ -1,4 +1,5 @@
 export * from "./hosted-store-database.js";
+export * from "./live-immutability.js";
 export * from "./migrations.js";
 export * from "./sql-client.js";
 export * from "./store-rows.js";

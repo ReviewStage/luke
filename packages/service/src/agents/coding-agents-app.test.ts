@@ -62,6 +62,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -158,6 +159,7 @@ import {
   inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
+import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionLinksIn, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -178,7 +180,7 @@ import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@l
 import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -257,11 +259,11 @@ import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { chatAttachmentApp } from "./chat-attachment-app.js";
@@ -310,6 +312,7 @@ import { AgentSandbox } from "./terminal/agent-sandbox.js";
 const ORIGIN = "https://luke.test";
 const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
+const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
@@ -327,9 +330,11 @@ const TASKS = "/api/plans";
 const TASK = (taskId: string) => `${TASKS}/${taskId}`;
 /** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
 const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
-/** A task's own path or its Stop, by the task's id, which the router serves where the old groups serve flattened keys. */
+/** Luke's own transcript of a task, served by the hosted oRPC router. */
+const TASK_MESSAGES = (taskId: string) => `${TASK(taskId)}/messages`;
+/** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
-  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
+  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
@@ -459,7 +464,7 @@ function fakeEve(
   const resetAs: string[] = [];
   let sessions = 0;
   let deliveries = 0;
-  const eve = (authorization: string): EveSessions => ({
+  const eve = (authorization: string): AgentSessions => ({
     open: (message) =>
       Effect.suspend(() => {
         if (options.reachable === false) {
@@ -527,8 +532,10 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */
@@ -661,6 +668,11 @@ const standing = (
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
           return routed(new Request(url, request), webServices);
         }
+        const call = url.searchParams.get("call");
+        if (pathname === SUBAGENT_MESSAGES && id !== null && call !== null) {
+          url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
+          return routed(new Request(url, request), webServices);
+        }
         if (pathname === CHAT || pathname === WORKSPACE_AGENTS) return routed(request, webServices);
         if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
         return pathname === TASKS || TASK_PATH.test(pathname)
@@ -691,6 +703,7 @@ function request(
     id?: string;
     after?: string;
     call?: string;
+    wait?: string;
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
@@ -710,6 +723,7 @@ function request(
   if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
+  if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
@@ -1570,6 +1584,47 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(request(TASK_AGENTS, other, { id: task.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "a plan's agents, inbox, and transcript are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const now = yield* DateTime.nowAsDate;
+        // A revision a later build wrote, by a kind of writer this build has no name for.
+        yield* Database.use((db) =>
+          db.insert(planRevision).values({
+            taskId: task.id,
+            seq: 1_000,
+            actor: sql`'a-later-writer'`,
+            document: SAVED,
+            changes: 1,
+            startedAt: now,
+            at: now,
+          }),
+        );
+        // The whole read, which reads who wrote each section, cannot answer the plan.
+        assert.equal(
+          (yield* ask(request(TASK(task.id), owner))).status,
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        );
+        const reads = (bearer: string, id: string) =>
+          [
+            request(TASK_AGENTS, bearer, { id }),
+            request(TASK_INBOX, bearer, { id }),
+            request(TASK_MESSAGES(id), bearer),
+          ] as const;
+
+        const [agents, inbox, transcript] = reads(owner, task.id);
+        readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(agents));
+        readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(inbox));
+        readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(transcript));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        for (const refused of [...reads(other, task.id), ...reads(owner, randomUUID())]) {
+          assert.deepEqual(yield* ask(refused), notFound, refused.url);
+        }
       }),
   );
 
@@ -5527,6 +5582,56 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "a notice waits on the account until Got it settles it, which messages nobody, and a reply with words settles another as it reaches the agent",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, agent, answer, message, waiting } = yield* openInbox(eve);
+        const owned = { userId: owner, taskId: task.id, agentId: agent.id };
+        const notice = (key: string) =>
+          postInboxThread(owned, {
+            key,
+            title: "The preview is up",
+            body: "It deploys from main.",
+          });
+        const nodded = yield* notice("preview-nod");
+        const replied = yield* notice("preview-reply");
+        assert.ok(Result.isSuccess(nodded) && Result.isSuccess(replied));
+        const waitingIds = Effect.map(waiting(), (read) =>
+          read.items.map((item) => item.id).sort(),
+        );
+        assert.deepEqual(yield* waitingIds, [nodded.success.id, replied.success.id].sort());
+        const before = eve.sent.length;
+
+        const pressed = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(nodded.success.id, {
+            revision: nodded.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.ACKNOWLEDGED,
+          }),
+        );
+        assert.deepEqual([pressed.taken, pressed.item.status], [true, INBOX_STATUS.ANSWERED]);
+        assert.equal(eve.sent.length, before, "Got it messages nobody");
+
+        const sent = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(replied.success.id, {
+            text: "Nice work.",
+            clientKey: randomUUID(),
+            revision: replied.success.revision,
+          }),
+        );
+        assert.equal(sent.item.status, INBOX_STATUS.ANSWERED);
+        assert.equal(eve.sent.length, before + 1, "a reply with words reaches the agent");
+        assert.ok(JSON.stringify(eve.sent.at(-1)?.message.message).includes("Nice work."));
+        assert.deepEqual(yield* waitingIds, []);
+      }),
+  );
+
+  it.effect(
     "an answer carrying a file and no note reaches the agent with the file, even from an item that asks nothing back, and the item names the file it kept",
     () =>
       Effect.gen(function* () {
@@ -6555,6 +6660,49 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
       }),
   );
+
+  it.effect(
+    "a transcript read with wait=none is answered at once, never held, with whether the held read would have held on it: the agent's own and a worker's whose call is not recorded yet",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        // Nothing stands yet and the agent is starting, which the held read would hold on; this answers at once.
+        const own = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
+        );
+        assert.deepEqual(own.messages, []);
+        assert.equal(own.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(own.holds, true);
+
+        const worker = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(SUBAGENT_MESSAGES, owner, {
+              id: agent.id,
+              call: "call-7",
+              after: "0:0",
+              wait: "none",
+            }),
+          ),
+        );
+        assert.deepEqual(worker.messages, []);
+        assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(worker.holds, true);
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_MESSAGES, other, { id: agent.id, wait: "none" })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
 });
 
 /** The slug a workspace's links are written under. */
@@ -6990,22 +7138,22 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "an agent whose session eve no longer runs is stamped as having left, and posts nothing more",
+    "an agent whose session eve no longer runs is told all the same, on a fresh session opened over its conversation, and stays in the chat",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED });
         const chat = yield* openChat(eve);
+        const openedBefore = eve.opened.length;
         const toSecond = yield* chat.post(chat.person, `${chat.links.second} are you?`);
-        assert.deepEqual(toSecond.receipt.left, [chat.links.second]);
-        const left = (yield* roster(chat.owner, chat.workspace)).filter(
-          (row) => row.leftAt !== null,
+        assert.deepEqual([toSecond.receipt.told, toSecond.receipt.left], [[chat.links.second], []]);
+        assert.deepEqual(
+          eve.opened.slice(openedBefore).map((each) => each.message.conversationId),
+          [chat.second.target.conversationId],
         );
         assert.deepEqual(
-          left.map((row) => row.agentId),
-          [chat.second.agent.id],
+          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+          [],
         );
-        const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
-        assert.ok(Result.isFailure(silenced));
       }),
   );
 

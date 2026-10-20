@@ -8,7 +8,7 @@ import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
 import type { AvatarState } from "@luke/voice/avatar";
 import type { NotificationsStatus } from "@luke/voice/settings-controls";
-import type { VoiceView } from "@luke/voice/voice-view";
+import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Result, Schema } from "effect";
@@ -96,6 +96,12 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
+  /**
+   * What was said on the standing call so far, held whole from the changes
+   * the voice window reports beside its view (`VoiceCallTranscript`); absent
+   * while no call stands, before its first line, and once that window is gone.
+   */
+  callTranscript?: VoiceCallTranscript | undefined;
   /**
    * Luke's avatar on the call, as the panel reports it: what puts the video
    * tile at the top of the Call tab and what the tile draws. Main's rather than
@@ -212,6 +218,18 @@ interface AppNetworkSlice {
 }
 
 /**
+ * What the signed-in account may open in the app, as the host last read it
+ * from the service for that account (`account-access-client.ts`): whether
+ * it is an admin, which the sidebar offers the admin dashboard by. Never an
+ * admin while nobody is signed in, for another account than the one read,
+ * or where the read failed. A window draws by it and authorizes nothing:
+ * the dashboard's own gate on the service decides every admin read.
+ */
+export interface AppAccessSlice {
+  admin: boolean;
+}
+
+/**
  * Everything main keeps of what the host tells it and what this machine
  * answers for itself: one document, read whole and replaced a slice at a
  * time, so the state a window is handed and the state main answers a call
@@ -227,6 +245,7 @@ export interface AppState {
   run: AppRunFacts;
   settings?: AppSettings;
   account: AccountSnapshot;
+  access: AppAccessSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
   hotkeys: AppHotkeysSlice;

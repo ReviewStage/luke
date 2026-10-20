@@ -11,6 +11,7 @@
  */
 
 import {
+  type CodingAgentMessagesAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
@@ -42,8 +43,10 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentTranscriptKeySchema,
   codingAgentWorkspaceListParamsSchema,
 } from "@luke/features/coding-agent-view";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_ACT_KIND } from "./kinds.js";
@@ -109,6 +112,11 @@ export const agentActsContract = {
   )
     .input(exactInput(codingAgentMessagesParamsSchema))
     .output(EffectSchema.flip(codingAgentMessagesAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actProcedure(
+    "Could not follow the agent's transcript on this system.",
+  )
+    .input(exactInput(codingAgentTranscriptKeySchema))
+    .output(eventIterator(type<CodingAgentMessagesAnswerView>())),
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actProcedure(
     "Could not message the agent on this system.",
   )

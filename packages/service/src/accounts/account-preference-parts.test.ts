@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
+  readAccountRole,
   readPlanTemplate,
   restorePlanTemplate,
   writeAccountPreferences,
@@ -66,8 +67,10 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 interface Answer {
@@ -96,6 +99,7 @@ const openAccounts = Effect.gen(function* () {
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
+    readRole: readAccountRole,
     anthropicFastAccess,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,

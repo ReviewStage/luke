@@ -177,6 +177,7 @@ function PullRequestRowCard({
             event.stopPropagation();
             openLink(target);
           }}
+          linkHref={target}
         />
       </RowHintOptions>
     </OneRowCard>
@@ -222,6 +223,7 @@ function PageRowCard({
             event.stopPropagation();
             openLink(target);
           }}
+          linkHref={target}
         />
       </RowHintOptions>
     </OneRowCard>

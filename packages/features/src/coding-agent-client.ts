@@ -52,6 +52,8 @@ import {
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  type GitHubTokenAnswerView,
+  type GitHubTokenSaveParams,
   githubImageTypeSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
@@ -82,6 +84,7 @@ import {
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
+import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
@@ -101,6 +104,12 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
+import {
+  type AgentTranscriptLiveAnswer,
+  LIVE_POLL,
+  TRANSCRIPT_NOW_QUERY,
+  type TranscriptNowAnswer,
+} from "./live-wire.js";
 import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -176,6 +185,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -189,7 +199,7 @@ const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its task archived, and the repository the turn's checkout no longer reaches. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its task archived, the repository the turn's checkout no longer reaches, and an agent on its starter's own GitHub token the caller did not start. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -198,6 +208,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
@@ -490,14 +501,17 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** One provider's key removed, answering the keys as they then stand. */
+  /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     // The provider rides in the query, since a DELETE carries no body.
     return hostedAnswer(
       askHosted(this.#hosted.account.removeProviderKey, {
-        query: { [PROVIDER_KEY_QUERY.PROVIDER]: params.provider },
+        query: {
+          [PROVIDER_KEY_QUERY.PROVIDER]: params.provider,
+          ...(params.kind === undefined ? undefined : { [PROVIDER_KEY_QUERY.KIND]: params.kind }),
+        },
       }),
       {},
     );
@@ -517,6 +531,29 @@ export class HostedCodingAgentClient {
       askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
       {},
     );
+  }
+
+  /** The member's own GitHub token, as what tells it apart; never the token. */
+  readGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.githubToken.read, undefined), {});
+  }
+
+  /**
+   * The member's GitHub token saved, answering it as it then stands and,
+   * where the service kept nothing, why; a token the service would refuse
+   * by shape is refused here without traveling at all.
+   */
+  saveGitHubToken(
+    params: GitHubTokenSaveParams,
+  ): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(githubTokenSaveRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.githubToken.save, admitted), {});
+  }
+
+  /** The member's GitHub token removed, answering none. */
+  removeGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.githubToken.remove, undefined), {});
   }
 
   /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
@@ -580,21 +617,44 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's transcript past the cursor, or a worker's where the delegation call that started it is named, held by the service while the agent or the worker runs and nothing new stands. */
-  messages(
+  /**
+   * One agent's transcript past the cursor, or a worker's, read at once
+   * rather than held, with whether the held read would have held on it: for
+   * a reader following the transcript's live statements, which reads again
+   * once they move.
+   */
+  messagesNow(
     agentId: string,
     after: string,
     callId?: string,
-  ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
+    const wait = TRANSCRIPT_NOW_QUERY.NONE;
     const asked =
       callId === undefined
-        ? askHosted(this.#hosted.messages.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD)
-        : askHosted(
-            this.#hosted.messages.agentWorker,
-            { id: agentId, call: callId, after },
-            HOSTED_DEADLINE.HELD,
-          );
-    return hostedAnswer(asked, ROW_REFUSALS);
+        ? askHosted(this.#hosted.messages.agent, { id: agentId, after, wait })
+        : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, after, wait });
+    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), (answer) =>
+      "failure" in answer || answer.holds === undefined
+        ? UNANSWERED
+        : { ...answer, holds: answer.holds },
+    );
+  }
+
+  /**
+   * One agent's transcript, or a worker's where the delegation call is
+   * named, sealed for following over Neon Realtime, answered at once: not
+   * found where the account reaches no such agent, unanswered for anything
+   * else, which the caller answers by sealing it again; with `poll`, its
+   * rows inline, for a reader polling while Realtime fails it.
+   */
+  agentTranscriptLive(
+    agentId: string,
+    callId?: string,
+    poll = false,
+  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    const named = callId === undefined ? { id: agentId } : { id: agentId, call: callId };
+    const asked = poll ? { ...named, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : named;
+    return hostedAnswer(askHosted(this.#hosted.live.agentTranscript, asked), ROW_REFUSALS);
   }
 
   /**

@@ -98,7 +98,8 @@ export interface MentionedAgent {
   readonly name: string;
   /** The task it works on, and whether that task is archived, which takes its agents no message; null for an agent on none. */
   readonly task: { readonly id: string; readonly name: string; readonly archived: boolean } | null;
-  readonly repository: string;
+  /** The repository it works in; null for an agent with none. */
+  readonly repository: string | null;
   /** The branch its last turn ended on; null before one ended, or where it stood detached. */
   readonly branch: string | null;
   /** The pull request from its branch as GitHub last answered; null where it has none. */
@@ -214,6 +215,8 @@ function pageNoteOf(pageId: string, name: string, reads: MentionedReads): string
 
 /** How the agent reads another agent's work: its pull request's diff, else its branch's, by the repository the agent shares with it or names. */
 function readingOf(agent: MentionedAgent, repository: string | null): string {
+  if (agent.repository === null)
+    return " It works in no repository, so there is no work of its to read.";
   const elsewhere = agent.repository.toLowerCase() !== repository?.toLowerCase();
   const repo = elsewhere ? ` --repo ${agent.repository}` : "";
   if (agent.pullRequest !== null) {
@@ -244,6 +247,7 @@ function agentNoteOf(
   if (agent === undefined) return `The coding agent "${name}": not found in your workspace.`;
   const archived = agent.archived ? ", archived," : "";
   const branch = agent.branch === null ? "" : ` on the branch \`${agent.branch}\``;
+  const working = agent.repository === null ? "" : ` working in \`${agent.repository}\``;
   const pullRequest =
     agent.pullRequest === null
       ? ""
@@ -253,7 +257,7 @@ function agentNoteOf(
     : agent.task?.archived === true
       ? " Its task is archived, so it takes no message."
       : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
-  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
+  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
 /** What a member's role is said as. */

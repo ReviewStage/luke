@@ -10,7 +10,7 @@ import {
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
-import { beginTaskWork, readTask } from "@luke/database/models/task-store";
+import { beginTaskWork, readTask, readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
@@ -75,9 +75,9 @@ import {
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
-  type EveSessions,
   type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
 import { fenceable } from "../fenced-text.js";
@@ -428,13 +428,19 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** Where a Start through this path puts its agent: handed the plan or a prompt, never started blank. */
+type HandedPlace = Exclude<
+  CodingAgentPlace,
+  { readonly planSnapshot: null; readonly prompt: null }
+>;
+
 /** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string;
   readonly task: Task | undefined;
   readonly mover: string | undefined;
-  readonly place: CodingAgentPlace;
+  readonly place: HandedPlace;
   /** What the new agent keeps of the agent it was started from; none for one started afresh. */
   readonly startedFrom: StoredStartedFrom | undefined;
 }
@@ -700,7 +706,7 @@ function continuedTitle(source: string | null): string | undefined {
  * not be stopped is logged, since the new agent stands either way.
  */
 const stoppedSource = (
-  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   source: CodingAgent,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
@@ -711,7 +717,7 @@ const stoppedSource = (
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
-  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
@@ -720,7 +726,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (ask.taskId !== null && ask.from !== undefined) {
     const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
     if (Option.isSome(made) && made.value.taskId === ask.taskId) {
-      const reached = yield* hostedStoreOrUnavailable(readTask(userId, ask.taskId));
+      const reached = yield* hostedStoreOrUnavailable(readTaskWorkspace(userId, ask.taskId));
       if (Option.isSome(reached)) return { agent: made.value, created: false };
     }
   }
@@ -899,7 +905,7 @@ export interface RequestedStart {
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   taskId: string,
   request: CodingAgentStartRequest,

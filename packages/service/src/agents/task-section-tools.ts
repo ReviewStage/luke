@@ -94,8 +94,8 @@ export const CREATE_SECTION_TOOL = {
     "Make a section in your workspace's sidebar, for the developer you work for, to keep tasks " +
     "in: it stands in their sidebar alone, as one they made from the sidebar would, with the " +
     `title and the emoji given, and holds no task until ${AGENT_TOOL.UPDATE_TASK}'s sectionId moves one in. ` +
-    "Make one when the developer asks for it, or when you orchestrate, to keep the tasks you " +
-    "make for one piece of work together; never otherwise on your own. Answers `accepted` with the " +
+    "Make one when the developer asks for it, or to keep together the tasks you make for one " +
+    "piece of work that stands apart from yours; never otherwise on your own. Answers `accepted` with the " +
     "section's id and title, or `rejected` and why.",
   inputSchema: CREATE_SECTION_INPUT,
 } as const;

@@ -41,10 +41,9 @@ import { pageResetControl } from "../settings/reset.js";
 import {
   SettingsPanel,
   type SettingsPanelProps,
-  settingsRowsInput,
   voicePageAttention,
 } from "../settings/settings-panel.js";
-import { shownWorkspace } from "../settings/workspace-page.js";
+import { settingsRowsInput, shownWorkspace } from "../settings/settings-rows.js";
 import { useSettingsWrites } from "../settings/writes.js";
 import {
   landOnSettingsRow,

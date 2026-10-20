@@ -74,6 +74,12 @@ import { wholeWordsHint } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
+import { shownWorkspace } from "./settings-rows.js";
+import {
+  AddTokenRepository,
+  TokenRepositoryRows,
+  useTokenRepositories,
+} from "./workspace-token-repositories.js";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
@@ -1107,9 +1113,15 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
 function ManagedGitHub({
   workspace,
   connections,
+  add,
+  addRefusal,
 }: {
   workspace: Workspace;
   connections: readonly ShownConnection[];
+  /** Add repository, which stands before the row's own press. */
+  add: React.ReactNode;
+  /** What the last add was refused with, said under the row. */
+  addRefusal: string | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1127,23 +1139,26 @@ function ManagedGitHub({
         leading={GITHUB_MARK}
         label="GitHub"
         description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
-        error={refusal}
+        error={refusal ?? addRefusal}
       >
-        {() =>
-          connected ? (
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<ExternalLinkIcon aria-hidden="true" />}
-              onClick={open}
-            >
-              Manage on GitHub
-            </Button>
-          ) : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
-              Connect
-            </Button>
-          )
-        }
+        {() => (
+          <>
+            {add}
+            {connected ? (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<ExternalLinkIcon aria-hidden="true" />}
+                onClick={open}
+              >
+                Manage on GitHub
+              </Button>
+            ) : (
+              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+                Connect
+              </Button>
+            )}
+          </>
+        )}
       </SettingsRow>
     </div>
   );
@@ -1152,14 +1167,30 @@ function ManagedGitHub({
 /**
  * The workspace's GitHub: an owner's or an admin's to connect, and for a
  * member, read only, or the ask to have it; then every account connected,
- * the same for both.
+ * the same for both, and every repository a member added on their own
+ * token (`workspace-token-repositories.tsx`), which any member adds from
+ * GitHub's row.
  */
 function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const connections = connectionsOf(workspace);
+  const repositories = useTokenRepositories(workspace.id);
+  const [addRefusal, setAddRefusal] = useState<string>();
+  const add = (
+    <AddTokenRepository
+      workspaceId={workspace.id}
+      repositories={repositories}
+      onRefused={setAddRefusal}
+    />
+  );
   return (
     <>
       {managesWorkspace(workspace) ? (
-        <ManagedGitHub workspace={workspace} connections={connections} />
+        <ManagedGitHub
+          workspace={workspace}
+          connections={connections}
+          add={add}
+          addRefusal={addRefusal}
+        />
       ) : (
         <SettingsRow
           leading={GITHUB_MARK}
@@ -1167,8 +1198,9 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           description={
             connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
           }
+          error={addRefusal}
         >
-          {() => null}
+          {() => add}
         </SettingsRow>
       )}
       {connections.map((connection) => (
@@ -1177,6 +1209,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           connection={connection}
         />
       ))}
+      <TokenRepositoryRows repositories={repositories} />
     </>
   );
 }
@@ -1301,15 +1334,6 @@ export interface WorkspaceSettingsControl {
   listFailed: boolean;
   /** Asks for the workspaces again. */
   onRetryList: () => void;
-}
-
-/** The workspace the page shows: the one the sidebar lists, else the first; none before the workspaces are read. */
-export function shownWorkspace(
-  control: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId">,
-): Workspace | undefined {
-  return (
-    control.workspaces.find((each) => each.id === control.workspaceId) ?? control.workspaces[0]
-  );
 }
 
 /** A picked file read into a workspace's photo: the `data:` URL to send, or why it cannot be one. */

@@ -188,6 +188,9 @@ it.effect(
       );
       // Note that the worktrees an earlier Luke kept under its application data are named, to be pointed to.
       assert.match(terminal.script, /earlier_worktrees='\/state\/worktrees\/acme\/app'/u);
+      // Note that worktrees past their use are moved under the shared root to be deleted, and an earlier Luke's clone is named to be tidied.
+      assert.match(terminal.script, /trash='\/home\/\.luke\/trash'/u);
+      assert.match(terminal.script, /earlier_clone='\/state\/clones\/acme\/app'/u);
       assert.match(terminal.script, /pnpm dev/u);
 
       terminal.output("ready");

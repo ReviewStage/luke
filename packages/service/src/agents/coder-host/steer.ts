@@ -11,10 +11,14 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
-import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import {
+  claimRuntimeSession,
+  recordedRuntimeSession,
+} from "@luke/database/models/recorded-session";
 import { readTask } from "@luke/database/models/task-store";
 import {
   type AwaitingLineMetadata,
+  type ConversationTarget,
   type LineSender,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
@@ -38,13 +42,15 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { controlsAgent } from "../agent-reach.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
-  type EveSessions,
   type EveTypedTurn,
+  type EveUnreachable,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
@@ -75,8 +81,9 @@ import { codingAgentStatusOf } from "./status.js";
  * a sign-in that lapsed is refused here rather than failing the turn's
  * first step. The caller is any member of the agent's workspace, whose task
  * read gates the send, or for an agent with no task whose membership of its
- * workspace does, and whose standing with GitHub is asked, while the
- * line lands in the agent's conversation under the member who started it,
+ * workspace does, and whose standing with GitHub is asked (the starter
+ * alone, for an agent on its starter's own GitHub token), while the line
+ * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
@@ -92,9 +99,16 @@ import { codingAgentStatusOf } from "./status.js";
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
- * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`):
- * the agent then reads as failed, idle for an archive or a Stop, rather
- * than running until the sweep's day-long bound.
+ * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
+ * rather than running until the sweep's day-long bound. The words are then
+ * no refusal: they open a fresh session over the same conversation, as the
+ * brain's ask opens one for a conversation whose session retired
+ * (`brain-host/brain-ask.ts`), and so does a message to an agent whose
+ * session never claimed its record, past the grace its Start's session had
+ * to come up in or where its Start opened none. The fresh session claims
+ * the record forward, so the ended one is refused from then on, and is
+ * seeded with what was said (`host.ts`'s `seed`); Continue and fork still
+ * start a new agent of their own.
  */
 
 /**
@@ -121,28 +135,53 @@ export const STEER_OUTCOME = {
 
 export type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
 
-/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, one eve no longer runs is gone for good, and anything else is an outage. */
+/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and anything else is an outage. A session eve no longer runs is no refusal: the message opens a fresh one. */
 const REFUSAL_OF_SEND_OUTCOME = {
   [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
-  [EVE_SEND_OUTCOME.RETIRED]: HOSTED_REFUSAL.AGENT_RETIRED,
   [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
 } as const;
 
 /**
- * The refusal for an agent whose session has not claimed its record: still
- * coming up inside the grace its first turn may land in, so the developer
- * tries again, and past it a session that never started, which the agent's
- * tab reads as failed, so the developer starts a new one.
+ * Whether a message to an agent whose session has not claimed its record
+ * opens one: where its Start opened none, as an agent started blank, with
+ * neither the plan nor a prompt, has none until its first words; or past the
+ * grace its first turn may land in, where the session its Start opened never
+ * started. Inside the grace a Start's session is still coming up, and a
+ * second opened beside it would only lose the record to it, so the developer
+ * tries again.
  */
-const unstartedRefusal = (agent: CodingAgent) =>
-  Effect.map(Clock.currentTimeMillis, (now) =>
-    codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) ===
-    CODING_AGENT_STATUS.FAILED
-      ? HOSTED_REFUSAL.AGENT_RETIRED
-      : HOSTED_REFUSAL.AGENT_NOT_READY,
+const opensUnclaimed = (agent: CodingAgent) =>
+  Effect.map(
+    Clock.currentTimeMillis,
+    (now) =>
+      (agent.planSnapshot === null && agent.prompt === null) ||
+      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) ===
+        CODING_AGENT_STATUS.FAILED,
   );
 
-/** The turn a refusal as ended for good settles: the newest, where it still stood queued or running before eve was asked; none otherwise. */
+/** An eve the client never reached reads as an outage, said in the log by its kind alone. */
+const unreached = (failure: EveUnreachable) =>
+  Effect.as(
+    Effect.logWarning(
+      `eve could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
+    ),
+    { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
+  );
+
+/** The record claimed for the session just opened, forward only as its start would; a claim that fails is logged, and the session's own start claims it in time. */
+const claimedFor = (target: ConversationTarget, sessionId: string) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    yield* claimRuntimeSession(target, sessionId, new Date(now));
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(
+        `a coding agent's fresh session did not claim its record: ${causeKind(cause)}`,
+      ),
+    ),
+  );
+
+/** The turn an ended session settles: the newest, where it still stood queued or running before eve was asked; none otherwise. */
 const runningTurnOf = (agent: CodingAgent) =>
   Effect.map(
     hostedStoreOrUnavailable(latestTurnsOfReached([agent.conversationId])),
@@ -198,7 +237,7 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
-  eve: EveSessions<EveTypedTurn>,
+  eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: CodingAgent,
@@ -208,6 +247,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
+  // An agent on its starter's own GitHub token takes words from its starter alone.
+  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(
@@ -227,14 +268,19 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  yield* workspaceRepository(
-    workspace.value,
-    agent.repository,
-    agentMember(agent),
-    task?.ownerId === userId ? userId : undefined,
-  );
+  // An agent with no repository has none for GitHub to reach.
+  if (agent.repository !== null) {
+    yield* workspaceRepository(
+      workspace.value,
+      agent.repository,
+      agentMember(agent),
+      task?.ownerId === userId ? userId : undefined,
+    );
+  }
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
+  if (sessionId === undefined && !(yield* opensUnclaimed(agent))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+  }
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
   // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention;
   // and a chat notice's links to people, agents, and Lukes name who said it and whom it addresses, members the agent reads the chat by,
@@ -248,31 +294,43 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         readMentioned(userId, pointed, { task: task?.task, workspaceId: agent.organizationId }),
       );
   const mentioned = reviewers ? undefined : mentionedContext(pointed, task?.task, reads);
-  // Read before eve is asked, so a refusal settles the turn the session was running and never one begun since.
+  // Read before eve is asked, so an ended session settles the turn it was running and never one begun since.
   const running = yield* runningTurnOf(agent);
-  // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
+  // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed,
+  // and so is whether the session the record named had ended, whose running turn nothing else ends.
   let refused: HostedRefusal | undefined;
-  const send = eve
-    .send(sessionId, {
-      conversationId: agent.conversationId,
-      turn: BRAIN_HOST_TURN.TYPED,
-      message: eveContent(line.text, line.attachments ?? [], mentioned),
-    })
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
-        ),
-      ),
-      Effect.map((sent) => {
-        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+  let ended = false;
+  const message = {
+    conversationId: agent.conversationId,
+    turn: BRAIN_HOST_TURN.TYPED,
+    message: eveContent(line.text, line.attachments ?? [], mentioned),
+  };
+  // Note that a session eve no longer runs, or none at all, is no refusal: the words open a fresh
+  // session over the same conversation, which claims its record forward from the one that ended and
+  // is seeded with what was said in it (`host.ts`'s `seed`), so no developer has to press Continue.
+  const send = Effect.gen(function* () {
+    if (sessionId !== undefined) {
+      const sent = yield* eve
+        .send(sessionId, message)
+        .pipe(Effect.catchTag("EveUnreachable", unreached));
+      if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+      if (sent.outcome !== EVE_SEND_OUTCOME.RETIRED) {
         refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
         return false;
-      }),
-    );
+      }
+      ended = true;
+    }
+    const opened = yield* eve.open(message).pipe(Effect.catchTag("EveUnreachable", unreached));
+    if (opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+      refused = HOSTED_REFUSAL.UNAVAILABLE;
+      return false;
+    }
+    // Note that the fresh session claims the record here, still under the conversation's lock, rather
+    // than only as its own start runs, because a message sent in between would read the ended session,
+    // open a second fresh one, and the newer claim would refuse the first, words and all.
+    yield* claimedFor(target, opened.sessionId);
+    return true;
+  });
   // Note that the archive is read again here, under the conversation's lock, because a plan's archive
   // takes that lock to archive the agent, so the two never cross.
   const handOver = Effect.flatMap(refusalNow(userId, agent), (refusal) => {
@@ -314,11 +372,9 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         : HOSTED_REFUSAL.INVALID_REQUEST,
     );
   }
-  if (Option.isNone(written.success)) {
-    if (refused === HOSTED_REFUSAL.AGENT_RETIRED && running !== undefined) {
-      yield* settledEnded(writer, agent, running);
-    }
+  // The turn the ended session was running is settled whether or not the fresh session took the words.
+  if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
+  if (Option.isNone(written.success))
     return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
-  }
   return STEER_OUTCOME.SENT;
 });

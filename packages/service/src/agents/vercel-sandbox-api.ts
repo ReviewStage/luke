@@ -81,17 +81,27 @@ export interface InteractiveShell {
   readonly token: Redacted.Redacted;
 }
 
-/** A sandbox session's network policy as the API takes it: every host open, and on the hosts named, headers the firewall sets on the way out. */
-interface NetworkPolicy {
-  readonly allow: Readonly<
-    Record<
-      string,
-      readonly {
-        readonly transform: readonly { readonly headers: Readonly<Record<string, string>> }[];
-      }[]
-    >
-  >;
-}
+/**
+ * A sandbox session's network policy as the API takes it: the open internet
+ * with nothing set, or every host open and, on the hosts named, headers the
+ * firewall sets on the way out, on every request or on those whose path
+ * matches.
+ */
+type NetworkPolicy =
+  | { readonly mode: "allow-all" }
+  | {
+      readonly allow: Readonly<
+        Record<
+          string,
+          readonly {
+            readonly match?: {
+              readonly path: { readonly startsWith: string } | { readonly exact: string };
+            };
+            readonly transform: readonly { readonly headers: Readonly<Record<string, string>> }[];
+          }[]
+        >
+      >;
+    };
 
 /** The argv of a command Luke wrote, and where it runs. */
 export interface CommandAsk {

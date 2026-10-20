@@ -1,6 +1,6 @@
 {
   "name": "@luke/service",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -70,6 +70,7 @@
     "./agents/coder-host/checkout": "./src/agents/coder-host/checkout.js",
     "./agents/coder-host/context": "./src/agents/coder-host/context.js",
     "./agents/coder-host/context-estimate": "./src/agents/coder-host/context-estimate.js",
+    "./agents/coder-host/deepen": "./src/agents/coder-host/deepen.js",
     "./agents/coder-host/delegation": "./src/agents/coder-host/delegation.js",
     "./agents/coder-host/files": "./src/agents/coder-host/files.js",
     "./agents/coder-host/host": "./src/agents/coder-host/host.js",
@@ -262,6 +263,7 @@
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@neon/realtime": "0.1.1",
+    "@neon/realtime-drizzle": "0.1.0",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",
     "@orpc/openapi": "catalog:",

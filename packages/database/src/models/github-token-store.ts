@@ -6,6 +6,7 @@ import { Database } from "../core/query.js";
 import { account } from "../schemas/auth.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { InstantColumnSchema } from "./columns.js";
+import { forgetRepositoryReads } from "./github-repository-reads.js";
 import type { SealedGitHubToken } from "./provider-key-seal.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
@@ -19,7 +20,9 @@ import type { TaskStoreEffect } from "./task-store.js";
  * holds. A save replaces the row whole, as a token added now and verified
  * now, since a token is saved only once GitHub accepted it. A status is
  * written against the sealed token a step ran on, so a step on a token since
- * replaced marks nothing of its successor.
+ * replaced marks nothing of its successor. A save and a removal each forget
+ * which repositories the member's token was answered for
+ * (`github-repository-reads.ts`), since another token may read others.
  */
 
 /** Better Auth's provider id for GitHub on an account row. */
@@ -207,19 +210,22 @@ export function linkedGitHubUserIds(userId: string): TaskStoreEffect<readonly st
   return Effect.map(findLinkedGitHubIds(userId), (rows) => rows.map((row) => row.githubUserId));
 }
 
-/** Keeps the member's token, replacing the one they held, as added and verified now. */
+/** Keeps the member's token, replacing the one they held, as added and verified now, and forgets what the one before read. */
 export function saveGitHubToken(
   userId: string,
   sealed: SealedGitHubToken,
   facts: GitHubTokenFacts,
   now: Date,
 ): TaskStoreEffect<void> {
-  return upsertRow({ userId, ...sealed, ...facts, now });
+  return Effect.andThen(
+    upsertRow({ userId, ...sealed, ...facts, now }),
+    forgetRepositoryReads(userId),
+  );
 }
 
-/** Removes the member's token; removing one they do not hold moves nothing. */
+/** Removes the member's token, and what it read; removing one they do not hold moves nothing. */
 export function removeGitHubToken(userId: string): TaskStoreEffect<void> {
-  return deleteRow(userId);
+  return Effect.andThen(deleteRow(userId), forgetRepositoryReads(userId));
 }
 
 /** Writes how GitHub last answered the token a step ran on, where the row still holds that token. */

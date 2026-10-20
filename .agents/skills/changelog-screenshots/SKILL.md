@@ -127,8 +127,7 @@ Every picture, whatever it shows:
   chrome.
 
 Each shot's agent verifies in the cloud before anything reaches the Mac:
-`pnpm typecheck`, `pnpm build` (esbuild only; `build:native` needs macOS;
-`LUKE_UPDATE_BUNDLE_BUDGET=1` if the embedded pictures trip the budget), and a
+`pnpm typecheck`, `pnpm build` (esbuild only; `build:native` needs macOS), and a
 throwaway jsdom render of the shot that checks its key text and the absence of
 "1969", deleted before the diff. Merge the shots by copying each agent's
 `shots/` files into one worktree over the foundation, not by stacking patches:

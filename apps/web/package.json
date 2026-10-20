@@ -1,6 +1,6 @@
 {
   "name": "@luke/web",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "Luke landing page",
@@ -17,9 +17,8 @@
     "preview": "vite preview",
     "test": "vitest run && pnpm test:agent",
     "test:agent": "pnpm --filter @luke/luke run test:agent && pnpm --filter @luke/coder run test:agent",
-    "test:store": "tsx scripts/store-tests.ts",
     "test:vitest": "vitest run",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --project tsconfig.json"
   },
   "dependencies": {
     "@better-auth/oauth-provider": "1.7.7",
@@ -28,6 +27,7 @@
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@luke/credentials": "workspace:*",
     "@luke/database": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/host": "workspace:*",

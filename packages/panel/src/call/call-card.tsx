@@ -16,14 +16,14 @@ import { EXPERIMENT } from "@luke/settings";
 import { IconButton, ReturnIcon } from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { useClipped } from "@luke/ui/use-clipped";
-import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts.js";
 import { Tooltip } from "../tooltip.js";
-import { useAppState, useExperiment } from "../use-app-state.js";
-import { useVoiceView } from "../use-voice-view.js";
+import { useExperiment } from "../use-app-state.js";
+import { useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
 import { CallVideoTile, VideoToggle } from "./call-video-tile.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
@@ -75,10 +75,10 @@ export interface CallCardInput {
 
 /** What a card draws of the avatar on this window's document (`callCardVideoStatus`). */
 export function useCardVideoStatus(): AvatarStatus | undefined {
-  const state = useAppState();
   const { view } = useVoiceView();
+  const avatar = useVoiceAvatar();
   const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
-  return callCardVideoStatus({ view, avatar: state?.voice.avatar ?? AVATAR_OFF, videoCalls });
+  return callCardVideoStatus({ view, avatar, videoCalls });
 }
 
 /**
@@ -138,7 +138,7 @@ export function CallCard({
   leaving?: boolean;
   onLeft?: () => void;
 }): React.JSX.Element {
-  const [title, clipped] = useClipped();
+  const [title, clipped] = useClipped(card.taskName);
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
   const name = (
     <span className="call-card-task" ref={title} data-overflow={clipped}>

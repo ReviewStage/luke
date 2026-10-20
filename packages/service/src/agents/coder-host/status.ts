@@ -1,7 +1,9 @@
-import type {
-  CodingAgent,
-  CodingAgentLatestTurn,
-  CodingAgentStartedFromIt,
+import {
+  type CodingAgent,
+  type CodingAgentLatestTurn,
+  type CodingAgentLine,
+  type CodingAgentStartedFromIt,
+  codingAgentLineOf,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
@@ -113,21 +115,40 @@ function turnRuns(turn: CodingAgentLatestTurn): boolean {
  * session ended for good leaves every line awaiting nothing, since the
  * session that would have taken one is gone and no message reopens it.
  */
+/** Where a line stands, and since when it has stood with nothing running to take it, where its grace counts. */
+interface LineRead {
+  readonly standing: LineStanding;
+  readonly since?: number;
+}
+
+function lineOf(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
+): LineRead {
+  const line = standing.awaitingLineAt?.getTime();
+  if (line === undefined) return { standing: LINE_STANDING.NONE };
+  if (turn?.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED)
+    return { standing: LINE_STANDING.NONE };
+  if (turn !== undefined && turnRuns(turn)) return { standing: LINE_STANDING.AWAITS };
+  if (turn !== undefined && line < turn.queuedAt.getTime()) {
+    return { standing: LINE_STANDING.NONE };
+  }
+  const since = Math.max(line, turn?.settledAt?.getTime() ?? 0);
+  return {
+    standing:
+      standing.now - since <= Duration.toMillis(CODER.LINE_GRACE)
+        ? LINE_STANDING.AWAITS
+        : LINE_STANDING.UNANSWERED,
+    since,
+  };
+}
+
+/** Where the newest line awaiting a turn stands (`lineOf`). */
 function lineStandingOf(
   turn: CodingAgentLatestTurn | undefined,
   standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
 ): LineStanding {
-  const line = standing.awaitingLineAt?.getTime();
-  if (line === undefined) return LINE_STANDING.NONE;
-  if (turn?.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) return LINE_STANDING.NONE;
-  if (turn !== undefined && turnRuns(turn)) return LINE_STANDING.AWAITS;
-  if (turn !== undefined && line < turn.queuedAt.getTime()) {
-    return LINE_STANDING.NONE;
-  }
-  const since = Math.max(line, turn?.settledAt?.getTime() ?? 0);
-  return standing.now - since <= Duration.toMillis(CODER.LINE_GRACE)
-    ? LINE_STANDING.AWAITS
-    : LINE_STANDING.UNANSWERED;
+  return lineOf(turn, standing).standing;
 }
 
 /** Whether a line of the developer's awaits the turn it opens, which keeps the agent at work: what an archive or a Stop reads the agent idle by. */
@@ -157,6 +178,27 @@ export function codingAgentStatusOf(
   return status === CODING_AGENT_STATUS.RUNNING && turn.cancelRequestedAt !== null
     ? CODING_AGENT_STATUS.CANCELLED
     : status;
+}
+
+/**
+ * The next instant past which the clock alone moves the agent's status, in
+ * epoch milliseconds: a line's grace running out, from running to failed,
+ * or, with no turn and no line, the starting grace running out, from
+ * starting to failed. None where nothing but a row changing can move it.
+ */
+export function statusClockEdge(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: AgentStanding,
+): number | undefined {
+  const line = lineOf(turn, standing);
+  if (line.standing === LINE_STANDING.AWAITS) {
+    return line.since === undefined
+      ? undefined
+      : line.since + Duration.toMillis(CODER.LINE_GRACE) + 1;
+  }
+  if (line.standing === LINE_STANDING.UNANSWERED || turn !== undefined) return undefined;
+  const edge = standing.createdAt.getTime() + Duration.toMillis(CODER.STARTING_GRACE);
+  return standing.now <= edge ? edge + 1 : undefined;
 }
 
 /**
@@ -275,7 +317,7 @@ function archivedByOf(
 
 /** What every read of one agent says of it but its task, its status read at `now`, and the agents started from it where any was. */
 function summaryFields(
-  agent: CodingAgent,
+  agent: CodingAgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
@@ -296,7 +338,7 @@ function summaryFields(
       awaitingLineAt: standing.awaitingLineAt,
     }),
     turnId: standing.turn?.id ?? null,
-    brief: agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT,
+    brief: agent.handedPrompt ? CODING_AGENT_BRIEF.PROMPT : CODING_AGENT_BRIEF.PLAN,
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
     ...(agent.archivedAt === null || agent.archivedBy === null
       ? undefined
@@ -306,9 +348,7 @@ function summaryFields(
       : { disabledServers: agent.disabledServers }),
     ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
     ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
-    ...(agent.automationOrigin === null
-      ? undefined
-      : { automationName: agent.automationOrigin.name }),
+    ...(agent.automationName === null ? undefined : { automationName: agent.automationName }),
     ...(agent.startedFrom === null ? undefined : { from: agent.startedFrom }),
     ...(continuedBy.length === 0
       ? undefined
@@ -330,22 +370,23 @@ function summaryFields(
 }
 
 /**
- * One agent as the tabs draw it, on a task or with none, its status read at
- * `now`, the member who started it named by `names`, the accounts' names
- * by id, where theirs stands, and the agents started from it, none where
- * the read names none.
+ * One agent as the tabs draw it, on a task or with none, read whole or as a
+ * list's line, its status read at `now`, the member who started it named by
+ * `names`, the accounts' names by id, where theirs stands, and the agents
+ * started from it, none where the read names none.
  */
 export function codingAgentSummary(
-  agent: CodingAgent,
+  agent: CodingAgent | CodingAgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
 ): CodingAgentSummary {
+  const line = "handedPrompt" in agent ? agent : codingAgentLineOf(agent);
   return {
-    id: agent.id,
-    planId: agent.taskId,
-    ...summaryFields(agent, standing, now, names, continuedBy),
+    id: line.id,
+    planId: line.taskId,
+    ...summaryFields(line, standing, now, names, continuedBy),
   };
 }
 
@@ -384,7 +425,9 @@ function originOf(
 }
 
 /** The accounts an agent's summary names: its starter, and the member it was archived by or for. */
-export function summaryAccounts(agent: CodingAgent): readonly string[] {
+export function summaryAccounts(
+  agent: Pick<CodingAgentLine, "userId" | "archivedBy">,
+): readonly string[] {
   return agent.archivedBy === null ? [agent.userId] : [agent.userId, agent.archivedBy.userId];
 }
 
@@ -407,7 +450,7 @@ export function codingAgentPage(
   return {
     id: agent.id,
     planId: agent.taskId,
-    ...summaryFields(agent, standing, now, names, continuedBy),
+    ...summaryFields(codingAgentLineOf(agent), standing, now, names, continuedBy),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null
       ? undefined

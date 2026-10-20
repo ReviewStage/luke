@@ -133,6 +133,8 @@ export interface StoredTask {
   readonly task: Task;
   /** The account that started the task, the one that may move it to another workspace. */
   readonly ownerId: string;
+  /** How the task's repository was reached as it was named: the workspace's GitHub App, or its owner's own token. */
+  readonly githubAccess: GitHubAccess;
   /** The plan's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
@@ -210,6 +212,7 @@ const TASK_SUMMARY_COLUMNS = {
   status: task.status,
   priority: task.priority,
   repository: task.repository,
+  githubAccess: task.githubAccess,
   archivedAt: task.archivedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -233,6 +236,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
+  githubAccess: GitHubAccessSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -437,6 +441,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
       ownerId: row.userId,
+      githubAccess: row.githubAccess,
       text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
@@ -609,6 +614,34 @@ const findTaskWorkspace = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({ organizationId: task.organizationId })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .limit(1),
+    ),
+});
+
+/** The columns of a task `readTaskHeader` answers: every one but its plan's. */
+const findTaskHeader = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: Schema.Struct({
+    organizationId: Schema.String,
+    userId: Schema.String,
+    name: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+    archived: Schema.Boolean,
+    conversationId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          organizationId: task.organizationId,
+          userId: task.userId,
+          name: task.name,
+          repository: task.repository,
+          archived: sql<boolean>`${task.archivedAt} is not null`,
+          conversationId: task.conversationId,
+        })
         .from(task)
         .where(reachableTask(userId, taskId))
         .limit(1),
@@ -990,6 +1023,40 @@ export function readTaskWorkspace(
   return Effect.map(
     findTaskWorkspace({ userId, taskId }),
     Option.map((row) => row.organizationId),
+  );
+}
+
+/** A task as `readTaskHeader` reads it: where it stands and whose it is, without its plan. */
+export interface TaskHeader {
+  readonly workspaceId: string;
+  readonly ownerId: string;
+  readonly name: string;
+  readonly repository: string | null;
+  readonly archived: boolean;
+  /** Its brain's conversation; none before Luke first ran on it. */
+  readonly conversationId: string | undefined;
+}
+
+/**
+ * A task the account reaches, as `readTask` would answer it, in one
+ * statement and without its plan, its history, or its issues: what a read
+ * that only refuses a task, finds its workspace, its repository, or its
+ * conversation, or names it needs. Nothing where the account reaches none.
+ */
+export function readTaskHeader(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<TaskHeader>> {
+  return Effect.map(
+    findTaskHeader({ userId, taskId }),
+    Option.map((row) => ({
+      workspaceId: row.organizationId,
+      ownerId: row.userId,
+      name: row.name,
+      repository: row.repository,
+      archived: row.archived,
+      conversationId: row.conversationId ?? undefined,
+    })),
   );
 }
 

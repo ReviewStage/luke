@@ -352,8 +352,8 @@ its caller per request in one place (`src/agents/coder-host/stop.ts`'s
 `eveFor`): a request that carries an `Authorization` header reaches eve over
 that bearer as it came, as every desktop request does, and one that carries
 none, whose account the cookie named, reaches eve as the deployment acting
-for that account, under the deployment's own `CRON_SECRET` with the account
-in `x-luke-account`. The account is always the one the route resolved from
+for that account, under the deployment's own `EVE_DEPLOYMENT_SECRET` with the
+account in `x-luke-account`. The account is always the one the route resolved from
 that request, never one the request or a row names, and a deployment with
 no secret or no eve origin answers such a request unavailable, a delete
 included: a cookie's delete composes eve before it stops or erases anything
@@ -1605,8 +1605,9 @@ queued. Then it is a Start with a prompt, on the one path a Start takes
 (`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
 through the App, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and eve is reached
-as the deployment acting for the owner under `CRON_SECRET`, the opening the
-coder channel already admits for the voice brain. The prompt is the
+as the deployment acting for the owner under `EVE_DEPLOYMENT_SECRET`, never
+the bearer the cron called with, the opening the coder channel already admits
+for the voice brain. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -1984,8 +1985,8 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: Luke's brain, its worker, the coding agent, and its worker.
 What each is offered is derived from it: the brain's hosted resolver
 offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
-(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` and
-its worker's are held to their roles by `coder-agent.test.ts`; each role's
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` are held to its set by
+`coder-tool-files.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
 every module may import it. eve's own injected tools (`task_wait`,
@@ -2228,35 +2229,30 @@ and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
-`check.sh` needs no service; the `postgres` CI job runs the same migrations,
-then `test:store`, against a Postgres container. Every one of those is
-Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
-embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
-any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
-dialect an opening of the test database is a database of that opening's own:
-a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
-names, made with `create database ... template ...` on the cluster's
-`postgres` maintenance database and dropped when the file closes it
-(`@luke/database/testing`). Nothing writes to the named
-database itself after `db:migrate`, so a statement a test forgets to scope by
-account or conversation reaches its own file's rows and no other file's.
-Which files `test:store` runs is read from the files, not kept
-in a list: `apps/web/scripts/store-tests.ts` selects every `apps/web/tests/**/*.test.ts` whose
-source imports the one door, `@luke/database/testing` (whose
-`openHostedStoreTestDatabase()` is the hosted store's and `getTestDB()` the
-bare one), because
-`LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
-door cannot meet a Postgres whatever it does. A new store test is therefore
-in the set the moment it imports its harness, and `package.json` is not
-edited. The runner then reads vitest's JSON report back and fails, naming
-each file, when the files vitest ran are not exactly the files selected. A reproduction against a real
-Postgres needs an 18 of your own whose role may `create database`, migrated
-by `db:migrate` alone, because that is the runner which records what it
-applied and the tests copy what it recorded, so run it first:
+`check.sh` and CI's test jobs need no service. The `postgres` CI job
+("Postgres migrations and store") proves only what PGlite cannot: it runs
+`db:migrate` against a fresh Postgres container and then
+`apps/web/tests/storage-schema.test.ts` and `drizzle-schema.test.ts` against
+what that migrated, so a
+statement PGlite accepts and Postgres refuses, or migrations that do not end
+at the declared schema, fail there. Every one of those is Postgres 18, the
+major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
+18.3, and the CI image is `postgres:18`, so a local `check.sh` is a
+reproduction on 18 already. On either dialect an opening of the test
+database is a database of that opening's own: a fresh PGlite, or a clone of
+the database `LUKE_STORE_TEST_DATABASE_URL` names, made with
+`create database ... template ...` on the cluster's `postgres` maintenance
+database and dropped when the file closes it (`@luke/database/testing`, the
+one door that reads the variable). Nothing writes to the named database
+itself after `db:migrate`, so a statement a test forgets to scope by account
+or conversation reaches its own file's rows and no other file's. To run a
+store test against a real Postgres by hand, use an 18 of your own whose role
+may `create database`, migrated by `db:migrate` alone, because that is the
+runner which records what it applied and the tests copy what it recorded:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
-LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
+LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
 ## Hosted voice service
@@ -2570,7 +2566,7 @@ words no ask carried are handed to him as one last ask as the call ends.
 eve is reached as the deployment acting for the one account the session
 resolved at its handshake, since the function holds no bearer of the
 account's by the time a delegation arrives. It calls eve's session routes
-under the deployment's `CRON_SECRET` as its bearer with the account in
+under the deployment's `EVE_DEPLOYMENT_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
 account as its attribute — for a spoken message, which its table,
@@ -2606,6 +2602,12 @@ in production and the deployment's own host on any other deployment.
 Production names the custom domain rather than the generated `*.vercel.app`
 host because that host carries the project's Vercel Authentication, which
 answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
+Since a Preview's functions dial the Preview's own eve, both ends of a
+delegation read one environment's `EVE_DEPLOYMENT_SECRET`, so Production and
+Preview each hold a value of their own, and neither is `CRON_SECRET`'s.
+One set to the cron's value is read as unset (`environment.ts`), as a blank
+one is: the build logs that once, by the two names, and the admin
+dashboard's Reliability screen shows it as not configured.
 
 ### One connection is one invocation
 
@@ -2786,9 +2788,12 @@ the runs still queued from the last hour, at most twelve a sweep and four
 at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
-scheduled call once it is set in the project; the same secret is the one the
-voice function acts for an account under at eve's door ("The exchange on the
-sessions route"). Without it the route answers 503 and the schedule is
+scheduled call once it is set in the project. It guards the maintenance
+routes alone, this one and the provider-key rewrap asked by hand: the voice
+function, every other web function, and both eve services act for an account
+at eve's door under `EVE_DEPLOYMENT_SECRET` instead ("The exchange on the
+sessions route"), and neither door admits the cron's bearer, so the
+scheduler's secret opens no session. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 

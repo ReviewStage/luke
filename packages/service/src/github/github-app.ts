@@ -86,6 +86,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import { account } from "@luke/database/schemas/auth";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
+  GITHUB_SSO_URL_PATTERN,
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
@@ -108,6 +109,7 @@ import {
   Result,
   Schema,
 } from "effect";
+import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -239,6 +241,8 @@ export const GITHUB_HTTP_STATUS = {
   /** What a repository with its issues turned off answers on its issues path. */
   GONE: 410,
   UNPROCESSABLE: 422,
+  /** GitHub's primary or secondary rate limit, which it may answer as 403 instead. */
+  TOO_MANY_REQUESTS: 429,
 } as const;
 
 /** The domain of the address GitHub links to an account while keeping the account's own private. */
@@ -332,6 +336,8 @@ type GitHubFailure = (typeof GITHUB_FAILURE)[keyof typeof GITHUB_FAILURE];
 export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
   readonly reason: GitHubFailure;
   readonly status: number | undefined;
+  /** How long GitHub asked to be left alone, where its answer carried a `Retry-After` in seconds. */
+  readonly retryAfter?: Duration.Duration;
 }> {
   override get message(): string {
     return this.status === undefined
@@ -389,6 +395,25 @@ type TokenUnreached =
   | typeof REPOSITORY_UNREACHED.TOKEN_INVALID
   | typeof REPOSITORY_UNREACHED.TOKEN_NO_ACCESS
   | typeof REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH;
+
+/** The header GitHub answers a classic token not authorized for an organization's SAML SSO with. */
+const GITHUB_SSO_HEADER = "x-github-sso";
+
+/**
+ * The page that authorizes a classic token for an organization's SAML SSO,
+ * which GitHub names in the `X-GitHub-SSO` header of a 403
+ * (https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api#personal-access-tokens-and-saml-sso),
+ * as `required; url=<page>`; none where the header names none on GitHub's
+ * own site, as its `partial-results` form does.
+ */
+function ssoAuthorizeUrl(header: string | undefined): string | undefined {
+  const url = header
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("url="))
+    ?.slice("url=".length);
+  return url !== undefined && GITHUB_SSO_URL_PATTERN.test(url) ? url : undefined;
+}
 
 /** A repository reached through the workspace's installation, with the installation. */
 interface ReachedThroughApp {
@@ -540,6 +565,23 @@ export interface GitHubAppService {
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
+   * Whether the member's own token reads the repository, as GitHub answers
+   * `GET /repos/{owner}/{repo}` on it
+   * (https://docs.github.com/en/rest/repos/repos#get-a-repository): a 2xx
+   * reads it, and the 403 and 404 that page lists do not. None where the
+   * member keeps no token GitHub accepts, where GitHub refused the token
+   * (401), which marks it invalid, and where GitHub answered anything else,
+   * which says neither.
+   */
+  readonly memberRepositoryReadable: (
+    member: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<boolean>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
    * One repository by `owner/name`, spelled as GitHub spells it, where the
    * workspace's installation reaches it, and else where the member's own
    * token does (`member`, none for an automation), with which of the two;
@@ -648,6 +690,14 @@ export interface GitHubAppService {
    * /users/<slug>[bot]`) since the App's JWT reaches no user endpoint.
    */
   readonly appBot: (
+    token: Redacted.Redacted,
+  ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
+  /**
+   * The GitHub account a token belongs to, read on it (`GET /user`,
+   * https://docs.github.com/en/rest/users/users#get-the-authenticated-user):
+   * whose a member's own token is, as their commits name them.
+   */
+  readonly tokenUser: (
     token: Redacted.Redacted,
   ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
   /**
@@ -1010,12 +1060,23 @@ function repositoryPath(fullName: string): string {
   return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 }
 
-/** A transport failure as the kind alone: the request it carries holds the bearer, and is left behind. */
+/** A `Retry-After` spelled in seconds, as GitHub spells it; none where it is absent or spelled any other way. */
+function retryAfterOf(
+  response: HttpClientResponse.HttpClientResponse,
+): Duration.Duration | undefined {
+  const spelled = Option.getOrUndefined(Headers.get(response.headers, "retry-after"));
+  if (spelled === undefined || !/^\d+$/u.test(spelled.trim())) return undefined;
+  return Duration.seconds(Number(spelled.trim()));
+}
+
+/** A transport failure as the kind alone, and how long GitHub asked to wait where it said: the request it carries holds the bearer, and is left behind. */
 function unavailable(error: HttpClientError.HttpClientError): GitHubUnavailable {
-  const status = error.response?.status;
+  const response = error.response;
+  const retryAfter = response === undefined ? undefined : retryAfterOf(response);
   return new GitHubUnavailable({
-    reason: status === undefined ? GITHUB_FAILURE.TRANSPORT : GITHUB_FAILURE.STATUS,
-    status,
+    reason: response === undefined ? GITHUB_FAILURE.TRANSPORT : GITHUB_FAILURE.STATUS,
+    status: response?.status,
+    ...(retryAfter === undefined ? undefined : { retryAfter }),
   });
 }
 
@@ -1468,8 +1529,10 @@ function githubAppService(
    * deployment cannot open, no access to the repository, or no push; or
    * the installation's own why, `throughApp`, for a member who keeps no
    * token, since they never chose one. A 401 is GitHub refusing the token,
-   * which marks it invalid; the 403 and 404 that page lists are a
-   * repository the token does not reach.
+   * which marks it invalid; a 403 naming the page that authorizes the token
+   * for the organization's SAML SSO (`ssoAuthorizeUrl`) is that; any other
+   * 403 and the 404 that page lists are a repository the token does not
+   * reach.
    */
   const tokenReach = (member: string, fullName: string, throughApp: ReachResult) =>
     Effect.gen(function* () {
@@ -1488,6 +1551,17 @@ function githubAppService(
       if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
         yield* held.success.markInvalid;
         return unreached(REPOSITORY_UNREACHED.TOKEN_INVALID);
+      }
+      if (response.status === GITHUB_HTTP_STATUS.FORBIDDEN) {
+        const authorizeUrl = ssoAuthorizeUrl(response.headers[GITHUB_SSO_HEADER]);
+        if (authorizeUrl !== undefined) {
+          const unauthorized: ReachResult = Result.fail({
+            reason: REPOSITORY_UNREACHED.TOKEN_SSO,
+            repository: fullName,
+            authorizeUrl,
+          });
+          return unauthorized;
+        }
       }
       if (
         response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
@@ -1743,6 +1817,21 @@ function githubAppService(
           const pushed = listed.filter((one) => one.permissions?.push === true);
           return Option.some(pushed.map(repositoryOf));
         }).pipe(Effect.scoped),
+      memberRepositoryReadable: (member, fullName) =>
+        Effect.gen(function* () {
+          const held = yield* memberToken(member);
+          if (Result.isFailure(held)) return Option.none<boolean>();
+          const response = yield* send(githubRead(repositoryPath(fullName), held.success.token));
+          if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
+            yield* held.success.markInvalid;
+            return Option.none<boolean>();
+          }
+          if (response.status >= 200 && response.status < 300) return Option.some(true);
+          const refused =
+            response.status === GITHUB_HTTP_STATUS.FORBIDDEN ||
+            response.status === GITHUB_HTTP_STATUS.NOT_FOUND;
+          return refused ? Option.some(false) : Option.none<boolean>();
+        }).pipe(Effect.scoped),
       repositoryReach: (organizationId, fullName, member) =>
         Effect.map(
           reach(organizationId, fullName, member),
@@ -1847,6 +1936,11 @@ function githubAppService(
         Effect.gen(function* () {
           const app = yield* ready;
           const response = yield* send(githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token));
+          return userOf(yield* readBody(response, UserSchema));
+        }).pipe(Effect.scoped),
+      tokenUser: (token) =>
+        Effect.gen(function* () {
+          const response = yield* send(githubRead("/user", token));
           return userOf(yield* readBody(response, UserSchema));
         }).pipe(Effect.scoped),
       userToken,

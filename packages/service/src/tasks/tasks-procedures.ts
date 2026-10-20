@@ -64,7 +64,8 @@ import {
   deleteTask,
   listTasks,
   readTask,
-  type StoredTask,
+  readTaskHeader,
+  type TaskHeader,
   updateTask,
 } from "@luke/database/models/task-store";
 import { readTranscript } from "@luke/database/models/transcript-store";
@@ -102,6 +103,7 @@ import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
+import { refreshRepositoryReads } from "../github/repository-reads.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -152,7 +154,7 @@ const taskIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspace: Effect.Effect<string, HostedRefusal, DatabaseServices>,
   repository: string | null | undefined,
-  member: string,
+  member: string | undefined,
 ): Effect.fn.Return<
   { readonly repository: string | null; readonly githubAccess: GitHubAccess },
   HostedRefusal,
@@ -166,14 +168,14 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { repository: reached.repository.fullName, githubAccess: reached.access };
 });
 
-/** The account's plan, or not found for a plan it does not reach. */
+/** The account's plan without its document, or not found for a plan it does not reach. */
 const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
-): Effect.fn.Return<StoredTask, HostedRefusal, DatabaseServices> {
-  const opened = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return opened.value;
+): Effect.fn.Return<TaskHeader, HostedRefusal, DatabaseServices> {
+  const reached = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
+  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return reached.value;
 });
 
 /** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the procedure's refusal. */
@@ -189,7 +191,7 @@ class MoveRefused extends Data.TaggedError("MoveRefused")<{ readonly refusal: Ho
  */
 const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  stored: StoredTask,
+  stored: TaskHeader,
   workspaceId: string,
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
   if (stored.ownerId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
@@ -387,7 +389,7 @@ const linkIdOf = taskIdOf;
  */
 const liveTask = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, taskId: string) {
   const stored = yield* reachedTask(userId, taskId);
-  if (stored.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  if (stored.archived) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
   return stored;
 });
 
@@ -410,9 +412,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
   const writer: Effect.Effect<StoreWriter> = storeWriter({ tools: CODER_TOOL_SET });
   const plans = hosted.plans.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** The account's plans, and beside them the agents with no plan in its workspaces. */
+    /**
+     * The account's plans, and beside them the agents with no plan in its
+     * workspaces; a teammate's plan or agent on their own GitHub token among
+     * them where the account's own token reads its repository, asked of
+     * GitHub first where the answer kept is older than the hour.
+     */
     list: plans.list.effect(function* ({ input, context }) {
       const includeArchived = input.archived === TASK_LIST_ARCHIVED.INCLUDE;
+      yield* refreshRepositoryReads(context.userId);
       const tasks = yield* hostedStoreOrUnavailable(
         Effect.flatMap(listTasks(context.userId, { includeArchived }), (listed) =>
           withTaskAgents(context.userId, listed),
@@ -486,8 +494,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /** One plan with its saved document. */
     open: plans.open.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
-      const opened = yield* reachedTask(context.userId, taskId);
-      return { plan: opened.task };
+      const opened = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { plan: opened.value.task };
     }),
 
     /**
@@ -522,11 +531,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             );
       const workspace =
         organizationId === undefined
-          ? Effect.map(reachedTask(userId, taskId), (stored) => stored.task.workspaceId)
+          ? Effect.map(reachedTask(userId, taskId), (stored) => stored.workspaceId)
           : Effect.succeed(organizationId);
+      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
       const reached =
         "repository" in changes
-          ? yield* reachableRepository(workspace, changes.repository, userId)
+          ? yield* reachableRepository(
+              workspace,
+              changes.repository,
+              (yield* reachedTask(userId, taskId)).ownerId === userId ? userId : undefined,
+            )
           : undefined;
       const archiving = changes.archived === true;
       if (archiving) {
@@ -726,7 +740,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const taskId = yield* taskIdOf(input.id);
       const stored = yield* reachedTask(userId, taskId);
       const links = yield* hostedStoreOrUnavailable(listTaskIssues(userId, taskId));
-      const issues = yield* liveTaskIssues(userId, taskId, stored.task.workspaceId, links);
+      const issues = yield* liveTaskIssues(userId, taskId, stored.workspaceId, links);
       return { issues };
     }),
 
@@ -741,7 +755,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const { userId } = context;
       const taskId = yield* taskIdOf(input.params.id);
       const stored = yield* liveTask(userId, taskId);
-      const read = yield* linkedIssue(userId, stored.task.workspaceId, input.body);
+      const read = yield* linkedIssue(userId, stored.workspaceId, input.body);
       const made = yield* linkTaskIssue(userId, taskId, read).pipe(
         Effect.map(
           (link): Option.Option<TaskIssueLinkAnswer> =>

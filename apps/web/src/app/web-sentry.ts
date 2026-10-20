@@ -13,13 +13,14 @@
  * (`SENTRY_TRACES_SAMPLE_RATE`).
  *
  * Note that the SDK is a chunk of its own (`web-sentry-sdk.ts`), imported
- * the moment the root starts rather than carried in the entry, because the entry is held to its
- * budget (`bundle-budget.json`) and a tab with no DSN should not parse it at
+ * the moment the root starts rather than carried in the entry, because the entry is
+ * parsed as the tab opens and a tab with no DSN should not parse it at
  * all. What is reported before it lands, a failure an Effect boundary of the
  * tab's runtime reported, a tab that could draw nothing, or a refusal of the
  * page's policy, is kept for it, a few at most, and sent once it stands.
  */
 
+import { type EarlyReports, reportsOnceStarted } from "@luke/features/sentry-early-reports";
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import type { Layer } from "effect";
 
@@ -50,16 +51,6 @@ export interface WebSentryReports {
   /** Effect's reporters with Sentry's beside them, for the tab's runtime to stand on. */
   readonly errorReporting: Layer.Layer<never>;
   /** Settles once the SDK stands, or never will, and what was said before then was sent or dropped. */
-  readonly settled: Promise<void>;
-}
-
-/** One report, said to the SDK once it stands. */
-type Report = (sentry: WebSentry) => void;
-
-/** Where reports are said before the SDK may stand, and when it has, or never will. */
-interface EarlyReports {
-  /** Whether the report was sent or kept to be sent; false where it was dropped. */
-  readonly say: (report: Report) => boolean;
   readonly settled: Promise<void>;
 }
 
@@ -139,29 +130,6 @@ async function loadedSentry(build: WebSentryBuild): Promise<WebSentry | undefine
   }
 }
 
-/**
- * Says each report to the SDK once `started` settles: at once where it
- * stands, kept until then where it does not yet (the first
- * `EARLY_REPORTS_KEPT` of them), and dropped where it never will.
- */
-function reportsOnceStarted(started: Promise<WebSentry | undefined>): EarlyReports {
-  let standing: WebSentry | undefined;
-  let early: Report[] | undefined = [];
-  const settled = started.then((sentry) => {
-    const kept = early ?? [];
-    standing = sentry;
-    early = undefined;
-    if (sentry !== undefined) for (const report of kept) report(sentry);
-  });
-  const say = (report: Report): boolean => {
-    if (standing !== undefined) report(standing);
-    else if (early !== undefined && early.length < EARLY_REPORTS_KEPT) early.push(report);
-    else return false;
-    return true;
-  };
-  return { say, settled };
-}
-
 /** Whether an address is a browser extension's own, by its scheme, with or without what follows it. */
 function isExtensionAddress(address: string): boolean {
   return EXTENSION_SCHEMES.has(address.split(":", 1)[0] ?? "");
@@ -187,7 +155,7 @@ function refusedOrigin(blockedURI: string): string {
 const refusalsSaid = new Map<string, Set<string>>();
 
 /** Where this document's refusals are said: the latest start's reports, or nothing before the first. */
-let refusalsSaidTo: EarlyReports["say"] | undefined;
+let refusalsSaidTo: EarlyReports<WebSentry>["say"] | undefined;
 
 /**
  * Each kind of request the page's `Content-Security-Policy` refused, said
@@ -201,7 +169,7 @@ let refusalsSaidTo: EarlyReports["say"] | undefined;
  * sent, so one dropped while the early reports were full is said when it
  * comes again.
  */
-function listenForRefusals(say: EarlyReports["say"]): void {
+function listenForRefusals(say: EarlyReports<WebSentry>["say"]): void {
   const listening = refusalsSaidTo !== undefined;
   refusalsSaidTo = say;
   if (listening) return;
@@ -226,6 +194,7 @@ function listenForRefusals(say: EarlyReports["say"]): void {
 export function startWebSentry(build: WebSentryBuild): WebSentryReports {
   const { say, settled } = reportsOnceStarted(
     build.dsn ? loadedSentry(build) : Promise.resolve(undefined),
+    EARLY_REPORTS_KEPT,
   );
   if (build.dsn) listenForRefusals(say);
   return {

@@ -24,6 +24,9 @@
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
+ * Nor is a lead of one call and nothing else: a fold saying "1 tool call"
+ * over the one row it hides only costs a click, so the call stands on its
+ * own row, as a run of one call does in a turn that moves.
  * A message that reached a turn while it ran, a steer from whoever sent
  * it, stands where it arrived: it ends the group before it, and it splits
  * a finished turn's fold, the work before it folded above it and the work
@@ -505,8 +508,9 @@ export function turnRows<B>(
  * A finished turn's lead folded: each stretch of work between the messages
  * that reached the turn while it ran is one fold, and each message stands
  * on its own row between them; a stretch with no call keeps its rows, as a
- * lead with none does. Note that the first fold keeps the turn's own key,
- * so a turn no message reached folds under the key it always had.
+ * lead with none does, and a stretch of one call alone stands as that
+ * call's row. Note that the first fold keeps the turn's own key, so a turn
+ * no message reached folds under the key it always had.
  */
 function foldedLead<B>(
   lead: readonly Keyed<B>[],
@@ -526,6 +530,10 @@ function foldedLead<B>(
     const held = counted(run.blocks, read);
     if (held.calls + held.subagents + held.codingAgents === 0) {
       rows.push(...groupedRows(run.blocks, read, false, true, said));
+      continue;
+    }
+    if (run.blocks.length === 1) {
+      rows.push({ kind: TURN_ROW.BLOCK, key: first.key, block: first.block });
       continue;
     }
     rows.push({

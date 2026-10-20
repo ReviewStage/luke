@@ -31,8 +31,6 @@ export interface PageLeave {
   readonly unsavedWork: (ask: LeaveAsk) => void;
   /** Takes `go`, a way out of this tab, once the standing ask says to, or at once where none stands. */
   readonly leave: (go: () => void) => void;
-  /** Whether a page holds unsaved work now: an ask stands. */
-  readonly holdsUnsavedWork: () => boolean;
 }
 
 export function pageLeave(page: LeavingPage): PageLeave {
@@ -76,7 +74,7 @@ export function pageLeave(page: LeavingPage): PageLeave {
     ask(() => take(go));
   };
 
-  return { unsavedWork, leave, holdsUnsavedWork: () => standing !== undefined };
+  return { unsavedWork, leave };
 }
 
 /** This tab's ways out, over its own window. */

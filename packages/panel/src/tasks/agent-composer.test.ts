@@ -6,8 +6,12 @@ import {
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import {
+  REPOSITORY_UNREACHED,
+  type RepositoryUnreached,
+} from "@luke/features/repository-reach-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect } from "effect";
@@ -15,6 +19,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
@@ -512,4 +517,78 @@ test("a message sent and refused while the move is out is not sent again when th
     box.sent.map((each) => each.text),
     ["Rebase on main", "Rebase on main and fix CI"],
   );
+});
+
+/** What a remedy's press opened: pages of GitHub's, and places in Settings. */
+interface OpenedByRemedy {
+  readonly github: string[];
+  readonly settings: SettingsLink[];
+}
+
+/** The box under the window's doors and Settings opener, its one message refused for `unreached`; answers what each press opened. */
+async function mountedRefusedOnToken(unreached: RepositoryUnreached) {
+  const opened: OpenedByRemedy = { github: [], settings: [] };
+  const sender: MessageSender = () =>
+    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached });
+  const doors: RepositoryRemedyDoors = {
+    openWorkspaceGitHub: ignore,
+    openGitHub: (url) => opened.github.push(url),
+    chooseRepository: ignore,
+    moveTask: () => Promise.resolve(false),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => opened.settings.push(link) },
+          createElement(RepositoryRemedyProvider, { value: doors }, createElement(Box, { sender })),
+        ),
+      ),
+    ),
+  );
+  await settle();
+  typeInComposer(container, "Rebase on main");
+  pressInComposer(container, "Enter");
+  await settle();
+  const press = (label: string) =>
+    act(() =>
+      (
+        [...container.querySelectorAll("button")].find((each) => each.textContent === label) ??
+        assert.fail(`the note offers ${label}`)
+      ).click(),
+    );
+  return { container, opened, press };
+}
+
+test("a message refused because GitHub refused the member's own token offers Update GitHub token, which opens Settings › Profile", async () => {
+  const box = await mountedRefusedOnToken({
+    reason: REPOSITORY_UNREACHED.TOKEN_INVALID,
+    repository: "acme/relay",
+  });
+
+  box.press("Update GitHub token");
+
+  assert.ok(box.container.textContent?.includes("Your GitHub token was refused."));
+  assert.deepEqual(box.opened.settings, [{ page: SETTINGS_VIEW.ACCOUNT }]);
+  assert.deepEqual(box.opened.github, []);
+});
+
+test("a message refused because the member's token is not authorized for the organization's SAML SSO offers to authorize it, which opens GitHub's page", async () => {
+  const authorizeUrl = "https://github.com/orgs/acme/sso?authorization_request=fixture";
+  const box = await mountedRefusedOnToken({
+    reason: REPOSITORY_UNREACHED.TOKEN_SSO,
+    repository: "acme/relay",
+    authorizeUrl,
+  });
+
+  box.press("Authorize token for acme");
+
+  assert.deepEqual(box.opened.github, [authorizeUrl]);
+  assert.deepEqual(box.opened.settings, []);
 });

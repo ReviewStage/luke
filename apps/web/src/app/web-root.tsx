@@ -11,6 +11,12 @@
  * stands the runtime on its reporter, as the desktop's main stands its own,
  * and reports through it a tab that could draw nothing, as the desktop's
  * window root does.
+ *
+ * Until the panel draws, the tab shows the shell's frame app.html stands in
+ * the root element, which the root's first render replaces; a tab that can
+ * draw nothing takes the frame down, so it is never left looking as though
+ * the panel were still coming. What the next load's frame needs to know of
+ * this one is kept as the panel draws (`first-frame-hint.tsx`).
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -29,6 +35,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
 import { type BrowserHistory, browserHistory } from "./browser-history";
+import { FirstFrameHint } from "./first-frame-hint";
 import { withLoadLink } from "./load-link";
 import { browserLinkPlatform, browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
@@ -67,8 +74,9 @@ function installTabHistory<State>(
 
 /**
  * Composes the host in the tab, installs its doors, and draws the panel into
- * the element given once its document has been read. A tab whose host cannot
- * stand, or whose document cannot be read, draws nothing, as a desktop window
+ * the element given once its document has been read, in place of whatever
+ * frame the element held. A tab whose host cannot stand, or whose document
+ * cannot be read, empties the element and draws nothing, as a desktop window
  * does, and answers nothing to close.
  */
 export async function mountWebApp(
@@ -79,9 +87,8 @@ export async function mountWebApp(
   const loadedAt = location.href;
   const loadedFresh = browserLoadedFresh();
   const linkPlatform = options.linkPlatform ?? browserLinkPlatform();
-  const build = options.sentry ?? webSentryBuild();
   // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
-  const sentry = startWebSentry(build);
+  const sentry = startWebSentry(options.sentry ?? webSentryBuild());
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
   // Note that a count is forked only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
@@ -91,11 +98,7 @@ export async function mountWebApp(
   };
   // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
   runtime = ManagedRuntime.make(
-    Layer.provideMerge(
-      // The release Sentry files reports under is the build's commit, which a tab left open across a release is reloaded off.
-      composeWeb({ httpClient, fork, linkPlatform, release: build.release }),
-      sentry.errorReporting,
-    ),
+    Layer.provideMerge(composeWeb({ httpClient, fork, linkPlatform }), sentry.errorReporting),
   );
   // What the tab installed, taken down again in the reverse order as it closes.
   const installed: (() => void)[] = [];
@@ -117,6 +120,7 @@ export async function mountWebApp(
     // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
     sentry.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
     uninstall();
+    rootElement.replaceChildren();
     await runtime.dispose();
     return undefined;
   }
@@ -124,6 +128,7 @@ export async function mountWebApp(
   root.render(
     <RegistryContext.Provider value={rendererRegistry}>
       <WebAppearance />
+      <FirstFrameHint />
       <App />
     </RegistryContext.Provider>,
   );

@@ -13,7 +13,7 @@ import {
   useCardVideoStatus,
 } from "@luke/panel/call/call-card";
 import { useKeyboardModality } from "@luke/panel/keyboard-modality";
-import { useAppState } from "@luke/panel/use-app-state";
+import { APP_SLICE, useAppSlice } from "@luke/panel/use-app-state";
 import { useVoiceView } from "@luke/panel/use-voice-view";
 import { callCard } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
@@ -29,13 +29,13 @@ export function CallWindowCard(): React.JSX.Element {
   useKeyboardModality();
   useStaleHoverAfterMove();
   const { tell } = useAct();
-  const state = useAppState();
+  const planning = useAppSlice(APP_SLICE.TASKS);
   const { view } = useVoiceView();
   const videoStatus = useCardVideoStatus();
   const track = useAvatarView(videoStatus === AVATAR_STATUS.LIVE);
   return (
     <CallCard
-      card={callCard({ view, tasks: state?.tasks ?? IDLE_TASKS_VIEW })}
+      card={callCard({ view, tasks: planning ?? IDLE_TASKS_VIEW })}
       speakerMuted={view.speakerMuted}
       controls={callControls(tell, view.speakerMuted)}
       video={cardVideo(videoStatus, track, tell)}

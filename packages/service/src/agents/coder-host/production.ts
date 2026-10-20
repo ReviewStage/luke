@@ -40,7 +40,7 @@ export interface CoderHostSeams {
   readonly userInfo: UserInfoEndpoint;
   /** Who reaches a session or a conversation, for the door. */
   readonly ownership: SessionOwnership;
-  /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
+  /** The secret the deployment acts for an account under at eve's door (`EVE_DEPLOYMENT_SECRET`, never the cron's), sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on for a message one agent sends another, which no request carries; nothing on a machine neither configured nor deployed. */
   readonly eveOrigin: () => string | undefined;
@@ -85,7 +85,7 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
         reachesConversation: (userId, conversationId) =>
           run(conversationReachableBy(userId, conversationId)),
       },
-      deploymentSecret: () => environment.cronSecret,
+      deploymentSecret: () => environment.eveDeploymentSecret,
       eveOrigin: deploymentEveOrigin,
       userInfo: (input) =>
         Effect.tryPromise(async () => {

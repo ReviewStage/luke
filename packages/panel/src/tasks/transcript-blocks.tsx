@@ -1208,7 +1208,7 @@ export function TranscriptSubagent({
   onOpen,
   card,
 }: TranscriptSubagentProps): ReactNode {
-  const [words, clipped] = useClipped();
+  const [words, clipped] = useClipped(job);
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>

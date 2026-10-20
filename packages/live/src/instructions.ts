@@ -1,5 +1,26 @@
 import { developerSeedItem, type InitialItem } from "./seed.js";
 
+/** The backend tool that hangs the call up, which the policy names on a line of its own wherever the backend holds it. */
+const END_CALL_TOOL = "end_call";
+
+/**
+ * The policy's list of what the backend can do: every tool the caller names,
+ * in its order, and, where the backend holds `end_call`, the line that says
+ * it alone hangs the call up.
+ */
+function backendToolsLines(tools: readonly string[]): string {
+  const lines = [
+    "Backend tools:",
+    `- The backend can call ${tools.join(", ")}. You cannot call them yourself; delegate to the backend to have them called.`,
+  ];
+  if (tools.includes(END_CALL_TOOL)) {
+    lines.push(
+      `- The call: ${END_CALL_TOOL}, the only way the call hangs up. A goodbye you say without delegating leaves the call up.`,
+    );
+  }
+  return lines.join("\n");
+}
+
 /**
  * A task's call's backend is the brain, which holds the saved
  * document, reads the task's repository, and writes the plan itself; no
@@ -7,9 +28,12 @@ import { developerSeedItem, type InitialItem } from "./seed.js";
  * the plan only through a delegation, and every decision, requirement,
  * correction, and retraction is one. The guide's Delegation
  * section asks for concrete conditions, so the policy is the template's own
- * conditions with the brain's tools named: the voice is choosing
+ * conditions with the backend's tools named: the voice is choosing
  * whether one call is needed, and a tool it cannot name is a capability it
- * will not reach for. Note that the backend keeps the question queue, so
+ * will not reach for. Note that the tools are named as the caller hands them,
+ * the backend's own role's tools as the service's registry lists them
+ * (`backendToolsLines`), rather than kept here by hand, because a hand list
+ * drifted from what the backend was offered. Note that the backend keeps the question queue, so
  * every answer is a reason to delegate: it is what keeps the queue the voice
  * asks from current. Note that the call's start is no reason here, because
  * the service sets the backend exploring as a plan's first call starts, and
@@ -30,17 +54,7 @@ import { developerSeedItem, type InitialItem } from "./seed.js";
  * each a second note with more detail; the start tool's note is where that
  * detail now goes.
  */
-const CALL_DELEGATION_POLICY = `Delegation policy:
-Backend tools:
-- The repository: run_in_repository, which runs shell commands in a checkout of the task's GitHub repository.
-- Research: search_web and read_web_page, which can search the Internet.
-- The plan: edit_plan, which writes what the call settles into the plan.
-- The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
-- Coding agents: list_agents, read_agent, message_agent, start_agent, stop_agent, update_agent, list_tasks, read_task, create_task, update_task, and list_models, which say how an agent working on this task or another task of the workspace is doing, pass the developer's instruction to one, start a new one on this task's plan, on a prompt in the developer's words, or on another task of the workspace, say which models one may run on, stop one the developer asks to stop, archive an idle one the developer asks to put away or bring one back, and rename, pin, archive, or bring back a task of the workspace the developer names.
-- The sidebar: create_section and delete_section, which make and delete the developer's own sections of the workspace's sidebar, and update_task, whose sectionId moves a task into one or back under Tasks.
-- The call: end_call, the only way the call hangs up. A goodbye you say without delegating leaves the call up.
-
-Delegate to the backend when:
+const CALL_DELEGATION_RULES = `Delegate to the backend when:
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
 - The developer states a decision, a requirement, a constraint, a correction, or takes something back: pass it to the backend, which writes it into the plan; nothing reaches the plan otherwise.
@@ -57,6 +71,11 @@ Do not delegate to the backend when:
 
 Delegate before giving an answer that depends on backend work.
 Do not guess the result while waiting.`;
+
+/** The delegation policy, its tools those the backend holds. */
+function callDelegationPolicy(tools: readonly string[]): string {
+  return `Delegation policy:\n${backendToolsLines(tools)}\n\n${CALL_DELEGATION_RULES}`;
+}
 
 /**
  * The Live prompting guide's starter template, cut to who is speaking and
@@ -99,7 +118,7 @@ const CALL_ENDING_POLICY = `Ending policy: You cannot hang up the call yourself;
 
 `;
 
-const CALL_INSTRUCTIONS = `${CALL_ROLE}
+const CALL_INSTRUCTIONS_HEAD = `${CALL_ROLE}
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
 
@@ -107,11 +126,15 @@ Backchannel policy: Use moderate backchannels. Acknowledge naturally without com
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
 
-${CALL_ENDING_POLICY}${CALL_CONVERSATION_POLICY}${CALL_DELEGATION_POLICY}`;
+${CALL_ENDING_POLICY}${CALL_CONVERSATION_POLICY}`;
 
-/** The `instructions` a task's call is created with. */
-export function sessionInstructions(): string {
-  return CALL_INSTRUCTIONS;
+/**
+ * The `instructions` a call is created with, naming the tools its backend
+ * holds: the task's brain's, or the agent's the call speaks into, as the
+ * service's tool registry lists them.
+ */
+export function sessionInstructions(backendTools: readonly string[]): string {
+  return `${CALL_INSTRUCTIONS_HEAD}${callDelegationPolicy(backendTools)}`;
 }
 
 /**

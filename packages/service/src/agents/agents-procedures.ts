@@ -30,15 +30,17 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
-  listCodingAgents,
-  listWorkspaceCodingAgents,
+  type CodingAgentLine,
+  hasRepository,
+  listCodingAgentLines,
+  listWorkspaceCodingAgentLines,
   pinCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import {
@@ -66,7 +68,7 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
-import { pathUuid, reachedAgentById } from "./agent-reach.js";
+import { controlsAgent, pathUuid, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import {
@@ -117,10 +119,10 @@ function listsArchived(archived: string | undefined): boolean {
   return archived === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
-/** The agents listed, each with its status, who it names, and what continued it, as the lists answer them. */
+/** The agents listed, each read as its line, with its status, who it names, and what continued it, as the lists answer them. */
 const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agents: readonly Parameters<typeof codingAgentSummary>[0][],
+  agents: readonly CodingAgentLine[],
 ): Effect.fn.Return<{ agents: CodingAgentSummary[] }, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
@@ -148,13 +150,15 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The agent the path names, still standing, and the eve session its sandbox
  * is tagged with, or none where the agent has not run yet. An archived agent
- * is gone, as its tab is.
+ * is gone, as its tab is, and one on its starter's own GitHub token gives its
+ * sandbox to its starter alone.
  */
 const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
 ): Effect.fn.Return<string | undefined, HostedRefusal, DatabaseServices> {
   const { agent } = yield* reachedAgentById(userId, id);
+  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   const [session] = yield* hostedStoreOrUnavailable(
     standingSessionsOf(agent.userId, [agent.conversationId]),
@@ -229,7 +233,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listWorkspaceCodingAgents(context.userId, workspaceId, {
+        listWorkspaceCodingAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
@@ -241,10 +245,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /** The task's agents with their status. */
     listOfTask: signedIn.listOfTask.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
+      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listCodingAgents(context.userId, taskId, {
+        listCodingAgentLines(context.userId, taskId, {
           includeArchived: listsArchived(input.archived),
         }),
       );
@@ -368,7 +372,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
       const number = yield* pullRequestNumberOf(input.number === undefined ? [] : [input.number]);
       const pullRequest = yield* askedPullRequest(yield* published, userId, agent, number);
-      if (pullRequest === null) return { pullRequest };
+      if (pullRequest === null || !hasRepository(agent)) return { pullRequest: null };
       const listed = yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);
@@ -404,6 +408,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      */
     reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
+      // An agent with no repository has none to offer reviewers or labels of.
+      if (!hasRepository(agent)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
       return yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);

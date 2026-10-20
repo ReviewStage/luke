@@ -33,6 +33,7 @@ import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { PLAN_SAVE_REFUSAL } from "../../tasks/plan-notes.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
+import { standingContext } from "../agent-runtime/standing-context.js";
 import { CHAT_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../coder-host/plan-edit.js";
@@ -51,7 +52,6 @@ import {
 } from "./bounds.js";
 import {
   BRAIN_INSTRUCTIONS,
-  brainStandingContext,
   brainToolDeclarations,
   EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
@@ -455,7 +455,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           task === undefined
             ? Option.none()
             : yield* readPlanCommentThreads(admitted.caller, task.task.id);
-        const text = brainStandingContext(
+        const text = standingContext(
           task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           chat,
@@ -571,7 +571,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     model: (admitted) => modelFor(admitted),
 
-    relaysQuietly: foldedQuietly,
+    relaysQuietly: (event, state) => foldedQuietly(event, state, seams.now()),
 
     relay: (event, admitted, session, state, prompt, chat) =>
       Effect.gen(function* () {

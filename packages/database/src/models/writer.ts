@@ -86,6 +86,11 @@ import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
  * id, a tool part by its call id, so an event delivered twice writes one row
  * and a stream replayed from its start changes nothing.
  *
+ * A turn's journal grows in place, and a batch of events (`consumeAll`)
+ * grows it in memory under one lock and lands it once as the write ends,
+ * with one move of the journal revision, so a turn whose events arrive
+ * together rewrites its parts once rather than once for each.
+ *
  * Every write runs under a lock on the conversation row, which serializes
  * the conversation's writers, so a check made before an insert holds when
  * the insert runs. Sequences are allocated from the row's own counters,
@@ -396,6 +401,17 @@ type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION
 export interface StoreWriter {
   /** Consumes one event of the run stream for the conversation it names. */
   consume(target: ConversationTarget, event: BrainRunEvent): Write<StoreWriteResult>;
+  /**
+   * Consumes a batch of the run stream's events, in order, as one locked
+   * write: the conversation is locked once, each journal is read once, and
+   * a journal the batch grew lands once, its revision moved once, however
+   * many events grew it. Answers each event's own result, in order; a
+   * conversation that does not stand refuses every event.
+   */
+  consumeAll(
+    target: ConversationTarget,
+    events: readonly BrainRunEvent[],
+  ): Write<readonly StoreWriteResult[]>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
   /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
@@ -1110,6 +1126,12 @@ function toolPartOf(
   return part !== undefined && isStoredToolPart(part) ? { index, part } : undefined;
 }
 
+/** A turn's journal as this locked write last read or amended it, and whether an amendment is still to land. */
+interface HeldJournal {
+  readonly row: MessageRow;
+  readonly dirty: boolean;
+}
+
 interface WriterContext {
   readonly tools: ToolSet;
   /** The instant this locked write stamps every row it touches. */
@@ -1117,6 +1139,13 @@ interface WriterContext {
   readonly target: ConversationTarget;
   /** What the conversation is: a coding agent's own, whose failed turn keeps its words, or one of the brain's. */
   readonly kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
+  /**
+   * The journals this locked write has read, by their turn's id, each as it
+   * now stands in the write: read once, amended here, and written once as
+   * the write ends (`landJournals`), so a batch of events moves a journal's
+   * parts and its revision once however many of them grew it.
+   */
+  readonly journals: Map<string, HeldJournal>;
 }
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
@@ -1187,6 +1216,51 @@ function messageByClientId(
     conversationId: context.target.conversationId,
     clientId,
   });
+}
+
+/**
+ * The turn's journal as this write holds it: the row read once by its
+ * client id, then whatever the write has made of it since, so the events of
+ * one batch read what the ones before them amended rather than the row as
+ * it last landed.
+ */
+function journalRow(context: WriterContext, turnId: string): Write<Option.Option<MessageRow>> {
+  const held = context.journals.get(turnId);
+  if (held !== undefined) return Effect.succeed(Option.some(held.row));
+  return Effect.tap(messageByClientId(context, turnId), (read) =>
+    Effect.sync(() => {
+      if (Option.isSome(read)) context.journals.set(turnId, { row: read.value, dirty: false });
+    }),
+  );
+}
+
+/** Keeps what the write made of the turn's journal: an amendment still to land, or a row a statement already wrote. */
+function holdJournal(context: WriterContext, turnId: string, row: MessageRow, dirty: boolean) {
+  context.journals.set(turnId, { row, dirty });
+}
+
+/**
+ * Lands every journal the write amended, each in one statement that moves
+ * the conversation's journal revision once: the parts as the last amendment
+ * left them. A journal a later statement of the same write already wrote
+ * whole (its answer, its end) has nothing left to land.
+ */
+function landJournals(context: WriterContext): Write<void> {
+  return Effect.forEach(
+    [...context.journals.entries()],
+    ([turnId, held]) =>
+      held.dirty
+        ? Effect.andThen(
+            updateMessageParts({
+              id: held.row.id,
+              conversationId: context.target.conversationId,
+              parts: held.row.parts,
+            }),
+            Effect.sync(() => holdJournal(context, turnId, held.row, false)),
+          )
+        : Effect.void,
+    { discard: true },
+  );
 }
 
 /** Where a row landed: its id, and the position it took. */
@@ -1289,7 +1363,7 @@ const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
 ): Effect.fn.Return<Journal, WriteFailure, DatabaseServices> {
-  const standing = yield* messageByClientId(context, turnId);
+  const standing = yield* journalRow(context, turnId);
   if (Option.isSome(standing)) return Result.succeed(standing.value);
   const closed = yield* openTurn(context, turnId);
   if (Option.isSome(closed)) return Result.fail(closed.value);
@@ -1299,12 +1373,20 @@ const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
     message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
     finishedAt: undefined,
   });
-  return Result.succeed({ id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null });
+  const opened: MessageRow = { id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null };
+  holdJournal(context, turnId, opened, false);
+  return Result.succeed(opened);
 });
 
-/** Writes the journal's parts as they now stand, held to the vocabulary first. */
+/**
+ * Takes the journal's parts as they now stand, held to the vocabulary first.
+ * They land as the locked write ends (`landJournals`), once for every
+ * amendment the write made, so an amendment the vocabulary refused never
+ * stands and one it took is written with whatever followed it.
+ */
 const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
+  turnId: string,
   row: MessageRow,
   parts: Parts,
 ): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
@@ -1315,11 +1397,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
     parts,
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
-  yield* updateMessageParts({
-    id: row.id,
-    conversationId: context.target.conversationId,
-    parts: read.success.parts,
-  });
+  holdJournal(context, turnId, { ...row, parts: read.success.parts }, true);
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
@@ -1384,7 +1462,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   // the answer already closed is revised in place, because a reader may
   // have taken it before the row settled, and what the row now says of it
   // travels with it.
-  const open = yield* messageByClientId(context, event.turnId);
+  const open = yield* journalRow(context, event.turnId);
   if (Option.isSome(open) && open.value.finishedAt !== null) {
     yield* reviseJournal({ id: open.value.id, conversationId: context.target.conversationId });
   }
@@ -1406,6 +1484,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
       parts,
       finishedAt: settledAt,
     });
+    holdJournal(context, event.turnId, { ...open.value, parts, finishedAt: settledAt }, false);
   }
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
@@ -1413,6 +1492,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The newest step's calls still unanswered, settled as an abandoned attempt's, and a coding agent's words of that attempt dropped; a journal with neither, or closed, is a repeat. */
 const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
+  turnId: string,
   row: MessageRow,
 ): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
@@ -1428,7 +1508,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
   const settled =
     parts.length !== row.parts.length || parts.some((part, index) => part !== row.parts[index]);
   if (!settled || row.finishedAt !== null) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
-  return yield* amendJournal(context, row, parts);
+  return yield* amendJournal(context, turnId, row, parts);
 });
 
 /**
@@ -1462,9 +1542,9 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = opened.success;
   const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
   if (held > event.step) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
-  if (held === event.step) return yield* settleRetriedCalls(context, row);
+  if (held === event.step) return yield* settleRetriedCalls(context, event.turnId, row);
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
-  return yield* amendJournal(context, row, [...row.parts, STEP_START_PART]);
+  return yield* amendJournal(context, event.turnId, row, [...row.parts, STEP_START_PART]);
 });
 
 const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -1478,7 +1558,7 @@ const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
     return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
   }
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
-  return yield* amendJournal(context, row, [
+  return yield* amendJournal(context, event.turnId, row, [
     ...row.parts,
     pendingToolPart(event.name, event.callId, event.input),
   ]);
@@ -1488,7 +1568,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
 ): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
-  const standing = yield* messageByClientId(context, event.turnId);
+  const standing = yield* journalRow(context, event.turnId);
   if (Option.isNone(standing)) {
     const turn = yield* turnRow(context, event.turnId);
     return Result.fail({
@@ -1509,7 +1589,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   const parts = [...row.parts];
   parts[found.index] = settledToolPart(found.part, event.settlement);
-  return yield* amendJournal(context, row, parts);
+  return yield* amendJournal(context, event.turnId, row, parts);
 });
 
 /**
@@ -1531,7 +1611,10 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
     return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
   }
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
-  return yield* amendJournal(context, row, [...row.parts, reasoningPart(event.summary, id)]);
+  return yield* amendJournal(context, event.turnId, row, [
+    ...row.parts,
+    reasoningPart(event.summary, id),
+  ]);
 });
 
 /**
@@ -1566,7 +1649,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
   const parts = [...row.parts];
   if (at === -1) parts.splice(end, 0, part);
   else parts[at] = part;
-  return yield* amendJournal(context, row, parts);
+  return yield* amendJournal(context, event.turnId, row, parts);
 });
 
 /**
@@ -1617,6 +1700,18 @@ const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
     metadata: nullable(message.metadata),
     finishedAt: context.now,
   });
+  // The answer replaces the journal whole, so an amendment this write held for it has nothing left to land.
+  holdJournal(
+    context,
+    event.turnId,
+    {
+      id: row.id,
+      parts: message.parts,
+      metadata: nullable(message.metadata),
+      finishedAt: context.now,
+    },
+    false,
+  );
   yield* moveJournalBehindWhatFollowed(context, row.id);
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
@@ -2078,7 +2173,7 @@ const giveLineToTurn = SqlSchema.void({
  * start, so the boundaries already standing are the steps before it.
  */
 const stepsBegun = (context: WriterContext, turnId: string): Write<number | null> =>
-  Effect.map(messageByClientId(context, turnId), (journal) => {
+  Effect.map(journalRow(context, turnId), (journal) => {
     if (Option.isNone(journal)) return null;
     const steps = journal.value.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START);
     return steps.length === 0 ? null : steps.length;
@@ -2338,24 +2433,49 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
    * write's instant is read from the clock once the lock is held, so every
    * row one write stamps carries the same one.
    */
-  function underConversation<A, E>(
+  function locked<A>(
     target: ConversationTarget,
-    write: (context: WriterContext) => Write<Result.Result<A, E>>,
-  ): Write<Result.Result<A, E | typeof NO_CONVERSATION>> {
+    write: (context: WriterContext) => Write<A>,
+    absent: () => A,
+  ): Write<A> {
     return Effect.flatMap(SqlClient.SqlClient, (client) =>
       client.withTransaction(
         Effect.gen(function* () {
-          const locked = yield* lockConversation(target);
-          if (Option.isNone(locked)) return Result.fail(NO_CONVERSATION);
+          const row = yield* lockConversation(target);
+          if (Option.isNone(row)) return absent();
           const now = yield* DateTime.nowAsDate;
-          return yield* write({ tools, now, target, kind: locked.value.kind });
+          const context: WriterContext = {
+            tools,
+            now,
+            target,
+            kind: row.value.kind,
+            journals: new Map(),
+          };
+          const written = yield* write(context);
+          yield* landJournals(context);
+          return written;
         }),
       ),
     );
   }
 
+  function underConversation<A, E>(
+    target: ConversationTarget,
+    write: (context: WriterContext) => Write<Result.Result<A, E>>,
+  ): Write<Result.Result<A, E | typeof NO_CONVERSATION>> {
+    return locked<Result.Result<A, E | typeof NO_CONVERSATION>>(target, write, () =>
+      Result.fail(NO_CONVERSATION),
+    );
+  }
+
   const writer: StoreWriter = {
     consume: (target, event) => underConversation(target, (context) => consume(context, event)),
+    consumeAll: (target, events) =>
+      locked<readonly StoreWriteResult[]>(
+        target,
+        (context) => Effect.forEach(events, (event) => consume(context, event)),
+        () => events.map(() => Result.fail(NO_CONVERSATION)),
+      ),
     enqueueTurn: (target, enqueue) =>
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
     requestTurnCancel: (target, cancel) =>

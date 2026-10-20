@@ -28,6 +28,7 @@ import {
   type Task,
   type TaskStanding,
   type TaskStatus,
+  type TaskSummary,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import {
@@ -133,7 +134,12 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "@luke/voice/transcript-model";
-import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
+import {
+  callInProgress,
+  VOICE_COMMAND,
+  type VoiceCallTranscript,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -160,12 +166,7 @@ import type { MessageReveal } from "./message-links.js";
 import type { SectionReveal } from "./plan-body.js";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import {
-  FIXTURE_TASKS_CALL,
-  fixtureRepositories,
-  fixtureSidePanel,
-  fixtureTasksView,
-} from "./tasks-fixture.js";
+import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
@@ -267,6 +268,13 @@ interface InboxViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
+  /**
+   * Opens the Inbox on an item, from wherever the window stands: a row of
+   * the inbox-first sidebar's list, which stands while the Inbox does not.
+   * Asked first where leaving would lose unsaved work, as every door that
+   * moves the place is.
+   */
+  readonly onOpenItem: (chosen: InboxChoice) => void;
   /**
    * Whether the list stands alone rather than the item chosen, where the
    * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
@@ -1044,6 +1052,13 @@ const DELETE_REFUSED: ActionResult = {
  * not yet listed is in no workspace's share until it is.
  */
 
+/** The sidebar's lists of `tasks`: those standing, pinned first, and every one, the archived last. */
+function sidebarList(tasks: readonly TaskSummary[]) {
+  const { pinned, rest, archived } = sidebarTasks(tasks);
+  const standing = [...pinned, ...rest];
+  return { standing, archived, every: [...standing, ...archived] };
+}
+
 /** The entries of the tasks in `workspaceId`, or every entry while no workspace is listed. */
 function inWorkspace<Entry extends { readonly taskId: string }>(
   entries: readonly Entry[],
@@ -1144,6 +1159,8 @@ export function useTasksTab(input: {
   failedRuns: readonly AccountFailedRun[];
   voice: {
     view: VoiceView;
+    /** What was said on the standing call so far (`voice.callTranscript`), which the live transcript draws. */
+    callTranscript: VoiceCallTranscript | undefined;
     listening: boolean;
     requestMicrophoneAccess: () => void;
   };
@@ -1210,6 +1227,8 @@ export function useTasksTab(input: {
       live = false;
     };
   }, [fixtureMode]);
+  // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
+  const tasksFixture = loadedTasksFixture();
   const stage = (
     staged: (held: FixtureChat, staging: ChatStager) => Staged,
   ): Promise<string | undefined> => {
@@ -1240,7 +1259,7 @@ export function useTasksTab(input: {
 
   // A fixture run draws its synthetic tasks in place of the account's,
   // signed out as every fixture run is.
-  const fixture = fixtureTasksView(input.run);
+  const fixture = tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
   // A name given here stands until main's view carries it, so a rename that
   // landed never flickers back while main's copy of the view catches up.
@@ -1301,18 +1320,26 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!accountSignedIn) setSectionWrites([]);
   }, [accountSignedIn]);
-  const taskSections = sectionWrites.reduce(
-    (held, pending) => applySectionWrite(held, pending.write, pending.at),
-    viewed.taskSections ?? NO_TASK_SECTIONS,
+  // Note that every list step below is memoized on what it reads, because
+  // this runs on every render of the window and each step walks every task
+  // of every workspace.
+  const viewedSections = viewed.taskSections ?? NO_TASK_SECTIONS;
+  const taskSections = useMemo(
+    () =>
+      sectionWrites.reduce(
+        (held, pending) => applySectionWrite(held, pending.write, pending.at),
+        viewedSections,
+      ),
+    [sectionWrites, viewedSections],
   );
   // A tab closed names a task of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
-  const tasks = positionedView(
-    markedView(renamedView(renamedView(viewed, renames), drafts), marks),
-    pinPositions,
-  );
+  const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
+  const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
+  const marked = useMemo(() => markedView(drafted, marks), [drafted, marks]);
+  const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
   // else that finds a task, the palette, the inbox, and the history, finds
   // it among them all; with no workspace listed yet, every task is listed.
@@ -1333,13 +1360,17 @@ export function useTasksTab(input: {
   if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
     setStandIn(undefined);
   }
-  const sidebar = sidebarTasks(tasks.tasks);
-  const listedSidebar = sidebarTasks(
-    listedWorkspace === undefined
-      ? tasks.tasks
-      : tasks.tasks.filter((task) => task.workspaceId === listedWorkspace.id),
-  );
   const listedWorkspaceId = listedWorkspace?.id;
+  const sidebar = useMemo(() => sidebarList(tasks.tasks), [tasks.tasks]);
+  const listedSidebar = useMemo(
+    () =>
+      sidebarList(
+        listedWorkspaceId === undefined
+          ? tasks.tasks
+          : tasks.tasks.filter((task) => task.workspaceId === listedWorkspaceId),
+      ),
+    [tasks.tasks, listedWorkspaceId],
+  );
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each pinned as given here until main's view carries it.
   const { tasklessAgents } = tasks;
@@ -1469,7 +1500,14 @@ export function useTasksTab(input: {
   // The calls heard on the open task, each held past its end until the
   // record's copy catches up; a fixture's open task is drawn with its own
   // call's words.
-  const reported = fixture === undefined ? voice.view : FIXTURE_TASKS_CALL;
+  const reported =
+    tasksFixture === undefined || fixture === undefined
+      ? {
+          voiceStatus: voice.view.voiceStatus,
+          callTaskId: voice.view.callTaskId,
+          callTranscript: voice.callTranscript,
+        }
+      : tasksFixture.FIXTURE_TASKS_CALL;
   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
   useEffect(() => {
     setHeard((held) =>
@@ -1599,7 +1637,7 @@ export function useTasksTab(input: {
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
   const sidePanel = useSidePanel(
-    fixtureSidePanel(input.run),
+    tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
       ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
       : pageAgents === undefined
@@ -2336,8 +2374,8 @@ export function useTasksTab(input: {
     return {
       recent: recentRepositories(offered),
       read: () =>
-        fixture !== undefined
-          ? Promise.resolve(fixtureRepositories(workspaceId))
+        tasksFixture !== undefined && fixture !== undefined
+          ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
           : act(
               ACT_KIND.TASKS_REPOSITORIES,
               workspaceId === undefined ? {} : { workspaceId },
@@ -3025,10 +3063,10 @@ export function useTasksTab(input: {
     shown,
     signedIn,
     me: fixture === undefined ? input.accountId : undefined,
-    tasks: [...sidebar.pinned, ...sidebar.rest],
+    tasks: sidebar.standing,
     archived: sidebar.archived,
     listed: {
-      tasks: [...listedSidebar.pinned, ...listedSidebar.rest],
+      tasks: listedSidebar.standing,
       archived: listedSidebar.archived,
       inbox: listedInbox.inbox,
       inboxTasks: listedInbox.inboxTasks,
@@ -3177,6 +3215,14 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
+      onOpenItem: guard((chosen: InboxChoice) => {
+        setHistoryFor(undefined);
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX
+            ? { ...held, chosen, listed: false }
+            : { kind: STAND_IN.INBOX, chosen, listed: false },
+        );
+      }),
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
@@ -3381,7 +3427,7 @@ export function useTasksTab(input: {
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),
-      tasks: [...sidebar.pinned, ...sidebar.rest, ...sidebar.archived],
+      tasks: sidebar.every,
       onShowMention: guard(showMention),
       linearIssuesIn,
       githubIssuesIn,

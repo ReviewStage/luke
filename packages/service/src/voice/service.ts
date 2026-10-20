@@ -510,6 +510,7 @@ export class VoiceService {
         accountId,
         sessionId,
         taskId: opened.taskId,
+        agentId: opened.agentId,
         timeZone: opened.timeZone,
         started: opened.started,
         sideband,

@@ -6,7 +6,7 @@ export {
   initialAppState,
   publishAppStateChanges,
   voiceWindowGone,
-  voiceWindowState,
+  WindowAppStates,
   windowAppState,
 } from "./app-state-store.js";
 export { linkClientNotices } from "./client-notices.js";

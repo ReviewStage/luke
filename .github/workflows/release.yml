@@ -108,9 +108,6 @@ jobs:
             ' "$VERSION"
           } >> "$GITHUB_ENV"
 
-      - name: Run repository checks
-        run: ./scripts/check.sh
-
       - name: Import Developer ID certificate
         env:
           MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}

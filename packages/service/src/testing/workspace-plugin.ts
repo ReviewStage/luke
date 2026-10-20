@@ -10,11 +10,12 @@ import {
   DISABLED_AUTH_PATHS,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
+  SESSION_COOKIE_CACHE,
   USER_FIELDS,
 } from "../auth/auth-policy.js";
 
 /**
- * workspace-plugin.ts -- Better Auth with the organization and bearer plugins, and the user's fields `auth.ts` declares, over a migrated PGlite of its own.
+ * workspace-plugin.ts -- Better Auth with the organization and bearer plugins, and the user's fields and session cookie cache `auth.ts` declares, over a migrated PGlite of its own.
  *
  * The plugin writes through its own adapter and the store reads through
  * `database`, the same PGlite, so a test sees the plugin's real rows: the
@@ -39,6 +40,7 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     baseURL: "http://127.0.0.1",
     secret: SECRET,
     user: USER_FIELDS,
+    session: SESSION_COOKIE_CACHE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     plugins: [organizationPlugin(ORGANIZATION_OPTIONS), bearer(SESSION_BEARER)],
   });

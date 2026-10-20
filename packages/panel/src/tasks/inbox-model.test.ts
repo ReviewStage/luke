@@ -21,8 +21,7 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   ANSWER_TONE,
-  answeredWords,
-  attachedStamp,
+  awaitsNod,
   CODE_READ,
   codeNotice,
   codeReadOf,
@@ -45,6 +44,7 @@ import {
   type InboxSort,
   type InboxWhose,
   inboxBoard,
+  inboxCommentFiles,
   inboxCounts,
   inboxList,
   inboxMedia,
@@ -61,6 +61,7 @@ import {
   SETTLED_BY,
   sentStamp,
   settlementOf,
+  shownTicks,
   taskHolder,
   tasklessGroups,
   withChoice,
@@ -174,7 +175,7 @@ test("the picks are the answer in the order pressed, and a choice of one takes n
   );
 });
 
-test("a form is answered by its fields in the form's own order whatever order they were filled in, a blank text left out, a required one holding the answer back, a switch left alone sent as no, and a field's value replacing the one before it", () => {
+test("a form is answered by its fields in the form's own order whatever order they were filled in, a blank text left out, a required one holding back a form given nothing, a switch left alone sent as no, and a field's value replacing the one before it", () => {
   assert.equal(inboxReply(SMTP, EMPTY_INBOX_DRAFT), undefined, "Host is required");
   let draft = withValue(EMPTY_INBOX_DRAFT, "Host", "  ");
   assert.equal(inboxReply(SMTP, draft), undefined, "blank is not filled");
@@ -214,7 +215,69 @@ test("a form is answered by its fields in the form's own order whatever order th
   });
 });
 
-test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
+test("a form filled in part sends what was filled, a required field left empty absent from its values, as does one given only the developer's words or files; one given nothing, a switch left alone filling nothing, sends nothing", () => {
+  const settings = item({
+    id: "settings",
+    response: {
+      type: INBOX_RESPONSE.FORM,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+        { type: INBOX_FIELD.NUMBER, label: "Port", required: true },
+        { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+      ],
+    },
+  });
+  assert.equal(inboxReply(settings, EMPTY_INBOX_DRAFT), undefined);
+  assert.equal(inboxReply(settings, withValue(EMPTY_INBOX_DRAFT, "Host", "  ")), undefined);
+  assert.deepEqual(inboxReply(settings, withValue(EMPTY_INBOX_DRAFT, "Port", 587)), {
+    reply: INBOX_REPLY.SUBMITTED,
+    values: [
+      { label: "Port", value: 587 },
+      { label: "Verify certificate", value: false },
+    ],
+  });
+  assert.deepEqual(inboxReply(settings, { ...EMPTY_INBOX_DRAFT, note: "Ask ops for it." }), {
+    reply: INBOX_REPLY.SUBMITTED,
+    values: [{ label: "Verify certificate", value: false }],
+    note: "Ask ops for it.",
+  });
+  const files = [{ name: "smtp.txt", mediaType: "text/plain", data: btoa("host\n") }] as const;
+  assert.equal(
+    inboxReply(settings, { ...EMPTY_INBOX_DRAFT, attachments: files })?.reply,
+    INBOX_REPLY.SUBMITTED,
+  );
+});
+
+test("a thread's form attaches its values to the reply as they are filled, with no press, a required field left empty absent from them; a reply with nothing filled stays plain, a switch left alone filling nothing", () => {
+  const form = [
+    asking({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+        { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate", required: true },
+      ],
+    }),
+  ];
+  assert.equal(inboxThreadSend(form, EMPTY_INBOX_DRAFT), undefined, "nothing filled sends nothing");
+  assert.deepEqual(
+    inboxThreadSend(form, { ...EMPTY_INBOX_DRAFT, note: "Which host?" }),
+    { text: "Which host?", attachments: [] },
+    "words alone are a plain reply, keeping the ask open",
+  );
+  const partial = withValue(EMPTY_INBOX_DRAFT, "Verify certificate", true);
+  const sent = inboxThreadSend(form, { ...partial, note: "No host yet." });
+  assert.deepEqual(sent, {
+    text: "No host yet.",
+    attachments: [],
+    answers: {
+      ask: ASKING_ID,
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [{ label: "Verify certificate", value: true }],
+    },
+  });
+});
+
+test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
   assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.OPTION,
     line: "Pick an option",
@@ -240,16 +303,21 @@ test("what an answer lacks is said by what it asks: a choice its pick, unless th
       ],
     },
   });
-  assert.deepEqual(inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "Dean")), {
+  assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.FIELD,
     label: "Effort",
     line: "Fill in Effort",
   });
-  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
   assert.deepEqual(
-    inboxMissing(rollout, withValue(effort, "Reviewer", "  ")),
-    { kind: INBOX_MISSING.FIELD, label: "Reviewer", line: "Fill in Reviewer" },
+    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
+    { kind: INBOX_MISSING.FIELD, label: "Effort", line: "Fill in Effort" },
     "blank words fill nothing",
+  );
+  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
+  assert.equal(
+    inboxMissing(rollout, effort),
+    undefined,
+    "a form filled in part lacks nothing, sending what was filled",
   );
   assert.equal(
     inboxMissing(rollout, withValue(effort, "Reviewer", "Dean")),
@@ -1321,7 +1389,7 @@ test("an item is drawn as its thread where the thread asks, or where the agent's
   assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
 });
 
-test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words or Mark done with a step unticked", () => {
+test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words", () => {
   const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
   const decide = [asking(pick)];
   const draft: InboxDraft = { ...EMPTY_INBOX_DRAFT, note: "  Why not C?  " };
@@ -1345,15 +1413,19 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     reply: INBOX_REPLY.ANSWERED,
   });
 
-  const steps = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
+  const toDo = { type: INBOX_ASK.DO, steps: ["One", "Two"] } as const;
+  const steps = [asking(toDo)];
   const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] };
-  assert.equal(inboxThreadSend(steps, done), undefined);
   assert.deepEqual(inboxThreadSend(steps, { ...done, press: INBOX_REPLY.NOT_DONE })?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.NOT_DONE,
     steps: [1],
   });
-  assert.deepEqual(inboxThreadSend(steps, withStep(done, 0))?.answers?.steps, [0, 1]);
+  assert.deepEqual(
+    inboxThreadSend(steps, withStep(toDo, { ...done, press: INBOX_REPLY.NOT_DONE }, 0))?.answers
+      ?.steps,
+    [0, 1],
+  );
 
   const settled: InboxMessage = {
     ...asking(pick),
@@ -1364,6 +1436,64 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     { text: "x", attachments: [] },
     "a pick on a settled ask is no answer",
   );
+});
+
+test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn't do it still sends only those ticked by hand", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
+  const steps = [asking(ask)];
+  const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE };
+  assert.deepEqual(shownTicks(ask, done), [0, 1, 2], "the checklist shows every step ticked");
+  assert.deepEqual(inboxThreadSend(steps, done)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [0, 1, 2],
+  });
+  const byHand: InboxDraft = { ...withStep(ask, EMPTY_INBOX_DRAFT, 1), press: INBOX_REPLY.DONE };
+  assert.deepEqual(inboxThreadSend(steps, byHand)?.answers?.steps, [0, 1, 2]);
+
+  const failed: InboxDraft = { ...byHand, press: INBOX_REPLY.NOT_DONE };
+  assert.deepEqual(shownTicks(ask, failed), [1]);
+  assert.deepEqual(
+    inboxThreadSend(steps, failed)?.answers?.steps,
+    [1],
+    "Couldn't do it after Mark done sends only the step ticked by hand",
+  );
+
+  const letGo = withStep(ask, done, 2);
+  assert.equal(letGo.press, undefined, "letting a step go takes Mark done off");
+  assert.deepEqual(shownTicks(ask, letGo), [0, 1]);
+
+  const titled = { type: INBOX_ASK.DO, steps: [] } as const;
+  assert.deepEqual(shownTicks(titled, done), [0], "the title standing as the one step is ticked");
+  assert.deepEqual(inboxThreadSend([asking(titled)], done)?.answers?.steps, []);
+});
+
+test("a notice, open and asking nothing with no ask open on its thread, waits on the reader's nod, which Got it answers; a thread whose ask is open, or one settled, waits on none", () => {
+  const said: InboxMessage = {
+    id: "b1b2c3d4-0000-4000-8000-000000000010",
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text: "The preview is up.",
+    createdAt: 1_000,
+  };
+  const notice = item({
+    id: "a1b2c3d4-0000-4000-8000-000000000010",
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    thread: [said],
+  });
+
+  assert.equal(awaitsNod(notice, [said]), true);
+  assert.deepEqual(inboxReply(notice, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED), {
+    reply: INBOX_REPLY.ACKNOWLEDGED,
+  });
+  const asked = asking({ type: INBOX_ASK.ANSWER });
+  assert.equal(awaitsNod({ ...notice, response: { type: INBOX_RESPONSE.TEXT } }, [asked]), false);
+  assert.equal(
+    awaitsNod(notice, [said, asked]),
+    false,
+    "an ask open on the thread is answered, not nodded to",
+  );
+  assert.equal(awaitsNod({ ...notice, status: INBOX_STATUS.ANSWERED }, [said]), false);
 });
 
 test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {
@@ -1384,13 +1514,7 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
     tone: ANSWER_TONE.BACK,
     words: "Requested changes",
   });
-  assert.deepEqual(attachedStamp(chose("Request changes"), pair), {
-    tone: ANSWER_TONE.BACK,
-    words: "Request changes",
-  });
-  assert.equal(answeredWords(chose("Request changes"), pair), "requested changes");
   assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
-  assert.equal(attachedStamp(chose("7 days"), undefined).words, 'Choose "7 days"');
 
   const todo = asking({ type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] }).ask;
   const done = { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1, 2] };
@@ -1399,7 +1523,6 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
     tone: ANSWER_TONE.BACK,
     words: "Couldn't do it 1/3",
   });
-  assert.equal(attachedStamp(done, todo).words, "Mark done");
 });
 
 test("a thread's row previews its latest message, an answer led by its stamp, and a note that asks nothing reads as the agent's words rather than an answer", () => {
@@ -1530,6 +1653,63 @@ test("a thread's row media are the pictures its messages' words draw by address 
     [],
     "another item's picture, one quoted in code, and a bare address draw no picture, so the row shows none",
   );
+});
+
+test("a comment's files are drawn after its words but for a picture its words draw as one, the pictures apart from every other file; a file the words only link to, quote in code, or draw though it is no picture is still drawn", () => {
+  const itemId = "a1b2c3d4-0000-4000-8000-0000000000f1";
+  const place = {
+    kind: LINK_PLACE.INBOX_ITEM,
+    planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    itemId,
+  } as const;
+  const address = (attachmentId: string) => `${linkOf(place, "acme")}/files/${attachmentId}`;
+  const [drawn, linked, quoted, fenced, loose, spec, drawnSpec] = [
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c90",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c91",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c92",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c93",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c94",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c95",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c96",
+  ];
+  const png = (attachmentId: string) => ({
+    attachmentId,
+    name: `${attachmentId.slice(-2)}.png`,
+    mediaType: "image/png",
+  });
+  const pdf = (attachmentId: string) => ({
+    attachmentId,
+    name: `${attachmentId.slice(-2)}.pdf`,
+    mediaType: "application/pdf",
+  });
+  const files = [
+    png(drawn),
+    png(linked),
+    png(quoted),
+    png(fenced),
+    png(loose),
+    pdf(spec),
+    pdf(drawnSpec),
+  ];
+  const words = [
+    `![The form](<${address(drawn)}> "After")`,
+    `See [the form](${address(linked)}), or \`![x](${address(quoted)})\`.`,
+    "```md",
+    `![x](${address(fenced)})`,
+    "```",
+    `The spec: ${address(spec)} and ![spec](${address(drawnSpec)})`,
+  ].join("\n");
+  const ids = (each: readonly { readonly attachmentId: string }[]) =>
+    each.map(({ attachmentId }) => attachmentId);
+  const read = inboxCommentFiles(files, words, itemId);
+  assert.deepEqual(ids(read.pictures), [linked, quoted, fenced, loose]);
+  assert.deepEqual(ids(read.others), [spec, drawnSpec]);
+  // Words naming another item's picture draw none of this one's, and no words leave every file to be drawn.
+  assert.deepEqual(
+    ids(inboxCommentFiles(files, words, "a1b2c3d4-0000-4000-8000-0000000000f2").pictures),
+    [drawn, linked, quoted, fenced, loose],
+  );
+  assert.deepEqual(ids(inboxCommentFiles(files, undefined, itemId).others), [spec, drawnSpec]);
 });
 
 /** The message with its ask standing as `status` says; the very message where it asks nothing. */

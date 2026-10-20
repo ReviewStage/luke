@@ -6,7 +6,7 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/featu
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -15,6 +15,7 @@ import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
+import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 
 /**
@@ -66,8 +67,8 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card on a repository, as Home draws it (no title) or as the dialog does (`heading`). */
-async function mount(heading?: ReactNode): Promise<HTMLElement> {
+/** The card on a repository, its lists opening under the line as Home's do, or over it as the dialog's do. */
+async function mount(listSide: MentionMenuSide = MENTION_MENU_SIDE.BELOW): Promise<HTMLElement> {
   const control = tasksControl();
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -84,7 +85,7 @@ async function mount(heading?: ReactNode): Promise<HTMLElement> {
           },
           workspaceId: "workspace-acme",
           onLeave: () => undefined,
-          heading,
+          listSide,
         }),
       ),
     ),
@@ -118,12 +119,12 @@ test("on Home the / list opens under the caret's line too", async () => {
 });
 
 test("in the dialog, whose card is not at a page's top, the @ list still opens over the line", async () => {
-  const container = await mount(createElement("h2", null, "New task"));
+  const container = await mount(MENTION_MENU_SIDE.ABOVE);
   assert.equal(sideOf(await listOpenedBy(container, "@", ".mention-menu")), "above");
 });
 
 test("in the dialog the / list still opens over the line too", async () => {
-  const container = await mount(createElement("h2", null, "New task"));
+  const container = await mount(MENTION_MENU_SIDE.ABOVE);
   assert.equal(sideOf(await listOpenedBy(container, "/", ".skill-menu")), "above");
 });
 
@@ -235,6 +236,7 @@ async function mountChosen(width: number, touch: boolean) {
           },
           workspaceId: "workspace-acme",
           onLeave: () => undefined,
+          listSide: MENTION_MENU_SIDE.BELOW,
         }),
       ),
     ),

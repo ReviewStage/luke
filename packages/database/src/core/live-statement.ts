@@ -10,8 +10,10 @@ import { Option, Schema } from "effect";
  * selects every column under its wire key (`liveSelection`), and an instant
  * as the epoch milliseconds the wire carries, so a row as Realtime delivers
  * it decodes under the same schema the held read answers with. Realtime takes
- * raw SQL with `$n` placeholders and its values beside it, which is what
- * Drizzle renders a statement to (`liveStatementOf`).
+ * the Drizzle select itself through its Drizzle adapter, which renders it to
+ * SQL with `$n` placeholders and its values beside it and refuses one whose
+ * selected key is not the name Postgres answers the column under
+ * (`liveStatementOf`).
  *
  * Note that a live read is deterministic, as Realtime requires: no `now()`,
  * no window measured from the clock. A read that needs one bounds it on the
@@ -21,15 +23,25 @@ import { Option, Schema } from "effect";
 /** One value of a live statement, as Realtime takes it: Postgres infers its type from where it stands. */
 type LiveParameter = string | number | boolean | null;
 
-/** A live statement: its SQL and the values its placeholders name, in order. */
+/**
+ * A Drizzle select as Realtime's Drizzle adapter seals it: the rows it is
+ * typed to answer, and the SQL and values it renders to.
+ */
+export interface LiveSelect {
+  readonly _: { readonly result: readonly unknown[] };
+  toSQL(): { readonly sql: string; readonly params: readonly unknown[] };
+}
+
+/**
+ * A live statement: its SQL and the values its placeholders name, in order,
+ * and the Drizzle select it was rendered from, which is what is sealed
+ * (`drizzleAdapter()`); a statement written as text alone, as a test's
+ * stand-in is, carries none and is sealed as that text.
+ */
 export interface LiveStatement {
   readonly sql: string;
   readonly params: readonly LiveParameter[];
-}
-
-/** What a Drizzle statement renders to, whichever builder made it. */
-interface RenderableStatement {
-  toSQL(): { readonly sql: string; readonly params: readonly unknown[] };
+  readonly query?: LiveSelect;
 }
 
 /**
@@ -80,10 +92,12 @@ const LiveValuesSchema = Schema.Array(
  * The statement as Realtime takes it; none where it names a value Realtime
  * cannot carry, which a caller answers as the read not being live.
  */
-export function liveStatementOf(statement: RenderableStatement): Option.Option<LiveStatement> {
+export function liveStatementOf(statement: LiveSelect): Option.Option<LiveStatement> {
   const { sql: text, params } = statement.toSQL();
   return Option.map(Schema.decodeUnknownOption(LiveValuesSchema)(params), (values) => ({
     sql: text,
     params: values.map((value) => (value instanceof Date ? value.toISOString() : value)),
+    // Note that a select binding an instant is sealed as its text, because the adapter encodes no `Date`.
+    ...(values.some((value) => value instanceof Date) ? undefined : { query: statement }),
   }));
 }

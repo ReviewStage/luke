@@ -17,6 +17,7 @@ import { installAppPlatform } from "@luke/panel/app-platform";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
+import { loadTasksFixture } from "@luke/panel/tasks/tasks-fixture-loader";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@luke/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -120,6 +121,8 @@ export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void 
 
 /** The panel drawn in the tab once its state is read, as the web root draws it. */
 export async function drawPanel() {
+  // A fixture run's window is drawn once its synthetic tasks have landed; they land before this one draws.
+  await loadTasksFixture();
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);

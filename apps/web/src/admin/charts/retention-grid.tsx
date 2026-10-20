@@ -21,8 +21,11 @@ import { ChartEmpty, ChartFrame } from "./chart-frame";
 const RETENTION_FILL_FLOOR_PERCENT = 8;
 
 /**
- * The share past which a cell's fill is strong enough that the page's light
- * foreground stops clearing it, so the text flips to the dark background tone.
+ * The share past which a cell's fill is strong enough that the page's text
+ * stops clearing it, in the dark theme, so the text flips to the ink the
+ * palette sets on a fill of the accent's family. That ink is dark in both
+ * themes, so in the light theme, where the text is dark already and the fill
+ * is thinned against a light card, the flip changes the ink by almost nothing.
  */
 const RETENTION_TEXT_FLIP_SHARE = 0.75;
 
@@ -31,7 +34,7 @@ function retentionCellStyle(share: number): React.CSSProperties {
   return {
     backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
     color:
-      share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-ground)" : "var(--luke-color-text)",
+      share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-on-accent)" : "var(--luke-color-text)",
   };
 }
 
@@ -119,16 +122,16 @@ export function RetentionGrid({
       scrolled out of a narrow card should pass under its edge, not stop short of it.
       The inset comes back on the grid's own box, which stands as wide as the grid,
       so it pads both ends of the scroll; a swipe up or down over it moves the page. */}
-      <div className="-mx-5">
+      <div className="-mx-(--luke-card-inset)">
         <ScrollArea
           axis={SCROLL_AXIS.HORIZONTAL}
           size={SCROLL_SIZE.CONTENT}
           overscroll={SCROLL_OVERSCROLL.CHAIN}
         >
-          <div className="w-fit min-w-full px-5">
+          <div className="w-fit min-w-full px-(--luke-card-inset)">
             <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
               <div
-                className="grid min-w-160 gap-1 tabular-nums"
+                className="grid min-w-160 gap-(--luke-space-4) tabular-nums"
                 style={{
                   gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
                 }}
@@ -147,7 +150,7 @@ export function RetentionGrid({
                 {retention.cohorts.map((cohort) => (
                   <Fragment key={cohort.weekStart}>
                     <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
-                    <div className="flex items-center justify-end pr-1 text-(--luke-color-text-muted)">
+                    <div className="flex items-center justify-end pr-(--luke-space-4) text-(--luke-color-text-muted)">
                       {formatNumber(cohort.size)}
                     </div>
                     {offsets.map((offset) => {

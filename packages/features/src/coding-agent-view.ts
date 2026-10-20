@@ -24,6 +24,7 @@ import {
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
+import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
@@ -43,6 +44,7 @@ import {
 } from "./plan-document-template.js";
 import {
   PROVIDER_KEY_PROVIDER,
+  providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
@@ -104,6 +106,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_RETIRED: "agent-retired",
   /** The task is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
   TASK_ARCHIVED: "plan-archived",
+  /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
+  NOT_PERMITTED: "not-permitted",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -146,12 +150,23 @@ export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;
 
 export type ProviderKeySaveParams = typeof providerKeySaveParamsSchema.Type;
 
-/** Removing a key, as the window asks it: the provider. */
+/** Removing a key, as the window asks it: the provider, and the kind where it is no API key. */
 export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
   provider: EffectSchema.Literals(Object.values(PROVIDER_KEY_PROVIDER)),
+  kind: EffectSchema.optionalKey(providerKeyKindSchema),
 });
 
 export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;
+
+/** The member's own GitHub token, as the window hears it read, saved, or removed: what it is, or why there is no answer. */
+export const githubTokenAnswerViewSchema = EffectSchema.Union([githubTokenAnswerSchema, failed]);
+
+export type GitHubTokenAnswerView = typeof githubTokenAnswerViewSchema.Type;
+
+/** Saving a token, as the window asks it: the token, once. */
+export const githubTokenSaveParamsSchema = githubTokenSaveRequestSchema;
+
+export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
 /** The account's plan template, as the window hears it read or written: the template as kept and whether the account wrote it, or why there is none. */
 export const planTemplateAnswerViewSchema = EffectSchema.Union([planTemplateAnswerSchema, failed]);
@@ -258,6 +273,44 @@ export const codingAgentMessagesAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentMessagesAnswerView = typeof codingAgentMessagesAnswerViewSchema.Type;
+
+/** Whose transcript a window follows: a coding agent's, or a worker's of it, or a task's planning worker's. */
+export const TRANSCRIPT_KIND = {
+  AGENT: "agent",
+  TASK_WORKER: "taskWorker",
+} as const;
+
+/**
+ * One transcript as a window follows it: an agent's own, or one of its
+ * workers' by the delegation call that started it; or a task's planning
+ * worker's by the call that started it.
+ */
+export const codingAgentTranscriptKeySchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(TRANSCRIPT_KIND.AGENT),
+    agentId: EffectSchema.NonEmptyString,
+    callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(TRANSCRIPT_KIND.TASK_WORKER),
+    taskId: EffectSchema.NonEmptyString,
+    callId: codingAgentCallIdSchema,
+  }),
+]);
+
+export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Type;
+
+/**
+ * A followed transcript's next page, as the window hears it pushed: the
+ * messages past the last page pushed, the first from the start, with where
+ * the agent stands as it was read; or why there is none.
+ */
+export const codingAgentTranscriptChangedSchema = EffectSchema.Struct({
+  transcript: codingAgentTranscriptKeySchema,
+  page: codingAgentMessagesAnswerViewSchema,
+});
+
+export type CodingAgentTranscriptChanged = typeof codingAgentTranscriptChangedSchema.Type;
 
 /** Messaging an agent, as the window asks it: the agent, and the message request the service takes, its key the window's own. */
 export const codingAgentMessageParamsSchema = EffectSchema.Struct({

@@ -16,7 +16,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import { TASK_FILE_REFUSAL, type TaskSkillsAnswer } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -64,13 +64,11 @@ export function readTaskSkills(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
-    return Option.some(
-      yield* readWorkspaceSkills(stored.value.task.workspaceId, repository, userId),
-    );
+    return Option.some(yield* readWorkspaceSkills(stored.value.workspaceId, repository, userId));
   });
 }
 

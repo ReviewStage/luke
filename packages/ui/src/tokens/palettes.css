@@ -244,8 +244,9 @@
   --luke-color-chart-5: #868b94;
 }
 
-/* The admin dashboard's and the OAuth cards' dark ground, the product's state
-   palette on it verbatim. */
+/* The site's dark ground, worn where the account's Theme setting (or the
+   machine, under System) asks for it, as the app and the admin dashboard do,
+   and where a page asks for it itself, as the OAuth cards do. The product's state palette on it verbatim. */
 [data-luke-profile="web"][data-luke-theme="dark"] {
   --luke-color-text: rgba(255, 255, 255, 0.92);
   --luke-color-text-muted: rgba(255, 255, 255, 0.56);
@@ -324,7 +325,7 @@
   --luke-color-identity-6: #477a3a;
   --luke-color-on-identity: #fff;
 
-  /* The admin dashboard's chart series. The accent cyan sits too light for a
+  /* The chart series on the dark ground. The accent cyan sits too light for a
      mark on the dark card, so the slot is a darker step of the same hue
      family, validated against the card at #101114 (6.1:1, ≥ 3:1); the series
      after it hold the same bound there (4.7:1 to 5.7:1). */

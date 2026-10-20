@@ -126,3 +126,12 @@ test("a window with no accounts says so instead of drawing a grid", () => {
 
   expect(page.textContent).toBe("No accounts created in the last 8 weeks yet.");
 });
+
+test("a strong cell's words take the palette's ink on a fill, never the ground, which is pale in the light theme", () => {
+  const page = render(RETENTION);
+
+  const [strong] = cellsReading(page, "100%");
+  const [weak] = cellsReading(page, "25%");
+  expect(strong?.style.color).toBe("var(--luke-color-on-accent)");
+  expect(weak?.style.color).toBe("var(--luke-color-text)");
+});

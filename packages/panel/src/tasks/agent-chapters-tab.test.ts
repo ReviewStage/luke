@@ -65,8 +65,9 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * only its hunks and the review threads on them; chapters made for an
  * older head stand under a line saying so with Regenerate; a generation
  * that failed says why with Retry; a chapter is viewed once its files are,
- * Mark chapter viewed and ⇧V mark them all, and ← and → step through the
- * chapters. Synthetic people, files, and chapters throughout.
+ * Mark chapter viewed and ⇧V mark them all, ← and → step through the
+ * chapters, and a key change's press scrolls to its lines and lights them.
+ * Synthetic people, files, and chapters throughout.
  */
 
 const AGENT: CodingAgentSummary = {
@@ -214,13 +215,16 @@ function answering(
 }
 
 /** Ready chapters made for `headSha`, "Other changes" put first, as no reader reads it. */
-function ready(headSha = HEAD): PullRequestChaptersState {
+function ready(
+  headSha = HEAD,
+  chapters: readonly Chapter[] = [OTHER, READ_STORE, SWEEP_EXPIRED],
+): PullRequestChaptersState {
   return {
     status: PULL_REQUEST_CHAPTERS_STATE.READY,
     headSha,
     baseSha: BASE,
     model: "claude",
-    chapters: [OTHER, READ_STORE, SWEEP_EXPIRED],
+    chapters,
   };
 }
 
@@ -241,6 +245,8 @@ const DIFF_STAND_IN: DiffViewModule = {
       update: (next) => lists.push({ host, props: next }),
       reveal: (path) => listReveals.push(path),
       revealLine: (path, side, line) => listReveals.push(`${path}:${side}:${line}`),
+      revealLines: (range) =>
+        listReveals.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },
@@ -543,7 +549,40 @@ test("← and → step through the chapters, held at either end, and a key chang
 
   act(() => button(tab, "src/store.ts · L1–2").click());
   await settle();
-  assert.deepEqual(listReveals, [STORE.path]);
+  assert.deepEqual(listReveals, ["src/store.ts:additions:1-2"]);
+});
+
+test("a key change's press scrolls to its first lines in the chapter's file order and lights them, or to its file where the chapter draws none of them", async () => {
+  const pointed: Chapter = {
+    ...SWEEP_EXPIRED,
+    keyChanges: [
+      {
+        content: "Does the sweep run before the write?",
+        lineRefs: [
+          { path: STORE.path, side: LINE_REF_SIDE.ADDITIONS, startLine: 11, endLine: 11 },
+          { path: SWEEP.path, side: LINE_REF_SIDE.ADDITIONS, startLine: 1, endLine: 1 },
+        ],
+      },
+      {
+        content: "Is the read between them still right?",
+        lineRefs: [{ path: STORE.path, side: LINE_REF_SIDE.ADDITIONS, startLine: 5, endLine: 6 }],
+      },
+    ],
+  };
+  const tab = await draw(
+    controlAnswering({
+      readChapters: () => Promise.resolve(answering(ready(HEAD, [READ_STORE, pointed]))),
+    }),
+  );
+  press(tab, { key: "ArrowRight" });
+  await settle();
+  assert.equal(heading(tab), "2. Sweep what expired");
+
+  act(() => button(tab, "src/sweep.ts · L1").click());
+  await settle();
+  act(() => button(tab, "src/store.ts · L5–6").click());
+  await settle();
+  assert.deepEqual(listReveals, ["src/sweep.ts:additions:1-1", STORE.path]);
 });
 
 test("a chapter is viewed once every file it holds is; Mark chapter viewed and ⇧V mark the rest, and unmark them all once all are", async () => {
@@ -573,6 +612,31 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: SWEEP.path },
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: STORE.path },
   ]);
+});
+
+/** The Chapters tab answering ready chapters, made by `model` for `headSha`. */
+function readyChapters(headSha: string): Extract<PullRequestChaptersState, { model: string }> {
+  const chapters = ready(headSha);
+  return chapters.status === PULL_REQUEST_CHAPTERS_STATE.READY ? chapters : assert.fail("ready");
+}
+
+function madeBy(model: string, headSha = HEAD): CodingAgentsControl {
+  return controlAnswering({
+    readChapters: () => Promise.resolve(answering({ ...readyChapters(headSha), model })),
+  });
+}
+
+test("the chapters say which model made them, inside the tab's ph-no-capture root", async () => {
+  const tab = await draw(madeBy("claude-haiku-5-5"));
+  const line = tab.querySelector(".chapters-made-by") ?? assert.fail("the model is named");
+  assert.equal(line.textContent, "Made by Haiku 5.5");
+  assert.notEqual(line.closest(".ph-no-capture"), null);
+});
+
+test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
+  const tab = await draw(madeBy("scripted", OLDER));
+  assert.notEqual(tab.querySelector(".chapters-stale"), null);
+  assert.equal(tab.querySelector(".chapters-made-by")?.textContent, "Made by scripted");
 });
 
 test("chapters made for an older head stand under a line saying new commits came since, with Regenerate, drawing no diff, counts, Viewed, or press to their lines, since their hunks name an older head", async () => {

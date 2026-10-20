@@ -203,6 +203,31 @@ test("the loading dashboard stands its sections under the same headings, saying 
   expect(page.querySelector('[role="status"]')?.textContent).toContain("Loading…");
 });
 
+/** Each region the page draws, by the words of the heading that names it, and the words it holds. */
+function regions(page: HTMLElement): { name: string; words: string }[] {
+  return Array.from(page.querySelectorAll("section[aria-labelledby]"), (region) => ({
+    name: page.querySelector(`[id="${region.getAttribute("aria-labelledby")}"]`)?.textContent ?? "",
+    words: region.textContent ?? "",
+  }));
+}
+
+test("each section is a region named by its heading, holding what it heads and its note", () => {
+  const page = render(ready(metrics()));
+
+  expect(regions(page).map((region) => region.name)).toEqual(SECTIONS);
+  const named = (name: string) => regions(page).find((region) => region.name === name)?.words;
+  expect(named("This week")).toContain("Weekly active developers");
+  expect(named("This week")).not.toContain("Activity by feature per day");
+  expect(named("Most active accounts")).toContain("Ada Lovelace");
+  expect(named("Most active accounts")).toContain("An active day is a UTC day");
+});
+
+test("the loading dashboard stands the same regions, named by the same headings", () => {
+  const page = render({ status: "loading" });
+
+  expect(regions(page).map((region) => region.name)).toEqual(SECTIONS);
+});
+
 test("each headline tile reads its week's figure under its name, with its move and its detail", () => {
   const page = render(ready(metrics()));
 
@@ -341,15 +366,17 @@ test("a refresh that failed says so over the answer still shown, and Retry reads
   expect(heard).toEqual(["reload"]);
 });
 
-test("a first read that failed says why in place of the page, and Retry reads again", () => {
+test("a first read that failed says why under the page's toolbar, its controls still at hand, and Retry reads again", () => {
   const heard: string[] = [];
   const page = render({ status: "error", detail: "The metrics endpoint did not answer." }, heard);
 
+  expect(page.querySelector("header h1")?.textContent).toBe("Overview");
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
     "The metrics endpoint did not answer.",
   );
+  act(() => button(page, "90d").click());
   act(() => button(page, "Retry").click());
-  expect(heard).toEqual(["reload"]);
+  expect(heard).toEqual(["window 90", "reload"]);
 });
 
 test("the window is one of three radios, and the hide-admins box hands its choice up", () => {

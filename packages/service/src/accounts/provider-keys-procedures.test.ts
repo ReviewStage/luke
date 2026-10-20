@@ -8,6 +8,7 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import {
   FAST_ACCESS,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
@@ -79,8 +80,10 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 interface Answer {
@@ -197,8 +200,20 @@ function request(
 const save = (userId: string, provider: ProviderKeyProvider, key: string) =>
   request(userId, { method: "PUT", body: { provider, key } });
 
-const remove = (userId: string, provider: string) =>
-  request(userId, { method: "DELETE", query: `provider=${provider}` });
+const remove = (userId: string, provider: string, kind?: string) =>
+  request(userId, {
+    method: "DELETE",
+    query: kind === undefined ? `provider=${provider}` : `provider=${provider}&kind=${kind}`,
+  });
+
+/** A Claude setup-token as `claude setup-token` prints one: an OAuth token's prefix, synthetic throughout. */
+const SETUP_TOKEN = "sk-ant-oat01-test-setup-token-000000000000000000000000tokn";
+
+const saveToken = (userId: string, provider: ProviderKeyProvider, key: string) =>
+  request(userId, {
+    method: "PUT",
+    body: { provider, key, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN },
+  });
 
 /** The answer as the wire reads it, failing the test where it is not the wire's. */
 function keysOf(answered: Answer): ProviderKeysAnswer {
@@ -274,7 +289,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         keysOf(yield* later.ask(save(later.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, unsaid)));
 
         const fastOf = (userId: string) =>
-          Effect.map(listProviderKeyRows(userId), (rows) =>
+          Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) =>
             rows.map((row) => [row.provider, row.fastAccess]),
           );
         assert.deepEqual(yield* fastOf(owner), [
@@ -502,5 +517,132 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         );
         assert.deepEqual(checks, []);
       }),
+  );
+  it.effect(
+    "a Claude setup-token is kept sealed and unverified as a subscription beside the keys, never sent to a provider, answered or logged, and removed by its kind for the bearer's account alone",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 hour");
+        const savedAt = yield* Clock.currentTimeMillis;
+
+        const saved = yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN));
+        const othersRead = keysOf(yield* ask(request(other)));
+        const othersRemoval = keysOf(
+          yield* ask(
+            remove(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+        const keyRemoval = keysOf(yield* ask(remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC)));
+        const stored = JSON.stringify(
+          yield* db.select().from(accountProviderKey).where(eq(accountProviderKey.userId, owner)),
+        );
+        const removed = keysOf(
+          yield* ask(
+            remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+
+        const subscription = {
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          hint: "sk-ant-…tokn",
+          addedAt: savedAt,
+          status: PROVIDER_KEY_STATUS.UNVERIFIED,
+          statusAt: savedAt,
+        };
+        assert.deepEqual(keysOf(saved), { keys: [], subscriptions: [subscription] });
+        assert.deepEqual(othersRead, { keys: [] }, "another account reads none of it");
+        assert.deepEqual(othersRemoval, { keys: [] }, "another account removes none of it");
+        assert.deepEqual(
+          keyRemoval,
+          { keys: [], subscriptions: [subscription] },
+          "a removal naming no kind takes an API key and leaves the subscription",
+        );
+        assert.deepEqual(removed, { keys: [] });
+        assert.deepEqual(checks, [], "no provider is asked about a setup-token");
+        assert.ok(!saved.text.includes(SETUP_TOKEN));
+        assert.ok(!stored.includes(SETUP_TOKEN));
+        assert.ok(!stored.includes(Buffer.from(SETUP_TOKEN).toString("base64")));
+        assert.ok(logged.every((line) => !line.includes(SETUP_TOKEN)));
+      }),
+  );
+
+  it.effect(
+    "a setup-token is kept beside an Anthropic API key and an API key beside a setup-token, each removed by its own kind, and one spelled as no setup-token or saved for OpenAI keeps nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
+        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)));
+        keysOf(yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+        const checksBefore = checks.length;
+
+        const tokenBesideKey = keysOf(
+          yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
+        );
+        const checksAfterToken = checks.length;
+        const keyBesideToken = keysOf(
+          yield* ask(save(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
+        );
+        const checksAfterKey = checks.length;
+        const tokenRemoved = keysOf(
+          yield* ask(
+            remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+        const keyRemoved = keysOf(yield* ask(remove(other, PROVIDER_KEY_PROVIDER.ANTHROPIC)));
+        const apiKeyAsToken = keysOf(
+          yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
+        );
+        const forOpenAi = keysOf(
+          yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.OPENAI, SETUP_TOKEN)),
+        );
+
+        const keyHints = (answer: typeof tokenBesideKey) =>
+          answer.keys.map(({ provider, hint }) => [provider, hint]);
+        const tokenHints = (answer: typeof tokenBesideKey) =>
+          answer.subscriptions?.map(({ provider, kind, hint }) => [provider, kind, hint]);
+        const anthropicKey = [[PROVIDER_KEY_PROVIDER.ANTHROPIC, "sk-ant-…wxyz"]];
+        const anthropicToken = [
+          [PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN, "sk-ant-…tokn"],
+        ];
+        assert.equal(tokenBesideKey.rejected, undefined);
+        assert.deepEqual(keyHints(tokenBesideKey), anthropicKey);
+        assert.deepEqual(tokenHints(tokenBesideKey), anthropicToken);
+        assert.equal(checksAfterToken, checksBefore, "no provider is asked about a setup-token");
+        assert.equal(keyBesideToken.rejected, undefined);
+        assert.ok(checksAfterKey > checksAfterToken, "the API key is checked with its provider");
+        assert.deepEqual(keyHints(keyBesideToken), anthropicKey);
+        assert.deepEqual(tokenHints(keyBesideToken), anthropicToken);
+        assert.deepEqual(keyHints(tokenRemoved), anthropicKey, "the API key outlives the token");
+        assert.equal(tokenRemoved.subscriptions, undefined);
+        assert.deepEqual(keyRemoved.keys, [], "the token outlives the API key");
+        assert.deepEqual(tokenHints(keyRemoved), anthropicToken);
+        assert.deepEqual(apiKeyAsToken.rejected, PROVIDER_KEY_REJECTION.INVALID);
+        assert.deepEqual(apiKeyAsToken.subscriptions, keyRemoved.subscriptions);
+        assert.deepEqual(forOpenAi.rejected, PROVIDER_KEY_REJECTION.WRONG_PROVIDER);
+        assert.equal(forOpenAi.subscriptions, undefined);
+        assert.ok(logged.every((line) => !line.includes(SETUP_TOKEN)));
+      }),
+  );
+
+  it.effect("setup-token saves are braked with key saves, ten an hour per account", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE });
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        keysOf(yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+      }
+
+      const braked = keysOf(
+        yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
+      );
+      const othersSave = keysOf(
+        yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
+      );
+
+      assert.equal(braked.rejected, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
+      assert.equal(othersSave.rejected, undefined);
+    }),
   );
 });

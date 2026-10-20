@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   isSecretFile,
   TASK_FILE_REFUSAL,
@@ -90,17 +90,12 @@ export function readTaskFile(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     if (isSecretFile(request.path)) return Option.some(refused(TASK_FILE_REFUSAL.SECRET));
-    const answer = yield* readWindow(
-      stored.value.task.workspaceId,
-      repository,
-      userId,
-      request,
-    ).pipe(
+    const answer = yield* readWindow(stored.value.workspaceId, repository, userId, request).pipe(
       Effect.catchTag("GitHubUnavailable", (failure) =>
         Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
       ),

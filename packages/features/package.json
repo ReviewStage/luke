@@ -1,6 +1,6 @@
 {
   "name": "@luke/features",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "The client side of the hosted service: its paths and wire, its clients, the plan and board domain, the planner's run vocabulary, product events, and feedback delivery",
@@ -19,6 +19,7 @@
     "./credential-redaction": "./src/credential-redaction.js",
     "./sentry-addresses": "./src/sentry-addresses.js",
     "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",
+    "./sentry-early-reports": "./src/sentry-early-reports.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
     "./live-wire": "./src/live-wire.js",
@@ -118,6 +119,7 @@
     "./page-frame": "./src/page-frame.js",
     "./browser-acts": "./src/browser-acts.js",
     "./page-policy": "./src/page-policy.js",
+    "./page-find": "./src/page-find.js",
     "./terminal-entry": "./src/terminal-entry.js",
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",

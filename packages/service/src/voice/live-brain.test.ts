@@ -48,11 +48,11 @@ import { DEPLOYMENT_TURNS } from "../agents/brain-host/channel.js";
 import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { ownedAuth } from "../agents/brain-host/door.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
   type EveStreamEvent,
   eveSessions,
 } from "../agents/brain-host/eve-sessions.js";
@@ -68,6 +68,7 @@ import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-ques
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { type RecordingSentry, recordingSentry, sentOfType } from "../testing/sentry-transport.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
@@ -147,7 +148,7 @@ function mintSession(): string {
   return `wrun_${randomUUID()}`;
 }
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly opened: EveMessage[];
   /** The delivery id each send into a standing session was answered with, in order. */
   readonly delivered: string[];
@@ -263,7 +264,7 @@ async function stand(
   store: HostedLiveBrainOptions["store"] = database.store,
   conversationId: string = target.conversationId,
   record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
-  over?: EveSessions,
+  over?: AgentSessions,
   accountId: string = target.userId,
   sentry?: RecordingSentry,
 ): Promise<Stand> {
@@ -281,6 +282,7 @@ async function stand(
       hostedLiveBrain({
         accountId,
         conversation: { userId: target.userId, conversationId },
+        backend: CALL_BACKEND.TASK,
         asks: { asks: record, eve: over ?? eve },
         store,
         writer,
@@ -591,7 +593,7 @@ it.live(
     }),
 );
 
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 
 /** What eve's door saw of one request the host's client made: its route, its bearer, the account it named, and its body. */
 interface DoorSeen {
@@ -617,7 +619,7 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
   const auth: AuthFn<Request> = ownedAuth(
     [
       deploymentActor({
-        secret: Redacted.make(CRON_SECRET),
+        secret: Redacted.make(DEPLOYMENT_SECRET),
         admits: DEPLOYMENT_TURNS,
         presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
       }),
@@ -648,7 +650,7 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
     Effect.provide(
       eveSessions({
         origin: "https://luke.test",
-        caller: { secret: Redacted.make(CRON_SECRET), account: target.userId },
+        caller: { secret: Redacted.make(DEPLOYMENT_SECRET), account: target.userId },
         mount: EVE_MOUNT.TASKS,
       }),
       door,
@@ -693,7 +695,7 @@ it.live(
       const cancel = behind.seen.at(-1);
       assert.deepEqual(cancel, {
         pathname: `/eve/v1/session/${sessionId}/cancel`,
-        authorization: `Bearer ${CRON_SECRET}`,
+        authorization: `Bearer ${DEPLOYMENT_SECRET}`,
         account: target.userId,
         body: { turnId: FIRST_EVE_TURN },
       });

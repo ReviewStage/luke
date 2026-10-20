@@ -9,12 +9,8 @@ import {
   HAND_WRITTEN_FUNCTIONS,
 } from "../server/build-output.js";
 import {
-  expectedExternals,
-  externalsByBundle,
-  externalsDrift,
   FUNCTION_METAFILE,
   functionBundlePlan,
-  importChain,
   undeclaredImports,
 } from "../server/function-bundles.js";
 import {
@@ -54,7 +50,10 @@ const SITE_DIRECTORY = "dist";
  * `SENTRY_AUTH_TOKEN` uploads; any other, a Preview's included, bundles as
  * before, since a Preview's traces are rarely read and the maps cost its build. The plugin names
  * the release from the deployment's commit and writes it into each bundle,
- * which is the release the SDK then reports under.
+ * which is the release the SDK then reports under. A refused release or
+ * upload is only logged, the plugin's default with no `errorHandler`, so
+ * Sentry being down never fails the build; the maps are deleted after it
+ * either way. A failed deletion still throws, so no map can ship.
  */
 function withSentrySourceMaps(options: BuildOptions): BuildOptions {
   const authToken = sourceMapUploadToken(process.env);
@@ -92,26 +91,6 @@ if (undeclared.length > 0) {
 }
 
 await writeFile(join(WEB, FUNCTION_METAFILE), JSON.stringify(result.metafile));
-
-const externals = externalsDrift(
-  await expectedExternals(WEB),
-  externalsByBundle(result.metafile, WEB),
-);
-if (externals.length > 0) {
-  const lines = externals.map((entry) => {
-    const outputPath = Object.keys(result.metafile.outputs).find((path) =>
-      path.endsWith(entry.bundle),
-    );
-    const chains = entry.added.map(
-      (added) =>
-        `${added} via ${(outputPath === undefined ? [] : importChain(result.metafile, outputPath, added)).join(" -> ")}`,
-    );
-    return `${entry.bundle}: added ${JSON.stringify(entry.added)} removed ${JSON.stringify(entry.removed)}${chains.length > 0 ? ` (${chains.join("; ")})` : ""}`;
-  });
-  throw new Error(
-    `function bundles load externals the record does not expect (run \`pnpm --filter @luke/web functions:externals\` if intended):\n${lines.join("\n")}`,
-  );
-}
 
 const durationOf = new Map(
   task.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),

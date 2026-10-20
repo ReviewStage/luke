@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { Clock, Effect, type Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
+import type { TokenPullRequestSweepOutcome } from "../github/token-pull-request-sweep.js";
 import {
   bearerMatchesSecret,
   errorResponse,
@@ -21,16 +22,17 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * ended on Luke's key, as a connection would have ended it, the Vercel
  * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
  * sandbox no developer's terminal holds any more is stopped, the
- * automations whose schedule is due are fired, and a picture pasted into a
- * plan a day ago that no save ever named is deleted. None of the eight reads
- * a word of any account; each is bounded on its own, and the sweep runs them
- * in turn.
+ * automations whose schedule is due are fired, a picture pasted into a
+ * plan a day ago that no save ever named is deleted, and the pull requests of
+ * agents on a member's own GitHub token, which no webhook reaches, are polled
+ * for what their agents are told of. Each is bounded on its own, and the
+ * sweep runs them in turn.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The eight sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The nine sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -48,10 +50,12 @@ interface MaintenanceSweeps {
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
   /** Deletes the plans' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
+  /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
+  sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the eight sweeps once
+ * How a run is told to the sweep's cron monitor: around the nine sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -84,9 +88,11 @@ interface MaintenanceSweepAnswer {
   automations: AutomationSweepOutcome;
   /** Pictures pasted into plans that no save named, deleted. */
   purgedPictures: number;
+  /** What the poll of the token agents' pull requests did. */
+  tokenPullRequests: TokenPullRequestSweepOutcome;
 }
 
-/** The eight sweeps in turn, each handed the same instant. */
+/** The nine sweeps in turn, each handed the same instant. */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -100,6 +106,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     terminals: yield* sweeps.sweepTerminalLeases(now),
     automations: yield* sweeps.sweepAutomations(now),
     purgedPictures: yield* sweeps.purgeUnsavedPictures(now),
+    tokenPullRequests: yield* sweeps.sweepTokenPullRequests(now),
   };
 });
 

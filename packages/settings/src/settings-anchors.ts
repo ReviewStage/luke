@@ -26,6 +26,8 @@ export const SETTINGS_SEARCH_ROW = {
   UPDATES: "updates",
   CHANGELOG: "changelog",
   SIGN_OUT: "sign-out",
+  /** Profile's GitHub personal access token row, apart from Integrations' own GitHub row, which its provider anchors. */
+  GITHUB_ACCESS: "github-access",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",
   TALK_KEY: "talk-key",
@@ -53,5 +55,5 @@ export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
   [EXPERIMENT.SECTIONS]: "experiment-sections",
-  [EXPERIMENT.GITHUB_TOKEN]: "experiment-github-token",
+  [EXPERIMENT.INBOX_FIRST]: "experiment-inbox-first",
 } as const satisfies Record<Experiment, string>;

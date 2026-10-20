@@ -205,6 +205,7 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        onOpenItem: () => undefined,
         listed: false,
         onListed: ignore,
         pages: undefined,
@@ -590,6 +591,38 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
+test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Board's row is the Tasks page's", async () => {
+  handState({});
+  const off = mount(false);
+  await settle();
+  assert.ok(placeRow(off, "Board"));
+  assert.ok(placeRow(off, "Inbox"));
+  assert.equal(placeRow(off, "Tasks"), undefined);
+  assert.equal(off.querySelector('aside .inbox-tasks[data-placement="sidebar"]'), null);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
+  const on = mount(false);
+  await settle();
+  assert.ok(placeRow(on, "Tasks"));
+  assert.equal(placeRow(on, "Board"), undefined);
+  assert.equal(
+    placeRow(on, "Inbox"),
+    undefined,
+    "the sidebar is the Inbox, so it needs no row for it",
+  );
+  assert.ok(
+    on.querySelector('aside .inbox-tasks[data-placement="sidebar"]'),
+    "the sidebar lists the Inbox",
+  );
+  assert.equal(
+    on.querySelector('aside nav[aria-label="Tasks"]'),
+    null,
+    "the task list stands on its page",
+  );
+});
+
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
   handState({});
   const page = mount(false);
@@ -644,6 +677,72 @@ test("while the Automations pages are still loading their frame stands the list 
   });
 
   assert.deepEqual(closed, ["closed"]);
+});
+
+test("while Factory's chunk is still loading its frame stands under its title, Escape closes Factory, and the line stands once the chunk lands", async () => {
+  const closed: string[] = [];
+  const factoryView = { open: true, onOpen: ignore, onClose: () => closed.push("closed") };
+  const registry = AtomRegistry.make();
+  handState(experimentsOn(EXPERIMENT.FACTORY));
+  mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME },
+    PANEL_TAB.TASKS,
+    ignore,
+    {},
+    registry,
+  );
+  await settle();
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  // Note that the window's state has landed in the registry, so Factory opens within one render, before its chunk can.
+  const page = mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME, factoryView },
+    PANEL_TAB.TASKS,
+    ignore,
+    {},
+    registry,
+  );
+  const loading = page.querySelector("section[aria-label=Factory]");
+  assert.ok(loading, "Factory's frame stands");
+  assert.equal(loading.querySelector("h1")?.textContent, "Factory");
+  assert.equal(loading.querySelector("[role=status]")?.textContent, "Reading tasks…");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_FACTORY), "Factory's way out is offered");
+  });
+  assert.deepEqual(closed, ["closed"]);
+
+  await import("./desktop-factory.js");
+  await settle();
+  assert.equal(
+    page.querySelector("section[aria-label=Factory] [role=status]"),
+    null,
+    "the line stands in the frame's place",
+  );
+});
+
+test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands", async () => {
+  const closed: string[] = [];
+  const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
+  handState({});
+  const page = mount(false, false, { history });
+  const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
+  assert.ok(versions, "the versions' column stands");
+  assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
+  const back = [...versions.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim().startsWith("Back") === true,
+  );
+  assert.ok(back, "the Back row stands");
+  act(() => back.click());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY), "Escape leaves the history");
+  });
+  assert.deepEqual(closed, ["closed", "closed"]);
+  await settle();
 });
 
 test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
@@ -796,11 +895,17 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
 
 /**
  * The bridge as the window meets it, every act written down, with Factory
- * on, and Settings' chunk already loaded, as it is
- * once Settings has opened once, so it stands within a settle.
+ * on, and the chunks of Settings and of the pages drawn on demand
+ * (`pages-on-demand.ts`) already loaded, as each is once it has opened once,
+ * so each stands within a settle.
  */
 async function handBridge(): Promise<void> {
-  await import("./desktop-settings.js");
+  await Promise.all([
+    import("./desktop-settings.js"),
+    import("./desktop-factory.js"),
+    import("./desktop-version-history.js"),
+    import("./person-page.js"),
+  ]);
   handState(experimentsOn(EXPERIMENT.FACTORY));
   sentActs = [];
   const bridge = appBridge();

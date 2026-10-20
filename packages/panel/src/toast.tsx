@@ -61,7 +61,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
+import { rendererRuntime } from "./renderer-runtime.js";
 
 /** What a toast reports: the act done, the act refused, or something asked of the developer. */
 export const TOAST_TONE = {
@@ -366,20 +366,6 @@ const toastLifeAtom = Atom.keepAlive(
     }),
   ),
 );
-
-/**
- * Shows a toast from outside the panel's tree, as a shell's own code does:
- * the web app's tab offering the reload onto a new release. It lands on
- * the stack every toast stands in, on the panel's one registry.
- */
-export function showToast(notice: ToastNotice): void {
-  rendererRegistry.set(toastLifeAtom, { kind: TOAST_STEP.SHOW, notice });
-}
-
-/** Withdraws every toast standing or waiting about `subject` from outside the panel's tree, as `showToast` shows one. */
-export function withdrawToast(subject: string): void {
-  rendererRegistry.set(toastLifeAtom, { kind: TOAST_STEP.WITHDRAW, subject });
-}
 
 /** Shows a toast; the same function on every render. */
 export function useToast(): (notice: ToastNotice) => void {

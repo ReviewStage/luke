@@ -53,6 +53,7 @@ import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import {
   Fragment,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -71,8 +72,6 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { SpinnerRegion } from "../spinner.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph.js";
-import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab.js";
-import { AgentPullRequestTab, pullRequestOfTab } from "../tasks/agent-pull-request-tab.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -84,6 +83,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
+import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
@@ -93,7 +93,7 @@ import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
 import { PageCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
-import { ofPullRequestTab } from "../tasks/pull-request-number.js";
+import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
@@ -139,7 +139,9 @@ import {
 } from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import type { MenuAction } from "./action-menu.js";
 import { useFileTreeWidth } from "./folded-groups.js";
+import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
 import {
   type AddEntry,
@@ -340,6 +342,12 @@ export interface ChangesOffer {
   readonly agent: CodingAgentSummary;
   readonly label: string;
   readonly pullRequest: CodingAgentPullRequest;
+}
+
+/** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
+interface HandedTabActions {
+  readonly tab: SidePanelTab;
+  readonly actions: MenuAction[];
 }
 
 /** What the "+" calls the row that opens a Browser tab. */
@@ -863,6 +871,7 @@ function PanelTabs({
   held,
   readWorker,
   actionsSlot,
+  handed,
   onOpenAgent,
   shownAgent,
   inboxWaiting,
@@ -902,6 +911,8 @@ function PanelTabs({
   readWorker: TranscriptReader;
   /** The bar's slot the chosen tab's ⋯ stands in. */
   actionsSlot: HTMLElement | null;
+  /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
+  handed: HandedTabActions | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
@@ -965,6 +976,10 @@ function PanelTabs({
       pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
+      handed:
+        entry.look.selected && handed !== undefined && sameTab(handed.tab, entry.tab)
+          ? handed.actions
+          : undefined,
     };
   };
   return (
@@ -1365,9 +1380,6 @@ function TabContent({
   onBrowseFile,
   onFileHistory,
   onFoldNote,
-  codeReveal,
-  onShowNote,
-  onRevealed,
   onCloseTab,
   pullRequestViews,
   onPullRequestView,
@@ -1376,6 +1388,7 @@ function TabContent({
   onBrowserOpened,
   plan,
   inbox,
+  onTabActions,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1415,12 +1428,6 @@ function TabContent({
   onFileHistory: (from: string, step: FileHistoryStep) => void;
   /** Folds or opens a note on a File tab (`SidePanelControl.onFoldNote`). */
   onFoldNote: (path: string, callId: string, folded: boolean) => void;
-  /** The call whose card the Code tab scrolls to as it is drawn, which a File tab's note asked for. */
-  codeReveal: string | undefined;
-  /** Shows the Code tab on the card of the call a File tab's note is from. */
-  onShowNote: (callId: string) => void;
-  /** Says the Code tab scrolled to the card asked for. */
-  onRevealed: () => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
   /** What each Pull request tab shows, by agent and number (`SidePanelControl.pullRequestViews`). */
@@ -1437,6 +1444,8 @@ function TabContent({
   plan: React.ReactNode;
   /** The task's Inbox, drawn by the task's page on the same terms. */
   inbox: React.ReactNode;
+  /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
+  onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   if (isMacTerminalTab(tab)) {
@@ -1490,16 +1499,20 @@ function TabContent({
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
       <PullRequestsOnGitHub key={tabKey(tab)}>
-        <AgentPullRequestTab
-          agentId={tab.changes}
-          number={tab.number}
-          control={agents}
-          shown={shown}
-          repository={repository}
-          tree={fileTree}
-          view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
-          onView={(view) => onPullRequestView(tab, view)}
-        />
+        {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
+        <Suspense fallback={<SpinnerRegion label="Loading pull request" />}>
+          <PULL_REQUEST_TAB.Route
+            agentId={tab.changes}
+            number={tab.number}
+            control={agents}
+            shown={shown}
+            repository={repository}
+            tree={fileTree}
+            view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
+            onView={(view) => onPullRequestView(tab, view)}
+            onActions={(actions) => onTabActions(tab, actions)}
+          />
+        </Suspense>
       </PullRequestsOnGitHub>
     );
   }
@@ -1533,7 +1546,6 @@ function TabContent({
             onStep: (step) => onFileHistory(file.path, step),
           }}
           onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
-          onShowNote={onShowNote}
         />
       </Fragment>
     );
@@ -1618,8 +1630,6 @@ function TabContent({
           shown={shownCode}
           calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
           onOpenFile={onOpenFile}
-          reveal={codeReveal}
-          onRevealed={onRevealed}
         />
       );
     case SIDE_PANEL_TAB.COMMENTS:
@@ -1899,6 +1909,17 @@ export function SidePanel({
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
+  const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
+  const handTabActions = useCallback((tab: SidePanelTab, actions: MenuAction[] | undefined) => {
+    setHanded((was) =>
+      actions !== undefined
+        ? { tab, actions }
+        : was !== undefined && sameTab(was.tab, tab)
+          ? undefined
+          : was,
+    );
+  }, []);
   const { tab } = panel;
   // A Pull request tab naming another pull request by its number is named by
   // that pull request, read once for each such tab the strip draws, since
@@ -2003,16 +2024,6 @@ export function SidePanel({
                   : isBrowserTab(tab)
                     ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
                     : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
-  // The card a File tab's note asked the Code tab to scroll to, until it has.
-  const [codeReveal, setCodeReveal] = useState<string | undefined>(undefined);
-  const showNote = useCallback(
-    (callId: string) => {
-      setCodeReveal(callId);
-      panel.onChoose(SIDE_PANEL_TAB.CODE);
-    },
-    [panel.onChoose],
-  );
-  const revealed = useCallback(() => setCodeReveal(undefined), []);
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
@@ -2070,6 +2081,7 @@ export function SidePanel({
           held={drawnTranscripts}
           readWorker={work.readWorker}
           actionsSlot={actionsSlot}
+          handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
           inboxWaiting={inbox?.waiting ?? 0}
@@ -2103,9 +2115,9 @@ export function SidePanel({
       ) : (
         // The Board is drawn on a canvas, which keeps a find of its own, and
         // a page's words stand in a sandboxed frame no find of the window
-        // reaches, so a page's tab finds in its source alone, itself; a
-        // Browser tab's page stands in a view of main's, which no find of the
-        // window reaches either.
+        // reaches, so a page's tab finds itself, through its frame or in its
+        // source; a Browser tab's page stands in a view of main's, which no
+        // find of the window reaches either.
         <FindScope
           className="side-panel-content"
           role="tabpanel"
@@ -2139,9 +2151,6 @@ export function SidePanel({
             onBrowseFile={panel.onBrowseFile}
             onFileHistory={panel.onFileHistory}
             onFoldNote={panel.onFoldNote}
-            codeReveal={codeReveal}
-            onShowNote={showNote}
-            onRevealed={revealed}
             onCloseTab={panel.onClose}
             pullRequestViews={panel.pullRequestViews}
             onPullRequestView={panel.onPullRequestView}
@@ -2150,6 +2159,7 @@ export function SidePanel({
             onBrowserOpened={panel.onBrowserOpened}
             plan={plan}
             inbox={inbox?.body}
+            onTabActions={handTabActions}
           />
         </FindScope>
       )}

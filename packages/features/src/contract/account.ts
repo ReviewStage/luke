@@ -1,12 +1,12 @@
 /**
  * account.ts -- the signed-in account's own reads and writes (`account-wire.ts`, `plan-document-template.ts`, `provider-key-wire.ts`), as procedures.
  *
- * Its deletion, its preferences snapshot, its plan template with the
- * template's history, and its own provider keys, each on the path and
+ * Its deletion, its preferences snapshot, its access, its plan template with
+ * the template's history, and its own provider keys, each on the path and
  * method it has always answered on. A revision's number travels in the
  * path, and a page of the history names the revision it is read before in
  * the query, each as the text a URL carries, read as a revision number;
- * a key is removed by the provider its query names, since a `DELETE`
+ * a key is removed by the provider and the kind its query names, since a `DELETE`
  * carries no body. A JSON body is read whole, a key it does not name
  * refused (`exactInput`), but for the preferences write, whose parts the
  * service has always read one by one and whose other keys it passes over.
@@ -19,6 +19,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  accountAccessAnswerSchema,
   accountDeleteAnswerSchema,
   accountPreferencesAnswerSchema,
   accountPreferencesWriteSchema,
@@ -33,6 +34,7 @@ import {
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
+  providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "../provider-key-wire.js";
@@ -66,6 +68,9 @@ export const accountContract = {
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .input(accountPreferencesWriteSchema)
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),
+  access: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_ACCESS }))
+    .output(EffectSchema.flip(accountAccessAnswerSchema)),
   planTemplate: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }))
     .output(EffectSchema.flip(planTemplateAnswerSchema)),
@@ -118,6 +123,7 @@ export const accountContract = {
           [PROVIDER_KEY_QUERY.PROVIDER]: EffectSchema.Literals(
             Object.values(PROVIDER_KEY_PROVIDER),
           ),
+          [PROVIDER_KEY_QUERY.KIND]: EffectSchema.optionalKey(providerKeyKindSchema),
         }),
       }),
     )

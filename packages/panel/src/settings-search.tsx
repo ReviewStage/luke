@@ -42,7 +42,8 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf, settingsPageShown } from "./settings/pages.js";
+import { settingsPageOf } from "./settings/pages.js";
+import { settingsPageShown } from "./settings/settings-rows.js";
 import { Shortcut } from "./shortcut.js";
 import { commandKeyshortcuts } from "./tooltip.js";
 
@@ -153,6 +154,14 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           label: "Sign out",
           page: SETTINGS_VIEW.ACCOUNT,
           haystack: ["Sign out", "account sign out log out"],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.GITHUB_ACCESS,
+          label: "GitHub personal access token",
+          page: SETTINGS_VIEW.ACCOUNT,
+          haystack: ["GitHub personal access token", "classic token PAT add manage"],
         }
       : undefined,
     // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.

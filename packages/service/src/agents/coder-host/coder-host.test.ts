@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { askRecord } from "@luke/database/models/asks";
+import { readBoard } from "@luke/database/models/board-store";
 import {
   agentWorkspace,
   ensureGeneral,
@@ -10,23 +12,29 @@ import {
   postMessage,
   roster,
 } from "@luke/database/models/chat-store";
+import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
   archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
+  delegationsOf,
+  fillCodingAgentTitle,
+  hasRepository,
   latestTurnsOf,
   readCodingAgent,
+  writeDelegation,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import { listJournalsCalling } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { conversations, turns } from "@luke/database/schemas/storage";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -37,23 +45,30 @@ import {
   INBOX_STATUS,
   INBOX_TOOL,
 } from "@luke/features/inbox-wire";
+import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
+import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
+import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
+import type { SandboxNetworkPolicy } from "eve/sandbox";
 import {
   ACTION_RESULT_STATUS,
+  ASK_ORIGIN,
+  isStoredToolPart,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -64,12 +79,25 @@ import {
   type WireRecord,
 } from "../../core.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
+import { DRAW_ON_BOARD_STATUS } from "../../tasks/board-tool.js";
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
+import { saveNotes } from "../../tasks/plan-notes.js";
+import { shownCodeOf } from "../../tasks/show-code.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { added } from "../../testing/task-contents.js";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_AUTHENTICATOR,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN,
+} from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
-import { CODER_REFUSAL } from "./bounds.js";
+import type { RepositorySandbox } from "../repository-shell.js";
+import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
@@ -79,8 +107,15 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
-import { CURSOR_START, transcriptPast } from "./transcript.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, turnToolsOf } from "./tool-set.js";
+import {
+  CURSOR_START,
+  titleMayLand,
+  titleWindowEdge,
+  transcriptNow,
+  transcriptPast,
+} from "./transcript.js";
+import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -97,6 +132,9 @@ import { CURSOR_START, transcriptPast } from "./transcript.js";
  */
 
 const NOW = 1_800_000_000_000;
+
+/** When a turn starts on the relay's clock where a test reads that against the test's own clock, which starts at nothing. */
+const TURN_STARTS_AT = 10 * 60_000;
 
 /** A sandbox door no call of notes alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
@@ -126,8 +164,8 @@ const KEYS: ProviderKeys = {
   openAi: { key: Redacted.make("sk-openai-fixture") },
 };
 
-/** The host over the test's own store, with the writer composed on the test's client, and the title model handed in where a test has one. */
-const hostOverStore = (titleModel?: LanguageModel) =>
+/** The host over the test's own store, with the writer composed on the test's client, the title model handed in where a test has one, and its clock, the fixed instant where a test names none. */
+const hostOverStore = (titleModel?: LanguageModel, now: () => number = () => NOW) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const seams: CoderHostSeams = {
@@ -144,7 +182,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       titleModel: () => titleModel,
       research: () => ({ openAi: undefined, spend: Effect.void }),
       scriptedModel: () => false,
-      now: () => NOW,
+      now,
     };
     return coderHost(seams);
   });
@@ -162,6 +200,21 @@ function ownSeat(userId: string, conversationId: string): SessionAuth {
     [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
     [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
   });
+  return { current: seat, initiator: seat };
+}
+
+/** The voice's seat in the agent's conversation: the deployment acting for the agent's starter, on a spoken turn, as the coder door admits a call's ask. */
+function spokenSeat(target: ConversationTarget): SessionAuth {
+  const seat: SessionAuthContext = {
+    principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+    principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    attributes: {
+      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
+      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.SPOKEN,
+      [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: target.userId,
+    },
+  };
   return { current: seat, initiator: seat };
 }
 
@@ -193,6 +246,7 @@ const unclaimedAgent = (
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
+    assert.ok(hasRepository(agent));
     const target: ConversationTarget = { userId, conversationId: agent.conversationId };
     return { userId, agent, target, auth: ownSeat(userId, agent.conversationId) };
   });
@@ -320,6 +374,73 @@ function codingTurn(
   ];
 }
 
+/** One spoken ask's turn as eve emits it on an agent's session: the ask received, a question queued for the voice, and a sentence of answer. */
+function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): MessageStreamEvent[] {
+  const sequence = 0;
+  return [
+    stampedEveEvent({ type: "turn.started", data: { turnId, sequence } }, NOW, deliveryIds),
+    stamped({
+      type: "message.received",
+      data: { turnId, sequence, message: "The developer asked how far along the invites are." },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          {
+            kind: "tool-call",
+            callId: "call-1",
+            toolName: CODER_TOOL.QUEUE_QUESTION,
+            input: {
+              question: "Should a withdrawn invite say who withdrew it?",
+              recommendation: "No: just say it is no longer valid.",
+            },
+          },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-1",
+          toolName: CODER_TOOL.QUEUE_QUESTION,
+          output: { status: ACTION_RESULT_STATUS.ACCEPTED },
+        },
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 1,
+        finishReason: "stop",
+        message: "The invite table is built; expiry is next.",
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
 /** A title model answering each call with the next of `answers`, nothing once they run out, keeping each prompt it was asked. */
 function scriptedTitleModel(answers: readonly string[]) {
   const asked: string[] = [];
@@ -408,7 +529,213 @@ const turnRow = (id: string) =>
       rows[0] === undefined ? undefined : Schema.decodeUnknownSync(TurnRowSchema)(rows[0]),
   );
 
+/** A transcript's live statements run as Realtime runs them, their rows decoded as the desktop decodes them, each part in an order of its own since Realtime keeps none. */
+const liveRowsOf = (
+  target: ConversationTarget,
+  parentConversationId: string,
+  readerId = target.userId,
+) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statements = Option.getOrThrow(
+      transcriptLiveStatements(
+        target,
+        parentConversationId,
+        agentFollowedBy(target.userId, parentConversationId, readerId),
+      ),
+    );
+    const rows = yield* Effect.all({
+      messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
+      turns: sql.unsafe(statements.turns.sql, [...statements.turns.params]),
+      conversation: sql.unsafe(statements.conversation.sql, [...statements.conversation.params]),
+      agent: sql.unsafe(statements.agent.sql, [...statements.agent.params]),
+      workers: sql.unsafe(statements.workers.sql, [...statements.workers.params]),
+    });
+    const decoded = yield* Schema.decodeUnknownEffect(agentTranscriptLiveRowsSchema)(rows);
+    return JSON.stringify(
+      Object.entries(decoded).map(([part, list]) => [
+        part,
+        list.map((row) => JSON.stringify(row)).toSorted(),
+      ]),
+    );
+  });
+
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a line no turn takes after the agent's turn ended holds the read running, which the read says it wakes from once the line's grace ends",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target } = yield* openAgent(host);
+        const db = yield* Database;
+        const now = yield* Clock.currentTimeMillis;
+        yield* db.insert(turns).values({
+          userId,
+          conversationId: target.conversationId,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.SETTLED,
+          queuedAt: new Date(now - 60_000),
+          settledAt: new Date(now - 30_000),
+        });
+        const writtenAt = new Date(now - 10_000);
+        yield* db.insert(messages).values({
+          userId,
+          conversationId: target.conversationId,
+          seq: 50,
+          clientId: randomUUID(),
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: "Are you there?" }],
+          placedAt: writtenAt,
+          createdAt: writtenAt,
+          turnId: null,
+        });
+        const read = (cursor: typeof CURSOR_START) =>
+          transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+        const first = yield* read(CURSOR_START);
+        const past = yield* read(first.page.cursor);
+
+        assert.equal(past.page.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(past.holds, true);
+        assert.equal(
+          past.wakeIn,
+          writtenAt.getTime() + Duration.toMillis(CODER.LINE_GRACE) + 1 - now,
+        );
+      }),
+  );
+
+  it.effect(
+    "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing for an account outside the agent's workspace, nor for a member once removed",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const parent = target.conversationId;
+        const now = (cursor: typeof CURSOR_START) =>
+          transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+
+        let cursor = CURSOR_START;
+        let read = yield* now(cursor);
+        let rows = yield* liveRowsOf(target, parent);
+        // Before its first turn the agent is starting, which only the clock ends: the read says when.
+        assert.equal(read.page.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(read.holds, true);
+        assert.equal(
+          read.wakeIn,
+          agent.createdAt.getTime() +
+            Duration.toMillis(CODER.STARTING_GRACE) +
+            1 -
+            (yield* Clock.currentTimeMillis),
+        );
+        let said = 0;
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(
+            event,
+            admitted,
+            { id: sessionId, auth, turn: { id: "turn_0" } } as never,
+            state,
+            {
+              hash: prompt.hash,
+            },
+          );
+          const next = yield* now(cursor);
+          const moved = yield* liveRowsOf(target, parent);
+          if (next.page.messages.length > 0 || next.page.status !== read.page.status) {
+            said += 1;
+            assert.notEqual(moved, rows, `the statements move with ${event.type}`);
+          }
+          // Note that a page with nothing past the cursor holds while the turn runs, and not once it ended.
+          if (next.page.messages.length === 0) {
+            assert.equal(next.holds, next.page.status === CODING_AGENT_STATUS.RUNNING);
+          }
+          cursor = next.page.cursor;
+          read = next;
+          rows = moved;
+        }
+        assert.ok(said > 2, "the turn said something more than once");
+        assert.equal(read.page.status, CODING_AGENT_STATUS.COMPLETED);
+
+        // Ended and untitled, the read holds on the title, until its window closes with the clock.
+        const ended = (yield* latestTurnsOf(userId, [parent])).get(parent)?.settledAt;
+        assert.ok(ended);
+        const awaiting = yield* transcriptNow(
+          target,
+          CODER_TOOL_SET,
+          cursor,
+          agent,
+          agent,
+          titleMayLand(target),
+          titleWindowEdge(target),
+        ).pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.equal(awaiting.holds, true);
+        assert.equal(awaiting.wakeIn, ended.getTime() + 20_001 - (yield* Clock.currentTimeMillis));
+
+        // A title landing is heard on the agent's own transcript.
+        assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Teammate invitations"), true);
+        const titled = yield* liveRowsOf(target, parent);
+        assert.notEqual(titled, rows);
+
+        // A worker's delegation being recorded and its title landing are heard on its transcript and the agent's.
+        const workerCall = "call-worker";
+        const child = childConversationId(parent, workerCall);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: child,
+          userId,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: parent,
+        });
+        const worker = { userId, conversationId: child };
+        const opened = yield* liveRowsOf(worker, parent);
+        yield* writeDelegation(child, workerCall, { model: agent.model, effort: agent.effort });
+        const delegated = yield* liveRowsOf(worker, parent);
+        assert.notEqual(delegated, opened);
+        // An untitled worker's read waits on its title until the window opened at its start closes.
+        const [recorded] = yield* delegationsOf(target);
+        assert.equal(recorded?.childConversationId, child);
+        assert.equal(
+          yield* titleWindowEdge(target, child),
+          (recorded?.createdAt.getTime() ?? 0) + 20_001,
+        );
+        const ownBefore = yield* liveRowsOf(target, parent);
+        assert.equal(yield* fillChildTitle(target, child, "Invite expiry"), true);
+        assert.notEqual(yield* liveRowsOf(worker, parent), delegated);
+        assert.notEqual(yield* liveRowsOf(target, parent), ownBefore);
+
+        // Another account's statements over the same conversations read nothing of them.
+        const stranger = yield* openGithubUser();
+        const nothing = JSON.stringify([
+          ["messages", [JSON.stringify({ rows: 0, seq: 0 })]],
+          ["turns", []],
+          ["conversation", []],
+          ["agent", []],
+          ["workers", []],
+        ]);
+        assert.equal(
+          yield* liveRowsOf({ userId: stranger, conversationId: parent }, parent),
+          nothing,
+        );
+        assert.equal(
+          yield* liveRowsOf({ userId: stranger, conversationId: child }, parent),
+          nothing,
+        );
+
+        // A member of the agent's workspace follows the owner's rows, an outsider nothing, and a member taken out stops at once.
+        const owned = yield* liveRowsOf(target, parent);
+        assert.equal(yield* liveRowsOf(target, parent, stranger), nothing);
+        yield* joinWorkspace(agent.organizationId, stranger);
+        assert.equal(yield* liveRowsOf(target, parent, stranger), owned);
+        yield* leaveWorkspace(agent.organizationId, stranger);
+        assert.equal(yield* liveRowsOf(target, parent, stranger), nothing);
+      }),
+  );
+
   it.effect(
     "a conversation that is no agent's is refused a model, an agent, and a prompt alike",
     () =>
@@ -436,6 +763,159 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             .pipe(Effect.provide(modelCatalogOf(CATALOG))),
           Result.fail(CODER_REFUSAL.NO_AGENT),
         );
+      }),
+  );
+
+  it.effect(
+    "an agent with no repository runs: its sandbox opens on an empty working folder with nothing at the firewall, its session tells of no checkout or pull request, and it is offered none of the repository's tools",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const userId = yield* openGithubUser();
+        const task = yield* startTask(userId, { name: "Talk it over" });
+        const { agent } = Option.getOrThrow(
+          yield* createCodingAgent(userId, {
+            taskId: task.id,
+            idempotencyKey: "start-blank",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: null,
+            prompt: null,
+            repository: null,
+          }),
+        );
+        const sessionId = mintSession();
+        const auth = ownSeat(userId, agent.conversationId);
+        const starting = yield* host.admitStarting(auth, sessionId);
+        assert.ok(Result.isSuccess(starting));
+        yield* host.sessionStarted(starting.success, sessionId);
+        const admitted = yield* host.admit(auth, sessionId);
+        assert.ok(Result.isSuccess(admitted));
+        const found = yield* host.agent(admitted.success);
+        assert.ok(Result.isSuccess(found));
+        // A sandbox writing down each command it ran, in the directory it ran it in, and each firewall policy set.
+        const ran: string[] = [];
+        const policies: SandboxNetworkPolicy[] = [];
+        const sandbox: RepositorySandbox = {
+          run: (run) => {
+            ran.push(`${run.workingDirectory ?? ""}: ${run.command}`);
+            return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+          },
+          setNetworkPolicy: (policy) => {
+            policies.push(policy);
+            return Promise.resolve();
+          },
+        };
+
+        const credential = yield* host
+          .checkOut(admitted.success, sandbox)
+          .pipe(Effect.provide(reachingRelay()));
+        const renewed = yield* host
+          .repositoryCredential(admitted.success)
+          .pipe(Effect.provide(reachingRelay()));
+        const prompt = yield* composedPrompt(host, admitted.success, found.success);
+        const skills = yield* host
+          .skills(admitted.success, found.success)
+          .pipe(Effect.provide(reachingRelay()));
+        const model = yield* host
+          .model(admitted.success, undefined, "turn-fixture")
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+
+        assert.equal(credential, undefined);
+        assert.equal(renewed, undefined);
+        assert.deepEqual(ran, ["/workspace: mkdir -p /workspace/repository"]);
+        assert.deepEqual(policies, []);
+        assert.deepEqual(skills, []);
+        assert.ok(Result.isSuccess(model));
+        assert.match(prompt.text, /You work in no repository/u);
+        for (const absent of [
+          "## The checkout",
+          CODER_TOOL.OPEN_PULL_REQUEST,
+          CODER_TOOL.APPLY_PATCH,
+          CODER_TOOL.WRITE_FILE,
+          "Co-authored-by",
+          "gh pr checks",
+        ]) {
+          assert.ok(!prompt.text.includes(absent), absent);
+        }
+        assert.deepEqual([...repositoryToolsOf(found.success)], []);
+        assert.deepEqual(
+          yield* host
+            .openPullRequest(
+              admitted.success,
+              unparsedWire({ head: "luke/x", title: "x", body: "" }),
+            )
+            .pipe(Effect.provide(reachingRelay())),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CODER_REFUSAL.NO_REPOSITORY },
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent with a repository is offered its pull request, the tools that write into its checkout, and show_code",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* unclaimedAgent();
+        assert.deepEqual(
+          [...repositoryToolsOf(agent)].sort(),
+          [
+            CODER_TOOL.APPLY_PATCH,
+            CODER_TOOL.OPEN_PULL_REQUEST,
+            CODER_TOOL.WRITE_FILE,
+            CODER_TOOL.SHOW_CODE,
+          ].sort(),
+        );
+      }),
+  );
+
+  it.effect(
+    "a session opened afresh after the agent's last one retired claims the conversation, the retired one is refused, and the fresh one is seeded with what was said, the line it opens with left out",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Now send the invitation from the settings page.",
+            clientKey: "after-retirement",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+
+        const fresh = mintSession();
+        const starting = yield* host.admitStarting(auth, fresh);
+        assert.ok(Result.isSuccess(starting));
+        const seed = yield* host.seed(starting.success);
+        assert.equal(yield* host.sessionStarted(starting.success, fresh), true);
+
+        assert.deepEqual(
+          yield* host.admit(auth, sessionId),
+          Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+        );
+        assert.ok(Result.isSuccess(yield* host.admit(auth, fresh)));
+        assert.ok(seed !== undefined);
+        assert.match(seed, /Invite a teammate by email/u);
+        assert.match(seed, /The guide is read; the plan fits the code\./u);
+        assert.ok(!seed.includes("settings page"), seed);
+      }),
+  );
+
+  it.effect(
+    "an agent's first session, over a conversation with nothing said, is seeded with nothing",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { starting } = yield* openAgent(host);
+        assert.equal(yield* host.seed(starting), undefined);
       }),
   );
 
@@ -1366,11 +1846,315 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });
-        assert.equal(yield* host.chatDigest(admitted), undefined);
+        assert.equal(
+          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
+          undefined,
+        );
         yield* chatOn(userId);
-        const digest = (yield* host.chatDigest(admitted)) ?? "";
+        const digest =
+          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined)) ?? "";
         assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), digest);
         assert.ok(digest.endsWith("The invite table is mine."), digest);
+      }),
+  );
+
+  it.effect(
+    "a spoken turn opens with the call's words, how to talk the plan through, and the task as it stands, and is offered the call's own tools; a typed turn of a fresh agent opens with none of it and is offered none",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+
+        const spoken =
+          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN, undefined)) ?? "";
+        for (const told of [
+          "## This turn is spoken",
+          `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+          "## Talking the plan through",
+          "[the developer's time]",
+          "[saved document]",
+          "Name: Teammate invitations",
+        ]) {
+          assert.ok(spoken.includes(told), told);
+        }
+        assert.deepEqual(
+          [...turnToolsOf(host.turnKind(spokenSeat(admitted.target)))],
+          [CODER_TOOL.QUEUE_QUESTION, CODER_TOOL.WITHDRAW_QUESTION, CODER_TOOL.END_CALL],
+        );
+
+        assert.equal(
+          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
+          undefined,
+        );
+        assert.deepEqual(
+          [
+            ...turnToolsOf(
+              host.turnKind(ownSeat(admitted.target.userId, admitted.target.conversationId)),
+            ),
+          ],
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "a typed turn is handed the task as it stands only once someone other than the agent saved the plan after the agent's previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
+    () =>
+      Effect.gen(function* () {
+        // The relay's clock, which stamps when a turn started, stands ten minutes into the test's.
+        const host = yield* hostOverStore(undefined, () => TURN_STARTS_AT);
+        const { userId, agent, auth, sessionId, admitted } = yield* openAgent(host);
+        assert.ok(agent.taskId !== null);
+        const binding = { userId, taskId: agent.taskId };
+        const typedAt = (eveTurnId: string) =>
+          host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, hostTurnId(sessionId, eveTurnId));
+        const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
+          Effect.map(
+            host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox),
+            (answer) => answer.status,
+          );
+
+        // Luke's notes before the agent's first turn: that turn opens on the plan as its first message.
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
+        assert.equal(yield* typedAt("turn_0"), undefined);
+        // The first turn runs, started at the relay's clock, after Luke's notes.
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const state = memoryRelayState();
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+        assert.equal(yield* typedAt("turn_1"), undefined);
+
+        // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
+        yield* TestClock.adjust("10 minutes");
+        assert.equal(
+          yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")]),
+          ACTION_RESULT_STATUS.ACCEPTED,
+        );
+        assert.equal(yield* typedAt("turn_1"), undefined);
+
+        // Luke's notes while that turn ran, and the agent's after them in the same section, which
+        // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [
+          added(PLAN_HEADING.APPROACH, "- A withdrawn invite never grants access."),
+        ]);
+        yield* TestClock.adjust("1 minute");
+        assert.equal(
+          yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Resending renews the link.")]),
+          ACTION_RESULT_STATUS.ACCEPTED,
+        );
+        const handed = (yield* typedAt("turn_1")) ?? "";
+        assert.ok(handed.includes("saved since your last turn by someone other than you"), handed);
+        assert.ok(handed.includes("A withdrawn invite never grants access."), handed);
+        assert.ok(!handed.includes("## This turn is spoken"), handed);
+      }),
+  );
+
+  it.effect(
+    "a spoken ask the voice dispatched into an agent's session runs as a spoken turn: the ask learns the turn it ran in, the transcript's line is the turn's own rather than a second line written from eve's message, and the question the agent queued is journaled",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId } = yield* openAgent(host);
+        const spokenAuth: SessionAuth = {
+          current: spokenSeat(target).current,
+          initiator: auth.initiator,
+        };
+        const admitted = Result.getOrThrow(yield* host.admit(spokenAuth, sessionId));
+        // The voice's ask under its delegation's id, dispatched into the agent's session, and the
+        // transcript row the voice writer cut for it, written before eve's turn started.
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-1" }),
+        );
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const lineId = `line-${delegationId}`;
+        const line = yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "How far along are the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        assert.ok(Result.isSuccess(line));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+
+        const session = { id: sessionId, auth: spokenAuth, turn: { id: "turn_0" } };
+        const state = memoryRelayState();
+        for (const event of spokenCodingTurn("turn_0", ["delivery-1"])) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const turnId = hostTurnId(sessionId, "turn_0");
+        assert.equal((yield* turnRow(turnId))?.origin, TURN_ORIGIN.SPOKEN);
+        assert.equal((yield* asks.named(target.userId, ask.id))?.turnId, turnId);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        assert.deepEqual(
+          page.messages.map((message) => [message.role, message.id]),
+          [
+            [MESSAGE_ROLE.USER, line.success.id],
+            [MESSAGE_ROLE.ASSISTANT, page.messages[1]?.id],
+          ],
+        );
+        const answer = page.messages[1];
+        assert.ok(
+          answer?.parts.some(
+            (part) => isToolUIPart(part) && part.type === `tool-${CODER_TOOL.QUEUE_QUESTION}`,
+          ),
+        );
+      }),
+  );
+  it.effect(
+    "show_code reads its lines from the checkout the agent's sandbox opened with, cloning nothing, and the call, relayed on a typed turn, reads back from the agent's own conversation as code shown",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, sessionId, auth, admitted } = yield* openAgent(host);
+        const sandbox = sandboxDouble(() => undefined, {
+          files: { "src/invite.ts": "export const TTL = 7;\nexport const LIMIT = 3;\n" },
+        });
+        sandbox.checkedOut = "acme/relay";
+        const input = {
+          path: "src/invite.ts",
+          startLine: 1,
+          endLine: 1,
+          note: "Invitations last a week.",
+        };
+
+        const answer = yield* host.showCode(admitted, unparsedWire(input), sandbox.door);
+
+        assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answer));
+        assert.deepEqual(sandbox.clones, []);
+        const turnId = "turn_0";
+        const sequence = 0;
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: turnId } };
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId, sequence } }),
+          stamped({
+            type: "message.received",
+            data: { turnId, sequence, message: "Where is the invite's lifetime set?" },
+          }),
+          stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: {
+              turnId,
+              sequence,
+              stepIndex: 0,
+              actions: [
+                { kind: "tool-call", callId: "call-1", toolName: CODER_TOOL.SHOW_CODE, input },
+              ],
+            },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              turnId,
+              sequence,
+              stepIndex: 0,
+              status: "completed",
+              result: {
+                kind: "tool-result",
+                callId: "call-1",
+                toolName: CODER_TOOL.SHOW_CODE,
+                output: answer,
+              },
+            },
+          }),
+          stamped({
+            type: "step.completed",
+            data: { turnId, sequence, stepIndex: 0, finishReason: "stop" },
+          }),
+          stamped({ type: "turn.completed", data: { turnId, sequence } }),
+        ];
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        // The Code tab's read: every answered show_code call in the conversation's journals.
+        const journals = yield* listJournalsCalling(
+          target.userId,
+          target.conversationId,
+          CODER_TOOL_SET,
+          CODER_TOOL.SHOW_CODE,
+        );
+        assert.ok(journals.ok);
+        const shown = journals.value.flatMap((journal) =>
+          journal.message.parts.filter(isStoredToolPart).flatMap((part) => {
+            const code = shownCodeOf(part);
+            return code === undefined ? [] : [code];
+          }),
+        );
+        // A short file is shown whole around the lines pointed at, from its first line.
+        assert.deepEqual(
+          shown.map((code) => [
+            code.repository,
+            code.ref,
+            code.firstLine,
+            code.lines[0],
+            code.note,
+          ]),
+          [
+            [
+              "acme/relay",
+              { path: "src/invite.ts", startLine: 1, endLine: 1 },
+              1,
+              "export const TTL = 7;",
+              "Invitations last a week.",
+            ],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent on a task draws on its task's whiteboard, which then holds the drawing, and one on no task is refused",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        const drawing = {
+          elements: [
+            { type: "rectangle", id: "invite", x: 0, y: 0, label: "Invite" },
+            { type: "rectangle", id: "accept", x: 320, y: 0, label: "Accept" },
+            { type: "arrow", id: "flow", from: "invite", to: "accept" },
+          ],
+        };
+
+        const drawn = yield* host.board(admitted, CODER_TOOL.DRAW_ON_BOARD, unparsedWire(drawing));
+
+        assert.equal(drawn.status, DRAW_ON_BOARD_STATUS.DRAWN, JSON.stringify(drawn));
+        const taskId = agent.taskId;
+        assert.ok(taskId !== null);
+        const board = Option.getOrThrow(yield* readBoard(userId, taskId));
+        assert.deepEqual(
+          board.drawing?.elements.map((element) => element.id),
+          ["invite", "accept", "flow"],
+        );
+
+        const db = yield* Database;
+        yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agent.id));
+        const refused = yield* host.board(
+          admitted,
+          CODER_TOOL.DRAW_ON_BOARD,
+          unparsedWire(drawing),
+        );
+        assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
       }),
   );
 });

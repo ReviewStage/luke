@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import type { WireValue } from "@luke/wire";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -28,6 +30,12 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const SESSION_PATH = "/api/auth/get-session";
 
 const SIGN_OUT_PATH = "/api/auth/sign-out";
+
+/** The app's shared shell sheet, which the admin's entry lays as the browser loads it. */
+const SHELL_SHEET = readFileSync(
+  createRequire(import.meta.url).resolve("@luke/panel/styles/shell.css"),
+  "utf8",
+);
 
 /** A phone's width, under the line the app's shell turns narrow at. */
 const PHONE_WIDTH = 390;
@@ -207,6 +215,47 @@ test("the toggle at the sidebar's top hides it and shows it again, remembered ac
   });
   expect(unreachable(sectionLink(page, "Users"))).toBe(false);
   expect(button("Hide sidebar")).toBeDefined();
+});
+
+/**
+ * Whether the view's toolbar starts past the sidebar's toggle: whether a rule
+ * of the app's shared shell sheet that starts a toolbar at the toggle's
+ * clearance reaches it. jsdom computes no padding drawn from a custom
+ * property, so the sheet's own rules are read.
+ */
+function toolbarClearsToggle(page: HTMLElement): boolean {
+  const toolbar = page.querySelector("main header.desktop-toolbar");
+  if (toolbar === null) throw new Error("No toolbar heads the view");
+  const laid = document.head.appendChild(document.createElement("style"));
+  laid.textContent = SHELL_SHEET;
+  const rules = Array.from(laid.sheet?.cssRules ?? []);
+  laid.remove();
+  return rules.some(
+    (rule) =>
+      rule instanceof CSSStyleRule &&
+      rule.style.getPropertyValue("padding-left") === "var(--sidebar-toggle-clearance)" &&
+      toolbar.matches(rule.selectorText),
+  );
+}
+
+test("hidden or in a narrow room, the sidebar's toggle stands over the view's toolbar, which starts its title past it", async () => {
+  const page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+  expect(toolbarClearsToggle(page)).toBe(false);
+
+  await act(async () => {
+    button("Hide sidebar")?.click();
+  });
+  expect(toolbarClearsToggle(page)).toBe(true);
+  act(() => root?.unmount());
+  window.localStorage.clear();
+
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: PHONE_WIDTH, height: 800 }),
+  );
+  const narrow = await openAdmin();
+  await vi.waitFor(() => expect(narrow.querySelector("main h1")?.textContent).toBe("Overview"));
+  expect(toolbarClearsToggle(narrow)).toBe(true);
 });
 
 test("in a phone's narrow room the sidebar is a drawer the toggle opens over the view, and a choice in it puts away", async () => {

@@ -10,7 +10,7 @@ import type { AdminReliability } from "@luke/service/admin/admin-reliability";
 import { ADMIN_ATTENTION_KIND } from "@luke/service/admin/http";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ReliabilityScreen } from "../src/admin/screens/reliability";
 
 /**
@@ -91,6 +91,7 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
         analyticsRecording: true,
         analyticsErasure: true,
         sweep: true,
+        eveDeployment: true,
         ownKeys: true,
         workspaceLinear: false,
         connectors: new Map([[INTEGRATION_PROVIDER.LINEAR, true]]),
@@ -102,10 +103,21 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
 
 let root: Root | undefined;
 
+/** jsdom's stand-in for the browser's ResizeObserver, which it lacks; a list row measures its title with one, and the page is never resized. */
+class StillResizeObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StillResizeObserver);
+});
+
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
   document.body.replaceChildren();
 });

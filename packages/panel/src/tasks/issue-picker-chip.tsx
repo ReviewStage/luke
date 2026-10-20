@@ -3,18 +3,7 @@ import { type GitHubIssuePick, isOutsideAuthor } from "@luke/features/github-rep
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import {
-  BADGE_TONE,
-  Badge,
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
-  CHIP_LOOK,
-  CHIP_WIDTH,
-  Chip,
-  ChipName,
-  ProviderMark,
-} from "@luke/ui";
+import { BADGE_TONE, Badge, CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
@@ -72,9 +61,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * typed in the menu's field names the task; choosing an issue is the
  * owner's to act on.
  *
- * A task's page opens the same menu from its Linked issues box
- * (`task-issue-links.tsx`), drawn as a button that names what it does
- * (`trigger`) in the chip's place, over the task's own repository, the
+ * A task's page opens the same menu from the end of its row of linked
+ * issues (`task-issue-links.tsx`), drawn as a quiet chip that names what it
+ * does (`trigger`) in the issue chip's place, over the task's own repository, the
  * issues the task links standing dimmed as linked.
  */
 
@@ -339,7 +328,7 @@ export function IssuePickerChip({
   openRequest?: number | undefined;
   /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
   align?: PickerAlign | undefined;
-  /** The words of a button drawn in the chip's place, as a task page's "Link issue"; the chip where none are given. */
+  /** The words of a quiet chip drawn in the issue chip's place, as a task page's "Link issue"; the issue chip where none are given. */
   trigger?: string | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
   onChooseGitHub: (issue: GitHubIssuePick) => void;
@@ -429,21 +418,20 @@ export function IssuePickerChip({
   };
 
   return (
-    <div className="issue-picker-chip" data-align={align} {...placement} ref={box}>
+    <div className="issue-picker-chip" {...placement} ref={box}>
       {trigger !== undefined ? (
-        <Button
+        <Chip
           ref={button}
-          variant={BUTTON_VARIANT.OUTLINE}
-          size={BUTTON_SIZE.COMPACT}
-          icon={<PlusIcon />}
+          look={CHIP_LOOK.TOOLBAR}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           disabled={disabled}
           onClick={press}
         >
-          {trigger}
-        </Button>
+          <PlusIcon />
+          <ChipName>{trigger}</ChipName>
+        </Chip>
       ) : (
         <Tooltip label={ISSUE_WORDS.LABEL} chord={ISSUE_CHORD}>
           <Chip

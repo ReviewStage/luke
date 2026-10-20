@@ -2,8 +2,10 @@ import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_PAYER,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
   type ContextWindow,
@@ -54,7 +56,12 @@ import {
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  CONVERSATION_RUNTIME,
+  type ConversationRuntime,
+  MESSAGE_SENDER,
+} from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
   awaitingLinesOf,
@@ -69,6 +76,7 @@ import { TaskArchived } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
+  agentSeenBy,
   reachableTask,
   taskReachableBy,
   workspaceReachableBy,
@@ -167,7 +175,8 @@ export interface CodingAgent {
   readonly planSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
   readonly prompt: string | null;
-  readonly repository: string;
+  /** The GitHub repository the agent works in, as `owner/name`; null for an agent with none, which does no repository work. */
+  readonly repository: string | null;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
   /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
@@ -187,8 +196,23 @@ export interface CodingAgent {
   readonly createdAt: Date;
 }
 
-/** One agent with no plan as the sidebar lists it for its reader: the agent, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
-export interface TasklessCodingAgent extends CodingAgent {
+/**
+ * One coding agent as a list line reads it (`CODING_AGENT_LINE_COLUMNS`):
+ * the agent without what it was handed, the plan's text or the developer's
+ * prompt, and without the run that started it, which only its own page and
+ * its own turns read; whether it was handed a prompt, which its tab's brief
+ * is drawn from, and its automation's name stand in their place.
+ */
+export interface CodingAgentLine
+  extends Omit<CodingAgent, "automationOrigin" | "planSnapshot" | "prompt"> {
+  /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
+  readonly automationName: string | null;
+  /** Whether the agent was handed the developer's prompt rather than the plan. */
+  readonly handedPrompt: boolean;
+}
+
+/** One agent with no plan as the sidebar lists it for its reader: the agent's line, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
+export interface TasklessCodingAgent extends CodingAgentLine {
   readonly pinnedAt: Date | null;
   readonly pinPosition: string | null;
 }
@@ -210,10 +234,23 @@ export {
   turnUsagesOf,
 };
 
-/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's prompt in its place. */
+/** An agent, or a line of one, that works in a repository: every agent that does repository work, its checkout, its pull request, and its reach on GitHub, is one. */
+export type WithRepository<A extends { readonly repository: string | null }> = A & {
+  readonly repository: string;
+};
+
+/** Whether the agent works in a repository; one with none does no repository work. */
+export function hasRepository<A extends { readonly repository: string | null }>(
+  agent: A,
+): agent is WithRepository<A> {
+  return agent.repository !== null;
+}
+
+/** What a Start hands the agent as its first message: the plan's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
 export type CodingAgentBriefText =
   | { readonly planSnapshot: string; readonly prompt: null }
-  | { readonly planSnapshot: null; readonly prompt: string };
+  | { readonly planSnapshot: null; readonly prompt: string }
+  | { readonly planSnapshot: null; readonly prompt: null };
 
 /**
  * Where a Start puts the agent: on a task, whose workspace it joins and
@@ -245,7 +282,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly effort: string;
   /** The model's whole window, the long one, where the Start names none. */
   readonly contextWindow?: ContextWindow | undefined;
-  readonly repository: string;
+  /** The repository the agent works in; null for one with none. */
+  readonly repository: string | null;
   /** The branch the agent's checkout is cloned at; none for the repository's default branch. */
   readonly startBranch?: string | undefined;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
@@ -254,7 +292,26 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly mentionedServers?: readonly string[] | undefined;
   /** How the repository was reached for the Start; the App's where none is named. */
   readonly githubAccess?: GitHubAccess | undefined;
+  /** What answers the agent's conversation; eve where none is named. */
+  readonly runtime?: ConversationRuntime | undefined;
+  /** Who pays for the agent's model calls; none recorded where none is named. */
+  readonly payer?: CodingAgentPayer | undefined;
 };
+
+/**
+ * How an agent is run, as its rows hold it: what answers its conversation,
+ * eve for a conversation from before the column, the harness's own session
+ * or thread id, the digest of its runner's bearer, and who pays for it.
+ */
+export interface CodingAgentRouting {
+  readonly runtime: ConversationRuntime;
+  /** The harness's session or thread id; null on eve and before the harness answers one. */
+  readonly nativeSession: string | null;
+  /** The digest of the runner's bearer at Luke's MCP server; null where no runner holds one. */
+  readonly runnerTokenHash: string | null;
+  /** Who pays for the agent's model calls; null for an agent from before the column. */
+  readonly payer: CodingAgentPayer | null;
+}
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const CODING_AGENT_COLUMNS = {
@@ -282,6 +339,49 @@ const CODING_AGENT_COLUMNS = {
   githubAccess: codingAgent.githubAccess,
   createdAt: codingAgent.createdAt,
 };
+
+/**
+ * The columns a list line projects (`CodingAgentLine`): every one of
+ * `CODING_AGENT_COLUMNS` but the plan's text, the prompt, and the run that
+ * started the agent, whose prompt and webhook body it carries, with whether
+ * a prompt was handed and the run's automation name read in their place.
+ * Note that the lists read these, because they read every agent of every
+ * listed task on every refresh, and the text columns are the bulk of a row.
+ */
+const CODING_AGENT_LINE_COLUMNS = {
+  id: codingAgent.id,
+  userId: codingAgent.userId,
+  taskId: codingAgent.taskId,
+  organizationId: AGENT_WORKSPACE,
+  automationId: codingAgent.automationId,
+  automationName: sql<string | null>`${codingAgent.automationOrigin} ->> 'name'`,
+  startedFrom: codingAgent.startedFrom,
+  conversationId: codingAgent.conversationId,
+  model: codingAgent.model,
+  effort: codingAgent.effort,
+  contextWindow: codingAgent.contextWindow,
+  handedPrompt: sql<boolean>`${codingAgent.prompt} is not null`,
+  repository: codingAgent.repository,
+  branch: codingAgent.branch,
+  startBranch: codingAgent.startBranch,
+  title: codingAgent.title,
+  archivedAt: codingAgent.archivedAt,
+  archivedBy: codingAgent.archivedBy,
+  disabledServers: codingAgent.disabledServers,
+  author: codingAgent.author,
+  githubAccess: codingAgent.githubAccess,
+  createdAt: codingAgent.createdAt,
+} as const;
+
+/** The line a full read of an agent draws, as `CODING_AGENT_LINE_COLUMNS` reads it from the row. */
+export function codingAgentLineOf(agent: CodingAgent): CodingAgentLine {
+  const { automationOrigin, planSnapshot: _planSnapshot, prompt, ...line } = agent;
+  return {
+    ...line,
+    automationName: automationOrigin?.name ?? null,
+    handedPrompt: prompt !== null,
+  };
+}
 
 /**
  * The `disabled_servers` column as an agent reads it: connection names
@@ -356,7 +456,7 @@ const CodingAgentRowSchema = Schema.Struct({
   contextWindow: contextWindowSchema,
   planSnapshot: Schema.NullOr(Schema.String),
   prompt: Schema.NullOr(Schema.String),
-  repository: Schema.String,
+  repository: Schema.NullOr(Schema.String),
   branch: Schema.NullOr(Schema.String),
   startBranch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
@@ -368,9 +468,23 @@ const CodingAgentRowSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
 });
 
-/** An agent's row with the reader's own pin beside it; null where they hold none. */
+const {
+  automationOrigin: _automationOrigin,
+  planSnapshot: _planSnapshot,
+  prompt: _prompt,
+  ...LINE_ROW_FIELDS
+} = CodingAgentRowSchema.fields;
+
+/** An agent's row as a list line reads it (`CODING_AGENT_LINE_COLUMNS`). */
+const CodingAgentLineRowSchema = Schema.Struct({
+  ...LINE_ROW_FIELDS,
+  automationName: Schema.NullOr(Schema.String),
+  handedPrompt: Schema.Boolean,
+});
+
+/** An agent's line with the reader's own pin beside it; null where they hold none. */
 const TasklessAgentRowSchema = Schema.Struct({
-  ...CodingAgentRowSchema.fields,
+  ...CodingAgentLineRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
 });
@@ -445,16 +559,22 @@ const findAgentByKey = SqlSchema.findOneOption({
     ),
 });
 
+/** A runtime as a conversation's row holds it. */
+const RuntimeColumnSchema = Schema.Literals(Object.values(CONVERSATION_RUNTIME));
+/** A payer as the agent's row holds it. */
+const PayerColumnSchema = Schema.Literals(Object.values(CODING_AGENT_PAYER));
+
 const insertAgentConversation = SqlSchema.findOne({
-  Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({ userId: Schema.String, runtime: RuntimeColumnSchema, now: Schema.Date }),
   Result: IdRowSchema,
-  execute: ({ userId, now }) =>
+  execute: ({ userId, runtime, now }) =>
     Database.use((db) =>
       db
         .insert(conversations)
         .values({
           userId,
           kind: CONVERSATION_KIND.CODING_AGENT,
+          runtime,
           createdAt: now,
           lastActivityAt: now,
         })
@@ -478,11 +598,12 @@ const insertAgent = SqlSchema.findOne({
     contextWindow: contextWindowSchema,
     planSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
-    repository: Schema.String,
+    repository: Schema.NullOr(Schema.String),
     startBranch: Schema.NullOr(Schema.String),
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
+    payer: Schema.NullOr(PayerColumnSchema),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -505,11 +626,12 @@ const insertAgent = SqlSchema.findOne({
           planSnapshot: write.planSnapshot,
           prompt: write.prompt,
           repository: write.repository,
-          repositories: [write.repository],
+          repositories: write.repository === null ? [] : [write.repository],
           startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,
           githubAccess: write.githubAccess,
+          payer: write.payer,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -734,6 +856,75 @@ const updateAgentAuthor = SqlSchema.void({
     ),
 });
 
+const findAgentRouting = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({
+    runtime: Schema.NullOr(RuntimeColumnSchema),
+    nativeSession: Schema.NullOr(Schema.String),
+    runnerTokenHash: Schema.NullOr(Schema.String),
+    payer: Schema.NullOr(PayerColumnSchema),
+  }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          runtime: conversations.runtime,
+          nativeSession: conversations.nativeSession,
+          runnerTokenHash: conversations.runnerTokenHash,
+          payer: codingAgent.payer,
+        })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(reachableAgent(userId, agentId))
+        .limit(1),
+    ),
+});
+
+/** The agent's conversation, where the account reaches the agent, as a write to the conversation's own columns picks it. */
+function reachableAgentConversation(userId: string, agentId: string): SQL {
+  return inArray(
+    conversations.id,
+    queryBuilder
+      .select({ id: codingAgent.conversationId })
+      .from(codingAgent)
+      .where(reachableAgent(userId, agentId)),
+  );
+}
+
+const updateAgentNativeSession = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    nativeSession: Schema.String,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, nativeSession }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ nativeSession })
+        .where(reachableAgentConversation(userId, agentId))
+        .returning({ id: conversations.id }),
+    ),
+});
+
+const updateAgentRunnerToken = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    runnerTokenHash: Schema.NullOr(Schema.String),
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, runnerTokenHash }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ runnerTokenHash })
+        .where(reachableAgentConversation(userId, agentId))
+        .returning({ id: conversations.id }),
+    ),
+});
+
 /** The `last_step` column as the coder host writes it (`StoredAgentStep`). */
 const AgentStepColumnSchema = Schema.Struct({
   inputTokens: Schema.Number,
@@ -789,25 +980,45 @@ const findAgentContext = SqlSchema.findOneOption({
     ),
 });
 
+const AgentsOfTaskSchema = Schema.Struct({
+  userId: Schema.String,
+  taskId: Schema.String,
+  includeArchived: Schema.Boolean,
+});
+
+/** The condition that an agent stands on the task the account reaches, and is one the account sees as its GitHub access allows, archived only where asked for; read joined to its task. */
+function ofReachedTask({ userId, taskId, includeArchived }: typeof AgentsOfTaskSchema.Type) {
+  return and(
+    reachableTask(userId, taskId),
+    agentSeenBy(userId),
+    includeArchived ? undefined : isNull(codingAgent.archivedAt),
+  );
+}
+
 const findAgentsOfTask = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    taskId: Schema.String,
-    includeArchived: Schema.Boolean,
-  }),
+  Request: AgentsOfTaskSchema,
   Result: CodingAgentRowSchema,
-  execute: ({ userId, taskId, includeArchived }) =>
+  execute: (request) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
         .innerJoin(task, eq(task.id, codingAgent.taskId))
-        .where(
-          and(
-            reachableTask(userId, taskId),
-            includeArchived ? undefined : isNull(codingAgent.archivedAt),
-          ),
-        )
+        .where(ofReachedTask(request))
+        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
+});
+
+const findAgentLinesOfTask = SqlSchema.findAll({
+  Request: AgentsOfTaskSchema,
+  Result: CodingAgentLineRowSchema,
+  execute: (request) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_LINE_COLUMNS)
+        .from(codingAgent)
+        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .where(ofReachedTask(request))
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
     ),
 });
@@ -831,37 +1042,57 @@ function agentNamed(words: string): SQL | undefined {
   );
 }
 
+const AgentsOfWorkspaceSchema = Schema.Struct({
+  userId: Schema.String,
+  organizationId: Schema.String,
+  repository: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
+  words: Schema.NullOr(Schema.String),
+  includeArchived: Schema.Boolean,
+  limit: Schema.Number,
+});
+
+/** The condition that an agent is one of the workspace's the account reaches, narrowed as the request asks. */
+function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
+  const { userId, organizationId, repository, taskId, words, includeArchived } = request;
+  return and(
+    agentReachableBy(userId),
+    eq(AGENT_WORKSPACE, organizationId),
+    includeArchived ? undefined : isNull(codingAgent.archivedAt),
+    taskId === null ? undefined : eq(codingAgent.taskId, taskId),
+    words === null ? undefined : agentNamed(words),
+    // Note that a repository is matched as GitHub matches one, its case aside.
+    repository === null
+      ? undefined
+      : eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
+  );
+}
+
 const findAgentsOfWorkspace = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    organizationId: Schema.String,
-    repository: Schema.NullOr(Schema.String),
-    taskId: Schema.NullOr(Schema.String),
-    words: Schema.NullOr(Schema.String),
-    includeArchived: Schema.Boolean,
-    limit: Schema.Number,
-  }),
+  Request: AgentsOfWorkspaceSchema,
   Result: CodingAgentRowSchema,
-  execute: ({ userId, organizationId, repository, taskId, words, includeArchived, limit }) =>
+  execute: (request) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
-        .where(
-          and(
-            agentReachableBy(userId),
-            eq(AGENT_WORKSPACE, organizationId),
-            includeArchived ? undefined : isNull(codingAgent.archivedAt),
-            taskId === null ? undefined : eq(codingAgent.taskId, taskId),
-            words === null ? undefined : agentNamed(words),
-            // Note that a repository is matched as GitHub matches one, its case aside.
-            repository === null
-              ? undefined
-              : eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
-          ),
-        )
+        .where(ofReachedWorkspace(request))
         .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
-        .limit(limit),
+        .limit(request.limit),
+    ),
+});
+
+const findAgentLinesOfWorkspace = SqlSchema.findAll({
+  Request: AgentsOfWorkspaceSchema,
+  Result: CodingAgentLineRowSchema,
+  execute: (request) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_LINE_COLUMNS)
+        .from(codingAgent)
+        .where(ofReachedWorkspace(request))
+        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .limit(request.limit),
     ),
 });
 
@@ -873,7 +1104,7 @@ const findTasklessAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          ...CODING_AGENT_COLUMNS,
+          ...CODING_AGENT_LINE_COLUMNS,
           pinnedAt: agentPin.pinnedAt,
           pinPosition: agentPin.position,
         })
@@ -999,19 +1230,20 @@ const findAgentsOfTasks = SqlSchema.findAll({
     includeArchived: Schema.Boolean,
   }),
   Result: Schema.Struct({
-    ...CodingAgentRowSchema.fields,
+    ...CodingAgentLineRowSchema.fields,
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
   execute: ({ userId, taskIds, includeArchived }) =>
     Database.use((db) =>
       db
-        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
+        .select({ ...CODING_AGENT_LINE_COLUMNS, published: codingAgent.published })
         .from(codingAgent)
         .innerJoin(task, eq(task.id, codingAgent.taskId))
         .where(
           and(
             inArray(task.id, [...taskIds]),
             taskReachableBy(userId),
+            agentSeenBy(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
@@ -1241,7 +1473,11 @@ export function createCodingAgent(
         }
         if (reached.value.archived) return yield* new TaskArchived();
         const now = yield* DateTime.nowAsDate;
-        const conversation = yield* insertAgentConversation({ userId, now }).pipe(
+        const conversation = yield* insertAgentConversation({
+          userId,
+          runtime: started.runtime ?? CONVERSATION_RUNTIME.EVE,
+          now,
+        }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
@@ -1265,6 +1501,7 @@ export function createCodingAgent(
           disabledServers: storedServers(started.disabledServers ?? []),
           mentionedServers: storedServers(started.mentionedServers ?? []),
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
+          payer: started.payer ?? null,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -1303,6 +1540,41 @@ export function listCodingAgents(
   return findAgentsOfTask({ userId, taskId, includeArchived: options.includeArchived ?? false });
 }
 
+/** Every agent started on the task as its line reads, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such task. */
+export function listCodingAgentLines(
+  userId: string,
+  taskId: string,
+  options: { readonly includeArchived?: boolean } = {},
+): CodingAgentStoreEffect<readonly CodingAgentLine[]> {
+  return findAgentLinesOfTask({
+    userId,
+    taskId,
+    includeArchived: options.includeArchived ?? false,
+  });
+}
+
+/** What a list of a workspace's agents is narrowed to, and how many it answers at most. */
+interface WorkspaceAgentsAsked {
+  readonly repository?: string;
+  readonly taskId?: string;
+  readonly words?: string;
+  readonly includeArchived?: boolean;
+  readonly limit: number;
+}
+
+/** A workspace list's request as its statement reads it, every narrowing it was not given read as none. */
+function workspaceRequest(userId: string, organizationId: string, options: WorkspaceAgentsAsked) {
+  return {
+    userId,
+    organizationId,
+    repository: options.repository ?? null,
+    taskId: options.taskId ?? null,
+    words: options.words ?? null,
+    includeArchived: options.includeArchived ?? false,
+    limit: options.limit,
+  };
+}
+
 /**
  * The workspace's agents, on a task or with none, by any member, newest
  * started first, an archived one left out unless `includeArchived` asks,
@@ -1314,30 +1586,25 @@ export function listCodingAgents(
 export function listWorkspaceCodingAgents(
   userId: string,
   organizationId: string,
-  options: {
-    readonly repository?: string;
-    readonly taskId?: string;
-    readonly words?: string;
-    readonly includeArchived?: boolean;
-    readonly limit: number;
-  },
+  options: WorkspaceAgentsAsked,
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
-  return findAgentsOfWorkspace({
-    userId,
-    organizationId,
-    repository: options.repository ?? null,
-    taskId: options.taskId ?? null,
-    words: options.words ?? null,
-    includeArchived: options.includeArchived ?? false,
-    limit: options.limit,
-  });
+  return findAgentsOfWorkspace(workspaceRequest(userId, organizationId, options));
+}
+
+/** The workspace's agents as `listWorkspaceCodingAgents` lists them, each as its line reads. */
+export function listWorkspaceCodingAgentLines(
+  userId: string,
+  organizationId: string,
+  options: WorkspaceAgentsAsked,
+): CodingAgentStoreEffect<readonly CodingAgentLine[]> {
+  return findAgentLinesOfWorkspace(workspaceRequest(userId, organizationId, options));
 }
 
 /**
  * Every agent with no plan in the account's workspaces, by any member,
  * newest started first, the archived ones only where `includeArchived` asks,
- * each with the account's own pin of it: what the plan list carries beside
- * the plans, read by the same gate.
+ * each as its line reads with the account's own pin of it: what the plan
+ * list carries beside the plans, read by the same gate.
  */
 export function listTasklessCodingAgents(
   userId: string,
@@ -1387,12 +1654,18 @@ export interface PublishedCodingAgent {
   readonly published: CodingAgentPullRequest | null;
 }
 
-/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
+/** One agent's line, and the pull request from its branch as GitHub last answered; null before a read found one. */
+export interface PublishedCodingAgentLine {
+  readonly agent: CodingAgentLine;
+  readonly published: CodingAgentPullRequest | null;
+}
+
+/** Every agent standing on the plans named, by any member, each as its line reads with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
 export function listPublishedCodingAgents(
   userId: string,
   taskIds: readonly string[],
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+): CodingAgentStoreEffect<readonly PublishedCodingAgentLine[]> {
   if (taskIds.length === 0) return Effect.succeed([]);
   const includeArchived = options.includeArchived === true;
   return Effect.map(findAgentsOfTasks({ userId, taskIds, includeArchived }), (rows) =>
@@ -1884,6 +2157,41 @@ export function recordCodingAgentAuthor(
   author: CodingAgentAuthor,
 ): CodingAgentStoreEffect<void> {
   return updateAgentAuthor({ userId, agentId, author });
+}
+
+/** How the agent is run (`CodingAgentRouting`); nothing for an agent of a workspace the account is not in. */
+export function readCodingAgentRouting(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentRouting>> {
+  return Effect.map(
+    findAgentRouting({ userId, agentId }),
+    Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
+  );
+}
+
+/** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */
+export function recordCodingAgentNativeSession(
+  userId: string,
+  agentId: string,
+  nativeSession: string,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(
+    updateAgentNativeSession({ userId, agentId, nativeSession }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** The digest of the runner's bearer recorded on the agent's conversation, or null to retire it; answers whether the account reached the agent. */
+export function recordCodingAgentRunnerToken(
+  userId: string,
+  agentId: string,
+  runnerTokenHash: string | null,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(
+    updateAgentRunnerToken({ userId, agentId, runnerTokenHash }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */

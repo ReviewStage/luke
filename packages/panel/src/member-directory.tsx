@@ -2,9 +2,9 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
-import { createContext, type ReactNode, useCallback, useContext } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
 import { useFormerMembersRead, useWorkspaceMembersRead } from "./tasks/use-workspace-members.js";
-import { useAppState } from "./use-app-state.js";
+import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 
 /**
  * member-directory.tsx -- the members of the workspace the open task lives in, read once for everything in the task that names a person.
@@ -70,13 +70,14 @@ export function MemberDirectory({
     if (membersRefused) retryMembers();
     if (formerRefused) retryFormer();
   }, [membersRefused, formerRefused, retryMembers, retryFormer]);
-  return (
-    <DirectoryContext.Provider
-      value={{ members, readerId, former, workspaceId: workspace?.id, reading, refused, retry }}
-    >
-      {children}
-    </DirectoryContext.Provider>
+  // Note that the directory is the same across draws while none of it moves, because every
+  // face and name inside it is drawn again for a new one.
+  const workspaceId = workspace?.id;
+  const directory = useMemo(
+    () => ({ members, readerId, former, workspaceId, reading, refused, retry }),
+    [members, readerId, former, workspaceId, reading, refused, retry],
   );
+  return <DirectoryContext.Provider value={directory}>{children}</DirectoryContext.Provider>;
 }
 
 /** The directory standing around the caller: the members as read, the reader's id, and where the reads stand. */
@@ -104,7 +105,7 @@ export function useCreator(
   readerId?: string | undefined,
 ): Actor {
   const directory = useMemberDirectory();
-  const account = useAppState()?.account;
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   return creatorActor(task, { ...directory, readerId: directory.readerId ?? readerId }, you);
 }

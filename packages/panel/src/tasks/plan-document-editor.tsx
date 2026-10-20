@@ -21,6 +21,7 @@ import {
   type MentionNode,
   type MentionNodeDoors,
   PLACEMENT_END,
+  type PlacedWords,
   type PlanEditorHandle,
   type PlanEditorModule,
   type PlanEditorPlacement,
@@ -78,6 +79,9 @@ export const EDITOR_ROOM_CLASS = "plan-document-editor";
 /** What the text says while the editor's bundle could not be loaded. */
 const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
+/** What the developer does that ends the editor keeping the words it opened on where they stood: a scroll, a press, or a key. */
+const KEEPING_ENDS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
 
@@ -114,6 +118,54 @@ function editsOnClick(target: EventTarget): boolean {
     target instanceof Element &&
     target.closest("a, button, input, label, [data-mention-ref], .plan-unit-row") !== null
   );
+}
+
+/** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
+function rangeAt(x: number, y: number): Range | null {
+  // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
+  const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
+  if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
+  const position = page.caretPositionFromPoint?.(x, y) ?? null;
+  if (position === null) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  return range;
+}
+
+/** Where the top of a range's line stands in the window, or its words' element's where the browser draws no box for it. */
+function lineTop(range: Range, words: Text): number {
+  // Note that a range's boxes are read as possibly missing, since a page with no layout, as a test's is, draws none.
+  const measured: Partial<Pick<Range, "getClientRects">> = range;
+  const box = measured.getClientRects?.()[0];
+  return box?.top ?? words.parentElement?.getBoundingClientRect().top ?? 0;
+}
+
+/** Whether a text node stands in a code block, as `PlacedWords` counts it. */
+function inCode(text: Node): boolean {
+  return text.parentElement?.closest("pre") != null;
+}
+
+/**
+ * The words a click at a point landed on in a section's drawn block, as the
+ * editor finds them again (`PlacedWords`); none where it landed on no words.
+ */
+function wordsUnder(
+  block: HTMLElement,
+  section: number,
+  x: number,
+  y: number,
+): PlacedWords | undefined {
+  const range = rangeAt(x, y);
+  const words = range?.startContainer;
+  if (range == null || !(words instanceof Text) || !block.contains(words)) return undefined;
+  const text = words.data;
+  const code = inCode(words);
+  let occurrence = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null && at !== words; at = walker.nextNode()) {
+    if (at.textContent === text && inCode(at) === code) occurrence += 1;
+  }
+  return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
 }
 
 /** Where a text's words stand in the window. */
@@ -298,7 +350,10 @@ export function DocumentBlock({
         // Note that a click on a menu or a card portaled out of the block still
         // bubbles here through React's tree, and opens no editor.
         if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) return;
-        if (editsOnClick(event.target)) editing.open({ x: event.clientX, y: event.clientY });
+        if (!editsOnClick(event.target)) return;
+        const { clientX: x, clientY: y } = event;
+        const words = wordsUnder(event.currentTarget, section, x, y);
+        editing.open(words === undefined ? { x, y } : { x, y, words });
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -743,6 +798,35 @@ export function PlanDocumentEditor({
       else handle.current.focusAt(placement);
     },
   });
+  // Note that the words a click opened the editor on are kept where they
+  // stood, since the editor may draw what stands above them at another
+  // height than the text did, a picture, a table or a diagram's preview say,
+  // and again each time the editor's height changes as what it draws later
+  // lands, a diagram's preview or a chip, until the developer scrolls,
+  // presses, or types.
+  const ready = AsyncResult.isSuccess(module);
+  useLayoutEffect(() => {
+    if (!ready) return;
+    // Note that a press on the room while the bundle loaded is where the editor opens, which keeps no words.
+    const place = pending ?? editing.placement;
+    const target = place !== undefined && "words" in place ? place.words?.top : undefined;
+    const column = scroller?.current;
+    const text = room.current;
+    if (target === undefined || column == null || text === null) return;
+    const keep = () => {
+      const top = handle.current?.wordsTop();
+      if (top !== undefined) column.scrollTop += top - target;
+    };
+    keep();
+    const observer = new ResizeObserver(keep);
+    observer.observe(text);
+    const release = () => {
+      observer.disconnect();
+      for (const kind of KEEPING_ENDS) column.removeEventListener(kind, release);
+    };
+    for (const kind of KEEPING_ENDS) column.addEventListener(kind, release, { passive: true });
+    return release;
+  }, [ready]);
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
   const once = (close: () => void) => {

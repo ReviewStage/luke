@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { hasRepository } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
@@ -112,6 +113,8 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
   const image = githubImageOf(new URL(request.url).searchParams.get(QUERY.SRC) ?? "");
   if (image === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { userId, agent } = yield* reachedAgent(seams, request);
+  // An agent with no repository has no image of one to show.
+  if (!hasRepository(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const read = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
     return yield* githubImage(token, agent.repository, image);

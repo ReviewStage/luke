@@ -1,0 +1,30 @@
+{
+  "name": "@luke/agent-runner",
+  "version": "0.19.0",
+  "private": true,
+  "type": "module",
+  "description": "The runner in a coding agent's sandbox: Claude Code through the Agent SDK or Codex through its app-server, Luke's messages in on stdin, the harness's messages out to Luke",
+  "exports": {
+    "./protocol": "./src/protocol.js"
+  },
+  "types": "./src/protocol.ts",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/agent-runner.mjs --define:process.env.LUKE_RUNNER_VERSION='\"'$npm_package_version'\"' --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "generate:codex-protocol": "node scripts/generate-codex-protocol.mjs",
+    "test:vitest": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.304",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@luke/wire": "workspace:*",
+    "@types/node": "catalog:",
+    "esbuild": "0.28.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
