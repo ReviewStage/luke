@@ -22,6 +22,9 @@ import type {
   TasksWorkspacePhotoParams,
   TasksWorkspacePhotoSetParams,
   TasksWorkspaceRenameParams,
+  TasksWorkspaceTokenRepositoriesAnswer,
+  TasksWorkspaceTokenRepositoriesParams,
+  TasksWorkspaceTokenRepositorySetParams,
   TasksWorkspaceTransferParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
@@ -82,6 +85,12 @@ export interface WorkspaceProceduresDependencies {
     workspaceInvitationCancel(
       params: TasksWorkspaceInvitationCancelParams,
     ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
+    workspaceTokenRepositories(
+      params: TasksWorkspaceTokenRepositoriesParams,
+    ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+    workspaceTokenRepositorySet(
+      params: TasksWorkspaceTokenRepositorySetParams,
+    ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
   };
   /** Opens an address in the browser: a connection's install or sign-in page the service named. */
   openExternal: (url: string) => Promise<void>;
@@ -272,6 +281,22 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
         return yield* refusedWorkspace(errors.REFUSED, answer.failure);
       },
     ),
+    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceTokenRepositories(input);
+      if ("repositories" in answer) return answer.repositories;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceTokenRepositorySet(input);
+      if ("repositories" in answer) return answer.repositories;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
     [WORKSPACE_ACT_KIND.WORKSPACE_LEAVE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_LEAVE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

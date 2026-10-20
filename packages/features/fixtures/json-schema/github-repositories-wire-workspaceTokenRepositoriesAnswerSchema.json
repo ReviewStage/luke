@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "maxLength": 140
+          },
+          "addedBy": {
+            "type": "string"
+          },
+          "addedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "removable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fullName",
+          "addedBy",
+          "addedAt",
+          "removable"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "repositories"
+  ],
+  "additionalProperties": false
+}

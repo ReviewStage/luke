@@ -13,6 +13,7 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
+import type { WorkspaceTokenRepository } from "./github-repositories-wire.js";
 import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import type { LinearIssueSummary } from "./linear-wire.js";
@@ -52,6 +53,7 @@ import {
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
+  workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
@@ -317,6 +319,48 @@ export class HostedWorkspaceClient {
       const image = yield* imageBodyOf(answer.response, workspacePhotoTypeSchema);
       return image === undefined ? UNANSWERED : { ok: true, answer: image };
     });
+  }
+
+  /** The repositories members added to the workspace on their own GitHub tokens, newest added first. */
+  tokenRepositories(
+    workspaceId: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly WorkspaceTokenRepository[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceLeaveRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.github.tokenRepositories, admitted),
+      (answer) => answer.repositories,
+    );
+  }
+
+  /**
+   * A repository added to the workspace on the account's own GitHub token,
+   * or removed from it, answering the workspace's token repositories as they
+   * then stand; a request the service would refuse by shape never travels.
+   */
+  setTokenRepository(
+    workspaceId: string,
+    repository: string,
+    added: boolean,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly WorkspaceTokenRepository[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceTokenRepositoryRequestSchema)({ workspaceId, repository, added }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.github.setTokenRepository, admitted),
+      (answer) => answer.repositories,
+    );
   }
 
   /** One member removed by an owner or admin, answering the members who remain; an id the service would refuse by shape never travels. */

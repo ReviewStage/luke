@@ -116,6 +116,7 @@ const DECLARED_TABLES = [
   "workspace_chat",
   "voice_transcript_segments",
   "workspace_integration_connection",
+  "workspace_token_repository",
 ].sort();
 
 async function publicTableNames(): Promise<readonly string[]> {

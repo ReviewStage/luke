@@ -214,6 +214,14 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       return answer();
     });
   const host: WorkspaceProceduresDependencies["host"] = {
+    workspaceTokenRepositories: (params) =>
+      ask(`tokenRepositories:${params.workspaceId}`, () =>
+        script.notPermitted ? refusal() : { repositories: [] },
+      ),
+    workspaceTokenRepositorySet: (params) =>
+      ask(`tokenRepositorySet:${params.workspaceId}:${params.repository}:${params.added}`, () =>
+        script.notPermitted ? refusal() : { repositories: [] },
+      ),
     workspaceCreate: (params) =>
       ask(`create:${params.name}`, () =>
         script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },

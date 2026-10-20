@@ -211,6 +211,13 @@ export const HOSTED_SERVICE_PATH = {
    * `github-token-wire.ts` declares every body.
    */
   GITHUB_TOKEN: "/api/github/token",
+  /**
+   * The repositories members added to a workspace on their own GitHub
+   * tokens: read them for the workspace the query names (GET), or add or
+   * remove one (PUT), answered with them all as they then stand.
+   * `github-repositories-wire.ts` declares the answer.
+   */
+  GITHUB_TOKEN_REPOSITORIES: "/api/github/token-repositories",
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**
