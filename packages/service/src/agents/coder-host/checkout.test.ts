@@ -135,6 +135,7 @@ const openTokenAgent = Effect.gen(function* () {
   });
   assert.ok(Option.isSome(started));
   const { agent } = started.value;
+  assert.ok(hasRepository(agent));
   return { agent, target: { userId, conversationId: agent.conversationId } };
 });
 

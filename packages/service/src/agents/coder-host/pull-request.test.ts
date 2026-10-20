@@ -144,8 +144,10 @@ const openTokenAgent = Effect.gen(function* () {
   });
   const { agent } = Option.getOrThrow(started);
   yield* settleCodingAgentAuthor(userId, agent.id, CODING_AGENT_AUTHOR.TOKEN);
+  const settled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+  assert.ok(hasRepository(settled));
   return {
-    agent: Option.getOrThrow(yield* readCodingAgent(userId, agent.id)),
+    agent: settled,
     target: { userId, conversationId: agent.conversationId },
   };
 });
@@ -153,7 +155,7 @@ const openTokenAgent = Effect.gen(function* () {
 /** Opens a token agent's pull request against a GitHub where the member's token may push to the repository and no installation reaches it. */
 const openOnToken = (
   opened: {
-    readonly agent: CodingAgent;
+    readonly agent: WithRepository<CodingAgent>;
     readonly target: { userId: string; conversationId: string };
   },
   answer: Opening,
