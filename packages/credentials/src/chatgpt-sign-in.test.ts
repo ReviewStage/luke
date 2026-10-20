@@ -7,6 +7,7 @@ import { it } from "@effect/vitest";
 import type { ChatGptCredentialsSaveRequest } from "@luke/features/provider-key-wire";
 import { Deferred, Effect, Exit, Fiber } from "effect";
 import { CHATGPT_SIGN_IN, CHATGPT_SIGN_IN_REASON, chatGptSignIn } from "./chatgpt-sign-in.js";
+import { LOOPBACK_CONSENT_CANCELLED } from "./consent.js";
 import { loopbackConsent } from "./loopback-consent.js";
 import {
   CHATGPT_FAKE,
@@ -33,13 +34,13 @@ function harness(answers: FakeChatGptAnswers = {}) {
       Deferred.doneUnsafe(opened, Exit.succeed(server.authorize(url)));
     },
     http: server.http,
-    save: (credentials) =>
-      Effect.sync(() => {
-        saves.push(credentials);
-        return { saved: true } as const;
-      }),
   });
-  return { signIn, server, saves, opened };
+  const save = (credentials: ChatGptCredentialsSaveRequest) =>
+    Effect.sync(() => {
+      saves.push(credentials);
+      return { saved: true } as const;
+    });
+  return { signIn, server, saves, opened, request: { extAgentHostId: HOST_ID, save } };
 }
 
 /** Runs one sign-in through the browser's consent, answering the loopback with what the callback carries. */
@@ -48,7 +49,7 @@ const consentWith = (
   callback: (page: URL) => Record<string, string>,
 ) =>
   Effect.gen(function* () {
-    const running = yield* Effect.forkChild(setup.signIn.signIn(HOST_ID));
+    const running = yield* Effect.forkChild(setup.signIn.signIn(setup.request));
     const page = yield* Deferred.await(setup.opened);
     yield* Effect.orDie(returnToLoopback(page, callback(page)));
     return { outcome: yield* Fiber.join(running), page };
@@ -146,5 +147,21 @@ it.effect("with OpenAI's example port taken, the loopback listens on another and
     } finally {
       holder.close();
     }
+  }),
+);
+
+it.effect("a Cancel pressed while OpenAI's endpoints are still being read opens no browser", () =>
+  Effect.gen(function* () {
+    const gate = yield* Deferred.make<void>();
+    const setup = harness({ beforeDiscovery: () => Effect.runPromise(Deferred.await(gate)) });
+    const running = yield* Effect.forkChild(setup.signIn.signIn(setup.request));
+    while (setup.server.requests.length === 0) yield* Effect.yieldNow;
+
+    setup.signIn.cancel();
+    yield* Deferred.succeed(gate, undefined);
+
+    assert.deepEqual(yield* Fiber.join(running), { reason: LOOPBACK_CONSENT_CANCELLED });
+    assert.equal(yield* Deferred.isDone(setup.opened), false, "no browser was opened");
+    assert.deepEqual(setup.saves, []);
   }),
 );

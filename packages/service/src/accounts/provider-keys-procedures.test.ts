@@ -16,6 +16,7 @@ import { accountProviderKey } from "@luke/database/schemas/account-provider-key"
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import {
+  type ChatGptCredentialsSaveRequest,
   chatGptHostAnswerSchema,
   FAST_ACCESS,
   PROVIDER_KEY_KIND,
@@ -844,20 +845,20 @@ it.layer(getTestDB())("the provider keys route", (it) => {
             Deferred.doneUnsafe(opened, Exit.succeed(openai.authorize(url)));
           },
           http: openai.http,
-          save: (credentials) =>
-            Effect.map(
-              ask(
-                request(owner, {
-                  method: "PUT",
-                  path: CREDENTIALS_PATH,
-                  body: { ...credentials, scopes: [...credentials.scopes] },
-                }),
-              ),
-              keysOf,
-            ).pipe(Effect.provideContext(database)),
         });
+        const save = (credentials: ChatGptCredentialsSaveRequest) =>
+          Effect.map(
+            ask(
+              request(owner, {
+                method: "PUT",
+                path: CREDENTIALS_PATH,
+                body: { ...credentials, scopes: [...credentials.scopes] },
+              }),
+            ),
+            keysOf,
+          ).pipe(Effect.provideContext(database));
 
-        const running = yield* Effect.forkChild(signIn.signIn(extAgentHostId));
+        const running = yield* Effect.forkChild(signIn.signIn({ extAgentHostId, save }));
         const page = yield* Deferred.await(opened);
         yield* Effect.orDie(returnToLoopback(page, grantedCallback(page)));
         const kept = yield* Fiber.join(running);

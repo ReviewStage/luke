@@ -47,11 +47,22 @@ const KEPT: ProviderKeysAnswer = {
  * the host hands it, with the test as the browser: the page the host opens is
  * answered at once as the developer consenting would answer it.
  */
-function harness(options: { gateOpen?: boolean; saved?: ProviderKeysAnswer } = {}) {
+function harness(
+  options: {
+    gateOpen?: boolean;
+    saved?: ProviderKeysAnswer;
+    /** What happens while the browser is open, before the developer consents. */
+    whileBrowsing?: (signedIn: { key: string | undefined }) => void;
+    /** What happens while the service is asked for the host. */
+    whileAskingHost?: () => void;
+  } = {},
+) {
   const saves: string[] = [];
   const opened: URL[] = [];
+  const signedIn = { key: "ada@luke.test" as string | undefined };
   const service = async (request: RecordedRequest) => {
     if (request.pathname === "/api/account/chatgpt/host") {
+      options.whileAskingHost?.();
       return jsonResponse({ extAgentHostId: HOST_ID });
     }
     assert.equal(request.pathname, "/api/account/chatgpt/credentials");
@@ -65,10 +76,18 @@ function harness(options: { gateOpen?: boolean; saved?: ProviderKeysAnswer } = {
       openExternalThroughNode: async (url) => {
         const page = server.authorize(url);
         opened.push(page);
+        options.whileBrowsing?.(signedIn);
         await Effect.runPromise(returnToLoopback(page, grantedCallback(page)));
       },
     },
-    account: { capabilitiesActive: () => options.gateOpen ?? true },
+    account: {
+      capabilitiesActive: () => options.gateOpen ?? true,
+      token: {
+        readAccessToken: () => Effect.succeed("account-bearer"),
+        refreshAccount: () => Effect.void,
+        readAccountKey: () => Effect.sync(() => signedIn.key),
+      },
+    },
     client: new HostedCodingAgentClient({
       serviceBaseUrl: SERVICE,
       credential: fixedBearer("account-bearer"),
@@ -141,6 +160,41 @@ it.effect("a service that does not answer the host id opens no browser", () =>
     });
     const answered = yield* press({ ...setup, server: broken });
     assert.equal("failure" in JSON.parse(answered), true);
+    assert.deepEqual(setup.opened, []);
+  }),
+);
+
+it.effect(
+  "a sign-in finished after the Luke account changed is saved for no one, the new account included",
+  () =>
+    Effect.gen(function* () {
+      const setup = harness({
+        whileBrowsing: (signedIn) => {
+          signedIn.key = "grace@luke.test";
+        },
+      });
+      const answered = JSON.parse(yield* press(setup));
+      assert.deepEqual(answered, {
+        refused:
+          "You signed in to Luke as someone else while ChatGPT was open, so nothing was saved. Try again.",
+      });
+      assert.deepEqual(setup.saves, []);
+    }),
+);
+
+it.effect("a Cancel pressed while the service is asked for the host opens no browser", () =>
+  Effect.gen(function* () {
+    const composer = { cancel: () => undefined as unknown };
+    const setup = harness({ whileAskingHost: () => composer.cancel() });
+    const answered = yield* Effect.gen(function* () {
+      const built = yield* setup.composer;
+      const cancel = built.methods[GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL];
+      const signIn = built.methods[GATEWAY_METHOD.CHATGPT_SIGN_IN];
+      assert.ok(cancel && signIn);
+      composer.cancel = () => Effect.runSync(cancel({}, CONTEXT));
+      return JSON.stringify(yield* signIn({}, CONTEXT));
+    }).pipe(Effect.scoped, Effect.provide(setup.server.http));
+    assert.deepEqual(JSON.parse(answered), { cancelled: true });
     assert.deepEqual(setup.opened, []);
   }),
 );

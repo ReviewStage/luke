@@ -84,6 +84,8 @@ export interface FakeChatGptAnswers {
   readonly audience?: string;
   /** When the ID token expires, in Unix seconds, where a test sets it. */
   readonly expiresAt?: number;
+  /** What the discovery read waits on before it is answered, for a test that acts while it is out. */
+  readonly beforeDiscovery?: () => Promise<void>;
   /** What answers a request that is not OpenAI's, as a test routes it: the service, say. */
   readonly elsewhere?: (request: RecordedRequest) => Response | Promise<Response>;
 }
@@ -110,6 +112,7 @@ export function fakeChatGptAuthorizationServer(
       assert.ok(answers.elsewhere, `the fake was asked ${request.url}, which nothing answers`);
       return answers.elsewhere(request);
     }
+    if (request.url === CHATGPT_SIGN_IN.DISCOVERY_URL) await answers.beforeDiscovery?.();
     const published = signingKeysAnswer(request.url);
     if (published !== undefined) return published;
     assert.equal(request.url, CHATGPT_FAKE.TOKEN_URL);

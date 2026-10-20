@@ -32,11 +32,12 @@ import { Clock, Duration, Effect, type Layer, Option, Result, type Scope } from 
 import { Base64Url } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import type {
-  LoopbackConsent,
-  LoopbackConsentOutcome,
-  LoopbackExchange,
-  OpenConsent,
+import {
+  LOOPBACK_CONSENT_CANCELLED,
+  type LoopbackConsent,
+  type LoopbackConsentOutcome,
+  type LoopbackExchange,
+  type OpenConsent,
 } from "./consent.js";
 
 /** OpenAI's endpoints and the fixed values of the open-source flow, as its guides publish them. */
@@ -104,32 +105,41 @@ interface Endpoints {
 }
 
 /** What one attempt holds between its authorization page and its exchange. */
-interface Attempt {
+interface Attempt<Saved extends object> {
   readonly nonce: string;
   readonly extAgentHostId: string;
   readonly endpoints: Endpoints;
+  readonly save: ChatGptSave<Saved>;
 }
 
-export interface ChatGptSignInOptions<Saved extends object> {
+/**
+ * Hands the validated credentials to the service, answering what it kept or
+ * why not. The one place a token leaves the exchange. Never fails.
+ */
+export type ChatGptSave<Saved extends object> = (
+  credentials: ChatGptCredentialsSaveRequest,
+) => Effect.Effect<LoopbackConsentOutcome<Saved>>;
+
+/** One sign-in as a press asks it: the host it names, and where what it validates is kept. */
+export interface ChatGptSignInRequest<Saved extends object> {
+  readonly extAgentHostId: string;
+  /** Bound to the press, so what is validated is kept for the account that pressed and no other. */
+  readonly save: ChatGptSave<Saved>;
+}
+
+export interface ChatGptSignInOptions {
   /** Stands a consent trip up: the desktop's loopback. */
   readonly openConsent: OpenConsent;
   /** Opens the authorization page in the user's own browser. */
   readonly openExternal: (url: string) => void | Promise<void>;
   /** The `HttpClient` OpenAI is reached over. */
   readonly http: Layer.Layer<HttpClient.HttpClient>;
-  /**
-   * Hands the validated credentials to the service, answering what it kept
-   * or why not. The one place a token leaves the exchange. Never fails.
-   */
-  readonly save: (
-    credentials: ChatGptCredentialsSaveRequest,
-  ) => Effect.Effect<LoopbackConsentOutcome<Saved>>;
 }
 
 export interface ChatGptSignIn<Saved extends object> {
   /** One sign-in, press to the service's answer, for the host the account's id names. */
-  signIn(extAgentHostId: string): Effect.Effect<LoopbackConsentOutcome<Saved>>;
-  /** Ends the sign-in now waiting on the browser, if any. */
+  signIn(request: ChatGptSignInRequest<Saved>): Effect.Effect<LoopbackConsentOutcome<Saved>>;
+  /** Ends the sign-in now under way, if any: one still reading OpenAI's endpoints opens no browser. */
   cancel(): void;
   /** Opens the waiting sign-in's page again. */
   reopen(): void;
@@ -312,7 +322,7 @@ const verifiedSubject = (input: {
 
 /** The authorization page's URL for a first registration, every value URL-encoded. */
 function authorizationUrl(
-  attempt: Attempt,
+  attempt: Attempt<object>,
   input: { state: string; redirectUri: string; codeChallenge: string },
 ): string {
   const query = new URLSearchParams({
@@ -338,12 +348,15 @@ function authorizationUrl(
  * is waiting alone, and dropped as it ends.
  */
 export function chatGptSignIn<Saved extends object>(
-  options: ChatGptSignInOptions<Saved>,
+  options: ChatGptSignInOptions,
 ): ChatGptSignIn<Saved> {
   // Note that the attempt is read by the consent's own callbacks, which it
   // calls with no context of ours; it is set before the trip opens the page
   // and read only while that trip stands.
-  let attempt: Attempt | undefined;
+  let attempt: Attempt<Saved> | undefined;
+  // Every Cancel pressed, so a sign-in still reading OpenAI's endpoints, before
+  // any consent stands to withdraw, sees it was withdrawn and opens no browser.
+  let cancels = 0;
 
   const exchange = (input: LoopbackExchange): Effect.Effect<LoopbackConsentOutcome<Saved>> =>
     Effect.gen(function* () {
@@ -371,7 +384,7 @@ export function chatGptSignIn<Saved extends object>(
         nonce: standing.nonce,
       });
       if (Option.isNone(subject)) return { reason: CHATGPT_SIGN_IN_REASON.NOT_VERIFIED };
-      return yield* options.save({
+      return yield* standing.save({
         clientId,
         accountId: subject.value,
         accessToken: tokens.value.accessToken,
@@ -392,7 +405,7 @@ export function chatGptSignIn<Saved extends object>(
     },
     authorizationUrl: (input) => {
       // SAFETY: the trip opens its page only after `signIn` set the attempt it runs under.
-      return authorizationUrl(attempt as Attempt, input);
+      return authorizationUrl(attempt as Attempt<Saved>, input);
     },
     exchange,
     openExternal: options.openExternal,
@@ -400,12 +413,14 @@ export function chatGptSignIn<Saved extends object>(
   });
 
   return {
-    signIn: (extAgentHostId) =>
+    signIn: ({ extAgentHostId, save }) =>
       Effect.gen(function* () {
+        const asked = cancels;
         const document = yield* Effect.provide(
           getJson(CHATGPT_SIGN_IN.DISCOVERY_URL),
           options.http,
         );
+        if (cancels !== asked) return { reason: LOOPBACK_CONSENT_CANCELLED };
         const endpoints = Option.flatMap(document, readDiscovery);
         if (Option.isNone(endpoints)) return { reason: CHATGPT_SIGN_IN_REASON.UNREACHABLE };
         const trip: Effect.Effect<
@@ -415,7 +430,7 @@ export function chatGptSignIn<Saved extends object>(
         > = consent.signInEffect();
         // A press while a sign-in waits leaves that one's attempt standing, and the consent answers it with why.
         if (attempt !== undefined) return yield* Effect.scoped(trip);
-        attempt = { nonce: randomValue(), extAgentHostId, endpoints: endpoints.value };
+        attempt = { nonce: randomValue(), extAgentHostId, endpoints: endpoints.value, save };
         return yield* Effect.scoped(trip).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -424,7 +439,10 @@ export function chatGptSignIn<Saved extends object>(
           ),
         );
       }),
-    cancel: () => consent.cancel(),
+    cancel: () => {
+      cancels += 1;
+      consent.cancel();
+    },
     reopen: () => consent.reopen(),
   };
 }

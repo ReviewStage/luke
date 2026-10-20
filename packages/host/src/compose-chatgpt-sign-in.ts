@@ -5,6 +5,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
 } from "@luke/features/coding-agent-view";
 import {
+  type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_REJECTION,
   type ProviderKeyRejection,
   type ProviderKeysAnswer,
@@ -38,7 +39,7 @@ export interface ChatGptSignInDependencies {
   kernel: Pick<HostKernel, "openExternalThroughNode"> & {
     runMode: { sendsNetwork: boolean };
   };
-  account: Pick<AccountComposer, "capabilitiesActive">;
+  account: Pick<AccountComposer, "capabilitiesActive" | "token">;
   client: ChatGptSignInClient;
   /** The loopback consent the desktop stands up. */
   openConsent: OpenConsent;
@@ -63,6 +64,9 @@ const REJECTION_WORDS = {
 
 const SAVE_FAILED = "Luke couldn't save the ChatGPT sign-in. Try again.";
 
+const ACCOUNT_CHANGED =
+  "You signed in to Luke as someone else while ChatGPT was open, so nothing was saved. Try again.";
+
 export function composeChatGptSignIn(
   dependencies: ChatGptSignInDependencies,
 ): Effect.Effect<ChatGptSignInComposer, never, Scope.Scope | HttpClient.HttpClient> {
@@ -84,25 +88,49 @@ function composed(
     openConsent,
     openExternal: (url) => kernel.openExternalThroughNode(url),
     http,
-    // Note that the browser's landing card waits on this answer, so a sign-in
-    // the service refused is a refusal there too rather than "Connected".
-    save: (credentials) =>
-      Effect.map(Effect.provide(client.saveChatGptCredentials(credentials), http), (answer) => {
-        if ("failure" in answer) return { reason: SAVE_FAILED };
-        if (answer.rejected !== undefined) return { reason: REJECTION_WORDS[answer.rejected] };
-        return answer;
-      }),
   });
+  const readAccountKey = (): Effect.Effect<string | undefined> =>
+    account.token.readAccountKey?.() ?? Effect.succeed(undefined);
+  // Every Cancel and every sign-out, so a press still asking the service for its host opens no browser.
+  let cancels = 0;
 
-  const run = Effect.gen(function* () {
+  /**
+   * The save for the account that pressed: the bearer is read afresh for the
+   * call, so an account that changed while the browser was open is refused
+   * here rather than handed another account's ChatGPT sign-in.
+   */
+  const saveFor = (pressedBy: string) => (credentials: ChatGptCredentialsSaveRequest) =>
+    Effect.gen(function* () {
+      if ((yield* readAccountKey()) !== pressedBy) return { reason: ACCOUNT_CHANGED };
+      // Note that the browser's landing card waits on this answer, so a sign-in
+      // the service refused is a refusal there too rather than "Connected".
+      const answer = yield* Effect.provide(client.saveChatGptCredentials(credentials), http);
+      if ("failure" in answer) return { reason: SAVE_FAILED };
+      if (answer.rejected !== undefined) return { reason: REJECTION_WORDS[answer.rejected] };
+      return answer;
+    });
+
+  const run: Effect.Effect<ChatGptSignInAnswerView> = Effect.gen(function* () {
+    const asked = cancels;
+    const pressedBy = yield* readAccountKey();
+    if (pressedBy === undefined) return UNANSWERED;
     const host = yield* Effect.provide(client.chatGptHost(), http);
     if ("failure" in host) return host;
-    const outcome = yield* signIn.signIn(host.extAgentHostId);
+    if (cancels !== asked) return { cancelled: true } as const;
+    const outcome = yield* signIn.signIn({
+      extAgentHostId: host.extAgentHostId,
+      save: saveFor(pressedBy),
+    });
     if (!("reason" in outcome)) return outcome;
     return outcome.reason === LOOPBACK_CONSENT_CANCELLED
       ? ({ cancelled: true } as const)
       : { refused: outcome.reason };
   });
+
+  const withdraw = () => {
+    cancels += 1;
+    signIn.cancel();
+  };
 
   const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN> = {
     [GATEWAY_METHOD.CHATGPT_SIGN_IN]: () =>
@@ -111,13 +139,13 @@ function composed(
       ),
     [GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL]: () =>
       Effect.sync(() => {
-        signIn.cancel();
+        withdraw();
         return {};
       }),
   };
   return {
     methods,
     lifetime: Effect.void,
-    reset: Effect.sync(() => signIn.cancel()),
+    reset: Effect.sync(withdraw),
   };
 }
