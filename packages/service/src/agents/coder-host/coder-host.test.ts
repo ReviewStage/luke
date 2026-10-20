@@ -117,7 +117,7 @@ import {
   transcriptPast,
 } from "./transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
-import type { TurnHanded } from "./turn-context.js";
+import { handedAfterCompaction, type TurnHanded } from "./turn-context.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -1893,6 +1893,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
         const again = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, after.handed);
         assert.ok(again.text?.includes("## This turn is spoken"), again.text ?? "");
+
+        // A compaction may drop the call's words, so a spoken turn after it is handed them whole,
+        // and a typed one is still told they no longer hold.
+        const compacted = handedAfterCompaction(again.handed);
+        const resumed = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, compacted);
+        assert.ok(resumed.text?.includes("## This turn is spoken"), resumed.text ?? "");
+        const typedAfter = yield* turnOf(BRAIN_HOST_TURN.TYPED, compacted);
+        assert.ok(typedAfter.text?.startsWith("This turn is typed"), typedAfter.text ?? "");
       }),
   );
 

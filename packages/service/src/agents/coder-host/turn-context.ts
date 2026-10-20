@@ -107,8 +107,15 @@ const TURN_MESSAGE_LEAD = {
 export interface TurnHanded {
   readonly task?: string;
   readonly chat?: string;
-  /** Whether the session's last turn was spoken, so the call's words already stand in the history. */
+  /** Whether the session's last turn was spoken, which a compaction leaves standing, so a typed turn after it says the call's words no longer hold. */
   readonly spoken?: boolean;
+  /** Whether the call's words stand in the history since the last compaction, so a spoken turn after a spoken one need not hand them again. */
+  readonly callWords?: boolean;
+}
+
+/** What a session has handed once eve compacted its history: only the last turn's kind, since a summary may have dropped the rest. */
+export function handedAfterCompaction(handed: TurnHanded): TurnHanded {
+  return handed.spoken === true ? { spoken: true } : {};
 }
 
 /** A content address: the same text always answers the same key. */
@@ -146,17 +153,18 @@ const TURN_KIND_LINE = {
 
 /**
  * What a turn opens with of its kind: on a spoken turn the call's words,
- * and how to talk the plan through for an agent on a task, where the turn
- * before was not spoken, and a line saying they still hold where it was;
- * on a typed turn after a spoken one, a line saying they no longer do; and
- * nothing on a typed turn after a typed one.
+ * and how to talk the plan through for an agent on a task, unless the turn
+ * before was spoken and the words still stand in the history, where a line
+ * says they still hold; on a typed turn after a spoken one, a line saying
+ * they no longer do; and nothing on a typed turn after a typed one.
  */
 export function turnKindWords(
   spoken: boolean,
-  afterSpoken: boolean,
+  handed: TurnHanded,
   onTask: boolean,
 ): string | undefined {
-  if (spoken && afterSpoken) return TURN_KIND_LINE.SPOKEN_AGAIN;
+  const afterSpoken = handed.spoken === true;
+  if (spoken && afterSpoken && handed.callWords === true) return TURN_KIND_LINE.SPOKEN_AGAIN;
   if (spoken) return onTask ? `${SPOKEN_WORDS}\n\n${DOCUMENT_TALK_WORDS}` : SPOKEN_WORDS;
   return afterSpoken ? TURN_KIND_LINE.TYPED_AFTER_CALL : undefined;
 }

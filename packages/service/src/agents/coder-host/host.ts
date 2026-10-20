@@ -1325,12 +1325,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const chatKey = digest === undefined ? handed.chat : contentKey(digest);
         const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
         const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
-        const kind = turnKindWords(spoken, handed.spoken === true, agent.taskId !== null);
+        const kind = turnKindWords(spoken, handed, agent.taskId !== null);
         const taskHanded = task === undefined ? handed.task : task.key;
         const next: TurnHanded = {
           ...(taskHanded === undefined ? undefined : { task: taskHanded }),
           ...(chatKey === undefined ? undefined : { chat: chatKey }),
-          ...(spoken ? { spoken } : undefined),
+          ...(spoken ? { spoken: true, callWords: true } : undefined),
         };
         const parts = [...(kind === undefined ? [] : [kind]), standing, ...chat];
         return { text: parts.join("\n\n"), handed: next };
