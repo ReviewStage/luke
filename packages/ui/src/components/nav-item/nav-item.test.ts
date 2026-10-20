@@ -22,9 +22,10 @@ import {
  * press; a hint's words describe the item they hang from; and one that
  * keeps focus leaves it on the field that held it. A nav item link is a
  * link to its address, named by its words or its label, announced as the
- * page where it is shown, and handing its press to its caller. A name, a
- * row's or a link's, fades out at its end only while its row cuts it short,
- * and a row's detail keeps its ellipsis.
+ * page where it is shown, handing its press to its caller, and opening in
+ * a tab of its own where it leaves the page. A name, a row's or a link's,
+ * fades out at its end only while its row cuts it short, and a row's detail
+ * keeps its ellipsis.
  */
 
 const roots: Root[] = [];
@@ -313,4 +314,22 @@ test("a link's name fades out at its end only while the row cuts it short", () =
   resize(160);
   expect(name()?.getAttribute("data-end")).toBe("fade");
   expect(name()?.getAttribute("data-overflow")).toBe("true");
+});
+
+test("a link that leaves the page opens in a tab of its own, and one that does not stays in this one", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(NavItemLink, { href: "/admin", newTab: true, children: "Admin" }),
+      createElement(NavItemLink, { href: "/admin/users", children: "Users" }),
+    ),
+  );
+  const [leaves, stays] = [...container.querySelectorAll("a")];
+
+  expect([leaves?.getAttribute("target"), leaves?.getAttribute("rel")]).toEqual([
+    "_blank",
+    "noopener",
+  ]);
+  expect([stays?.hasAttribute("target"), stays?.hasAttribute("rel")]).toEqual([false, false]);
 });

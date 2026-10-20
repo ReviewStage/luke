@@ -26,6 +26,7 @@ import {
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
+  NavItemLink,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -77,12 +78,14 @@ import {
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
+  ShieldUserIcon,
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
 import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
+import { appPlatform } from "../app-platform.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
@@ -103,7 +106,7 @@ import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
+import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
@@ -1191,6 +1194,40 @@ function SidebarAutomationsRow({
   );
 }
 
+/**
+ * The admin dashboard's row, after Automations' and drawn as it is, for an
+ * admin alone: a non-admin is drawn nothing, not a row held back. It is no
+ * place of the window's, so it is never the place shown. A browser tab links
+ * to the dashboard on its own origin, in a tab of its own; the Mac app's
+ * press opens it in the default browser, where the developer's session is,
+ * rather than a Browser tab, whose cookies are its own. Note that the row is
+ * a convenience: the service's own gate decides every read the dashboard
+ * makes.
+ */
+function SidebarAdminRow({
+  onChosen,
+}: {
+  onChosen: (go: () => void) => () => void;
+}): React.JSX.Element | null {
+  const admin = useAdminAccess();
+  if (!admin) return null;
+  const way = appPlatform().adminDashboard();
+  return "href" in way ? (
+    <NavItemLink
+      href={way.href}
+      icon={<ShieldUserIcon />}
+      newTab
+      onClick={onChosen(() => undefined)}
+    >
+      Admin
+    </NavItemLink>
+  ) : (
+    <NavItem icon={<ShieldUserIcon />} onClick={onChosen(way.open)}>
+      Admin
+    </NavItem>
+  );
+}
+
 /** The listed workspace's sections as the sidebar draws them, and the tasks standing in any of them, which Tasks leaves out. */
 interface SectionedTasks {
   readonly sections: readonly DrawnSection[];
@@ -1700,6 +1737,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
+        <SidebarAdminRow onChosen={chosen} />
       </div>
       <hr className="sidebar-rule" />
     </>

@@ -148,6 +148,9 @@ export const tasksActsContract = {
   )
     .input(takesNothing)
     .output(EffectSchema.Void),
+  [TASKS_ACT_KIND.ADMIN_OPEN]: actProcedure("Could not open the admin dashboard on this system.")
+    .input(takesNothing)
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: actProcedure("Could not disconnect GitHub on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
