@@ -163,6 +163,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
   /**
+   * The issues of a repository a workspace's installation reaches, as New
+   * task's picker reads them (GET): named as `GITHUB_REPOSITORY_ISSUE` names
+   * one, with the words searched for or the number of the one asked; the
+   * answer is `github-repositories-wire.ts`'s, or why the installation
+   * reads none.
+   */
+  GITHUB_REPOSITORY_ISSUES: "/api/github/repositories/issues",
+  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.

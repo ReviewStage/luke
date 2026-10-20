@@ -169,6 +169,8 @@ import {
   type TasksFileAnswer,
   type TasksFileParams,
   type TasksGitHubDisconnectAnswer,
+  type TasksGitHubIssuesAnswer,
+  type TasksGitHubIssuesParams,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksIssueParams,
@@ -231,6 +233,7 @@ import {
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
+  tasksGitHubIssuesAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
   tasksLinearIssuesAnswerSchema,
@@ -434,6 +437,8 @@ export interface HostOperator {
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
   /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+  /** A repository's issues as New task's picker asks for them; or that its installation grants none, or that the service did not answer. */
+  tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -1206,6 +1211,23 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
+    tasksGitHubIssues: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_GITHUB_ISSUES, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          ...("query" in params ? { query: params.query } : undefined),
+          ...("number" in params ? { number: params.number } : undefined),
+        }),
+        (answer): TasksGitHubIssuesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksGitHubIssuesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
     tasksRevisions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_REVISIONS, {
@@ -1502,6 +1524,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
+          ...("issues" in request ? { issues: request.issues } : undefined),
           ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
           ...("agent" in request ? { agent: request.agent } : undefined),

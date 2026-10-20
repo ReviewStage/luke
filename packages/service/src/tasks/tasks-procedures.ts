@@ -71,6 +71,11 @@ import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
+  TASK_ISSUE_PROVIDER,
+  type TaskIssueChoice,
+  type TaskIssueRelation,
+} from "@luke/features/task-issue-wire";
+import {
   TASK_BOUNDS,
   type Task,
   type TaskAgentStart,
@@ -95,7 +100,9 @@ import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
-import type { GitHubApp } from "../github/github-app.js";
+import { GitHubApp, ISSUE_ACCESS } from "../github/github-app.js";
+import { githubReadOrRefusal } from "../github/github-refusal.js";
+import { issueLink } from "../github/issues.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -266,6 +273,63 @@ const startingLinearIssue = (organizationId: string, issueId: string) =>
   );
 
 /**
+ * The GitHub issue a plan starts linked to, as the task links it, read
+ * through the workspace's installation on the repository the plan is about,
+ * or refused before anything is written: as invalid where the plan is about
+ * no repository or another one, and as not found where the installation
+ * reaches no such issue of it or has not granted the App issues.
+ */
+const startingGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+  repository: string | null,
+  chosen: { readonly repository: string; readonly number: number },
+) {
+  if (repository === null || repository.toLowerCase() !== chosen.repository.toLowerCase()) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const app = yield* GitHubApp;
+  const access = yield* githubReadOrRefusal(
+    app.repositoryIssueAccess(organizationId, repository, userId),
+  );
+  if (access.kind !== ISSUE_ACCESS.READABLE) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const read = yield* githubReadOrRefusal(
+    issueLink(access.token, access.repository.fullName, chosen.number),
+  );
+  if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return read.value;
+});
+
+/**
+ * The issues a plan starts linked to, in the order they were named, each
+ * read by its provider with the relation it was named with: those of
+ * `issues`, or the one Linear issue an older build names by
+ * `linearIssueId`. The first refused refuses the start, before anything is
+ * written.
+ */
+const startingIssueLinks = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+  repository: string | null,
+  input: { readonly linearIssueId?: string; readonly issues?: readonly TaskIssueChoice[] },
+) {
+  const chosen: readonly TaskIssueChoice[] =
+    input.linearIssueId === undefined
+      ? (input.issues ?? [])
+      : [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: input.linearIssueId }];
+  const links = [];
+  for (const choice of chosen) {
+    const read =
+      choice.provider === TASK_ISSUE_PROVIDER.LINEAR
+        ? yield* startingLinearIssue(organizationId, choice.id)
+        : yield* startingGitHubIssue(userId, organizationId, repository, choice);
+    const relation: TaskIssueRelation | undefined = choice.relation;
+    links.push(relation === undefined ? read : { ...read, relation });
+  }
+  return links;
+});
+
+/**
  * The workspace's own issue a plan starts from, where the account reads it
  * and it is an issue of the workspace the plan starts in; refused as not
  * found otherwise, before anything is written.
@@ -430,10 +494,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         input.repository,
         userId,
       );
-      const issue =
-        input.linearIssueId === undefined
-          ? undefined
-          : yield* startingLinearIssue(organizationId, input.linearIssueId);
+      const issueLinks = yield* startingIssueLinks(
+        userId,
+        organizationId,
+        reached.repository,
+        input,
+      );
       const issueId =
         input.issueId === undefined
           ? undefined
@@ -446,7 +512,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(input.name === undefined ? undefined : { name: input.name }),
           repository: reached.repository,
           githubAccess: reached.githubAccess,
-          ...(issue === undefined ? undefined : { issueLinks: [issue] }),
+          ...(issueLinks.length === 0 ? undefined : { issueLinks }),
           ...(issueId === undefined ? undefined : { issueId }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),
@@ -456,7 +522,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.SIDEBAR,
-        has_issue: issue !== undefined || issueId !== undefined,
+        has_issue: issueLinks.length > 0 || issueId !== undefined,
       });
       const answer: TaskStartAnswer =
         agent === undefined
