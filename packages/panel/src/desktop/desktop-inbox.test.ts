@@ -6530,7 +6530,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
 });
 
-test("a replaced ask is struck through and says so, a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+test("a replaced ask draws no card, only a quiet marker ending the agent's message saying a newer question replaced it; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -6551,7 +6551,6 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   const pane = await mountThread(shown);
 
   assert.deepEqual(askBoxes(pane), [
-    ["replaced", "Pick oneReplaced"],
     ["withdrawn", "Pick oneWithdrawn: Product picked 14 days."],
     ["withdrawn", "Pick oneCharles Pan · Resolved without an answer"],
   ]);
@@ -6561,6 +6560,23 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
     "a settled ask offers nothing",
   );
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+  const replaced =
+    pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ??
+    assert.fail("the replaced ask's message");
+  assert.equal(replaced.querySelector(".inbox-ask"), null, "the replaced ask draws no card");
+  assert.deepEqual(
+    [...replaced.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
+      marker.dataset.inboxSettled,
+      wordsOf(marker),
+    ]),
+    [["replaced", "Replaced by a newer question"]],
+    "the agent's message ends with the marker saying so",
+  );
+  assert.equal(
+    pane.querySelectorAll("[data-inbox-settled]").length,
+    1,
+    "no withdrawn ask wears the marker",
+  );
 });
 
 /** The reader's reply answering the ask the thread opens with, as the service keeps it. */
