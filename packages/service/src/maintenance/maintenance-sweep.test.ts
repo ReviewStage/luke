@@ -38,6 +38,7 @@ interface Recorded {
   terminals: number[];
   automated: number[];
   pictures: number[];
+  tokenPullRequests: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -50,6 +51,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     terminals: [],
     automated: [],
     pictures: [],
+    tokenPullRequests: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -95,6 +97,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.pictures.push(now);
         return 4;
       }),
+    sweepTokenPullRequests: (now) =>
+      Effect.sync(() => {
+        recorded.tokenPullRequests.push(now);
+        return { polled: 2, told: 1 };
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -123,6 +130,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       terminals: [],
       automated: [],
       pictures: [],
+      tokenPullRequests: [],
     });
   }),
 );
@@ -146,6 +154,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       terminals: [],
       automated: [],
       pictures: [],
+      tokenPullRequests: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -156,6 +165,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       terminals: [],
       automated: [],
       pictures: [],
+      tokenPullRequests: [],
     });
   }),
 );
@@ -171,6 +181,7 @@ it.effect(
       assert.deepEqual(answer.body.terminals, TERMINALS);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
+      assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -182,6 +193,7 @@ it.effect(
         terminals: [instant],
         automated: [instant],
         pictures: [instant],
+        tokenPullRequests: [instant],
       });
     }),
 );
