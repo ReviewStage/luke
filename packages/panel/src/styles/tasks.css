@@ -2353,6 +2353,10 @@
    pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
+  /* The band a section's heading sticks at in the Conversation, never
+     shorter than the controls it holds, so a finger's 44px filter on the
+     web stands inside it rather than over what scrolls beneath. */
+  --pull-request-band: max(var(--luke-scroll-band), var(--luke-control-height));
   /* Note that the tab isolates its stacking, so its header, raised over its
      own rows, rises over nothing outside the tab; and answers its own width,
      so its tabs' row folds by the room the tab has wherever it stands. */
@@ -2363,6 +2367,10 @@
 /* The tab shown fills the room under the header and the tabs, the others
    kept drawn but hidden, so switching back draws what each last read. */
 .pull-request-view {
+  /* Note that the view hands the tab's band down as the scroller's own, so
+     the fade begins beneath the heading at whatever height it stands
+     (`SCROLL_FADE_INSET.BAND`). */
+  --luke-scroll-band: var(--pull-request-band);
   display: flex;
   min-height: 0;
   flex: 1;
@@ -2916,8 +2924,9 @@
    scroller's band (`SCROLL_FADE_INSET.BAND`), as a call's checkpoint is
    (`.checkpoint-log`), because the fade begins beneath that band: taller,
    it would slice what passes under its foot, and shorter, it would fade
-   its own. The whole row presses, the chevron leading at the content inset
-   and what it holds at its end keeping their own presses. */
+   its own. The whole row presses as a `DisclosureSummary` does: the chevron
+   leading at its inset, the row filled under the pointer, and what it holds
+   at its end keeping their own presses. */
 .pull-request-section-head,
 .pull-request-page .pull-request-comment-box > .pull-request-heading {
   position: sticky;
@@ -2938,9 +2947,28 @@
   align-items: center;
   gap: var(--luke-icon-gap);
   min-width: 0;
-  padding-inline: var(--row-inset);
+  padding-inline: var(--luke-space-4);
   color: var(--luke-color-text-muted);
   white-space: nowrap;
+}
+
+/* The fill under the pointer, a disclosure row's (disclosure.css) at the
+   control's height and corner, drawn inside the band rather than on it, so
+   the band stays opaque to its corners while what scrolls passes under it.
+   Note that it sits under the row's words, the band being a stacking
+   context of its own, and lights only while the pointer is on the row
+   rather than on what stands at its end. */
+.pull-request-section-head::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc((var(--luke-scroll-band) - var(--luke-control-height)) / 2) 0;
+  border-radius: var(--luke-control-radius);
+  content: "";
+  transition: background-color var(--luke-duration-hover) ease;
+}
+
+.pull-request-section-head:hover:not(:has(.pull-request-section-end:hover))::before {
+  background: var(--luke-color-fill-strong);
 }
 
 .pull-request-section-head > .pull-request-heading {
@@ -2953,7 +2981,8 @@
   transition: color var(--luke-duration-hover) ease;
 }
 
-.pull-request-section-head:hover > .pull-request-heading {
+.pull-request-section-head:hover:not(:has(.pull-request-section-end:hover))
+  > .pull-request-heading {
   color: var(--luke-color-text);
 }
 
@@ -2964,13 +2993,14 @@
 }
 
 /* What the heading holds at its end, Hide resolved and Hide bots on the
-   Conversation's: compact chips, each its word and the quiet count of what
-   it leaves out, pressed while on. */
+   Conversation's: filter chips as the tasks board's toolbar draws its view
+   filter, each its word and the quiet count of what it leaves out, pressed
+   while on. */
 .pull-request-section-end {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-control-gap);
 }
 
 .pull-request-filter {
