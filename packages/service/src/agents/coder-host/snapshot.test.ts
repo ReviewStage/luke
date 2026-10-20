@@ -170,22 +170,34 @@ it.effect(
 );
 
 it.effect(
-  "a member's own token is set on the repository's paths for the push and taken off again after it, unless a terminal or a turn uses the sandbox",
+  "a member's own token is set on the repository's paths for the push and taken off again after it, however the copy ended, unless a terminal or a turn uses the sandbox",
   (t) =>
     Effect.gen(function* () {
       const idle = sourceSandbox(yield* checkoutFor(t), "running");
       const used = sourceSandbox(yield* checkoutFor(t), "running");
+      const refusing = sourceSandbox(yield* checkoutFor(t), "running");
 
       const alone = yield* copy(idle, false, CREDENTIAL.MEMBER);
       const beside = yield* copy(used, true, CREDENTIAL.MEMBER);
+      const refused = yield* copyOver(
+        (url, init) =>
+          new URL(url).pathname.endsWith("/cmd")
+            ? Promise.resolve(new Response(null, { status: 500 }))
+            : answerOf(refusing, url, init),
+        Effect.succeed(false),
+        CREDENTIAL.MEMBER,
+      );
 
       assert.ok(alone.copied && beside.copied);
+      assert.deepEqual(refused, { copied: false, miss: SNAPSHOT_MISS.FAILED });
       const carried = {
         session: SOURCE_SANDBOX.RUNNING,
         hosts: ["*", "github.com", "api.github.com"],
       };
-      assert.deepEqual(idle.policies, [carried, { session: SOURCE_SANDBOX.RUNNING, hosts: [] }]);
+      const open = { session: SOURCE_SANDBOX.RUNNING, hosts: [] };
+      assert.deepEqual(idle.policies, [carried, open]);
       assert.deepEqual(used.policies, [carried]);
+      assert.deepEqual(refusing.policies, [carried, open], "a copy that failed takes it off too");
     }),
 );
 

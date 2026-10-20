@@ -235,6 +235,25 @@ const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     Effect.catch((failure) => stopMissed(String(failure))),
   );
 
+/**
+ * A member's own token taken off the sandbox session's firewall once the
+ * copy is done, however it ended, unless a terminal or a turn uses the
+ * sandbox, which keeps it standing for them; within the stop's bound, and
+ * a withdrawal that fails is logged, since the copy's outcome stands.
+ */
+const withdrawUnlessInUse = <R>(api: VercelSandboxApi, session: string, ask: SnapshotAsk<R>) =>
+  Effect.gen(function* () {
+    if (yield* ask.keepUp) return;
+    yield* api.updateNetworkPolicy(session, OPEN_INTERNET_POLICY);
+  }).pipe(
+    Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `a member's token was not taken off the source's sandbox: ${String(failure)}`,
+      ),
+    ),
+  );
+
 /** The copy inside the scope a woken sandbox's stop is registered on. */
 const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -247,16 +266,16 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     if (!up) yield* Effect.addFinalizer(() => stopWoken(api, ask));
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
     const credential = yield* ask.credential;
+    // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.
+    if (credential.access.kind === GITHUB_ACCESS.TOKEN) {
+      yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, session, ask));
+    }
     yield* api.updateNetworkPolicy(session, credentialPolicy(credential));
     const ran = yield* api.run(session, {
       command: "sh",
       args: ["-c", SNAPSHOT_SCRIPT, "sh", ask.branch, ask.message],
       cwd: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
     });
-    // Note that a member's token stands only while the sandbox is in use, and a terminal or a turn sets it again for itself.
-    if (credential.access.kind === GITHUB_ACCESS.TOKEN && !(yield* ask.keepUp)) {
-      yield* api.updateNetworkPolicy(session, OPEN_INTERNET_POLICY);
-    }
     const printed = ran.exitCode === 0 ? printedCommits(ran.stdout) : undefined;
     if (printed === undefined) {
       yield* Effect.logWarning(
