@@ -365,11 +365,6 @@ reads it: `packages/host/src/acts.ts`,
   host's event loop for as long as it stands, so a store with an automatic
   reset enabled holds its host open for as long as its generation does: mind
   this when the caller is a process that would otherwise exit.
-- A bundle-budget baseline (`apps/desktop/bundle-budget.json`, checked with 5%
-  slack) is re-recorded with `LUKE_UPDATE_BUNDLE_BUDGET=1` by a PR that
-  genuinely needs the room, a feature's or a library's, which states the reason
-  and the size delta in its body. Drift and accidental growth are not a reason:
-  the slack is the speed bump that makes a PR stop and say why.
 
 ## Code style
 
