@@ -41,7 +41,7 @@ import {
   sameLook,
   sameNotes,
 } from "./contract.js";
-import { drawnAmong } from "./drawn-lines.js";
+import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
@@ -698,12 +698,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
   };
   // The hidden lines each file was last told to draw, told again only as they change.
-  const toldDrawn = new Map<string, readonly number[]>();
-  const tellDrawn = (path: string, lines: readonly number[]) => {
-    if (sameLines(toldDrawn.get(path) ?? NO_LINES, lines)) return;
-    toldDrawn.set(path, lines);
-    latest.onDrawn?.(path, lines);
-  };
+  const drawn = drawnTeller((path, lines) => latest.onDrawn?.(path, lines));
+  const tellDrawn = drawn.tell;
   const drawnBy = (path: string, instance: PierreFileDiff<string, undefined>) =>
     tellDrawn(path, drawnAmong(instance, drawnFiles.get(path)?.file.hidden ?? NO_LINES));
   // The files whose hidden lines changed while their item stood, read again once the list is drawn.
@@ -758,7 +754,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       else
         tellDrawn(
           path,
-          (toldDrawn.get(path) ?? NO_LINES).filter((line) => hidden.includes(line)),
+          drawn.told(path).filter((line) => hidden.includes(line)),
         );
     }
     rehidden.clear();
@@ -829,6 +825,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         view.setOptions(optionsFor(next));
       view.setItems(itemsOf(next.files));
       view.render();
+      // A file the list no longer holds draws none of its lines, and its next drawing opens no gap.
+      drawn.forget(new Set(next.files.map((file) => file.path)));
       readRehidden();
       tellTop(host.scrollTop);
       if (!sameListSelection(next.selected, was.selected)) light(next.selected);
@@ -847,6 +845,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         behavior: "smooth-auto",
       }),
     unmount: () => {
+      // A list taken down draws nothing; the next one mounted opens no gap.
+      drawn.forget(new Set());
       stopWatching();
       unsubscribe();
       view.cleanUp();

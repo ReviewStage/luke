@@ -4,13 +4,15 @@
  * drawn-lines.test.ts -- a line between a file's hunks is drawn once a gap
  * is opened over it, up, down, or all at once, as Pierre itself draws the
  * file; and a file Pierre has not read whole draws none of them, though
- * Pierre says every line of such a file stands. Synthetic files only.
+ * Pierre says every line of such a file stands. The view is told each
+ * file's lines only as they change, and that a file the list lets go, or a
+ * list taken down, draws none. Synthetic files only.
  */
 
 import assert from "node:assert/strict";
 import { FileDiff, getSharedHighlighter, parseDiffFromFile, parsePatchFiles } from "@pierre/diffs";
 import { beforeAll, test } from "vitest";
-import { drawnAmong } from "./drawn-lines.js";
+import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 
 /** A file of a hundred lines, the fifth and the ninetieth changed, so one long gap stands between its two hunks. */
 function changedFile() {
@@ -77,4 +79,28 @@ test("a file read from its patch alone draws none of the lines between its hunks
 
   assert.equal(view.isLineRenderable(50), true, "Pierre says a line of a partial file stands");
   assert.deepEqual(drawnAmong(view, HIDDEN), []);
+});
+
+test("the view is told a file's drawn lines only as they change, and that a file the list lets go, or a list taken down, draws none", () => {
+  const heard: Array<[string, readonly number[]]> = [];
+  const teller = drawnTeller((path, lines) => heard.push([path, lines]));
+
+  teller.tell("a.ts", []);
+  teller.tell("a.ts", [30]);
+  teller.tell("a.ts", [30]);
+  teller.tell("b.ts", [12]);
+  assert.deepEqual(heard, [
+    ["a.ts", [30]],
+    ["b.ts", [12]],
+  ]);
+
+  // A filter leaves b.ts out of the list.
+  teller.forget(new Set(["a.ts"]));
+  assert.deepEqual(heard.at(-1), ["b.ts", []]);
+  assert.deepEqual(teller.told("b.ts"), []);
+
+  // The list is taken down, as a filter that keeps no file does.
+  teller.forget(new Set());
+  assert.deepEqual(heard.at(-1), ["a.ts", []]);
+  assert.equal(heard.length, 4, "nothing is told twice");
 });
