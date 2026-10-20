@@ -187,7 +187,7 @@
   /* A row whose words label its switch is pressed whole under a finger: the
      label's press reaches across the row, and the switch and a link in the
      description stand above it, answering their own presses. */
-  @media (pointer: coarse) {
+  @media (hover: none) and (pointer: coarse) {
     .luke-settings-row[data-labels-control="true"] > .luke-settings-row-body {
       position: relative;
     }

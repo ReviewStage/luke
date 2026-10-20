@@ -14,7 +14,8 @@ import { layContainersAt, shown } from "./testing/container-width.js";
  * touch-hints.test.ts -- under a finger, a touch screen's (no hover, a
  * coarse pointer), no keyboard chord is drawn as a hint: not a hover's or a
  * button's chord, not a sidebar row's, whose count stays in its place, not
- * a search field's summons, and not the command palette's foot of keys;
+ * a search field's summons, not a menu row's chord (a hint of words
+ * stands), and not the command palette's foot of keys;
  * a chord that is a row's whole value still is. A switch's row on a phone
  * keeps its switch beside its words, and under a finger the whole row is
  * its label's press but for a control in its description, which stands
@@ -63,7 +64,7 @@ function found(within: ParentNode, selector: string): Element {
   return element;
 }
 
-/** What each hint draws on the device given: a chord, a sidebar row's chord, a row's count beside its chord, a search field's chord, the palette's foot, and a value chord. */
+/** What each hint draws on the device given: a chord, a sidebar row's chord, a row's count beside its chord, a search field's chord, the palette's foot, a value chord, and a menu row's hint that is a chord and one that is words. */
 function hintsOn(touch: boolean) {
   laid = layContainersAt({}, { touch });
   const page = mount(
@@ -99,6 +100,12 @@ function hintsOn(touch: boolean) {
         "Open",
       ),
       createElement(
+        "span",
+        { className: "luke-menu-item-hint chord-hint" },
+        createElement(Shortcut, { chord: CHORD }),
+      ),
+      createElement("span", { className: "luke-menu-item-hint words-hint" }, "acme/web"),
+      createElement(
         "div",
         { className: "value-row" },
         createElement(Shortcut, { chord: CHORD, className: "shortcut-value", spoken: true }),
@@ -112,6 +119,8 @@ function hintsOn(touch: boolean) {
     fieldChord: shown(found(page, ".luke-search-field .shortcut")),
     paletteFoot: shown(found(page, ".command-palette-footer")),
     value: shown(found(page, ".value-row .shortcut")),
+    menuChord: shown(found(page, ".chord-hint")),
+    menuWords: shown(found(page, ".words-hint")),
   };
 }
 
@@ -123,6 +132,8 @@ test("under a finger no chord is drawn as a hint, a row's count stays, and a cho
     fieldChord: false,
     paletteFoot: false,
     value: true,
+    menuChord: false,
+    menuWords: true,
   });
 });
 
@@ -134,6 +145,8 @@ test("with a mouse every chord stands as before", () => {
     fieldChord: true,
     paletteFoot: true,
     value: true,
+    menuChord: true,
+    menuWords: true,
   });
 });
 

@@ -69,6 +69,23 @@ export type ClientCapability = Exclude<
   (typeof CAPABILITY_OF_CONCERN)[HostPlatformConcern]
 >;
 
+const CONCERN_CAPABILITIES: ReadonlySet<HostCapability> = new Set(
+  Object.values(CAPABILITY_OF_CONCERN),
+);
+
+/** Whether a capability is one a client answers for itself. */
+const isClientCapability = (capability: HostCapability): capability is ClientCapability =>
+  !CONCERN_CAPABILITIES.has(capability);
+
+/**
+ * Every capability a client may answer for itself: what the desktop, which
+ * answers them all, offers. Derived rather than listed, so a capability added
+ * to `HOST_CAPABILITY` stands on the desktop without a second list to forget
+ * it in.
+ */
+export const ALL_CLIENT_CAPABILITIES: readonly ClientCapability[] =
+  Object.values(HOST_CAPABILITY).filter(isClientCapability);
+
 /**
  * What the platform offers: the client's own capabilities and the one each
  * platform concern this host runs stands for, in `HOST_CAPABILITY`'s order.

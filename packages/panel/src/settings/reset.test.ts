@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { HOST_CAPABILITY, type HostCapability, THEME } from "@luke/settings";
+import { APP_SETTING_DEFAULTS, HOST_CAPABILITY, type HostCapability, THEME } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -17,7 +17,8 @@ import type { SettingsWrites } from "./writes.js";
 /**
  * reset.test.ts -- a page's reset that the store refuses says why in a
  * failure's toast, announced as an alert, and the reset stands pressable
- * again; a page offers its reset only for a change to a row it draws.
+ * again; a page offers its reset only for a change to a row it draws, and
+ * resets only the rows it draws.
  */
 
 const REFUSED = "The settings could not be reset. Try again.";
@@ -123,4 +124,55 @@ test("captions turned on while the Voice page holds only its way in offer no res
     ),
     undefined,
   );
+});
+
+/** A store holding `start`, whose reset returns the whole Appearance group to its defaults in one write, as the host's does. */
+function appearanceStore(start: typeof settings) {
+  let held = start;
+  const writes: SettingsWrites = {
+    setting: (field, value) => {
+      held = Object.assign(settingsView(), held, { [field]: value });
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    reset: () => {
+      held = Object.assign(settingsView(), held, {
+        theme: APP_SETTING_DEFAULTS.theme,
+        zoom: APP_SETTING_DEFAULTS.zoom,
+        openAtLogin: APP_SETTING_DEFAULTS.openAtLogin,
+      });
+      return Promise.resolve({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: appSettingsWire(held),
+      });
+    },
+  };
+  return { writes, now: () => held };
+}
+
+test("a browser's Appearance reset returns the theme it draws to its default and keeps the zoom it does not draw", async () => {
+  const start = settingsView({ theme: THEME.DARK, zoom: 125 });
+  const store = appearanceStore(start);
+  const browser = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        "div",
+        null,
+        pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
+        createElement(ToastHost),
+      ),
+    ),
+  );
+  const reset = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Reset to defaults",
+  );
+  assert.ok(reset, "the page offers its reset");
+
+  await act(async () => reset.click());
+
+  assert.equal(store.now().theme, APP_SETTING_DEFAULTS.theme);
+  assert.equal(store.now().zoom, 125);
 });

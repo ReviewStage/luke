@@ -272,7 +272,7 @@ export function describedSettings(
 }
 
 /** Whether a field's row is drawn right now. A field that declares no condition is always drawn. */
-function settingVisible(field: AppSettingField, view: SettingsVisibility): boolean {
+export function settingVisible(field: AppSettingField, view: SettingsVisibility): boolean {
   return APP_SETTING_SCHEMA[field].visible?.(view) ?? true;
 }
 
@@ -405,13 +405,13 @@ export const APP_SETTING_DEFAULTS = typedAppSettingDefaults();
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,
   scope: SettingsResetScope,
-  /** What decides which rows are drawn, so only a change the page shows offers its reset; every field counts where absent. */
-  view?: SettingsVisibility,
+  /** What decides which rows are drawn, so only a change the page shows offers its reset. */
+  view: SettingsVisibility,
 ): boolean {
   return APP_SETTING_FIELDS.some((field) => {
     const definition = APP_SETTING_SCHEMA[field];
     if (definition.resetScope !== scope) return false;
-    if (view !== undefined && !settingVisible(field, view)) return false;
+    if (!settingVisible(field, view)) return false;
     return settings[field] !== definition.default;
   });
 }

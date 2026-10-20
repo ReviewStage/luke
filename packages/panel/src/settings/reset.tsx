@@ -3,6 +3,7 @@ import {
   APP_SETTING_SCHEMA,
   type SettingsRowsInput,
   settingsScopeChanged,
+  settingVisible,
 } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type {
@@ -94,15 +95,21 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * said in a toast with an Undo, which writes back what the page held.
  * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
  * slot.
+ *
+ * The page resets only the rows it draws: the store resets the whole group
+ * in one write, so a row the page leaves out, Zoom in a browser, is written
+ * straight back as it stood, and the Undo holds only what the page showed.
  */
 function ResetPageButton({
   scope,
   settings,
   writes,
+  rows,
 }: {
   scope: SettingsResetScope;
   settings: AppSettingsView;
   writes: SettingsWrites;
+  rows: SettingsRowsInput;
 }): React.JSX.Element {
   const toast = useToast();
   const reset = (asked: SettingsResetScope): Promise<ActionResult> => {
@@ -112,18 +119,28 @@ function ResetPageButton({
         toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
         return result;
       }
-      const held = changedBy(before, appSettingsView(result.settings), asked);
-      const undo = () =>
-        writeBack(writes, held).then((taken) => {
-          if (taken) return;
+      const changed = changedBy(before, appSettingsView(result.settings), asked);
+      const unseen = changed.filter(([field]) => !settingVisible(field, rows));
+      const held = changed.filter(([field]) => settingVisible(field, rows));
+      return writeBack(writes, unseen).then((kept) => {
+        if (!kept) {
           toast({ words: UNDO_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-        });
-      toast({
-        words: RESET_NOTES[asked],
-        tone: TOAST_TONE.DONE,
-        action: { label: UNDO_LABEL, onPress: undo },
+        }
+        sayReset(asked, held);
+        return result;
       });
-      return result;
+    });
+  };
+  const sayReset = (asked: SettingsResetScope, held: readonly HeldSetting[]): void => {
+    const undo = () =>
+      writeBack(writes, held).then((taken) => {
+        if (taken) return;
+        toast({ words: UNDO_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      });
+    toast({
+      words: RESET_NOTES[asked],
+      tone: TOAST_TONE.DONE,
+      action: { label: UNDO_LABEL, onPress: undo },
     });
   };
   const { busy, run } = useSettingWrite(reset);
@@ -161,5 +178,7 @@ export function pageResetControl(
   const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
   if (!settings || !rows || !settingsScopeChanged(settings, scope, rows)) return undefined;
   // Keyed to the page, so a press out on one page does not rest the next one's.
-  return <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} />;
+  return (
+    <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} rows={rows} />
+  );
 }

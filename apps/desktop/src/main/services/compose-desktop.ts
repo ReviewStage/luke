@@ -9,7 +9,7 @@ import {
   publishAppStateChanges,
 } from "@luke/host/client";
 import {
-  type ClientCapability,
+  ALL_CLIENT_CAPABILITIES,
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
@@ -19,7 +19,7 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
+import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
 import { net } from "electron";
@@ -80,16 +80,6 @@ export interface DesktopServices {
    */
   readonly services: Context.Context<never>;
 }
-
-/** What the desktop offers of its own, beside the platform concerns its host runs: every one of them. */
-const DESKTOP_CLIENT_CAPABILITIES: readonly ClientCapability[] = [
-  HOST_CAPABILITY.VOICE,
-  HOST_CAPABILITY.UPDATES,
-  HOST_CAPABILITY.MICROPHONE,
-  HOST_CAPABILITY.NOTIFICATIONS,
-  HOST_CAPABILITY.BROWSER,
-  HOST_CAPABILITY.DESKTOP_APP,
-];
 
 /** The desktop client as it stands once every step of the launch has run. */
 export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
@@ -197,7 +187,8 @@ export function composeDesktop(
         initialAppState(
           config,
           updateEngine !== undefined,
-          hostCapabilities(host.concerns, DESKTOP_CLIENT_CAPABILITIES),
+          // The desktop answers every capability a client can, beside the concerns its host runs.
+          hostCapabilities(host.concerns, ALL_CLIENT_CAPABILITIES),
         ),
         services,
       );
