@@ -55,6 +55,12 @@ let answer = PINK;
 
 const STAND_IN: DiffViewModule = {
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
+  mountFile: () => ({
+    update: () => undefined,
+    revealLines: () => undefined,
+    pickedLines: () => undefined,
+    unmount: () => undefined,
+  }),
   mountList: () => ({
     update: () => 0,
     reveal: () => 0,
