@@ -233,8 +233,25 @@ const PAGE_FIND_SCRIPT = `(() => {
   });
 })();`;
 
-/** The doctype a page opens with, which keeps it out of quirks mode only where nothing stands before it. */
-const LEADING_DOCTYPE = /^\s*<!doctype[^>]*>/i;
+/** The doctype a page opens with, where it opens the text it is read from. */
+const DOCTYPE = /^<!doctype[^>]*>/i;
+
+/**
+ * Where the page's doctype ends, past the whitespace and comments HTML
+ * lets stand ahead of it; 0 for a page with none there, which is in quirks
+ * mode however it is served.
+ */
+function doctypeEnd(html: string): number {
+  let at = html.length - html.trimStart().length;
+  while (html.startsWith("<!--", at)) {
+    const close = html.indexOf("-->", at + 4);
+    if (close < 0) return 0;
+    const next = close + 3;
+    at = next + (html.length - next - html.slice(next).trimStart().length);
+  }
+  const doctype = DOCTYPE.exec(html.slice(at))?.[0];
+  return doctype === undefined ? 0 : at + doctype.length;
+}
 
 /**
  * The page as served: the find's script ahead of the agent's HTML, after
@@ -243,6 +260,6 @@ const LEADING_DOCTYPE = /^\s*<!doctype[^>]*>/i;
  * mode its doctype asks for.
  */
 export function withPageFind(html: string): string {
-  const doctype = LEADING_DOCTYPE.exec(html)?.[0] ?? "";
-  return `${doctype}<script>${PAGE_FIND_SCRIPT}</script>${html.slice(doctype.length)}`;
+  const end = doctypeEnd(html);
+  return `${html.slice(0, end)}<script>${PAGE_FIND_SCRIPT}</script>${html.slice(end)}`;
 }

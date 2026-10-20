@@ -153,6 +153,16 @@ it.effect(
     }),
 );
 
+it.effect("a page whose doctype follows a comment keeps its standards mode", () =>
+  Effect.gen(function* () {
+    const page = yield* served(
+      "<!-- generated -->\n<!DOCTYPE html><title>Funnel</title><p>Sent</p>",
+    );
+
+    assert.equal(new DOMParser().parseFromString(page, "text/html").compatMode, "CSS1Compat");
+  }),
+);
+
 it.effect("markup the page leaves open does not swallow the find", () =>
   Effect.gen(function* () {
     const { ask, posted } = yield* draw("<!doctype html><p>Invites sent</p><textarea>unclosed");
