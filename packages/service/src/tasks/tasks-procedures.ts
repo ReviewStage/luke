@@ -54,6 +54,12 @@ import { hostedStore } from "@luke/database/models/hosted-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
+  linkTaskIssue,
+  listTaskIssues,
+  relateTaskIssue,
+  unlinkTaskIssue,
+} from "@luke/database/models/task-issue-store";
+import {
   createTask,
   deleteTask,
   listTasks,
@@ -70,8 +76,10 @@ import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
+  TASK_ISSUE_LINK_REFUSAL,
   TASK_ISSUE_PROVIDER,
   type TaskIssueChoice,
+  type TaskIssueLinkAnswer,
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import {
@@ -99,9 +107,7 @@ import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
-import { GitHubApp, ISSUE_ACCESS } from "../github/github-app.js";
-import { githubReadOrRefusal } from "../github/github-refusal.js";
-import { issueLink } from "../github/issues.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -111,11 +117,6 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import {
-  linearIssue,
-  linearOrRefused,
-  throughWorkspaceLinear,
-} from "../integrations/linear-issues.js";
 import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
 import {
   PLAN_SAVE_REFUSAL,
@@ -123,6 +124,13 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./plan-notes.js";
+import {
+  linkedGitHubIssue,
+  linkedIssue,
+  linkedLinearIssue,
+  linkViewOf,
+  liveTaskIssues,
+} from "./task-issue-links.js";
 import { readTaskWork } from "./task-work-store.js";
 
 /** A change is a name and a repository's name at most, so a body past this is none. */
@@ -130,6 +138,9 @@ const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
 /** A brief at its bound with every character escaped. */
 const MAXIMUM_BRIEF_BYTES = TASK_BOUNDS.MAX_BRIEF_CHARS * 6;
+
+/** A link names one issue by a few short fields, and a relation one word. */
+const MAXIMUM_ISSUE_BODY_BYTES = 1_024;
 
 /** A start is a change's few fields, a brief where it names one, and an agent's Start beside them where it names one. */
 const MAXIMUM_TASK_START_BODY_BYTES =
@@ -259,19 +270,6 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The Linear issue a plan starts from, as the task links it, read through
- * the workspace's own Linear connection whatever team it is in, or the
- * Linear refusal: the workspace has none connected, its grant is refused,
- * or the issue is none it reaches. Nothing is written before it is read, so
- * a refusal starts no plan.
- */
-const startingLinearIssue = (organizationId: string, issueId: string) =>
-  linearOrRefused(
-    throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
-    "Linear gave no issue to start a task from",
-  );
-
-/**
  * The GitHub issue a plan starts linked to, as the task links it, read
  * through the workspace's installation on the repository the plan is about,
  * or refused before anything is written: as invalid where the plan is about
@@ -287,16 +285,7 @@ const startingGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (repository === null || repository.toLowerCase() !== chosen.repository.toLowerCase()) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const app = yield* GitHubApp;
-  const access = yield* githubReadOrRefusal(
-    app.repositoryIssueAccess(organizationId, repository, userId),
-  );
-  if (access.kind !== ISSUE_ACCESS.READABLE) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const read = yield* githubReadOrRefusal(
-    issueLink(access.token, access.repository.fullName, chosen.number),
-  );
-  if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.value;
+  return yield* linkedGitHubIssue(userId, organizationId, { repository, number: chosen.number });
 });
 
 /**
@@ -320,7 +309,7 @@ const startingIssueLinks = /* @__PURE__ */ Effect.fnUntraced(function* (
   for (const choice of chosen) {
     const read =
       choice.provider === TASK_ISSUE_PROVIDER.LINEAR
-        ? yield* startingLinearIssue(organizationId, choice.id)
+        ? yield* linkedLinearIssue(organizationId, choice.id)
         : yield* startingGitHubIssue(userId, organizationId, repository, choice);
     const relation: TaskIssueRelation | undefined = choice.relation;
     links.push(relation === undefined ? read : { ...read, relation });
@@ -412,6 +401,20 @@ const startedAgentOn = (
       }),
     ),
   );
+
+/** The link a path names: an id that is no UUID names no link, and answers as none. */
+const linkIdOf = taskIdOf;
+
+/**
+ * The account's plan, where it is not archived: refused as archived where
+ * it is, and as not found where the account does not reach it. The store
+ * holds a link's write to the same terms under the plan's lock.
+ */
+const liveTask = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, taskId: string) {
+  const stored = yield* reachedTask(userId, taskId);
+  if (stored.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  return stored;
+});
 
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
@@ -743,6 +746,75 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         );
       }
       return { plan: restored.task };
+    }),
+
+    /**
+     * The issues the plan links, oldest linked first, each with where it
+     * stands now, read live from its provider through the plan's workspace
+     * (`task-issue-links.ts`), which refreshes what each chip draws.
+     */
+    issues: plans.issues.effect(function* ({ input, context }) {
+      const { userId } = context;
+      const taskId = yield* taskIdOf(input.id);
+      const stored = yield* reachedTask(userId, taskId);
+      const links = yield* hostedStoreOrUnavailable(listTaskIssues(userId, taskId));
+      const issues = yield* liveTaskIssues(userId, taskId, stored.task.workspaceId, links);
+      return { issues };
+    }),
+
+    /**
+     * An issue linked to the plan, read from its provider through the plan's
+     * workspace first, so what is kept of it is the provider's: answered
+     * with the link, or in band with why none was made, the plan linking
+     * the issue already or as many as it may. An archived plan takes none,
+     * as it takes no rename.
+     */
+    linkIssue: plans.linkIssue.use(bodyLimit(MAXIMUM_ISSUE_BODY_BYTES)).effect(function* ({
+      input,
+      context,
+    }) {
+      const { userId } = context;
+      const taskId = yield* taskIdOf(input.params.id);
+      const stored = yield* liveTask(userId, taskId);
+      const read = yield* linkedIssue(userId, stored.task.workspaceId, input.body);
+      const made = yield* linkTaskIssue(userId, taskId, read).pipe(
+        Effect.map(
+          (link): Option.Option<TaskIssueLinkAnswer> =>
+            Option.map(link, (issue) => ({ issue: linkViewOf(issue, undefined) })),
+        ),
+        Effect.catchTags({
+          TaskIssuesFull: () => Effect.succeedSome({ refused: TASK_ISSUE_LINK_REFUSAL.FULL }),
+          TaskIssueLinked: () => Effect.succeedSome({ refused: TASK_ISSUE_LINK_REFUSAL.LINKED }),
+        }),
+        hostedStoreOrArchived,
+      );
+      if (Option.isNone(made)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return made.value;
+    }),
+
+    /** Which keyword the plan's pull requests write of one of its links. */
+    relateIssue: plans.relateIssue.use(bodyLimit(MAXIMUM_ISSUE_BODY_BYTES)).effect(function* ({
+      input,
+      context,
+    }) {
+      const taskId = yield* taskIdOf(input.params.id);
+      const linkId = yield* linkIdOf(input.params.link);
+      const related = yield* hostedStoreOrArchived(
+        relateTaskIssue(context.userId, taskId, linkId, input.body.relation),
+      );
+      if (Option.isNone(related)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { issue: linkViewOf(related.value, undefined) };
+    }),
+
+    /** One of the plan's links let go; the issue itself is the provider's and stands as it was. */
+    unlinkIssue: plans.unlinkIssue.effect(function* ({ input, context }) {
+      const taskId = yield* taskIdOf(input.id);
+      const linkId = yield* linkIdOf(input.link);
+      const unlinked = yield* hostedStoreOrArchived(
+        unlinkTaskIssue(context.userId, taskId, linkId),
+      );
+      if (!unlinked) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { unlinked: true as const };
     }),
 
     /** The turn Luke is running on the plan stopped, call or no call, under its conversation's owner, through eve as the request's own caller (`eveFor`). */

@@ -48,6 +48,7 @@ function mainProcess() {
     factory: { host: {} },
     integrations: { host: {} },
     settings: {},
+    taskIssues: { host: {} },
     tasks: { host: {} },
     workspaces: { host: {} },
   } as unknown as Omit<ActPortDependencies, "pushes">;

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "unlinked": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    }
+  },
+  "required": [
+    "unlinked"
+  ],
+  "additionalProperties": false
+}

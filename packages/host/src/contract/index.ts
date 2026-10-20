@@ -17,6 +17,7 @@ import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
+import { taskIssueActsContract } from "./task-issues.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
@@ -51,6 +52,7 @@ export {
   type PlatformPortActKind,
   type PortActKind,
   SETTINGS_ACT_KIND,
+  TASK_ISSUE_ACT_KIND,
   TASKS_ACT_KIND,
   TERMINAL_ACT_KIND,
   UPDATE_ACT_KIND,
@@ -84,6 +86,7 @@ export const actContract = {
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
+  ...taskIssueActsContract,
   ...terminalActsContract,
   ...updateActsContract,
   ...voiceRuntimeActsContract,

@@ -109,6 +109,13 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1", orpc: true },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1", orpc: true },
+  {
+    src: "/api/plans/([^/]+)/issues/([^/]+)",
+    route: "plans/issue",
+    query: "id=$1&link=$2",
+    orpc: true,
+  },
+  { src: "/api/plans/([^/]+)/issues", route: "plans/issues", query: "id=$1", orpc: true },
   { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
   {
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",

@@ -56,6 +56,7 @@ import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TaskCall } from "../tasks/task-call.js";
+import { TaskIssueLinks } from "../tasks/task-issue-links.js";
 import {
   mentionablePullRequests,
   TaskMentions,
@@ -751,6 +752,16 @@ function PlanDocument({
                 void tasks.onSetTaskStanding(task.id, standing);
               },
         }}
+        underTitle={
+          <TaskIssueLinks
+            taskId={task.id}
+            workspaceId={task.workspaceId}
+            repository={task.repository}
+            archived={archived}
+            linearIn={tasks.newTask.linearIssuesIn}
+            githubIn={tasks.newTask.githubIssuesIn}
+          />
+        }
       />
     </section>
   );

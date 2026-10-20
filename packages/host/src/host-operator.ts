@@ -162,7 +162,15 @@ import {
   type TasksGitHubIssuesParams,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
+  type TasksIssueLinkAnswer,
+  type TasksIssueLinkParams,
+  type TasksIssueLinksAnswer,
+  type TasksIssueLinksParams,
   type TasksIssueParams,
+  type TasksIssueRelateAnswer,
+  type TasksIssueRelateParams,
+  type TasksIssueUnlinkAnswer,
+  type TasksIssueUnlinkParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
   type TasksMessagesParams,
@@ -225,6 +233,10 @@ import {
   tasksGitHubIssuesAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
+  tasksIssueLinkAnswerSchema,
+  tasksIssueLinksAnswerSchema,
+  tasksIssueRelateAnswerSchema,
+  tasksIssueUnlinkAnswerSchema,
   tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
@@ -428,6 +440,14 @@ export interface HostOperator {
   tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
   /** A repository's issues as New task's picker asks for them; or that its installation grants none, or that the service did not answer. */
   tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
+  /** The issues a task links, each with where it stands now; or why there are none. */
+  tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
+  /** One more issue linked to a task, read from its provider by the service; or why none was. */
+  tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
+  /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
+  tasksIssueRelate(params: TasksIssueRelateParams): Effect.Effect<TasksIssueRelateAnswer>;
+  /** One of a task's links let go; or why it stands. */
+  tasksIssueUnlink(params: TasksIssueUnlinkParams): Effect.Effect<TasksIssueUnlinkAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -795,6 +815,9 @@ const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
+/** A call on a task's linked issues that reached no answer. */
+const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
 /** A world call that reached no answer. */
 const FACTORY_WORLD_UNANSWERED = { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED } as const;
 
@@ -864,6 +887,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     ...(params.connection !== undefined ? { connection: params.connection } : undefined),
     ...(params.add !== undefined ? { add: params.add } : undefined),
   });
+
+  /** An answer on a task's linked issues as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const taskIssueAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof TASK_ISSUES_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? TASK_ISSUES_UNANSWERED;
 
   /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
   const integrationAnswer =
@@ -1197,6 +1228,36 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ),
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksIssueLinks: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId: params.taskId }),
+        taskIssueAnswer(tasksIssueLinksAnswerSchema),
+      ),
+    tasksIssueLink: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
+          taskId: params.taskId,
+          issue: params.issue,
+        }),
+        taskIssueAnswer(tasksIssueLinkAnswerSchema),
+      ),
+    tasksIssueRelate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
+          taskId: params.taskId,
+          linkId: params.linkId,
+          relation: params.relation,
+        }),
+        taskIssueAnswer(tasksIssueRelateAnswerSchema),
+      ),
+    tasksIssueUnlink: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, {
+          taskId: params.taskId,
+          linkId: params.linkId,
+        }),
+        taskIssueAnswer(tasksIssueUnlinkAnswerSchema),
       ),
     tasksRevisions: (params) =>
       Effect.map(

@@ -24,6 +24,7 @@ import type { ToolDefinition, ToolModelOutput } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
+import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import { LOOK_AT_BOARD_TOOL, lookModelOutput, runLookAtBoard } from "../../tasks/board-look.js";
@@ -586,7 +587,12 @@ interface BrainTool {
 }
 
 /** What a brain tool call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
-type BrainToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
+type BrainToolServices =
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | ModelCatalog
+  | WorkspaceLinearConnect;
 
 /**
  * The tools a brain turn is offered, in the order the model reads them.

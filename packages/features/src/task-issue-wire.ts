@@ -2,8 +2,10 @@ import { Schema as EffectSchema } from "effect";
 import {
   githubPullRequestNumberSchema,
   githubRepositoryFullNameSchema,
+  ISSUE_STATE,
 } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
+import { wireUuidSchema } from "./service-wire.js";
 
 /**
  * task-issue-wire.ts -- the external issues a task links: which provider holds each, and which keyword its pull requests say of it.
@@ -21,6 +23,14 @@ import { linearIssueIdSchema } from "./linear-wire.js";
  * never kept. A task started with issues names each by what its provider
  * finds it by (`taskIssueChoiceSchema`), and the service reads each itself
  * before it links it, so nothing a client says of an issue is kept.
+ *
+ * A task's links are read, linked, related, and unlinked at any time after
+ * its start too, on its page (`/api/plans/{id}/issues`): a read answers each
+ * link as its row keeps it with where the issue stands now, read live from
+ * its provider and never kept (`taskIssueLinksAnswerSchema`); a link names
+ * its issue as a start does and answers the link made, or why none was made
+ * where the task links that issue already or as many as it may
+ * (`taskIssueLinkAnswerSchema`); a relation names the keyword alone.
  */
 
 /** Who holds an issue a task links. */
@@ -39,7 +49,7 @@ export const TASK_ISSUE_RELATION = {
 
 export type TaskIssueRelation = (typeof TASK_ISSUE_RELATION)[keyof typeof TASK_ISSUE_RELATION];
 
-const taskIssueRelationSchema = EffectSchema.Literals(Object.values(TASK_ISSUE_RELATION));
+export const taskIssueRelationSchema = EffectSchema.Literals(Object.values(TASK_ISSUE_RELATION));
 
 /**
  * One issue a task is started linked to, as New task names it: a Linear
@@ -73,3 +83,83 @@ export function sameIssueChoice(a: TaskIssueChoice, b: TaskIssueChoice): boolean
   }
   return a.number === b.number && a.repository.toLowerCase() === b.repository.toLowerCase();
 }
+
+/**
+ * Where a linked issue stands now, as its provider answered on the read:
+ * GitHub's mark, open, closed, or closed as not planned, or the name of the
+ * Linear workflow state it is in, `In Progress`. Never kept.
+ */
+export const taskIssueStandingSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    provider: EffectSchema.Literal(TASK_ISSUE_PROVIDER.GITHUB),
+    state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
+  }),
+  EffectSchema.Struct({
+    provider: EffectSchema.Literal(TASK_ISSUE_PROVIDER.LINEAR),
+    state: EffectSchema.String,
+  }),
+]);
+
+export type TaskIssueStanding = typeof taskIssueStandingSchema.Type;
+
+/**
+ * One issue a task links, as its page draws it: the link's own id, which an
+ * unlink and a relation name it by, the provider and its own id for the
+ * issue, which a picker marks it linked by, its key, page, and title as the
+ * provider last answered them, its repository and number where GitHub holds
+ * it, the keyword its pull requests write of it, and where it stands now,
+ * absent where the provider did not answer.
+ */
+export const taskIssueLinkViewSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  provider: EffectSchema.Literals(Object.values(TASK_ISSUE_PROVIDER)),
+  externalId: EffectSchema.String,
+  key: EffectSchema.String,
+  url: EffectSchema.String,
+  title: EffectSchema.String,
+  repository: EffectSchema.optionalKey(EffectSchema.String),
+  number: EffectSchema.optionalKey(EffectSchema.Number),
+  relation: taskIssueRelationSchema,
+  standing: EffectSchema.optionalKey(taskIssueStandingSchema),
+});
+
+export type TaskIssueLinkView = typeof taskIssueLinkViewSchema.Type;
+
+/** A task's links, oldest linked first, each with where its issue stands now. */
+export const taskIssueLinksAnswerSchema = EffectSchema.Struct({
+  issues: EffectSchema.Array(taskIssueLinkViewSchema),
+});
+
+/** Why a link was not made, nothing written: the task links the issue already, or as many issues as a task may. */
+export const TASK_ISSUE_LINK_REFUSAL = {
+  LINKED: "linked",
+  FULL: "full",
+} as const;
+
+export type TaskIssueLinkRefusal =
+  (typeof TASK_ISSUE_LINK_REFUSAL)[keyof typeof TASK_ISSUE_LINK_REFUSAL];
+
+/** A link made, as the page draws it, or why none was. */
+export const taskIssueLinkAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ issue: taskIssueLinkViewSchema }),
+  EffectSchema.Struct({
+    refused: EffectSchema.Literals(Object.values(TASK_ISSUE_LINK_REFUSAL)),
+  }),
+]);
+
+export type TaskIssueLinkAnswer = typeof taskIssueLinkAnswerSchema.Type;
+
+/** A link's keyword changed (PATCH). */
+export const taskIssueRelateRequestSchema = EffectSchema.Struct({
+  relation: taskIssueRelationSchema,
+});
+
+/** A link changed, as the page draws it. */
+export const taskIssueLinkChangedAnswerSchema = EffectSchema.Struct({
+  issue: taskIssueLinkViewSchema,
+});
+
+/** A link let go (DELETE): nothing beyond that it was. */
+export const taskIssueUnlinkAnswerSchema = EffectSchema.Struct({
+  unlinked: EffectSchema.Literal(true),
+});
