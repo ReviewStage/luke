@@ -3,6 +3,7 @@ import {
   type CodingAgentLatestTurn,
   type CodingAgentLine,
   type CodingAgentStartedFromIt,
+  codingAgentBriefOf,
   codingAgentLineOf,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
@@ -72,13 +73,21 @@ function isTurnStatusWord(status: string): status is keyof typeof STATUS_OF_TURN
   return STATUS_WORDS.has(status);
 }
 
-/** When the agent was started, when it is being read, which is what an agent with no turn is judged by, and when the newest line of the developer's still awaiting its turn was written. */
+/** When the agent was started, when it is being read, which is what an agent with no turn is judged by, when the newest line of the developer's still awaiting its turn was written, and whether it was started blank. */
 export interface AgentStanding {
   readonly createdAt: Date;
   /** Epoch milliseconds now. */
   readonly now: number;
   /** When the newest message of the developer's standing in the transcript with no turn yet was written; none where none stands or unsaid. */
   readonly awaitingLineAt?: Date | undefined;
+  /** Whether the agent was started blank, handed neither the plan nor a prompt, so no first turn is on its way; unsaid reads as not. */
+  readonly blank?: boolean | undefined;
+}
+
+/** Whether an agent was started blank, as a full read or a list line says it. */
+export function startedBlank(agent: CodingAgent | Pick<CodingAgentLine, "brief">): boolean {
+  const brief = "brief" in agent ? agent.brief : codingAgentBriefOf(agent);
+  return brief === CODING_AGENT_BRIEF.BLANK;
 }
 
 /** Whether an agent with no turn row is still inside the grace its first turn may land in. */
@@ -159,7 +168,13 @@ export function lineAwaitsTurn(
   return lineStandingOf(turn, standing) === LINE_STANDING.AWAITS;
 }
 
-/** Where an agent stands, from its newest turn; running where a line awaits its turn, failed where one went unanswered past its grace, starting with no turn inside the grace, failed with none past it. */
+/**
+ * Where an agent stands, from its newest turn; running where a line awaits
+ * its turn, failed where one went unanswered past its grace, starting with
+ * no turn inside the grace, failed with none past it. An agent started blank
+ * with no turn yet has done all it was asked, which is nothing, so it reads
+ * as completed, however long ago it started: no first turn is on its way.
+ */
 export function codingAgentStatusOf(
   turn: CodingAgentLatestTurn | undefined,
   standing: AgentStanding,
@@ -167,6 +182,7 @@ export function codingAgentStatusOf(
   const line = lineStandingOf(turn, standing);
   if (line === LINE_STANDING.AWAITS) return CODING_AGENT_STATUS.RUNNING;
   if (line === LINE_STANDING.UNANSWERED) return CODING_AGENT_STATUS.FAILED;
+  if (turn === undefined && standing.blank === true) return CODING_AGENT_STATUS.COMPLETED;
   if (turn === undefined) {
     return withinStartingGrace(standing)
       ? CODING_AGENT_STATUS.STARTING
@@ -197,6 +213,7 @@ export function statusClockEdge(
       : line.since + Duration.toMillis(CODER.LINE_GRACE) + 1;
   }
   if (line.standing === LINE_STANDING.UNANSWERED || turn !== undefined) return undefined;
+  if (standing.blank === true) return undefined;
   const edge = standing.createdAt.getTime() + Duration.toMillis(CODER.STARTING_GRACE);
   return standing.now <= edge ? edge + 1 : undefined;
 }
@@ -336,9 +353,10 @@ function summaryFields(
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: standing.awaitingLineAt,
+      blank: startedBlank(agent),
     }),
     turnId: standing.turn?.id ?? null,
-    brief: agent.handedPrompt ? CODING_AGENT_BRIEF.PROMPT : CODING_AGENT_BRIEF.PLAN,
+    brief: agent.brief,
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
     ...(agent.archivedAt === null || agent.archivedBy === null
       ? undefined
@@ -382,7 +400,7 @@ export function codingAgentSummary(
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
 ): CodingAgentSummary {
-  const line = "handedPrompt" in agent ? agent : codingAgentLineOf(agent);
+  const line = "brief" in agent ? agent : codingAgentLineOf(agent);
   return {
     id: line.id,
     planId: line.taskId,

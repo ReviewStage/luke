@@ -50,6 +50,7 @@ import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import {
   isSettledToolPartState,
   isStoredToolPart,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type StoredUIMessage,
   storedToolName,
@@ -72,9 +73,13 @@ import { usageOfTurns } from "./usage.js";
  * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
  *
  * The transcript is the conversation's own `messages` rows: the plan the
- * agent was handed, and each turn's journal as the relay writes it, which
+ * agent was handed, each turn's journal as the relay writes it, which
  * grows in place while the turn runs and is replaced by the finished answer
- * when it ends. A reader holds a cursor of two numbers, the highest message
+ * when it ends, and the lines said on calls into the agent, the developer's
+ * and its own, as the voice writes them on the voice channel, each written
+ * once its words are first heard and grown in place, and carrying when its
+ * words began, so the tab places it on its call (`agents.calls` reads the
+ * calls themselves). A reader holds a cursor of two numbers, the highest message
  * sequence it has and the journal revision it last read at, so a row added
  * past the first or amended past the second is new to it. A read with
  * nothing new is held open while the agent is starting or its newest turn
@@ -169,19 +174,22 @@ const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
+/** When an agent was started, and whether blank, which is what its status is read by beside its turns (`AgentStanding`). */
+type AgentStart = Pick<AgentStanding, "createdAt" | "blank">;
+
 /** The agent's status now, read from its newest turn and when the newest line awaiting one was written, when that run began, why where that turn failed, and the instant the clock alone would move it, where one stands. */
-const statusNow = (target: ConversationTarget, createdAt: Date) =>
+const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
     const awaitingLineAt = awaiting.get(target.conversationId);
-    const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt });
+    const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt, blank });
     const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
-    const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt });
+    const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
     return { status, runStartedAt, failureReason, turn, graceEdge };
   });
 
@@ -215,7 +223,9 @@ interface JournalTurn {
  * what it ran on and spent as its row recorded them (`turn-record.ts`).
  */
 const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
-  const journals = records.filter((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
+  const journals = records.filter(
+    (record) => record.message.role === MESSAGE_ROLE.ASSISTANT && !spokenOnCall(record.message),
+  );
   const ids = new Set(journals.flatMap((record) => record.turnId ?? []));
   return Effect.map(
     turnsNamed(userId, [...ids]),
@@ -280,7 +290,22 @@ interface LinesRead {
   readonly places: ReadonlyMap<string, LinePlace>;
 }
 
-/** A row as the page carries it: its message, for a developer's line when and what sent it and where in a turn under way it arrived, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
+/** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
+function spokenOnCall(message: StoredUIMessage): boolean {
+  if (message.role === MESSAGE_ROLE.SYSTEM) return false;
+  const { metadata } = message;
+  return "channel" in metadata && metadata.channel === MESSAGE_CHANNEL.VOICE;
+}
+
+/**
+ * A row as the page carries it: its message, for a developer's line when
+ * and what sent it and where in a turn under way it arrived, for a line the
+ * agent said on a call when its words began, and for a turn's journal when
+ * the turn began and what it ran on and, once the journal closed, when it
+ * did and what it spent. Note that a spoken line of the agent's carries no
+ * turn's record, though the store names the turn it was read aloud from,
+ * because the line is what was said and the turn's journal is its own row.
+ */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
@@ -296,6 +321,7 @@ function transcriptMessageOf(
       ...(place === undefined ? undefined : { arrivedIn: place }),
     };
   }
+  if (spokenOnCall(record.message)) return { ...record.message, sentAt: record.placedAt.getTime() };
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
@@ -419,7 +445,7 @@ function pagePast(
   target: ConversationTarget,
   tools: ToolSet,
   after: MessageCursor,
-  createdAt: Date,
+  agent: AgentStart,
 ): TranscriptEffect<{
   readonly page: TranscriptPage;
   readonly turn: NewestTurn;
@@ -435,7 +461,7 @@ function pagePast(
     );
     const { status, runStartedAt, failureReason, turn, graceEdge } = yield* statusNow(
       target,
-      createdAt,
+      agent,
     );
     const records = read.ok ? read.value : [];
     const journalTurns = yield* journalTurnsOf(target.userId, records);
@@ -472,7 +498,7 @@ export function delegationNow(
   return Effect.gen(function* () {
     const found = yield* readDelegation(parent, childConversationId);
     if (Option.isSome(found)) return { delegation: found.value };
-    const { status } = yield* statusNow(parent, agent.createdAt);
+    const { status } = yield* statusNow(parent, agent);
     return { delegation: undefined, agentRuns: WAITING_STATUSES.has(status) };
   });
 }
@@ -618,13 +644,13 @@ export function transcriptPast(
   target: ConversationTarget,
   tools: ToolSet,
   after: MessageCursor,
-  agent: Pick<AgentStanding, "createdAt">,
+  agent: AgentStart,
   own?: OwnAgent,
   titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
   poll: Duration.Input = CODER.MESSAGES_POLL,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
   const once = Effect.gen(function* () {
-    const read = yield* pagePast(target, tools, after, agent.createdAt);
+    const read = yield* pagePast(target, tools, after, agent);
     return (yield* holdsFor(read.page, titleAwaited)) ? Option.none() : Option.some(read);
   });
   return once.pipe(
@@ -634,7 +660,7 @@ export function transcriptPast(
       const read = Option.flatten(held);
       return Option.isSome(read)
         ? Effect.succeed(read.value)
-        : pagePast(target, tools, after, agent.createdAt);
+        : pagePast(target, tools, after, agent);
     }),
     Effect.flatMap(({ page, turn }) => withUsage(target, tools, page, turn, own)),
   );
@@ -661,13 +687,13 @@ export function transcriptNow(
   target: ConversationTarget,
   tools: ToolSet,
   after: MessageCursor,
-  agent: Pick<AgentStanding, "createdAt">,
+  agent: AgentStart,
   own?: OwnAgent,
   titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
   titleEdge: TitleEdge = NO_TITLE_EDGE,
 ): TranscriptEffect<TranscriptNow, ModelCatalog> {
   return Effect.gen(function* () {
-    const { page, turn, graceEdge } = yield* pagePast(target, tools, after, agent.createdAt);
+    const { page, turn, graceEdge } = yield* pagePast(target, tools, after, agent);
     const holds = yield* holdsFor(page, titleAwaited);
     const read = { page: yield* withUsage(target, tools, page, turn, own), holds };
     if (!holds) return read;

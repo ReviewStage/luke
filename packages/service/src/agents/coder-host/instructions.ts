@@ -58,7 +58,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * its starter's task leaves it to the starter.
  */
 
-/** The words the instructions say of what the agent was handed, a plan or a prompt, where the two differ. */
+/** The words the instructions say of what the agent was handed, a plan, a prompt, or nothing, for one started blank, whose asks come in the conversation, where they differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
@@ -77,6 +77,15 @@ const BRIEF_WORDS = {
     whole: "does what the prompt asks, whole",
     none: "the prompt could not be carried out",
     describe: "say in its description what the prompt asked",
+  },
+  [CODING_AGENT_BRIEF.BLANK]: {
+    job: "do what the developer asks of you in this conversation",
+    brief: "request",
+    reread:
+      "Read the code what the developer asks touches before you change it. Where what they ask is unclear or the code does not fit it, say so plainly rather than guessing at a larger change.",
+    whole: "does what the developer asked, whole",
+    none: "what the developer asked could not be done",
+    describe: "say in its description what the developer asked",
   },
 } as const satisfies Record<
   CodingAgentBrief,
@@ -203,16 +212,18 @@ const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes
 
 /**
  * What an agent is told of its plan: one handed the plan always, and one
- * handed a prompt where it is on a task. One handed a prompt was not handed
- * the plan, which Luke may have written since, or may yet, so it is told to
- * read the plan before it edits it.
+ * handed a prompt or started blank where it is on a task. Neither of those
+ * was handed the plan, which Luke may have written since, or may yet, so
+ * each is told to read the plan before it edits it.
  */
 function editPlanTold(brief: CodingAgentBrief, onTask: boolean): EditPlanTold {
-  if (brief === CODING_AGENT_BRIEF.PROMPT && !onTask) return NOT_TOLD_EDIT_PLAN;
+  if (brief !== CODING_AGENT_BRIEF.PLAN && !onTask) return NOT_TOLD_EDIT_PLAN;
   const read =
     brief === CODING_AGENT_BRIEF.PROMPT
       ? `Your task has a plan beside the prompt you were handed, which Luke keeps as the developer talks the task through: it may be empty, or say what your prompt does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
-      : "";
+      : brief === CODING_AGENT_BRIEF.BLANK
+        ? `Your task has a plan, which you were not handed: it may be empty, or say what the conversation does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
+        : "";
   return {
     decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
     updating: `

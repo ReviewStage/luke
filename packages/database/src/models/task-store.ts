@@ -116,6 +116,8 @@ export interface TaskArchivedAgent {
   readonly id: string;
   readonly conversationId: string;
   readonly createdAt: Date;
+  /** Whether it was started blank, handed neither the plan nor a prompt. */
+  readonly blank: boolean;
 }
 
 /**
@@ -1301,6 +1303,7 @@ const lockStandingAgents = SqlSchema.findAll({
     id: Schema.String,
     conversationId: Schema.String,
     createdAt: InstantColumnSchema,
+    blank: Schema.Boolean,
   }),
   execute: ({ taskId }) =>
     Database.use((db) =>
@@ -1309,6 +1312,7 @@ const lockStandingAgents = SqlSchema.findAll({
           id: codingAgent.id,
           conversationId: codingAgent.conversationId,
           createdAt: codingAgent.createdAt,
+          blank: sql<boolean>`${codingAgent.planSnapshot} is null and ${codingAgent.prompt} is null`,
         })
         .from(codingAgent)
         .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))

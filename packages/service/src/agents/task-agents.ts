@@ -29,6 +29,7 @@ import {
   codingAgentRunStartedAt,
   codingAgentStatusOf,
   codingAgentSummary,
+  startedBlank,
   summaryAccounts,
 } from "./coder-host/status.js";
 
@@ -71,7 +72,7 @@ function agentLine(
 ): ReadAgent {
   const { agent } = held;
   const starter = names.get(agent.userId);
-  const standing = { createdAt: agent.createdAt, now, awaitingLineAt };
+  const standing = { createdAt: agent.createdAt, now, awaitingLineAt, blank: startedBlank(agent) };
   const status = codingAgentStatusOf(turn, standing);
   const at = WORKING_STATUSES.has(status)
     ? codingAgentRunStartedAt(turn, standing)
