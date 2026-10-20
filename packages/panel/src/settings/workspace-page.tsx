@@ -61,7 +61,9 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref.js";
+import { actPort } from "../app-bridge.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
@@ -932,16 +934,32 @@ function Invitations({
     };
   }, [act, workspaceId]);
 
-  // The invitation made is listed at once, its link copyable even if the
-  // read after it fails, and the read then reconciles with the service.
+  // The invitations are followed while the group stands: what any window or
+  // Mac invites or cancels, or what is accepted, is streamed, and is the
+  // newest word of them, whatever read is out.
+  useEffect(
+    () =>
+      streamFrom(
+        () => actPort()[ACT_KIND.WORKSPACE_INVITATIONS]({ workspaceId }),
+        (view) => {
+          if (!("invitations" in view)) return;
+          latest.current += 1;
+          setPending(view.invitations);
+        },
+      ),
+    [workspaceId],
+  );
+
+  // The invitation made is listed at once, its link copyable, and the
+  // followed list then carries it as the service holds it.
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
     write(
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
       (made) => {
         setEmail("");
+        latest.current += 1;
         setPending((standing) => [...(standing ?? []).filter((one) => one.id !== made.id), made]);
-        show(act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }));
       },
     );
   };

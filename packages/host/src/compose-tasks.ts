@@ -8,6 +8,7 @@ import {
   type TaskCallResult,
   type TaskMarks,
   WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "@luke/features";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
@@ -170,7 +171,13 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { type ConversationMark, conversationMark, markMoved } from "./conversation-follow.js";
 import type { HostKernel } from "./host-kernel.js";
-import { LIVE_GONE, type LiveBroken, type LiveClient, openRealtimeClient } from "./live-follow.js";
+import {
+  LIVE_GONE,
+  type LiveBroken,
+  type LiveClient,
+  openRealtimeClient,
+  type SealedRead,
+} from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt } from "./task-code.js";
@@ -181,7 +188,12 @@ import {
   type TranscriptFollows,
   transcriptFollows,
 } from "./transcript-follow.js";
-import { peopleMoves, workspacesMoves } from "./workspaces-follow.js";
+import {
+  invitationsMoves,
+  type LiveReadDependencies,
+  peopleMoves,
+  workspacesMoves,
+} from "./workspaces-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -481,6 +493,7 @@ export type TasksClient = Pick<
     | "linearIssues"
     | "people"
     | "peopleLive"
+    | "invitationsLive"
     | "photo"
     | "removeMember"
     | "tokenRepositories"
@@ -944,65 +957,108 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: true });
   });
 
-  /** The workspaces whose people a window follows, each followed while any window does. */
+  /** The workspaces whose people, and whose invitations, a window follows, each followed while any window does. */
   const peopleFollows = yield* FiberMap.make<string, void>();
+  const invitationFollows = yield* FiberMap.make<string, void>();
 
   /**
-   * One workspace's people followed over Realtime (`workspaces-follow.ts`),
-   * polled while Realtime fails them, each change told as
-   * `WORKSPACE_PEOPLE_CHANGED`. A seal the service did not answer, or a
-   * follow that stopped, is sealed again on the board's backoff without a
-   * word, so the window keeps the people it holds; a workspace the account
-   * is not in is told not found once, and not asked again.
+   * One workspace's followed read over Realtime (`workspaces-follow.ts`),
+   * polled while Realtime fails it, each change told by `told`. A seal the
+   * service did not answer, or a follow that stopped, is sealed again on the
+   * board's backoff without a word, so the window keeps what it holds; a
+   * workspace the account no longer reaches as the read asks is told so
+   * once, and not asked again; a session that is another account's stops it
+   * quietly.
    */
-  function followPeople(workspaceId: string): Effect.Effect<void> {
-    const told = (view: TasksWorkspaceMembersAnswer) =>
-      Effect.sync(() =>
-        kernel.emit(GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED, carried({ workspaceId, view })),
-      );
+  function followWorkspaceRead<Answer extends SealedRead<string>, View>(
+    seal: (
+      userId: string,
+      poll: boolean,
+      after: string | undefined,
+    ) => Effect.Effect<
+      WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
+      never,
+      HttpClient.HttpClient
+    >,
+    moves: (
+      dependencies: LiveReadDependencies<Answer>,
+      first: Answer,
+    ) => Stream.Stream<View, LiveBroken>,
+    told: (view: View | { readonly failure: WorkspaceCallFailure }) => Effect.Effect<void>,
+  ): Effect.Effect<void> {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
-    const seal = (poll: boolean, after?: string) =>
+    const sealed = (poll: boolean, after?: string) =>
       userId === undefined
         ? Effect.succeed(LIVE_SIGNED_OUT)
-        : Effect.map(
-            served(client.workspaces.peopleLive(workspaceId, userId, poll, after)),
-            (sealed) => {
-              if (!("ok" in sealed)) return sealed;
-              if (sealed.ok) return sealed.answer;
-              return {
-                failure: sealed.failure,
-                gone: sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND,
-              };
-            },
-          );
+        : Effect.map(served(seal(userId, poll, after)), (answer) => {
+            if (!("ok" in answer)) return answer;
+            if (answer.ok) return answer.answer;
+            return {
+              failure: answer.failure,
+              gone:
+                answer.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
+                answer.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
+            };
+          });
     /** One seal followed until it stops, which fails it so the backoff seals it again. */
     const attempt = Effect.gen(function* () {
-      const sealed = yield* seal(false);
-      if ("failure" in sealed) {
-        if (sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND)
-          yield* told({ failure: sealed.failure });
-        return yield* Effect.fail(sealed.failure);
+      const first = yield* sealed(false);
+      if ("failure" in first) {
+        if (
+          first.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
+          first.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
+        ) {
+          yield* told({ failure: first.failure });
+        }
+        return yield* Effect.fail(first.failure);
       }
-      const moves = peopleMoves(
+      const changes = moves(
         {
-          seal: () => seal(false),
-          poll: (after) => seal(true, after),
+          seal: () => sealed(false),
+          poll: (after) => sealed(true, after),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
         },
-        sealed,
+        first,
       );
-      yield* Stream.runForEach(moves, told).pipe(Effect.ignore);
+      yield* Stream.runForEach(changes, told).pipe(Effect.ignore);
       return yield* Effect.fail(WORKSPACE_CALL_FAILURE.UNANSWERED);
     });
     return attempt.pipe(
       Effect.retry({
         schedule: BOARD_BACKOFF,
         while: (why) =>
-          why !== WORKSPACE_CALL_FAILURE.NOT_FOUND && why !== LIVE_SIGNED_OUT.failure && gate(),
+          why !== WORKSPACE_CALL_FAILURE.NOT_FOUND &&
+          why !== WORKSPACE_CALL_FAILURE.NOT_PERMITTED &&
+          why !== LIVE_SIGNED_OUT.failure &&
+          gate(),
       }),
       Effect.ignore,
+    );
+  }
+
+  /** One workspace's people followed, each change told as `WORKSPACE_PEOPLE_CHANGED`. */
+  function followPeople(workspaceId: string): Effect.Effect<void> {
+    return followWorkspaceRead(
+      (userId, poll, after) => client.workspaces.peopleLive(workspaceId, userId, poll, after),
+      peopleMoves,
+      (view) =>
+        Effect.sync(() =>
+          kernel.emit(GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED, carried({ workspaceId, view })),
+        ),
+    );
+  }
+
+  /** One workspace's pending invitations followed, each change told as `WORKSPACE_INVITATIONS_CHANGED`. */
+  function followInvitations(workspaceId: string): Effect.Effect<void> {
+    return followWorkspaceRead(
+      (userId, poll, after) => client.workspaces.invitationsLive(workspaceId, userId, poll, after),
+      invitationsMoves,
+      (view) =>
+        Effect.sync(() =>
+          kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried({ workspaceId, view })),
+        ),
     );
   }
 
@@ -2718,6 +2774,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(peopleFollows, read.success.workspaceId);
         return {};
       }),
+    // An owner's or an admin's window follows a workspace's invitations as
+    // it follows its people.
+    [GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
+        if (!gate()) return {};
+        const { workspaceId } = read.success;
+        yield* FiberMap.run(invitationFollows, workspaceId, followInvitations(workspaceId));
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
+        yield* FiberMap.remove(invitationFollows, read.success.workspaceId);
+        return {};
+      }),
     [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceMembersParamsSchema)(unparsedWire(params));
@@ -2953,6 +3027,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(listFollow);
       yield* FiberHandle.clear(workspacesFollow);
       yield* FiberMap.clear(peopleFollows);
+      yield* FiberMap.clear(invitationFollows);
       yield* serial(
         Effect.sync(() => {
           githubAskedAt = undefined;

@@ -42,7 +42,11 @@ import {
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
-import type { WorkspaceMembersLiveAnswer, WorkspacesLiveAnswer } from "./workspace-live.js";
+import type {
+  WorkspaceInvitationsLiveAnswer,
+  WorkspaceMembersLiveAnswer,
+  WorkspacesLiveAnswer,
+} from "./workspace-live.js";
 import {
   type FormerMember,
   type LinearIssuesRequest,
@@ -232,6 +236,32 @@ export class HostedWorkspaceClient {
     return liveResult(
       askLive(
         this.#hosted.live.workspaceMembers,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+    );
+  }
+
+  /**
+   * A workspace's pending invitations sealed for following over Neon
+   * Realtime, to an owner or an admin of it and for the account named, or
+   * with their rows inline where `poll` asks for them; signed out where the
+   * session is another account's, or why not.
+   */
+  invitationsLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<WorkspaceInvitationsLiveAnswer> | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveResult(
+      askLive(
+        this.#hosted.live.workspaceInvitations,
         { workspaceId, [LIVE_USER_QUERY]: userId },
         poll,
         after,

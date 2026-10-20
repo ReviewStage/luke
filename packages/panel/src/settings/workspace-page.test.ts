@@ -14,7 +14,10 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
-import type { TasksWorkspaceMembersAnswer } from "@luke/features/tasks-view";
+import type {
+  TasksWorkspaceInvitationsAnswer,
+  TasksWorkspaceMembersAnswer,
+} from "@luke/features/tasks-view";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -428,6 +431,15 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
 /** What the act port answers a workspace's people's stream with. */
 type PeopleStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_PEOPLE]>>;
 
+/** What the act port answers a workspace's invitations' stream with. */
+type InvitationsStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_INVITATIONS]>>;
+
+/** Each workspace's invitations' streams the page holds open, which a test pushes a word to. */
+let invitationStreams: {
+  readonly workspaceId: string;
+  push: (view: TasksWorkspaceInvitationsAnswer) => void;
+}[] = [];
+
 /** A stream the test pushes words into, as the host streams a followed workspace's people. */
 function pushableStream<A>() {
   const held: A[] = [];
@@ -500,6 +512,7 @@ beforeEach(() => {
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   peopleStreams = [];
+  invitationStreams = [];
   fakeActPort({
     ...workspacePort(),
     [ACT_KIND.WORKSPACE_PEOPLE]: (input) => {
@@ -508,6 +521,13 @@ beforeEach(() => {
       peopleStreams.push({ workspaceId: input.workspaceId, push: stream.push });
       // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
       return Promise.resolve(stream.iterator as PeopleStream);
+    },
+    [ACT_KIND.WORKSPACE_INVITATIONS]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS, payload: input });
+      const stream = pushableStream<TasksWorkspaceInvitationsAnswer>();
+      invitationStreams.push({ workspaceId: input.workspaceId, push: stream.push });
+      // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
+      return Promise.resolve(stream.iterator as InvitationsStream);
     },
     [ACT_KIND.AUTOMATIONS_LIST]: () =>
       automations === undefined
@@ -1796,6 +1816,30 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
   await settle();
 }
 
+test("the invitations the host streams are drawn, another Mac's invitation among them, with nothing read again", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const pushed = {
+    id: "inv-ola@example.com",
+    email: "ola@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    expiresAt: "2026-10-16T12:00:00.000Z",
+    acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-ola@example.com",
+  };
+  act(() => {
+    for (const stream of invitationStreams) {
+      if (stream.workspaceId === ACME.id) stream.push({ invitations: [pushed] });
+    }
+  });
+  await settle();
+
+  assert.equal(invitationRows(page).length, 1);
+  assert.ok(invitationRows(page)[0]?.textContent?.includes("ola@example.com"));
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length,
+    1,
+  );
+});
+
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -1830,11 +1874,11 @@ test("the owner invites an address as a role, sees it pending with its link to c
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
+      [ACT_KIND.WORKSPACE_INVITATIONS, { workspaceId: ACME.id }],
       [
         ACT_KIND.WORKSPACE_INVITE,
         { workspaceId: ACME.id, email: "alan@example.com", role: WORKSPACE_ROLE.ADMIN },
       ],
-      [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },

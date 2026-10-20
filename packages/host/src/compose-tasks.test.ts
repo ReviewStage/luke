@@ -330,6 +330,15 @@ const PEOPLE_SEALED = {
   },
 };
 
+/** A workspace's invitations sealed for following, with the origin each accept link is built on. */
+const INVITATIONS_SEALED = {
+  url: WORKSPACES_URL,
+  origin: "https://luke.test",
+  queries: {
+    invitations: { capability: "capability-invitations", queryFingerprint: "v", expiresAt: 1e15 },
+  },
+};
+
 /** The workspaces as the live statements' rows carry them, the account's own first one being Ada's. */
 function workspacesLiveRows(workspaces: readonly Workspace[]) {
   return {
@@ -605,6 +614,13 @@ function fakeService(tasks: Task[]): FakeService {
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      // A workspace's invitations are sealed for an owner or an admin alone, as the service seals them.
+      invitationsLive: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`invitations-live:${workspaceId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          return { ok: true, answer: INVITATIONS_SEALED } as const;
+        }),
       // A workspace's people are sealed for a member alone, as the service seals them.
       peopleLive: (workspaceId, _userId) =>
         Effect.sync(() => {
@@ -4768,4 +4784,56 @@ it.effect("a workspace the account is not in is told not found once, and not ask
     ]);
     assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
   }),
+);
+
+it.effect(
+  "a workspace's invitations are followed for an owner or an admin, the expired left out by the host's clock and each with its accept link, and a role that may not is told so once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, events, settled } = yield* subject(service);
+      const invitations = () =>
+        events
+          .filter((event) => event.kind === GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED)
+          .map((event) => event.payload);
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      const row = (id: string, expiresAt: number) => ({
+        id,
+        email: `${id}@example.com`,
+        role: WORKSPACE_ROLE.MEMBER,
+        expiresAt,
+      });
+      service.realtime.deliver("invitations", [
+        row("late", 9_000),
+        row("spent", 0),
+        row("soon", 5_000),
+      ]);
+      yield* settled;
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, { workspaceId: ACME.id });
+      service.notPermitted = true;
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: RELAY.id });
+      yield* settled;
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* settled;
+
+      const accept = (id: string) =>
+        `https://luke.test/accept-invitation.html?id=${id}&email=${id}%40example.com`;
+      assert.deepEqual(invitations(), [
+        {
+          workspaceId: ACME.id,
+          view: {
+            invitations: ["soon", "late"].map((id) => ({
+              id,
+              email: `${id}@example.com`,
+              role: WORKSPACE_ROLE.MEMBER,
+              expiresAt: new Date(id === "soon" ? 5_000 : 9_000).toISOString(),
+              acceptUrl: accept(id),
+            })),
+          },
+        },
+        { workspaceId: RELAY.id, view: { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } },
+      ]);
+    }),
 );
