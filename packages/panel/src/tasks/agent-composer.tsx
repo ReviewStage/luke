@@ -50,6 +50,7 @@ import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
+import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
@@ -727,27 +728,13 @@ export function AgentComposer({
             <>
               <PromptInputTools>
                 <span className="agent-composer-attach">
-                  <Tooltip label={BUTTON.ATTACH}>
-                    <IconButton
-                      icon={<PlusIcon />}
-                      label={BUTTON.ATTACH}
-                      disabled={held}
-                      onClick={() => picker.current?.click()}
-                    />
-                  </Tooltip>
+                  <AttachFilesButton
+                    label={BUTTON.ATTACH}
+                    disabled={held}
+                    picker={picker}
+                    onFiles={attach}
+                  />
                 </span>
-                <input
-                  ref={picker}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    const picked = Array.from(event.currentTarget.files ?? []);
-                    // Cleared so the same file can be picked again after it was taken off.
-                    event.currentTarget.value = "";
-                    attach(picked);
-                  }}
-                />
                 <BranchChip
                   published={published}
                   doors={doors}

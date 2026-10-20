@@ -2,15 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { readerZone } from "@luke/features/date-mention";
-import {
-  ComboboxList,
-  comboboxOptionId,
-  GAP,
-  IconButton,
-  Inline,
-  PlusIcon,
-  SUBMIT_STATE,
-} from "@luke/ui";
+import { ComboboxList, comboboxOptionId, GAP, Inline, SUBMIT_STATE } from "@luke/ui";
 import {
   type ChatMention,
   type ChatTarget,
@@ -35,6 +27,7 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
+import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { chatOption, useChatMentionPicker } from "./chat-mention-picker.js";
@@ -285,7 +278,6 @@ function EditorChatComposer({
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
-  const picker = useRef<HTMLInputElement>(null);
   const [dropping, setDropping] = useState(false);
   const {
     draft,
@@ -396,29 +388,12 @@ function EditorChatComposer({
             sending={sending}
             empty={empty || reading}
             lead={
-              <>
-                <Tooltip label={ATTACH}>
-                  <IconButton
-                    icon={<PlusIcon />}
-                    label={ATTACH}
-                    disabled={sending}
-                    onClick={() => picker.current?.click()}
-                  />
-                </Tooltip>
-                <input
-                  ref={picker}
-                  type="file"
-                  accept={PICKS_IMAGES}
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    const picked = Array.from(event.currentTarget.files ?? []);
-                    // Cleared so the same file can be picked again after it was taken off.
-                    event.currentTarget.value = "";
-                    attach(picked);
-                  }}
-                />
-              </>
+              <AttachFilesButton
+                label={ATTACH}
+                accept={PICKS_IMAGES}
+                disabled={sending}
+                onFiles={attach}
+              />
             }
           >
             <DictateButton dictation={dictation} disabled={sending || module === undefined} />
