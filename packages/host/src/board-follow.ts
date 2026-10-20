@@ -24,6 +24,10 @@ export interface BoardFollowDependencies {
   readonly seal: () => Effect.Effect<
     TaskBoardLiveAnswer | { readonly failure: string; readonly gone?: boolean }
   >;
+  /** The board's rows inline, polled while Realtime fails it; failures as `seal`'s. */
+  readonly poll: () => Effect.Effect<
+    TaskBoardLiveAnswer | { readonly failure: string; readonly gone?: boolean }
+  >;
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
@@ -51,7 +55,12 @@ export function boardMoves(
 ): Stream.Stream<TaskBoardLiveRows, LiveBroken> {
   const decode = Schema.decodeUnknownOption(taskBoardLiveRowsSchema);
   return liveRows(
-    { openLive: dependencies.openLive, reseal: dependencies.seal, now: dependencies.now },
+    {
+      openLive: dependencies.openLive,
+      reseal: dependencies.seal,
+      poll: dependencies.poll,
+      now: dependencies.now,
+    },
     first,
   ).pipe(
     Stream.mapEffect((read) =>

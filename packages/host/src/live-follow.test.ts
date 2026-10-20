@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -14,10 +14,20 @@ import {
 /**
  * A read followed over Realtime answers every part's rows whole once each
  * part has its first result, renews every seal before the earliest expires,
- * and fails where a subscription stops for good or a renewal is refused.
+ * is polled while Realtime fails it and no longer once Realtime delivers
+ * again, and fails where the read is gone.
  */
 
 const URL = "wss://realtime.example/v1";
+
+/** Every step the read has to take, taken. */
+const settled = Effect.repeat(
+  Effect.andThen(
+    Effect.yieldNow,
+    Effect.promise(() => Promise.resolve()),
+  ),
+  { times: 20 },
+);
 
 type Part = "left" | "right";
 
@@ -90,12 +100,13 @@ it.effect("answers every part's rows whole, once each has its first result", () 
         {
           openLive: () => realtime.client,
           reseal: () => Effect.succeed(read(1, expiresAt + 60_000)),
+          poll: () => Effect.succeed({ failure: "unavailable" }),
           now: () => clock.currentTimeMillisUnsafe(),
         },
         read(0, expiresAt),
       ).pipe(Stream.take(2), Stream.runCollect),
     );
-    yield* TestClock.adjust(Duration.millis(1));
+    yield* settled;
     assert.deepEqual(realtime.subscribed(), ["left-0", "right-0"]);
     realtime.deliver("left-0", [{ id: "a" }]);
     realtime.deliver("right-0", undefined);
@@ -127,6 +138,7 @@ it.effect(
           {
             openLive: () => realtime.client,
             reseal: () => Effect.sync(() => reseals.shift() ?? read(2, start + 600_000)),
+            poll: () => Effect.succeed({ failure: "unavailable" }),
             now: () => clock.currentTimeMillisUnsafe(),
           },
           read(0, start + 60_000),
@@ -140,64 +152,6 @@ it.effect(
       assert.deepEqual(realtime.renewed.toSorted(), ["left-1", "right-1"]);
       yield* Fiber.interrupt(following);
     }),
-);
-
-it.effect("fails where a subscription stops for good", () =>
-  Effect.gen(function* () {
-    const realtime = fakeRealtime();
-    const clock = yield* Clock.Clock;
-    const expiresAt = clock.currentTimeMillisUnsafe() + 60_000;
-    const following = yield* Effect.forkChild(
-      liveRows<Part>(
-        {
-          openLive: () => realtime.client,
-          reseal: () => Effect.succeed(read(1, expiresAt)),
-          now: () => clock.currentTimeMillisUnsafe(),
-        },
-        read(0, expiresAt),
-      ).pipe(Stream.runDrain),
-    );
-    yield* TestClock.adjust(Duration.millis(1));
-    realtime.fail("right-0");
-    const exit = yield* Fiber.await(following);
-    assert.deepEqual(exit, Exit.fail(new LiveBroken({ reason: "the subscription stopped" })));
-    assert.equal(realtime.state.closed, true);
-  }),
-);
-
-it.effect("fails where a renewal is refused", () =>
-  Effect.gen(function* () {
-    const realtime = fakeRealtime({ refuseRenewal: true });
-    const clock = yield* Clock.Clock;
-    const start = clock.currentTimeMillisUnsafe();
-    const following = yield* Effect.forkChild(
-      liveRows<Part>(
-        {
-          openLive: () => realtime.client,
-          reseal: () => Effect.succeed(read(1, start + 120_000)),
-          now: () => clock.currentTimeMillisUnsafe(),
-        },
-        read(0, start + 60_000),
-      ).pipe(Stream.runDrain),
-    );
-    yield* TestClock.adjust(Duration.seconds(50));
-    const exit = yield* Fiber.await(following);
-    assert.deepEqual(exit, Exit.fail(new LiveBroken({ reason: "a renewal was refused" })));
-  }),
-);
-
-it.effect("fails where Realtime's client does not load", () =>
-  Effect.gen(function* () {
-    const exit = yield* liveRows<Part>(
-      {
-        openLive: () => Promise.reject(new Error("no module")),
-        reseal: () => Effect.succeed(read(1, 0)),
-        now: () => 0,
-      },
-      read(0, 60_000),
-    ).pipe(Stream.runDrain, Effect.exit);
-    assert.deepEqual(exit, Exit.fail(new LiveBroken({ reason: "Realtime's client did not load" })));
-  }),
 );
 
 it.effect(
@@ -220,6 +174,7 @@ it.effect("fails, rather than asking again, where a renewal finds the read gone"
         {
           openLive: () => realtime.client,
           reseal: () => Effect.succeed({ failure: "not-found", gone: true }),
+          poll: () => Effect.succeed({ failure: "unavailable" }),
           now: () => clock.currentTimeMillisUnsafe(),
         },
         read(0, start + 60_000),
@@ -229,4 +184,58 @@ it.effect("fails, rather than asking again, where a renewal finds the read gone"
     const exit = yield* Fiber.await(following);
     assert.deepEqual(exit, Exit.fail(new LiveBroken({ reason: "the read is gone" })));
   }),
+);
+
+it.effect(
+  "a subscription in error switches the read to polling, its rows fed on, until Realtime delivers again",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      let polls = 0;
+      const rows: unknown[] = [];
+      const following = yield* Effect.forkChild(
+        Stream.runForEach(
+          liveRows<Part>(
+            {
+              openLive: () => realtime.client,
+              reseal: () => Effect.succeed(read(1, 3_600_000)),
+              poll: () =>
+                Effect.sync(() => {
+                  polls += 1;
+                  return {
+                    url: LIVE_POLL_URL,
+                    queries: {
+                      left: { ...sealed("left", 9, 0), rows: [{ id: "polled" }] },
+                      right: { ...sealed("right", 9, 0), rows: [] },
+                    },
+                  };
+                }),
+              now: () => 0,
+            },
+            read(0, 3_600_000),
+          ),
+          (whole) => Effect.sync(() => void rows.push(whole)),
+        ),
+      );
+      yield* settled;
+      realtime.fail("left-0");
+      yield* settled;
+      assert.deepEqual(rows, [{ left: [{ id: "polled" }], right: [] }]);
+      yield* TestClock.adjust(Duration.seconds(6));
+      yield* settled;
+      assert.ok(polls >= 3, "polled every few seconds");
+      assert.equal(rows.length, 1, "unchanged polls feed nothing new");
+
+      yield* TestClock.adjust(Duration.seconds(15));
+      yield* settled;
+      realtime.deliver("left-1", [{ id: "live" }]);
+      realtime.deliver("right-1", []);
+      yield* settled;
+      const stopped = polls;
+      yield* TestClock.adjust(Duration.seconds(30));
+      yield* settled;
+      assert.equal(polls, stopped, "no polling once Realtime is back");
+      assert.deepEqual(rows.at(-1), { left: [{ id: "live" }], right: [] });
+      yield* Fiber.interrupt(following);
+    }),
 );
