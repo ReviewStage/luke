@@ -8,6 +8,7 @@ import {
   issuesFollowedSchema,
 } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -50,7 +51,9 @@ const ISSUE = {
 } as const;
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService(options: { listLive?: IssuesLiveAnswer; txid?: string } = {}) {
+function fakeService(
+  options: { listLive?: IssuesLiveAnswer; txid?: string; signedOutSeal?: boolean } = {},
+) {
   const asked: unknown[] = [];
   const answer =
     <A>(name: string, value: A) =>
@@ -67,7 +70,12 @@ function fakeService(options: { listLive?: IssuesLiveAnswer; txid?: string } = {
       "change",
       options.txid === undefined ? { issue: ISSUE } : { issue: ISSUE, txid: options.txid },
     ),
-    listLive: answer("listLive", options.listLive ?? { failure: ISSUE_CALL_FAILURE.UNANSWERED }),
+    listLive: (workspaceId, userId) =>
+      Effect.sync(() => {
+        asked.push(["listLive", workspaceId, userId]);
+        if (options.signedOutSeal === true) return LIVE_SIGNED_OUT;
+        return options.listLive ?? { failure: ISSUE_CALL_FAILURE.UNANSWERED };
+      }),
   };
   return { client, asked };
 }
@@ -95,7 +103,10 @@ function subject(
     sendsNetwork?: boolean;
     listLive?: IssuesLiveAnswer;
     txid?: string;
+    signedOutSeal?: boolean;
     openLive?: (url: string) => LiveClient;
+    /** The account signed in; Dana's where left out, and none for `null`. */
+    accountId?: string | null;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -105,6 +116,8 @@ function subject(
       kernel: kernelOf(options.sendsNetwork ?? true, followed),
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
+      accountId: () =>
+        options.accountId === undefined ? "user-dana" : (options.accountId ?? undefined),
       ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -183,6 +196,7 @@ it.effect("the service is asked over the HTTP client the host was handed", () =>
     const composer = yield* composeIssues({
       kernel: kernelOf(true, []),
       account: { capabilitiesActive: () => true },
+      accountId: () => "user-dana",
       client: new HostedIssueClient({
         serviceBaseUrl: "https://tryluke.test",
         credential: fixedBearer("bearer-1"),
@@ -288,7 +302,7 @@ it.effect(
           ],
         ],
       );
-      assert.deepEqual(asked, [["listLive", WORKSPACE_ID]]);
+      assert.deepEqual(asked, [["listLive", WORKSPACE_ID, "user-dana"]]);
 
       yield* call(GATEWAY_METHOD.ISSUES_UNFOLLOW, scope);
       yield* settled;
@@ -394,5 +408,35 @@ it.effect(
       yield* settled;
       yield* plain.call(GATEWAY_METHOD.ISSUES_CHANGE, change);
       assert.deepEqual(unchanged.awaited, []);
+    }),
+);
+
+it.effect(
+  "a follow with no account signed in seals nothing and publishes nothing, as signed out",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, followed } = yield* subject({ accountId: null });
+
+      yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* TestClock.adjust(Duration.minutes(1));
+
+      assert.deepEqual(asked, []);
+      assert.deepEqual(followed, []);
+    }),
+);
+
+it.effect(
+  "a seal refused as signed out ends the follow for good, publishing nothing and asking no more",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, followed } = yield* subject({ signedOutSeal: true });
+
+      yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* TestClock.adjust(Duration.minutes(1));
+
+      assert.deepEqual(asked, [["listLive", WORKSPACE_ID, "user-dana"]]);
+      assert.deepEqual(followed, []);
     }),
 );

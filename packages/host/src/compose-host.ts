@@ -201,6 +201,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const issues = yield* composeIssues({
       kernel,
       account,
+      accountId: () => {
+        const signedIn = account.session.snapshot();
+        return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+      },
       client: new HostedIssueClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,

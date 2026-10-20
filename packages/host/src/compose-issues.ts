@@ -9,6 +9,7 @@ import {
   issueIdParamsSchema,
   issueListParamsSchema,
 } from "@luke/features/issue-view";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -51,6 +52,8 @@ export interface IssuesDependencies {
   kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: IssuesClient;
+  /** The account signed in now, which a follow names on every seal and renewal; none while signed out. */
+  accountId: () => string | undefined;
   /** Realtime's client for the follows' subscriptions; Realtime's own where none is handed in. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
@@ -156,8 +159,13 @@ function composed(
           "a follow names a workspace",
         );
         if (!gate()) return {};
+        // Note that the account is read once, as the follow starts, so every renewal names the account it began for.
+        const userId = dependencies.accountId();
         const follow = followIssues({
-          live: () => asked(client.listLive(workspaceId)),
+          live: () =>
+            userId === undefined
+              ? Effect.succeed(LIVE_SIGNED_OUT)
+              : asked(client.listLive(workspaceId, userId)),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
           publish: (view) =>
