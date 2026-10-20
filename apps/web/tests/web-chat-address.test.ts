@@ -76,7 +76,6 @@ it.effect(
       yield* Effect.promise(async () => {
         const panel = await drawPanel();
         // The staged chat is imported apart from the panel's bundle, so it lands on its own time.
-        // The staged chat is imported apart from the panel's bundle, so it lands on its own time.
         await vi.waitFor(() =>
           assert.ok(panel.shows("For you"), "the chat profile opens Chat on For you"),
         );

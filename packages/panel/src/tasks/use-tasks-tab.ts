@@ -1386,15 +1386,26 @@ export function useTasksTab(input: {
       ? undefined
       : { answer: liveChat.chat, agents: [] }
     : chat;
-  // A channel the chat as read does not hold, as a stale link's, shows Chat on For you, its root; one not read yet is still the channel.
-  const chatPlace: ChatPlace =
-    standIn?.kind !== STAND_IN.CHAT
-      ? FOR_YOU
-      : shownChat !== undefined &&
-          standIn.place.kind === CHAT_PLACE.CHANNEL &&
-          placeChannel(shownChat.answer, standIn.place) === undefined
-        ? FOR_YOU
-        : standIn.place;
+  // A channel the chat as read does not hold, as a stale link's, puts Chat back on For you, its root, and is read no more; one not read yet is still the channel.
+  const staleChannel =
+    standIn?.kind === STAND_IN.CHAT &&
+    standIn.place.kind === CHAT_PLACE.CHANNEL &&
+    shownChat !== undefined &&
+    placeChannel(shownChat.answer, standIn.place) === undefined
+      ? standIn.place.channelId
+      : undefined;
+  // Note that this waits for the commit, because a workspace's chat read before another was listed is let go only by
+  // the render that lists it, which would otherwise find a channel of the new one missing from the old one's chat.
+  useEffect(() => {
+    if (staleChannel === undefined) return;
+    setStandIn((held) =>
+      held?.kind === STAND_IN.CHAT &&
+      held.place.kind === CHAT_PLACE.CHANNEL &&
+      held.place.channelId === staleChannel
+        ? { ...held, place: FOR_YOU }
+        : held,
+    );
+  }, [staleChannel]);
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -3147,7 +3158,7 @@ export function useTasksTab(input: {
       chat: shownChat,
       failed: liveRun && liveChat.failed,
       onRetry: liveChat.onRetry,
-      place: chatPlace,
+      place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
       listed: standIn?.kind === STAND_IN.CHAT ? standIn.listed : true,
       onList: () =>
         setStandIn((held) => (held?.kind === STAND_IN.CHAT ? { ...held, listed: true } : held)),
