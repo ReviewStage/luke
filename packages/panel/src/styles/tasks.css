@@ -2744,10 +2744,6 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.side-panel-content .pull-request-tabs {
-  padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
 .pull-request-tabs > .luke-choice-bar {
   min-width: 0;
   flex: 1 1 0;
@@ -2779,7 +2775,10 @@
    row, the pull request's Refresh and Open on GitHub in the side panel's
    own ⋯ above it, then the branches, who opened it and its reviewers in one line,
    standing put while the tab under it scrolls. It answers its own width,
-   so a narrow header shortens the merge control's words. */
+   so a narrow header shortens the merge control's words. It and the row of
+   tabs under it span the whole panel at the strip's own inset, however
+   wide, so the merge control and Review stand at the panel's edge; only the
+   views under them keep to the reading measure. */
 .pull-request-header {
   /* Note that the container makes the header a stacking context of its
      own, so it stands over the rows after it, or the merge control's panel
@@ -2789,10 +2788,6 @@
   flex: none;
   container: pull-request-header / inline-size;
   padding: var(--luke-space-8) var(--column-inset);
-}
-
-.side-panel-content .pull-request-header {
-  padding-inline: max(var(--column-inset), var(--reading-room));
 }
 
 /* The title's row: the pill at the row's inset, the title taking the room

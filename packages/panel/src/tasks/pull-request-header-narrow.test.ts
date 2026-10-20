@@ -142,3 +142,21 @@ test("a touch screen shows the title's pencil at rest, where a tap would otherwi
   assert.equal(pencilAtRest(true), true);
   assert.equal(pencilAtRest(false), false);
 }, 60_000);
+
+test("in a side panel of any width the header and its row of tabs span the panel at the strip's inset, never the reading measure the views under them keep", () => {
+  for (const width of [900, 1400]) {
+    laid?.remove();
+    laid = layContainersAt({ "pull-request-header": width, "pull-request-tab": width });
+    document.body.innerHTML = [
+      '<div class="side-panel-content"><div class="file-view pull-request-tab">',
+      '<header class="pull-request-header"></header><div class="pull-request-tabs"></div>',
+      "</div></div>",
+    ].join("");
+    for (const selector of [".pull-request-header", ".pull-request-tabs"]) {
+      const style = getComputedStyle(document.querySelector(selector) ?? assert.fail(selector));
+      for (const side of [style.paddingLeft, style.paddingRight, style.paddingInline]) {
+        assert.doesNotMatch(side, /reading-room/u, `${selector} at ${width}px`);
+      }
+    }
+  }
+}, 30_000);
