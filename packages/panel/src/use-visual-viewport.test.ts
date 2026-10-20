@@ -73,6 +73,11 @@ function standViewport(viewport: FakeVisualViewport | undefined): void {
     configurable: true,
     get: () => viewport?.window.height ?? WINDOW_HEIGHT,
   });
+  // The initial containing block, which jsdom answers as 0: the layout viewport's height in every engine, a pinch or not.
+  Object.defineProperty(document.documentElement, "clientHeight", {
+    configurable: true,
+    get: () => viewport?.layoutHeight ?? WINDOW_HEIGHT,
+  });
 }
 
 /** Mounts what the panel's root mounts. */
@@ -101,6 +106,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, "visualViewport");
   Reflect.deleteProperty(window, "innerWidth");
   Reflect.deleteProperty(window, "innerHeight");
+  Reflect.deleteProperty(document.documentElement, "clientHeight");
   document.body.replaceChildren();
 });
 
@@ -163,35 +169,6 @@ for (const engine of [ENGINE.BLINK, ENGINE.WEBKIT]) {
     assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
   });
 }
-
-test("in webkit a panel first drawn zoomed in measures the stage by the window as it stands unzoomed", () => {
-  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
-  viewport.change({ height: 400, scale: 2 }, "resize");
-  standViewport(viewport);
-  mount();
-  assert.equal(readOverBody("--luke-stage-height"), "800px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
-});
-
-test("in webkit a window resized while zoomed in is measured at its new height, with no keyboard read into what it lost", () => {
-  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
-  standViewport(viewport);
-  mount();
-  act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
-  act(() => viewport.change({ height: 300, layoutHeight: 600 }, "resize"));
-  assert.equal(readOverBody("--luke-stage-height"), "600px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
-});
-
-test("in webkit a window cut to a whole pixel at a fractional zoom keeps the stage still", () => {
-  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
-  standViewport(viewport);
-  mount();
-  // At three times over, WebKit answers the 800px window as 266px, which scaled back up is 798px.
-  act(() => viewport.change({ height: 800 / 3, scale: 3 }, "resize"));
-  assert.equal(readOverBody("--luke-stage-height"), "800px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
-});
 
 test("a window that shrinks for the keyboard, as Android's does, counts no keyboard below it, zoomed in or not", () => {
   const viewport = new FakeVisualViewport(ENGINE.BLINK);

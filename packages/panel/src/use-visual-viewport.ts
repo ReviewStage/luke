@@ -22,13 +22,12 @@
  * focuses it, still lifts the composer, while the pinch and the pan alone
  * leave the layout as it was rather than re-laying it into the zoomed box.
  *
- * Note that WebKit sizes `innerWidth` and `innerHeight` to the visual
- * viewport under a pinch (WebKit bug 174362), where every other engine keeps
- * the layout viewport's, so there the window's height is its `innerHeight`
- * times the scale, which a window resized while zoomed changes and a pinch
- * does not. Where `innerWidth` still spans the zoomed box times its scale,
- * `innerHeight` is the layout viewport's, and a window that shrinks for the
- * keyboard (Android's `resizes-content`) is read as it is.
+ * The unzoomed reference is the initial containing block, the root's
+ * `clientHeight`, which no engine resizes under a pinch (where WebKit's
+ * `innerHeight` follows it) and which is the stage's own containing block. A
+ * window that shrinks for the keyboard (Android's `resizes-content`) shrinks
+ * it too, so no inset is read there; at the page's own scale `innerHeight`
+ * stays the reference, as before.
  */
 
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -44,32 +43,9 @@ const KEYBOARD_INSET = "--luke-keyboard-inset";
 /** How far from 1 a visual viewport's scale may stand and still be the page at its own scale, for a phone's rounding. */
 const UNZOOMED_TOLERANCE = 0.01;
 
-/**
- * Whether the window's `innerWidth` and `innerHeight` follow a pinch into
- * the visual viewport, as WebKit's do: its width is nearer the zoomed box's
- * than that box's width times the scale, which the layout viewport spans.
- */
-function windowFollowsPinch(viewport: VisualViewport): boolean {
-  const width = window.innerWidth;
-  return Math.abs(width - viewport.width) < Math.abs(width - viewport.width * viewport.scale);
-}
-
 /** Whether the page is drawn at its own scale rather than pinch-zoomed. */
 function unzoomed(viewport: VisualViewport): boolean {
   return Math.abs(viewport.scale - 1) <= UNZOOMED_TOLERANCE;
-}
-
-/**
- * The window's height while zoomed in. WebKit's `innerHeight` is the layout
- * viewport's over the scale, cut to a whole pixel, so scaled back up it may
- * fall short of the height by up to the scale: within that of the height
- * last known, the height last known stands, and past it the window was
- * resized.
- */
-function zoomedWindowHeight(viewport: VisualViewport, known: number): number {
-  if (!windowFollowsPinch(viewport)) return window.innerHeight;
-  const scaled = window.innerHeight * viewport.scale;
-  return Math.abs(scaled - known) <= viewport.scale ? known : Math.round(scaled);
 }
 
 /**
@@ -85,11 +61,8 @@ export function useVisualViewport(): void {
     const root = document.documentElement.style;
     /** Where the stage begins, as last measured at the page's own scale. */
     let top = 0;
-    /** The window's height as last known, zoomed in or not. */
-    let windowHeight = unzoomed(viewport)
-      ? window.innerHeight
-      : zoomedWindowHeight(viewport, window.innerHeight);
     const write = () => {
+      let layout: number;
       let bottom: number;
       if (unzoomed(viewport)) {
         // A panned viewport (`offsetTop`) is seen, not covered: what stands
@@ -97,14 +70,14 @@ export function useVisualViewport(): void {
         // keyboard's.
         const seen = visibleViewport();
         top = seen.top;
-        windowHeight = window.innerHeight;
+        layout = window.innerHeight;
         bottom = seen.bottom;
       } else {
-        windowHeight = zoomedWindowHeight(viewport, windowHeight);
+        layout = document.documentElement.clientHeight;
         // Note that rounding keeps a pinch's fractions from moving the stage by a pixel.
-        bottom = Math.min(windowHeight, top + Math.round(viewport.height * viewport.scale));
+        bottom = Math.min(layout, top + Math.round(viewport.height * viewport.scale));
       }
-      const inset = Math.max(0, windowHeight - bottom);
+      const inset = Math.max(0, layout - bottom);
       root.setProperty(VIEWPORT_TOP, `${top}px`);
       root.setProperty(STAGE_HEIGHT, `${bottom - top}px`);
       root.setProperty(KEYBOARD_INSET, `${inset}px`);
