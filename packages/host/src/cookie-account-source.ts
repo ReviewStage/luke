@@ -405,9 +405,10 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         if (!read.signedIn) {
           if (standing === undefined) return yield* Effect.as(settleNobody, undefined);
           const closing = yield* depart;
-          yield* settleOn(SIGNED_OUT);
-          yield* forgetDeparted;
-          return yield* Effect.forkIn(close(closing), sessionScope);
+          const steps = yield* Effect.exit(Effect.andThen(settleOn(SIGNED_OUT), forgetDeparted));
+          const moved = yield* Effect.forkIn(close(closing), sessionScope);
+          yield* steps;
+          return moved;
         }
         // The same person, drawn anew where anything of them changed.
         if (standing !== undefined && standing === signedInId(read.account)) {
@@ -496,9 +497,8 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   const leave: Effect.Effect<void> = Effect.uninterruptible(
     Effect.gen(function* () {
       const closing = yield* depart;
-      yield* settleOn(SIGNED_OUT);
-      yield* forgetDeparted;
-      yield* close(closing);
+      // The closing a departure registered is carried out however its steps end.
+      yield* Effect.ensuring(Effect.andThen(settleOn(SIGNED_OUT), forgetDeparted), close(closing));
     }),
   );
 
