@@ -1,29 +1,42 @@
 /**
- * turn-context.ts -- what a coding agent's turn opens with beside its session's prompt: the call's words and the task as it stands.
+ * turn-context.ts -- what a coding agent's turn opens with beside its session's prompt: the call's words, and the task as it stands as a message of its own.
  *
  * The session's prompt (`instructions.ts`) is composed once, as the session
- * starts, and stands for its life; a turn's own instruction is composed as
- * the turn opens and remembered by none (`apps/dev/instructions/prompt.ts`),
- * which is where what follows the kind of turn goes. A spoken turn is the
- * developer speaking on a call, through Luke's voice: it opens with the
+ * starts, and stands for its life; a turn's own system instruction is
+ * composed as the turn opens and remembered by none
+ * (`apps/dev/instructions/prompt.ts`). A spoken turn is the developer
+ * speaking on a call, through Luke's voice: its system instruction is the
  * words for a call, adapted from the brain's (`../brain-host/brain.ts`'s
  * `BRAIN_INSTRUCTIONS`): that every word is heard, how to speak, the
  * question queue, summarising rather than reading out, and never waiting;
  * an agent on a task is told too how to talk its plan through, since on a
- * call the agent is who the developer plans with. Then the task as it
- * stands (`../agent-runtime/standing-context.ts`), on every spoken turn,
- * and on a typed one only where someone other than the agent saved the
- * plan since the agent's previous turn started, so a typed turn reads no
- * more than it did before unless there is something new to read.
+ * call the agent is who the developer plans with. Those words are the same
+ * on every spoken turn, so the system message stays the same from turn to
+ * turn.
+ *
+ * The task as it stands (`../agent-runtime/standing-context.ts`) and the
+ * chat the agent has not read change from turn to turn, so they ride as a
+ * user-role message of the turn's own, which eve appends to the history
+ * after what came before (`apps/dev/instructions/turn-message.ts`): the
+ * provider's prompt cache then holds the system prompt, the tools, and the
+ * whole history from one turn to the next, where a turn's system
+ * instruction that changed would have sent the whole history again
+ * uncached. Each turn's message says the developer's time; the rest of the
+ * task only where it changed since the session last handed it, and the
+ * chat only where it holds what was not handed before, so the history
+ * grows by what is new rather than by the task again every turn.
  */
 
+import { createHash } from "node:crypto";
+import type { StoredTask } from "@luke/database/models/task-store";
+import type { Board } from "@luke/features/board-wire";
+import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
 } from "@luke/features/plan-template";
 import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** Each section of the default template as the developer reads it, what it holds, and when it is done. */
@@ -77,13 +90,46 @@ Write what was settled: what the developer said, what you found, and what you pr
 
 The plan is done when it is enough for a separate agent to build the change without coming back with a question: every section meets its bar or the developer agreed it does not apply, and every remaining choice they do not mind either way is stated as an assumption. Then queue nothing more, withdraw what is still queued, and say the plan is complete, with the working assumptions for them to hear.`;
 
-/** The line the task as it stands rides behind, by why the turn is handed it. */
-const STANDING_LEAD = {
-  [BRAIN_HOST_TURN.SPOKEN]:
-    "The task as it stands as this turn opens, handed to you as data on every spoken turn:",
-  [BRAIN_HOST_TURN.TYPED]:
-    "The plan was saved since your last turn by someone other than you. The task as it stands as this turn opens, handed to you as data:",
-} as const satisfies Record<BrainHostTurn, string>;
+/** The line a turn's message rides behind, by whether it holds the task or the time alone. */
+const TURN_MESSAGE_LEAD = {
+  TASK: "The task as it stands as this turn opens, handed to you as data because it is new to you or changed since you last read it:",
+  TIME: "The time as this turn opens, handed to you as data:",
+} as const;
+
+/**
+ * What a session has handed its agent in its turns' messages, as content
+ * addresses kept in eve's durable session state: the task, by the parts
+ * of it no save of the plan changes (`taskKey`), and the chat digest.
+ * Nothing yet for a session whose turns handed none.
+ */
+export interface TurnHanded {
+  readonly task?: string;
+  readonly chat?: string;
+}
+
+/** A content address: the same text always answers the same key. */
+export function contentKey(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/**
+ * The address of what a turn hands of the task beyond its plan: its name,
+ * brief, linked issues, open comment threads, and whiteboard. Note that the
+ * saved document, the agents' notes, and the sections the developer wrote
+ * are left out, because every save of the plan changes them, the agent's
+ * own among them; whether someone else saved is read from the plan's
+ * revisions (`savedByAnotherSince`).
+ */
+export function taskKey(
+  stored: StoredTask,
+  board: Board,
+  comments: readonly PlanCommentThread[],
+): string {
+  const { name } = stored.task;
+  return contentKey(
+    JSON.stringify([name, stored.brief ?? null, stored.issueLinks, comments, board]),
+  );
+}
 
 /** The words a spoken turn opens with: the call's, and how to talk the plan through for an agent on a task. */
 export function spokenTurnWords(onTask: boolean): string {
@@ -109,7 +155,12 @@ export function savedByAnotherSince(
   return revisions.some((revision) => revision.lastEdit.at > since && revision.agentId !== agentId);
 }
 
-/** The task as it stands, behind the line saying why this turn is handed it. */
-export function standingWithLead(turn: BrainHostTurn, standing: string): string {
-  return `${STANDING_LEAD[turn]}\n${standing}`;
+/** The task as it stands, behind the line saying it is new or changed. */
+export function taskWithLead(standing: string): string {
+  return `${TURN_MESSAGE_LEAD.TASK}\n${standing}`;
+}
+
+/** The time as the turn opens alone, where nothing of the task is new. */
+export function timeWithLead(standing: string): string {
+  return `${TURN_MESSAGE_LEAD.TIME}\n${standing}`;
 }

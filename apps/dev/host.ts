@@ -10,6 +10,7 @@ import {
   type ChatCall,
   type CoderHost,
   type CoderSessionPromptRecord,
+  type CoderTurnMessage,
   coderHost,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
@@ -35,6 +36,7 @@ import {
   taskToolsOf,
   turnToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
@@ -251,6 +253,28 @@ export function offeredChatTools(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return false;
       return yield* host.chatOffered(admitted.success, prompt);
+    }),
+  );
+}
+
+/**
+ * The message a turn opens with after the history, the turn named by its
+ * store id, and what the session has handed once it is (`CoderHost`'s `turnMessage`), for the turn's message
+ * file (`instructions/turn-message.ts`); nothing to hand for a session the
+ * host does not admit.
+ */
+export function turnMessage(
+  auth: SessionAuth,
+  sessionId: string,
+  turnId: string,
+  handed: TurnHanded,
+): Promise<CoderTurnMessage> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return { text: undefined, handed };
+      const turn = { kind: host.turnKind(auth), turnId };
+      return yield* host.turnMessage(admitted.success, turn, handed);
     }),
   );
 }

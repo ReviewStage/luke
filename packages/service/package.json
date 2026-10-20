@@ -94,6 +94,7 @@
     "./agents/coder-host/todos": "./src/agents/coder-host/todos.js",
     "./agents/coder-host/tool-set": "./src/agents/coder-host/tool-set.js",
     "./agents/coder-host/transcript": "./src/agents/coder-host/transcript.js",
+    "./agents/coder-host/turn-context": "./src/agents/coder-host/turn-context.js",
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
     "./agents/task-section-tools": "./src/agents/task-section-tools.js",

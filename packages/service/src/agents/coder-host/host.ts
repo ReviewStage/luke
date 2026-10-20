@@ -180,7 +180,15 @@ import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-imag
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
-import { savedByAnotherSince, spokenTurnWords, standingWithLead } from "./turn-context.js";
+import {
+  contentKey,
+  savedByAnotherSince,
+  spokenTurnWords,
+  type TurnHanded,
+  taskKey,
+  taskWithLead,
+  timeWithLead,
+} from "./turn-context.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -249,6 +257,18 @@ export interface CoderSessionPromptRecord extends SessionPromptRecord {
   readonly coAuthor?: string;
   readonly workspace?: string;
   readonly chatOn?: boolean;
+}
+
+/** The turn opening: its kind, as its request named it, and its store id. */
+export interface CoderTurn {
+  readonly kind: BrainHostTurn | undefined;
+  readonly turnId: string | undefined;
+}
+
+/** A turn's own message, where there is one to hand, and what the session has handed once it is. */
+export interface CoderTurnMessage {
+  readonly text: string | undefined;
+  readonly handed: TurnHanded;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -420,20 +440,35 @@ export interface CoderHost extends HostAdmission {
   /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
   turnKind(auth: SessionAuth): BrainHostTurn | undefined;
   /**
-   * What a turn of the kind given opens with as its own instruction, beside
-   * the session's prompt (`turn-context.ts`), the turn named by its store
-   * id: on a spoken turn, the call's words and the task as it stands; on a
-   * typed one, the task as it stands only where someone other than the
-   * agent saved the plan since its previous turn started; and on either, what the agent has not read in its workspace's
-   * chat (`chat.ts`), where its starter turned Chat on. Nothing where none
-   * of it stands or the conversation is no agent's. A read that fails is
-   * logged and leaves its part out, so the turn still opens.
+   * What a turn of the kind given opens with as its own system instruction,
+   * beside the session's prompt (`turn-context.ts`): the call's words on a
+   * spoken turn, the same on every one, so the system message a spoken turn
+   * sends does not change from turn to turn; nothing on a typed turn, or
+   * where the conversation is no agent's.
    */
   turnInstructions(
     admitted: AdmittedConversation,
     turn: BrainHostTurn | undefined,
-    turnId: string | undefined,
   ): Effect.Effect<string | undefined, never, DatabaseServices>;
+  /**
+   * What a turn opens with as a user-role message of its own, which eve
+   * appends to the history after what came before, so the system prompt,
+   * the tools, and the history stay the provider's cached prefix from one
+   * turn to the next (`turn-context.ts`): the developer's time on every
+   * turn; the task as it stands where someone other than the agent saved
+   * the plan since its previous turn started, or the rest of it is not what
+   * the session last handed (`handed`); and what the agent has not read in
+   * its workspace's chat (`chat.ts`), where its starter turned Chat on and
+   * the digest is not the one last handed. Answers what the session has
+   * handed once this message is, for the session to keep; nothing to hand
+   * where the conversation is no agent's. A read that fails is logged and
+   * leaves its part out, so the turn still opens.
+   */
+  turnMessage(
+    admitted: AdmittedConversation,
+    turn: CoderTurn,
+    handed: TurnHanded,
+  ): Effect.Effect<CoderTurnMessage, never, DatabaseServices>;
   /**
    * Runs one of the agent's public reads, the brain's own
    * (`../public-research.ts`): a search or a page read, under the turn's
@@ -787,69 +822,52 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     );
 
   /**
-   * The agent's task, read as the member whose turn this is, where the turn
-   * is handed it: a spoken turn always; a typed one only where a revision of
-   * the plan another writer made was saved after the agent's previous turn
-   * started, so a save made while that turn ran, which none of its steps may
-   * have read, is handed too; and never on the agent's first turn, whose
-   * first message the plan, or the prompt beside it, already is.
+   * The agent's task as the turn's message hands it (`turn-context.ts`), read
+   * as the member whose turn this is, and what the session has handed of it
+   * once this turn is (`taskKey`), or nothing for an agent on no task or one
+   * whose task is gone. The task is handed where a revision of the plan
+   * another writer made was saved after the agent's previous turn started,
+   * so a save made while that turn ran, which none of its steps may have
+   * read, is handed too; or where the rest of it is not what the session
+   * last handed; never on a typed first turn, whose first message the plan,
+   * or the prompt beside it, already is. The chat is left out, since the
+   * agent's own digest of it follows (`digestOf`). A read that fails is
+   * logged and hands nothing.
    */
-  const handedTask = (
+  const taskOf = (
     admitted: AdmittedConversation,
     agent: CodingAgent,
-    taskId: string,
-    turn: { readonly spoken: boolean; readonly turnId: string | undefined },
+    turn: CoderTurn,
+    handed: TurnHanded,
   ) =>
     Effect.gen(function* () {
-      if (!turn.spoken) {
-        const since = yield* previousTurnStart(admitted.target, turn.turnId);
-        if (since === undefined) return undefined;
-        const history = yield* listRevisions(admitted.caller, taskId);
-        if (!savedByAnotherSince(history.revisions, since, agent.id)) return undefined;
-      }
-      return Option.getOrUndefined(yield* readTask(admitted.caller, taskId));
-    });
-
-  /**
-   * The task as it stands as the turn opens (`../agent-runtime/standing-context.ts`),
-   * behind the line saying why the turn is handed it, or nothing where it is
-   * not: on a spoken turn the developer's time alone for an agent on no task
-   * or one whose task is gone. The chat is left out of it, since the agent's
-   * own digest of it follows (`digestOf`).
-   */
-  const standingOf = (
-    admitted: AdmittedConversation,
-    agent: CodingAgent,
-    spoken: boolean,
-    turnId: string | undefined,
-  ) =>
-    Effect.gen(function* () {
-      const turn = spoken ? BRAIN_HOST_TURN.SPOKEN : BRAIN_HOST_TURN.TYPED;
-      const clock = { now: seams.now(), timeZone: admitted.timeZone };
-      const stored =
-        agent.taskId === null
-          ? undefined
-          : yield* handedTask(admitted, agent, agent.taskId, { spoken, turnId });
-      if (stored === undefined) {
-        return spoken
-          ? standingWithLead(turn, standingContext(undefined, EMPTY_BOARD, NO_CHAT, clock))
-          : undefined;
-      }
-      const [board, comments] = yield* Effect.all(
+      const { taskId } = agent;
+      if (taskId === null) return undefined;
+      const [stored, board, comments, since] = yield* Effect.all(
         [
-          readBoard(admitted.caller, stored.task.id),
-          readPlanCommentThreads(admitted.caller, stored.task.id),
+          readTask(admitted.caller, taskId),
+          readBoard(admitted.caller, taskId),
+          readPlanCommentThreads(admitted.caller, taskId),
+          previousTurnStart(admitted.target, turn.turnId),
         ],
         { concurrency: "unbounded" },
       );
-      const text = standingContext(
-        stored,
-        Option.getOrElse(board, () => EMPTY_BOARD),
-        NO_CHAT,
-        clock,
-        Option.getOrElse(comments, () => []),
-      );
-      return standingWithLead(turn, text);
+      if (Option.isNone(stored)) return undefined;
+      const drawn = Option.getOrElse(board, () => EMPTY_BOARD);
+      const threads = Option.getOrElse(comments, () => []);
+      const key = taskKey(stored.value, drawn, threads);
+      const opening = since === undefined && turn.kind !== BRAIN_HOST_TURN.SPOKEN;
+      const saved =
+        since !== undefined &&
+        savedByAnotherSince(
+          (yield* listRevisions(admitted.caller, taskId)).revisions,
+          since,
+          agent.id,
+        );
+      if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
+      const clock = { now: seams.now(), timeZone: admitted.timeZone };
+      const text = taskWithLead(standingContext(stored.value, drawn, NO_CHAT, clock, threads));
+      return { key, text };
     }).pipe(
       Effect.tapError(logStoreFailure),
       Effect.catch(() => Effect.succeed(undefined)),
@@ -1225,25 +1243,41 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     turnKind: (auth) => turnKindOf(auth.current),
 
-    turnInstructions: (admitted, turn, turnId) =>
+    turnInstructions: (admitted, turn) =>
       Effect.gen(function* () {
+        if (turn !== BRAIN_HOST_TURN.SPOKEN) return undefined;
         const found = yield* agentOf(admitted).pipe(
           Effect.tapError(logStoreFailure),
           Effect.orElseSucceed(() => Result.fail(CODER_REFUSAL.NO_AGENT)),
         );
         if (Result.isFailure(found)) return undefined;
+        return spokenTurnWords(found.success.taskId !== null);
+      }),
+
+    turnMessage: (admitted, turn, handed) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.orElseSucceed(() => Result.fail(CODER_REFUSAL.NO_AGENT)),
+        );
+        if (Result.isFailure(found)) return { text: undefined, handed };
         const agent = found.success;
-        const spoken = turn === BRAIN_HOST_TURN.SPOKEN;
-        const [standing, digest] = yield* Effect.all(
-          [standingOf(admitted, agent, spoken, turnId), digestOf(admitted, agent)],
+        const [task, digest] = yield* Effect.all(
+          [taskOf(admitted, agent, turn, handed), digestOf(admitted, agent)],
           { concurrency: "unbounded" },
         );
-        const parts = [
-          ...(spoken ? [spokenTurnWords(agent.taskId !== null)] : []),
-          ...(standing === undefined ? [] : [standing]),
-          ...(digest === undefined ? [] : [digest]),
-        ];
-        return parts.length === 0 ? undefined : parts.join("\n\n");
+        const clock = { now: seams.now(), timeZone: admitted.timeZone };
+        const standing =
+          task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, NO_CHAT, clock));
+        // The digest is handed again only where it holds what the last one did not.
+        const chatKey = digest === undefined ? handed.chat : contentKey(digest);
+        const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
+        const taskHanded = task === undefined ? handed.task : task.key;
+        const next: TurnHanded = {
+          ...(taskHanded === undefined ? undefined : { task: taskHanded }),
+          ...(chatKey === undefined ? undefined : { chat: chatKey }),
+        };
+        return { text: [standing, ...chat].join("\n\n"), handed: next };
       }),
 
     showPage: (admitted, input, sandbox) =>
