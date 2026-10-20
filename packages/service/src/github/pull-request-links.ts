@@ -19,7 +19,12 @@
  * Note that the member is part of the key, because a repository no
  * installation reaches may be read on the member's own token, and what that
  * token reads is not another member's to see. Who may ask at all is checked
- * on every ask, before the kept answer is read.
+ * on every ask, before the kept answer is read, and so is whether the
+ * workspace's installation or the member's token still reaches the
+ * repository: through `GitHubApp`'s own kept reach and token, which read the
+ * store's links and the member's token on every ask and GitHub only when
+ * their own keeping lapses, so an installation disconnected or a token
+ * revoked stops the kept answer at once rather than when it lapses.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -114,7 +119,7 @@ const pullRequestOfLink = /* @__PURE__ */ Effect.fnUntraced(function* (
 export class PullRequestLinks extends Context.Service<
   PullRequestLinks,
   {
-    /** The pull request the key names, kept or read; a failure is logged where it was read, not here. */
+    /** The pull request the key names, kept or read, where the repository is still reached; a failure is logged where it was read, not by the caller. */
     readonly read: (
       key: PullRequestLinkKey,
     ) => Effect.Effect<GitHubPullRequestSummary | null, GitHubWorkspaceReadFailure, LinkServices>;
@@ -130,6 +135,16 @@ export const pullRequestLinksLayer: Layer.Layer<PullRequestLinks> = Layer.effect
         pullRequestOfLink(key).pipe(Effect.tapError(logWorkspaceReadFailure)),
       { capacity: KEPT_LINK.CAPACITY, requireServicesAt: "lookup", timeToLive: keptFor },
     );
-    return { read: (key) => Cache.get(kept, key) };
+    return {
+      read: (key) =>
+        Effect.gen(function* () {
+          const app = yield* GitHubApp;
+          const reached = yield* app
+            .repositoryPullRequestToken(key.workspaceId, key.repository, key.member)
+            .pipe(Effect.tapError(logWorkspaceReadFailure));
+          if (Option.isNone(reached)) return null;
+          return yield* Cache.get(kept, key);
+        }),
+    };
   }),
 );

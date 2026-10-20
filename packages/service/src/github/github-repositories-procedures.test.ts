@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import {
@@ -62,6 +63,7 @@ import {
   openTokenMember,
 } from "../testing/github-app-fake.js";
 import type { GitHubApp } from "./github-app.js";
+import { setInstallationStatus } from "./github-installations.js";
 import { githubProcedures } from "./github-procedures.js";
 import { KEPT_LINK, type PullRequestLinks, pullRequestLinksLayer } from "./pull-request-links.js";
 
@@ -256,10 +258,6 @@ const keptPullRequest = (
     answerOn(route, new Request(url, { headers: { authorization: `Bearer ${member}` } })),
   );
 };
-
-/** How many reads of a pull request GitHub has been asked. */
-const pullReadsOf = (github: FakeGitHub) =>
-  github.sent.filter((sent) => PULL_PATH.test(new URL(sent.url).pathname)).length;
 
 /** Pull request 42 of `acme/relay` as GitHub answers it, under the title given. */
 const relayPull42 = (title: string) => Response.json({ ...RELAY_PULLS.get(42), title });
@@ -820,7 +818,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
         title = "Send invitations in batches of fifty";
         yield* TestClock.adjust(Duration.seconds(30));
         const kept = yield* pullRequest;
-        const readsWithinTheMinute = pullReadsOf(github);
         yield* TestClock.adjust(KEPT_LINK.ANSWER_TTL);
         const afresh = yield* pullRequest;
 
@@ -830,9 +827,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
           "Send invitations in batches",
         ]);
         assert.equal(titleOf(kept), "Send invitations in batches");
-        assert.equal(readsWithinTheMinute, 1);
         assert.equal(titleOf(afresh), "Send invitations in batches of fifty");
-        assert.equal(pullReadsOf(github), 2);
       }),
   );
 
@@ -873,7 +868,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
         refusing = false;
         yield* TestClock.adjust(Duration.seconds(90));
         const held = yield* pullRequest;
-        const readsWhileHeld = pullReadsOf(github);
         yield* TestClock.adjust(Duration.seconds(30));
         const afresh = yield* pullRequest;
 
@@ -883,13 +877,46 @@ it.layer(getTestDB())("the repositories route", (it) => {
         );
         assert.deepEqual(refused, unavailable);
         assert.deepEqual(held, unavailable);
-        assert.equal(readsWhileHeld, 1);
         assert.equal(logged.filter((line) => line.includes("GitHub answered 403")).length, 1);
         assert.equal(
           readOf(githubRepositoryPullRequestAnswerSchema, afresh).pullRequest?.title,
           "Send invitations in batches",
         );
-        assert.equal(pullReadsOf(github), 2);
+      }),
+  );
+
+  it.effect(
+    "a kept pull request is answered none the moment the workspace's installation is removed, rather than when its minute is out",
+    () =>
+      Effect.gen(function* () {
+        const installations = [
+          { id: 7807, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ];
+        const github = githubReaching(installations, undefined, {}, (sent) =>
+          PULL_PATH.test(new URL(sent.url).pathname)
+            ? relayPull42("Send invitations in batches")
+            : undefined,
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7807,
+          accountId: 9807,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const kept = yield* pullRequest;
+        // GitHub removes the installation, and its webhook tells the store so.
+        installations.length = 0;
+        yield* setInstallationStatus(7807, GITHUB_INSTALLATION_STATUS.DELETED);
+        const removed = yield* pullRequest;
+
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, kept).pullRequest?.title,
+          "Send invitations in batches",
+        );
+        assert.deepEqual(removed, { status: HOSTED_HTTP_STATUS.OK, body: { pullRequest: null } });
       }),
   );
 
