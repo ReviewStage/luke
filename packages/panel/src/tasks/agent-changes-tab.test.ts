@@ -40,7 +40,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
-import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
+import {
+  type DiffListProps,
+  type DiffViewModule,
+  GAP_CONTROL,
+  GAP_CONTROL_ATTRIBUTE,
+} from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import {
@@ -2042,24 +2047,32 @@ test("a file whose read is refused closes its gaps and says why, once, above its
   );
 });
 
-test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+test("a gap's control under the pointer or the keyboard's focus hangs its hint, what it opens, and a press lets it go", async () => {
   files = [changed("src/seats.ts")];
   await drawTab();
-  const hintOver = (long: boolean) => {
-    const wrapper = listBox().appendChild(document.createElement("div"));
-    wrapper.setAttribute("data-separator-wrapper", "");
-    const arrow = wrapper.appendChild(document.createElement("div"));
-    arrow.setAttribute("data-expand-button", "");
-    if (long)
-      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
-    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
-    const words = document.querySelector('[role="tooltip"]')?.textContent;
-    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
-    wrapper.remove();
-    return words;
-  };
-  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
-  assert.equal(hintOver(false), "Show these lines");
+  const band = listBox().appendChild(document.createElement("div"));
+  const words = band.appendChild(document.createElement("span"));
+  words.setAttribute(GAP_CONTROL_ATTRIBUTE, GAP_CONTROL.ALL);
+  words.setAttribute("aria-label", "Show all 51 lines");
+  words.tabIndex = 0;
+  const arrow = band.appendChild(document.createElement("div"));
+  arrow.setAttribute(GAP_CONTROL_ATTRIBUTE, GAP_CONTROL.MORE);
+  arrow.setAttribute("aria-label", "Show 20 more lines");
+  arrow.tabIndex = 0;
+  const hint = () => document.querySelector('[role="tooltip"]')?.textContent;
+
+  act(() => words.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  assert.equal(hint(), "Show all 51 lines");
+  act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  assert.equal(hint(), "Show 20 more lines");
+  act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.equal(hint(), undefined);
+
+  act(() => words.focus());
+  assert.equal(hint(), "Show all 51 lines");
+  act(() => words.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  assert.equal(hint(), undefined);
+  band.remove();
 });
 
 test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {

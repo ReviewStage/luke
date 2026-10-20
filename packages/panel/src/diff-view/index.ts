@@ -35,6 +35,8 @@ import {
   type DiffViewHandle,
   type DiffViewModule,
   type DiffViewProps,
+  GAP_CONTROL,
+  GAP_CONTROL_ATTRIBUTE,
   GAP_LINES,
   sameLines,
   sameListSelection,
@@ -42,6 +44,7 @@ import {
   sameNotes,
 } from "./contract.js";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
+import { watchGapControls } from "./gap-controls.js";
 import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
@@ -93,8 +96,9 @@ import { wholeOf } from "./whole-diff.js";
  * out. One diff alone offers no way to show them, since only its patch is
  * at hand; an excerpt, a review thread's lines, says nothing of the lines
  * around it. A list whose view reads its files whole (`readTexts`) offers
- * them as GitHub's diff does, twenty lines up or down or all at once, the
- * file read the first time one of its gaps is opened
+ * them as GitHub's diff does, each arrow twenty lines up or down and the
+ * gap's words all of it at once, alike on every gap (`./gap-controls.ts`),
+ * the file read the first time one of its gaps is opened
  * (`expansionOptions`). The view is told which lines between a file's
  * hunks it waits to put a note under the file draws, as a gap opens over
  * them (`./drawn-lines.ts`): read as each file is drawn, since Pierre keeps
@@ -183,12 +187,14 @@ const LOOK_CSS = `
   [data-utility-button] {
     margin-right: 0;
   }
-  /* A band between hunks is one surface across its width: Pierre fills
+  /* A band between hunks is one calm surface across its width: Pierre fills
      the band's row with the code's ground and its arrows and its words
      with the band's, a box pasted onto a strip. Its row takes the band's
      ground, the arrows and the words stand on it with no ground of their
-     own, and only the arrow fills under the pointer; the words, a bigger
-     target opening the same lines, lift their ink. */
+     own, and the band itself answers no pointer. Only its controls do,
+     alike on every gap (\`./gap-controls.ts\`): an arrow, opening the next
+     lines, fills its own cell, and the words, opening the whole gap, lift
+     their ink to the code's, with no underline. */
   [data-separator="line-info-basic"] [data-separator-wrapper] {
     /* Pierre's own band ground, which a list sets (LIST_CSS). */
     background-color: var(--diffs-bg-separator, var(--luke-color-fill-hover));
@@ -198,30 +204,34 @@ const LOOK_CSS = `
     background-color: transparent;
     border: 0;
   }
-  [data-separator="line-info-basic"] [data-expand-button]:hover {
+  [data-separator="line-info-basic"] [data-separator-content]:hover {
+    cursor: auto;
+    text-decoration: none;
+  }
+  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.MORE}"]:hover {
     background-color: var(--luke-color-fill-pressed);
   }
-  /* The words open what the arrow opens: Pierre opens a gap's both ends
-     from its words, which at the file's top or foot is not the arrow's, so
-     the words let the pointer through to the arrow, whose press reaches
-     across the band. A gap of two arrows keeps its words' own press,
-     which opens both of its ends, so neither arrow is covered. */
-  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
-    [data-separator-content] {
-    pointer-events: none;
+  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"] {
+    cursor: pointer;
   }
-  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
-    [data-expand-button]::after {
-    content: "";
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    /* The arrow's column stands in the gutter alone, its words running on
-       past it over the code, so its press runs the file's width. */
-    width: 100cqi;
+  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:hover {
+    /* The code's own ink, as an arrow's lifts under the pointer. */
+    color: var(--diffs-fg, var(--luke-color-text));
   }
-  [data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-separator-content] {
-    color: var(--luke-color-text-muted);
+  /* The window's one focus ring (\`styles/base.css\`), which reaches no
+     shadow root, drawn inside the band, whose card clips what stands past
+     it, and only once the keyboard has moved the focus. */
+  [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  }
+  /* The words stand inside the band with room around them, so their ring stands clear of them, as the window's does. */
+  [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:focus-visible {
+    border-radius: var(--luke-focus-ring-width);
+    outline-offset: var(--luke-focus-ring-offset);
+  }
+  :host-context(:root:not([data-keyboard="true"])) [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
+    outline: none;
   }
   /* Lines lit, a comment's or a thread's, light their own rows alone: a
      note under them, the comment being written or a thread, keeps its own
@@ -569,7 +579,7 @@ function expansionOptions(
 function listOptions(
   drawn: DiffLook,
   latest: () => DiffListProps,
-  dress: (element: HTMLElement, path: string) => void,
+  dress: (element: HTMLElement, path: string, phase: PostRenderPhase) => void,
   /** Told each file drawn, as Pierre draws it, to read which of its hidden lines it draws. */
   drawnBy: (path: string, instance: PierreFileDiff<string, undefined>) => void,
   commentable: (path: string) => boolean,
@@ -599,7 +609,7 @@ function listOptions(
       phase: PostRenderPhase,
       context: { item: { id: string } },
     ) => {
-      dress(node, context.item.id);
+      dress(node, context.item.id, phase);
       if (phase !== "unmount" && instance instanceof PierreFileDiff) {
         drawnBy(context.item.id, instance);
       }
@@ -689,7 +699,19 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   // Note that Pierre keeps a file's element for another file once the first
   // scrolls away, so each element's shadow root is dressed once, the first
   // time it is drawn, and whether it is drawn as notes alone every time.
-  const dress = (element: HTMLElement, path: string) => {
+  // Each drawn file's gaps watched for their controls (\`./gap-controls.ts\`), and let go as Pierre lets the file go, until its element draws a file again.
+  const gapWatches = new Map<HTMLElement, () => void>();
+  const watchGaps = (element: HTMLElement, phase: PostRenderPhase) => {
+    const watching = gapWatches.get(element);
+    if (phase === "unmount") {
+      watching?.();
+      gapWatches.delete(element);
+    } else if (watching === undefined && element.shadowRoot !== null) {
+      gapWatches.set(element, watchGapControls(element.shadowRoot));
+    }
+  };
+  const dress = (element: HTMLElement, path: string, phase: PostRenderPhase) => {
+    watchGaps(element, phase);
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
     if (dressed.has(element) || element.shadowRoot === null) return;
@@ -851,6 +873,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       unsubscribe();
       view.cleanUp();
       for (const release of releases) release();
+      for (const stop of gapWatches.values()) stop();
+      gapWatches.clear();
       host.replaceChildren();
     },
   };
