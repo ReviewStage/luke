@@ -128,6 +128,7 @@
     "./automations/automation-sweep": "./src/automations/automation-sweep.js",
     "./automations/automation-webhook-app": "./src/automations/automation-webhook-app.js",
     "./chapters/chapters-generator": "./src/chapters/chapters-generator.js",
+    "./chapters/chapters-function": "./src/chapters/chapters-function.js",
     "./db": "./src/db/index.js",
     "./db/sql-client": "./src/db/sql-client.js",
     "./dictation/transcription": "./src/dictation/transcription.js",

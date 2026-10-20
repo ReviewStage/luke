@@ -9,6 +9,8 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -442,6 +444,51 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
 
   await act(() => tab.control().readChanges(AGENT));
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
+});
+
+test("a pull request's chapters are read and generated for the agent's own pull request or the one a tab names by its number, and an ask the port refused is heard as unanswered", async () => {
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  const none = {
+    pullRequest: {
+      number: 41,
+      headSha: "c0ffee1",
+      generatable: true,
+      chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+    },
+  };
+  const generating = {
+    pullRequest: {
+      ...none.pullRequest,
+      chapters: {
+        status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
+        headSha: "c0ffee1",
+        baseSha: "ba5e000",
+        startedAt: 1_800_000_000_000,
+      },
+    },
+  };
+  tab.answer(ACT_KIND.CHAPTERS_READ, none, none);
+  tab.answer(ACT_KIND.CHAPTERS_GENERATE, generating);
+  await tab.mount();
+
+  assert.deepEqual(await tab.control().readChapters(AGENT), none);
+  assert.deepEqual(await tab.control().readChapters(AGENT, 41), none);
+  assert.deepEqual(await tab.control().generateChapters(AGENT, 41), generating);
+  // Nothing more is queued, so the port refuses this one.
+  assert.deepEqual(await tab.control().generateChapters(AGENT), {
+    failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
+  });
+  assert.deepEqual(
+    tab.asked.filter(
+      ({ kind }) => kind === ACT_KIND.CHAPTERS_READ || kind === ACT_KIND.CHAPTERS_GENERATE,
+    ),
+    [
+      { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT } },
+      { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT, number: 41 } },
+      { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT, number: 41 } },
+      { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT } },
+    ],
+  );
 });
 
 test("a pull request a tab names by its number is read with its number and kept by agent and number apart from the agent's own; an older read landing last keeps the newer, and one naming none lets it go", async () => {

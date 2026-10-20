@@ -63,6 +63,7 @@ export const HOSTED_DEADLINE = {
   USUAL: "usual",
   HELD: "held",
   START: "start",
+  CHAPTERS: "chapters",
 } as const;
 
 export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLINE];
@@ -70,11 +71,14 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
 /**
  * The deadlines longer than the usual one, which is the account call's own
  * default or the one a client keeps: a held read's is the service's hold and
- * room for the answer to travel after it, and a Start's outlasts the copy.
+ * room for the answer to travel after it, a Start's outlasts the copy, and a
+ * Generate of a pull request's chapters outlasts the function it runs in
+ * (`@luke/service/chapters/chapters-function`'s 240 seconds).
  */
 const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
   [HOSTED_DEADLINE.START]: 120_000,
+  [HOSTED_DEADLINE.CHAPTERS]: 250_000,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 
 /** The content type the link names a JSON body with, which the account call writes itself. */

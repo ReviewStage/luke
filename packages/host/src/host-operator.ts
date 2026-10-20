@@ -144,6 +144,11 @@ import {
 } from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
+  type PullRequestChaptersAnswerView,
+  type PullRequestChaptersParams,
+  pullRequestChaptersAnswerViewSchema,
+} from "@luke/features/pull-request-chapters-view";
+import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TasksArchiveParams,
@@ -593,6 +598,14 @@ export interface HostOperator {
   codingAgentPullRequest(
     params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
+  pullRequestChapters(
+    params: PullRequestChaptersParams,
+  ): Effect.Effect<PullRequestChaptersAnswerView>;
+  /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
+  pullRequestChaptersGenerate(
+    params: PullRequestChaptersParams,
+  ): Effect.Effect<PullRequestChaptersAnswerView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
     params: CodingAgentPullRequestReadParams,
@@ -757,6 +770,13 @@ interface HostOperatorOptions {
 function pullRequestRead(
   params: CodingAgentPullRequestReadParams,
 ): CodingAgentPullRequestReadParams {
+  return params.number === undefined
+    ? { agentId: params.agentId }
+    : { agentId: params.agentId, number: params.number };
+}
+
+/** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
+function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
   return params.number === undefined
     ? { agentId: params.agentId }
     : { agentId: params.agentId, number: params.number };
@@ -1762,6 +1782,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
+      ),
+    pullRequestChapters: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
+        codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
+      ),
+    pullRequestChaptersGenerate: (params) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE,
+          pullRequestChaptersRead(params),
+        ),
+        codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(

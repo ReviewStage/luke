@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ADMIN_ERROR } from "@luke/features/admin-wire";
 import { HOSTED_ERRORS, type hostedContract } from "@luke/features/contract";
+import { CHAPTERS_BOUNDS } from "@luke/service/chapters/chapters-generator";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { HostedContext } from "@luke/service/orpc/base";
 import { hostedFetch } from "@luke/service/orpc/handler";
@@ -29,10 +30,11 @@ import { HTTP_METHOD } from "@luke/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
-import { Effect, Schema } from "effect";
+import { Duration, Effect, Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { hostedProcedureRoutes, type ProcedureRoute } from "../server/api-callers.js";
 import { ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
+import { functionDefinitions } from "../server/function-durations.js";
 import { apiRewrites } from "../server/function-rewrites.js";
 import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
@@ -417,4 +419,21 @@ test("every procedure the contract declares is reached through the committed fal
       procedure.key.join("."),
     );
   }
+});
+
+test("a pull request's chapters are reached at their public path through the committed table, in a function that outlasts a generation, an unsigned caller refused on both methods", async () => {
+  const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
+  const routes = new Map([["agents/chapters", orpcRoute]]);
+  for (const method of [HTTP_METHOD.GET, HTTP_METHOD.POST]) {
+    const unsigned = await dispatched(
+      new Request(`${ORIGIN}/api/agents/${agent}/chapters?number=7`, { method }),
+      routes,
+    );
+    assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, method);
+    assert.equal(await unsigned.text(), '{"error":"invalid-token"}', method);
+  }
+  const serving = functionDefinitions(["agents/chapters", "models"]).find((definition) =>
+    definition.routes.includes("agents/chapters"),
+  );
+  assert.ok((serving?.maxDuration ?? 0) > Duration.toSeconds(CHAPTERS_BOUNDS.TIMEOUT));
 });

@@ -34,6 +34,10 @@
           "dest": "/api/default.js?route=agents/github-image&id=$1"
         },
         {
+          "src": "/api/agents/([^/]+)/chapters",
+          "dest": "/api/pull-request-chapters.js?route=agents/chapters&route-path=agents/$1/chapters"
+        },
+        {
           "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
           "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
         },

@@ -1,3 +1,4 @@
+import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
 import type { AutomationTriggerKind } from "@luke/features/automation-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
@@ -14,8 +15,8 @@ import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
  * It holds to the desktop's counted events' rule
  * (`@luke/features/analytics`'s `product-events.ts`): an event is a name from
  * this file, and every property is one of this file's fixed words, a boolean,
- * or an id from a catalog the service itself checked (a provider, a model, an
- * effort). Nothing typed, nothing a model wrote, and no title, branch,
+ * a count, or an id from a catalog the service itself checked (a provider, a
+ * model, an effort). Nothing typed, nothing a model wrote, and no title, branch,
  * repository, prompt, or row id has a property it could travel in, which the
  * types below enforce at each call site.
  *
@@ -32,6 +33,7 @@ export const SERVER_EVENT = {
   INBOX_ANSWER_SEND: "inbox:answer_send",
   CHAT_MESSAGE_SEND: "chat:message_send",
   AUTOMATION_CREATE: "automation:create",
+  PULL_REQUEST_CHAPTERS_GENERATE: "pull_request:chapters_generate",
   INTEGRATION_CONNECTION_CREATE: "integration:connection_create",
   INTEGRATION_CONNECTION_DELETE: "integration:connection_delete",
   WORKSPACE_CREATE: "workspace:create",
@@ -56,6 +58,12 @@ export const SERVER_AGENT_START_KIND = {
 export const SERVER_PULL_REQUEST_OPENER = {
   DEVELOPER: "developer",
   APP: "app",
+} as const;
+
+/** How a generation of a pull request's chapters came out: made, or the store's word for why it failed. */
+export const SERVER_CHAPTERS_OUTCOME = {
+  READY: "ready",
+  ...PULL_REQUEST_CHAPTERS_FAILURE,
 } as const;
 
 type Values<T> = T[keyof T];
@@ -85,6 +93,13 @@ interface ServerEventProperties {
   [SERVER_EVENT.INBOX_ANSWER_SEND]: Record<string, never>;
   [SERVER_EVENT.CHAT_MESSAGE_SEND]: { is_reply: boolean };
   [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: AutomationTriggerKind };
+  /** Counts alone: how many chapters and hunks a generation told, how long it took, and how it came out. */
+  [SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE]: {
+    outcome: Values<typeof SERVER_CHAPTERS_OUTCOME>;
+    chapters: number;
+    hunks: number;
+    duration_ms: number;
+  };
   [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: IntegrationProvider };
   [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: IntegrationProvider };
   [SERVER_EVENT.WORKSPACE_CREATE]: Record<string, never>;

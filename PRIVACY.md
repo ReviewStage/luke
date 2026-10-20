@@ -468,7 +468,25 @@ GitHub's own image proxy, each up to 8 MB; other images are shown as links.
 Files changed reads each changed file's name and patch, for up to 300 files,
 leaving out a patch over 100,000 characters. It stores none of it, and Luke
 holds it in memory while the tab is open, never on disk, except that
-downloading a patch writes it where you save it. A button in the tab that
+downloading a patch writes it where you save it. Chapters splits the pull
+request into chapters only when a member presses Generate chapters, or
+Regenerate once its head has moved on; nothing makes them on its own. Our
+service then reads the pull request's title, description, the messages of up
+to its first 100 commits, and each changed file's patch as Files changed
+reads them, and sends all of it, except the patches of files a reader reads
+past (lockfiles, minified files, source maps, snapshots, images, fonts,
+videos, and documents) and of files with no patch to read, to Anthropic's fast Claude model on our own key, never yours
+and never counted in your daily usage, as described under "Who we send it to".
+It stores the chapters that come back with the workspace, for that repository,
+pull request, and head commit, beside which member asked, when, the model
+that answered, and why a generation failed where one did: each chapter's
+title, summary, risk and reasons, the questions it puts to a reviewer, and the
+file paths and line numbers it covers, never a patch, the description, or a
+commit message. Every member of the workspace who can reach the repository
+sees them, and a Generate for the same head replaces them. They are deleted
+when the workspace is; nothing else deletes them, so they stay after the pull
+request closes, after a newer head's chapters are made, and after the member
+who asked deletes their account, which only clears who asked. A button in the tab that
 changes the pull request, such as Ready for review, Convert to draft, Merge,
 Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
@@ -913,8 +931,9 @@ a task or a workspace made (with where it was started from and whether from an i
 it runs on, and whether an automation started it), a pull request an agent
 opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
 answered, a Chat message you posted, an issue filed, an automation made (with
-what triggers it), and an integration connected or disconnected (with which
-provider). These counts are event names and values from a fixed list too, and
+what triggers it), an integration connected or disconnected (with which
+provider), and a pull request's chapters generated (with how it came out, how
+many chapters and parts of the diff they hold, and how long it took). These counts are event names and values from a fixed list too, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
@@ -1142,6 +1161,15 @@ only when you press Send.
 - Sentry, for the Mac app's and Luke in a browser's crash and performance
   reports, and our service's and Luke's agents' error, performance, log, and
   agent reports, described above.
+- Anthropic, for a pull request's chapters. Pressing Generate chapters in a
+  coding agent's Pull request tab sends the pull request's title, description,
+  commit messages, and patches, except those of files a reader reads past, to
+  Anthropic's fast Claude model from our service, on our key, in at most two
+  calls (the second places the parts of the diff the first left out), as
+  described under "A coding agent's pull request". Our service logs only how a
+  generation failed, by its kind, and counts its outcome as described under
+  "Usage data"; Anthropic keeps the request and its reply under its own
+  retention policy.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)

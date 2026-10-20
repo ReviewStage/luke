@@ -76,6 +76,8 @@
     "./tasks-view": "./src/tasks-view.js",
     "./pull-request-write-wire": "./src/pull-request-write-wire.js",
     "./pull-request-chapters": "./src/pull-request-chapters.js",
+    "./pull-request-chapters-wire": "./src/pull-request-chapters-wire.js",
+    "./pull-request-chapters-view": "./src/pull-request-chapters-view.js",
     "./diff-hunks": "./src/diff-hunks.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./github-token-wire": "./src/github-token-wire.js",

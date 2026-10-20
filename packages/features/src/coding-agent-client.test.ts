@@ -14,6 +14,8 @@ import {
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
 } from "./provider-key-wire.js";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
+import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -642,5 +644,58 @@ it.effect(
       assert.deepEqual(read, live);
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a pull request's chapters are read by the tab's number and generated with it in the query, each refusal the tab acts on read as its own failure",
+  () =>
+    Effect.gen(function* () {
+      const path = `/api/agents/${AGENT_ID}/chapters`;
+      const answer = {
+        pullRequest: {
+          number: 7,
+          headSha: "c0ffee1",
+          generatable: true,
+          chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET ${path}`]: { answer: () => answer },
+        [`POST ${path}`]: { answer: () => answer },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID, 7), api.layer), answer);
+      assert.deepEqual(
+        yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
+        answer,
+      );
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID), api.layer), answer);
+      assert.deepEqual(
+        api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
+        [`GET ${path}?number=7`, `POST ${path}?number=7`, `GET ${path}`],
+      );
+      assert.equal(api.requests()[1]?.body ?? "", "");
+
+      const refusals = [
+        [HOSTED_API_ERROR.NOT_FOUND, PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND],
+        [
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+          PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        ],
+        [HOSTED_API_ERROR.GITHUB_UNANSWERED, PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED],
+        [HOSTED_API_ERROR.UNAVAILABLE, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE],
+        [HOSTED_API_ERROR.INVALID_REQUEST, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          [`POST ${path}`]: { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
+        });
+        assert.deepEqual(
+          yield* Effect.provide(client().generateChapters(AGENT_ID), refusing.layer),
+          { failure },
+          error,
+        );
+      }
     }),
 );

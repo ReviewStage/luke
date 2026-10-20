@@ -36,6 +36,10 @@ import {
   automationsProcedures,
 } from "../automations/automations-procedures.js";
 import {
+  type PullRequestChaptersProcedureSeams,
+  pullRequestChaptersProcedures,
+} from "../chapters/pull-request-chapters-procedures.js";
+import {
   type DictationProcedureSeams,
   dictationProcedures,
 } from "../dictation/dictation-procedures.js";
@@ -96,6 +100,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
   PlanCommentsProcedureSeams &
+  PullRequestChaptersProcedureSeams &
   RepositoryPinsProcedureSeams &
   TaskFilesProcedureSeams &
   TaskSectionsProcedureSeams &
@@ -128,6 +133,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     models: modelsProcedures(seams),
     planComments: planCommentsProcedures(seams),
     plans: tasksProcedures(seams),
+    pullRequestChapters: pullRequestChaptersProcedures(published),
     repositoryPins: repositoryPinsProcedures(seams),
     taskFiles: taskFilesProcedures(seams),
     taskSections: taskSectionsProcedures(seams),
