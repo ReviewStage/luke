@@ -49,7 +49,12 @@ const CREDENTIAL = {
   MEMBER: {
     token: Redacted.make("member-token-fixture"),
     fullName: "Acme/Relay",
-    access: { kind: GITHUB_ACCESS.TOKEN, githubLogin: "octo-member", githubUserId: "4242" },
+    access: {
+      kind: GITHUB_ACCESS.TOKEN,
+      githubLogin: "octo-member",
+      githubUserId: "4242",
+      markInvalid: Effect.void,
+    },
   },
 } as const;
 

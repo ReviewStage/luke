@@ -362,11 +362,11 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
 
         assert.equal(Redacted.value(credential.token), GITHUB_FIXTURE_MEMBER.TOKEN);
-        assert.deepEqual(credential.access, {
-          kind: GITHUB_ACCESS.TOKEN,
-          githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
-          githubUserId: GITHUB_FIXTURE_MEMBER.ID,
-        });
+        assert.ok(credential.access.kind === GITHUB_ACCESS.TOKEN);
+        assert.deepEqual(
+          [credential.access.githubLogin, credential.access.githubUserId],
+          [GITHUB_FIXTURE_MEMBER.LOGIN, GITHUB_FIXTURE_MEMBER.ID],
+        );
         assert.deepEqual(sandbox.identities, [
           {
             name: MEMBER.name,

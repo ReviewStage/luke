@@ -351,7 +351,12 @@ it.effect(
           sandbox.setCredential(RUNNING_SESSION, {
             token: Redacted.make(MEMBER_TOKEN),
             fullName: REPOSITORY,
-            access: { kind: GITHUB_ACCESS.TOKEN, githubLogin: "octo-member", githubUserId: "4242" },
+            access: {
+              kind: GITHUB_ACCESS.TOKEN,
+              githubLogin: "octo-member",
+              githubUserId: "4242",
+              markInvalid: Effect.void,
+            },
           }),
           sandbox.withdrawCredential(RUNNING_SESSION),
         ),
