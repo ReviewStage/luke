@@ -232,7 +232,9 @@ function namedLink(
 }
 
 /**
- * The change a call asks of a task's links, against the links it holds:
+ * The change a call asks of a task's links, against the links it holds,
+ * `#N` naming an issue it links of the repository it stands on now and an
+ * issue to link of the one it stands on once the call changes it:
  * each issue to unlink or relate found among them, each issue to link that
  * it does not link yet read from its provider, and one it links already
  * related where the call names another keyword for it; or the refusal's
@@ -242,13 +244,13 @@ function namedLink(
 export const issueChangesOf = (
   organizationId: string,
   links: readonly TaskIssueLink[],
-  repository: string | null,
+  repositories: { readonly standing: string | null; readonly changed: string | null },
   asked: TaskIssueChangesAsked,
 ) =>
   Effect.gen(function* () {
     const unlink: string[] = [];
     for (const named of asked.unlinkIssues ?? []) {
-      const link = namedLink(links, named, repository);
+      const link = namedLink(links, named, repositories.standing);
       if (Result.isFailure(link)) return Result.fail(link.failure);
       if (!unlink.includes(link.success.id)) unlink.push(link.success.id);
     }
@@ -259,12 +261,12 @@ export const issueChangesOf = (
       }
     };
     for (const { issue, relation } of asked.relateIssues ?? []) {
-      const link = namedLink(links, issue, repository);
+      const link = namedLink(links, issue, repositories.standing);
       if (Result.isFailure(link)) return Result.fail(link.failure);
       relating(link.success, relation);
     }
     const linkItems = asked.linkIssues ?? [];
-    const choices = issueChoicesOf(linkItems, repository);
+    const choices = issueChoicesOf(linkItems, repositories.changed);
     if (Result.isFailure(choices)) return Result.fail(choices.failure);
     const fresh: { item: TaskIssueItem; choice: TaskIssueChoice }[] = [];
     for (const [index, choice] of choices.success.entries()) {

@@ -1951,13 +1951,16 @@ export function runUpdateTask(
         ...changes,
         ...(repository === undefined ? undefined : { repository: repository.success }),
       };
-      // Every issue to link is read from its provider before anything is written, `#N` of the
-      // repository the task stands on once the call changes it.
+      // Every issue to link is read from its provider before anything is written; `#N` names a link
+      // of the repository the task stands on now, and an issue to link of the one the call leaves it on.
       const relinked = relinking
         ? yield* issueChangesOf(
             workspace.value,
             read.value.issueLinks,
-            repository === undefined ? read.value.task.repository : repository.success,
+            {
+              standing: read.value.task.repository,
+              changed: repository === undefined ? read.value.task.repository : repository.success,
+            },
             issuesAsked,
           )
         : undefined;

@@ -1248,10 +1248,20 @@ it.layer(getTestDB())("the plan routes", (it) => {
           state: "open",
           reason: "reopened",
         };
+        // Linear answers its issue in progress, until it answers it renamed and naming no state.
+        const linear = { title: LINEAR_ISSUE.title, state: { name: "In Progress" } as const };
+        let linearStated = true;
         const github = githubReaching([relay], undefined, {}, (sent) => {
           if (sent.url === "https://api.linear.app/graphql") {
             return Response.json({
-              data: { issue: { ...LINEAR_ISSUE, state: { name: "In Progress" }, assignee: null } },
+              data: {
+                issue: {
+                  ...LINEAR_ISSUE,
+                  title: linear.title,
+                  state: linearStated ? linear.state : null,
+                  assignee: null,
+                },
+              },
             });
           }
           const numbered = /^\/repos\/acme\/relay\/issues\/(\d+)$/u.exec(
@@ -1382,6 +1392,19 @@ it.layer(getTestDB())("the plan routes", (it) => {
           assert.fail("the plan was not read"),
         );
         assert.equal(stored.issueLinks[0]?.title, "Invitations expire after an hour");
+
+        // A Linear issue renamed and naming no state is drawn renamed, with no state.
+        linear.title = "Invitations last a week";
+        linearStated = false;
+        const stateless = readAnswer(
+          taskIssueLinksAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ISSUES(plan.id), owner)),
+        ).issues[1];
+        assert.deepEqual(
+          [stateless?.title, stateless?.standing],
+          ["Invitations last a week", undefined],
+        );
 
         const related = readAnswer(
           taskIssueLinkChangedAnswerSchema,

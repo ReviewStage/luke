@@ -1613,8 +1613,17 @@ test("update_task links, relates, and unlinks a task's issues by name, answers t
     relateIssues: [{ issue: "#7", relation: TASK_ISSUE_RELATION.PART_OF }],
   });
   const notLinked = await call(CODER_TOOL.UPDATE_TASK, { taskId, unlinkIssues: ["ENG-1"] });
+  // #N names a link of the repository the task stands on before the call takes it away.
+  const unlinkedAway = await call(CODER_TOOL.UPDATE_TASK, {
+    taskId,
+    repository: null,
+    unlinkIssues: ["#8"],
+  });
   await call(CODER_TOOL.UPDATE_TASK, { taskId, archived: true });
-  const archived = await call(CODER_TOOL.UPDATE_TASK, { taskId, unlinkIssues: ["#7"] });
+  const archived = await call(CODER_TOOL.UPDATE_TASK, {
+    taskId,
+    unlinkIssues: [`${RELAY_FULL_NAME}#7`],
+  });
 
   assert.deepEqual(keysAndKeywords(relinked), [
     [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
@@ -1622,6 +1631,9 @@ test("update_task links, relates, and unlinks a task's issues by name, answers t
     [`${RELAY_FULL_NAME}#8`, TASK_ISSUE_RELATION.CLOSES],
   ]);
   assert.equal(relinked.already, false);
+  assert.deepEqual(keysAndKeywords(unlinkedAway), [
+    [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
+  ]);
   assert.deepEqual(keysAndKeywords(unlinked), [
     [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
     [`${RELAY_FULL_NAME}#8`, TASK_ISSUE_RELATION.CLOSES],
@@ -1637,7 +1649,7 @@ test("update_task links, relates, and unlinks a task's issues by name, answers t
   });
   assert.deepEqual(
     Option.getOrThrow(await database.run(readTask(bob, taskId))).issueLinks.map(({ key }) => key),
-    [`${RELAY_FULL_NAME}#7`, `${RELAY_FULL_NAME}#8`],
+    [`${RELAY_FULL_NAME}#7`],
   );
 });
 

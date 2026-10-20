@@ -5,7 +5,7 @@ import type {
 } from "@luke/features/task-issue-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { linkNoteOf } from "./task-issue-links-model.js";
 
@@ -16,8 +16,10 @@ import { linkNoteOf } from "./task-issue-links-model.js";
  * each with where its issue stands now, which the service reads live and
  * never keeps; a link made is read again with the rest, so its state is
  * drawn too. A relation changed stands at once and is put back where the
- * service refused it; an unlink lets the row go once the service answers.
- * What did not land is said in one note, the latest, until the next change.
+ * service refused it, unless a newer change of the same link went out since,
+ * whose answer is the one that stands; an unlink lets the row go once the
+ * service answers. What did not land is said in one note, the latest, until
+ * the next change; a read that did not land is asked again by `onRetry`.
  */
 
 /** A task's links as its page holds them: none read yet, or those read. */
@@ -31,6 +33,8 @@ export interface TaskIssueLinksControl {
   readonly onLink: (issue: TaskIssueChoice) => void;
   readonly onRelate: (linkId: string, relation: TaskIssueRelation) => void;
   readonly onUnlink: (linkId: string) => void;
+  /** Reads the links again, as after a read that did not land. */
+  readonly onRetry: () => void;
 }
 
 /** A refusal the act port answered, in its own sentence (`act.ts` rethrows one as an `Error` carrying it). */
@@ -49,6 +53,9 @@ export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
   const [note, setNote] = useState<{ readonly taskId: string; readonly words: string }>();
   const [linking, setLinking] = useState(false);
   const [asked, setAsked] = useState(0);
+  // Note that each link's relation changes are counted, so the answer to one
+  // a newer change overtook puts nothing back over the newer one.
+  const relating = useRef(new Map<string, number>());
 
   // The links are read for the task, and again after a link is made.
   useEffect(() => {
@@ -105,15 +112,19 @@ export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
       replaced((links) =>
         links.map((link) => (link.id === linkId ? { ...link, relation: to } : link)),
       );
+    const generation = (relating.current.get(linkId) ?? 0) + 1;
+    relating.current.set(linkId, generation);
+    const newest = () => relating.current.get(linkId) === generation;
     relate(relation);
     say(undefined);
     act(ACT_KIND.TASK_ISSUES_RELATE, { taskId, linkId, relation })
       .then((answer) => {
-        if ("issue" in answer) return;
+        if ("issue" in answer || !newest()) return;
         if (before !== undefined) relate(before);
         say(linkNoteOf(answer));
       })
       .catch((refused: Error) => {
+        if (!newest()) return;
         if (before !== undefined) relate(before);
         say(refusedSentence(refused));
       });
@@ -136,5 +147,9 @@ export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
     onLink,
     onRelate,
     onUnlink,
+    onRetry: () => {
+      say(undefined);
+      setAsked((count) => count + 1);
+    },
   };
 }

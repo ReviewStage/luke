@@ -8,6 +8,9 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   ChoiceBar,
@@ -42,7 +45,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * dimmed, and nothing more once it links as many as a task may. A task
  * with no links says so quietly beside the button; one whose workspace
  * offers no issue to link and links none draws no box at all. An archived
- * task's box is read only. What did not land is said under the rows.
+ * task's box is read only. What did not land is said under the rows, and a
+ * read that did not land says so in the box with a Try again.
  */
 
 /** What the box says. */
@@ -54,6 +58,7 @@ const LINKS_WORDS = {
   [TASK_ISSUE_RELATION.CLOSES]: "Closes",
   [TASK_ISSUE_RELATION.PART_OF]: "Part of",
   UNLINK: "Unlink",
+  RETRY: "Try again",
 } as const;
 
 /** The Closes / Part of switch's two options. */
@@ -155,6 +160,28 @@ export function TaskIssueLinks({
   const openLink = useOpenLink();
   const { links, note } = control;
   const offered = linearIn(workspaceId) !== undefined || githubIn(workspaceId) !== undefined;
+  // A first read that did not land says why, rather than standing for a task that links nothing.
+  if (links === undefined && note !== undefined) {
+    return (
+      <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
+        <header className="task-issue-links-head">
+          <span className="task-issue-links-heading">{LINKS_WORDS.HEADING}</span>
+          <span className="task-issue-links-none" role="alert">
+            {note}
+          </span>
+          <span className="task-issue-links-retry">
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={control.onRetry}
+            >
+              {LINKS_WORDS.RETRY}
+            </Button>
+          </span>
+        </header>
+      </section>
+    );
+  }
   if (links === undefined || (links.length === 0 && !offered)) return null;
   const editable = !archived;
   const linked = new Set(links.map((link) => link.externalId));

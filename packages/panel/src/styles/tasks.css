@@ -5757,7 +5757,8 @@ ol.transcript-list {
   font-weight: var(--luke-weight-regular);
 }
 
-.task-issue-links-head > .issue-picker-chip {
+.task-issue-links-head > .issue-picker-chip,
+.task-issue-links-retry {
   margin-left: auto;
 }
 

@@ -104,6 +104,10 @@ async function mount(options: {
   archived?: boolean;
   github?: boolean;
   answers?: Partial<Record<string, WireBoundaryInput>>;
+  /** Each read's answer in turn, the last standing for every read after; the task's links where none is given. */
+  reads?: readonly WireBoundaryInput[];
+  /** How a relation is answered, where the test holds it. */
+  relate?: (payload: WireBoundaryInput) => Promise<WireBoundaryInput>;
 }) {
   const sent: [string, WireBoundaryInput][] = [];
   const opened: string[] = [];
@@ -112,10 +116,15 @@ async function mount(options: {
     sent.push([kind, payload]);
     return Promise.resolve(options.answers?.[kind] ?? fallback);
   };
+  const reads = [...(options.reads ?? [])];
   fakeActPort({
     [ACT_KIND.TASK_ISSUES_READ]: (payload) =>
       // SAFETY: the fake answers what the test hands it, which the port's own schema would check.
-      answer(ACT_KIND.TASK_ISSUES_READ, payload, { issues: links }) as never,
+      answer(
+        ACT_KIND.TASK_ISSUES_READ,
+        payload,
+        (reads.length > 1 ? reads.shift() : reads[0]) ?? { issues: links },
+      ) as never,
     [ACT_KIND.TASK_ISSUES_LINK]: (payload) => {
       const made: TaskIssueLinkView = {
         ...SAFARI,
@@ -129,9 +138,15 @@ async function mount(options: {
       // SAFETY: as the read's answer above.
       return answer(ACT_KIND.TASK_ISSUES_LINK, payload, { issue: made }) as never;
     },
-    [ACT_KIND.TASK_ISSUES_RELATE]: (payload) =>
+    [ACT_KIND.TASK_ISSUES_RELATE]: (payload) => {
+      if (options.relate === undefined) {
+        // SAFETY: as the read's answer above.
+        return answer(ACT_KIND.TASK_ISSUES_RELATE, payload, { issue: SAFARI }) as never;
+      }
+      sent.push([ACT_KIND.TASK_ISSUES_RELATE, payload]);
       // SAFETY: as the read's answer above.
-      answer(ACT_KIND.TASK_ISSUES_RELATE, payload, { issue: SAFARI }) as never,
+      return options.relate(payload) as never;
+    },
     [ACT_KIND.TASK_ISSUES_UNLINK]: (payload) =>
       // SAFETY: as the read's answer above.
       answer(ACT_KIND.TASK_ISSUES_UNLINK, payload, { unlinked: true }) as never,
@@ -313,4 +328,50 @@ test("a task that links nothing in a workspace offering no issue to link draws n
     offered.container.querySelector(".task-issue-links-none")?.textContent,
     "No linked issues",
   );
+});
+
+test("a first read that did not land says so in the box, and Try again reads the links", async () => {
+  const { container } = await mount({
+    links: [SAFARI],
+    reads: [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { issues: [SAFARI] }],
+  });
+  const said = container.querySelector('[role="alert"]')?.textContent;
+
+  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Try again"));
+  await settle();
+
+  assert.equal(said, "Luke didn't answer. Try again.");
+  assert.deepEqual(
+    rows(container).map(({ key }) => key),
+    ["acme/web#312"],
+  );
+  assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+test("a keyword change a newer one overtook puts nothing back when it is refused, so the row says what was saved last", async () => {
+  const held: ((answer: WireBoundaryInput) => void)[] = [];
+  const { container } = await mount({
+    links: [SAFARI],
+    relate: () =>
+      new Promise<WireBoundaryInput>((resolve) => {
+        held.push(resolve);
+      }),
+  });
+  const radios = () => container.querySelectorAll('[role="radio"]');
+
+  press(radios()[1]);
+  press(radios()[0]);
+  press(radios()[1]);
+  await settle();
+  held[2]?.({ issue: { ...SAFARI, relation: TASK_ISSUE_RELATION.PART_OF } });
+  await settle();
+  held[0]?.({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  held[1]?.({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  await settle();
+
+  assert.deepEqual(
+    rows(container).map(({ keyword }) => keyword),
+    ["Part of"],
+  );
+  assert.equal(container.querySelector('[role="alert"]'), null);
 });

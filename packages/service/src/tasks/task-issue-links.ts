@@ -117,11 +117,11 @@ export function linkViewOf(
   };
 }
 
-/** What a provider answered for a link now: what its chip draws and where it stands. */
+/** What a provider answered for a link now: what its chip draws, and where it stands where it named that. */
 interface LiveIssue {
   readonly key: string;
   readonly title: string;
-  readonly standing: TaskIssueStanding;
+  readonly standing: TaskIssueStanding | undefined;
 }
 
 /** The repositories whose issues the workspace's installation reads, each once, by the name the links keep. */
@@ -173,13 +173,17 @@ export const liveTaskIssues = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (link.provider === TASK_ISSUE_PROVIDER.LINEAR) {
       if (linear === undefined) return Effect.succeed(undefined);
       return linearIssueByIdentifier(linear, link.externalId).pipe(
-        Effect.map(([issue]) =>
-          issue?.state === undefined
+        Effect.map(([issue]): LiveIssue | undefined =>
+          issue === undefined
             ? undefined
             : {
                 key: issue.identifier,
                 title: issue.title,
-                standing: { provider: TASK_ISSUE_PROVIDER.LINEAR, state: issue.state },
+                // Note that an issue Linear names no state for is still renamed as Linear names it.
+                standing:
+                  issue.state === undefined
+                    ? undefined
+                    : { provider: TASK_ISSUE_PROVIDER.LINEAR, state: issue.state },
               },
         ),
         Effect.orElseSucceed(() => undefined),
