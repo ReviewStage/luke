@@ -58,7 +58,7 @@ const conversationChoicesSchema = Schema.Struct({
 });
 
 /** The Conversation view's kept choices: its two filters, and whether each of its sections stands open. */
-export type ConversationChoices = typeof conversationChoicesSchema.Type;
+type ConversationChoices = typeof conversationChoicesSchema.Type;
 
 /** What the filters leave out of a conversation. */
 export type ConversationFilters = Pick<ConversationChoices, "hideBots" | "hideResolved">;
