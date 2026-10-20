@@ -7,6 +7,7 @@ import {
   nextFailedRunExpiry,
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
+import type { RealtimeLogEntry } from "@neon/realtime/client";
 import {
   Cause,
   Data,
@@ -40,9 +41,14 @@ import {
  * once for that silence, as a warning, to the host's line and to whatever
  * error reporter the runtime carries, naming why it last stopped and never an
  * address or a seal, and goes on asking. Realtime's client reconnects a
- * socket that never opens without end and says nothing of it, so without
+ * socket that never opens, and asks again to be admitted where Realtime
+ * refuses it for now, without end and says nothing of either, so without
  * this a socket the page may not open (the web app's
- * `Content-Security-Policy`) leaves the account's inbox empty in silence.
+ * `Content-Security-Policy`), or a Realtime whose backend cannot start,
+ * leaves the account's inbox empty in silence. The report says too what
+ * Realtime's client last reported going wrong for the subscription standing,
+ * by its diagnostic's name and code alone (`troubleOf`), which tells those
+ * two apart.
  */
 
 /** How long before a sealed statement expires it is renewed, as Neon's own bindings renew it. */
@@ -58,10 +64,10 @@ const FIRST_ANSWER_BOUND = Duration.seconds(30);
 /** How often a follower holding no failed run looks again for one to age out, since one may arrive meanwhile. */
 const EXPIRY_RECHECK = Duration.hours(1);
 
-/** A subscription that stopped for good: Realtime said so, or a row did not decode. */
+/** A subscription that stopped for good: Realtime said so, its client refused a seal, or a row did not decode. */
 class LiveBroken extends Data.TaggedError("LiveBroken")<{ readonly reason: string }> {}
 
-/** A follow that has answered nothing within its bound, reported once as a warning; `reason` is why it last stopped, never an address or a seal. */
+/** A follow that has answered nothing within its bound, reported once as a warning; `reason` is why it last stopped and what Realtime's client last reported, never an address or a seal. */
 class LiveUnanswered extends Data.TaggedError("LiveUnanswered")<{ readonly reason: string }> {
   override readonly [ErrorReporter.severity] = "Warn" as const;
   override get message(): string {
@@ -71,6 +77,16 @@ class LiveUnanswered extends Data.TaggedError("LiveUnanswered")<{ readonly reaso
 
 /** Why a follow that never stopped has not answered: its parts have not all delivered, as when the socket never opened. */
 const NOT_DELIVERED = "Realtime has not delivered every part";
+
+/**
+ * Realtime's diagnostic for an admission it will ask for again, which it
+ * reports beneath its warnings although it is what a Realtime that cannot
+ * start answers every part with.
+ */
+const ADMISSION_RETRIED = "subscription_retry_scheduled";
+
+/** A code as Realtime's protocol and client spell one; anything else beside a diagnostic is left unsaid. */
+const TROUBLE_CODE = /^[a-z][a-z0-9_]{0,63}$/u;
 
 /** One part's subscription, the slice of Realtime's client this reads. */
 interface LiveSubscription {
@@ -90,19 +106,49 @@ export interface LiveClient {
   close(): void;
 }
 
+/** Hears what Realtime's client reported going wrong, in the words `troubleOf` gives it. */
+type TroubleHeard = (trouble: string) => void;
+
+/**
+ * What one of Realtime's diagnostics says went wrong, or nothing where it
+ * says nothing did: a warning, an error, or an admission it will ask for
+ * again, named by the diagnostic's event and the code beside it. Note that
+ * nothing else of the entry is said, because its error may carry what the
+ * proxy answered, while an event's name and a code name no address, seal, or
+ * row.
+ */
+function troubleOf(entry: RealtimeLogEntry): string | undefined {
+  if (entry.level !== "warn" && entry.level !== "error" && entry.event !== ADMISSION_RETRIED) {
+    return undefined;
+  }
+  const code = "code" in entry ? entry.code : undefined;
+  return code !== undefined && TROUBLE_CODE.test(code) ? `${entry.event} (${code})` : entry.event;
+}
+
 /**
  * Realtime's own client, at the address the service named, loaded only when
  * the account is first followed, so its protocol's validators stay out of the
- * web app's first load.
+ * web app's first load, telling `heard` each thing its diagnostics say went
+ * wrong.
  */
-export const openRealtimeClient = (url: string): Promise<LiveClient> =>
-  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url }));
+export const openRealtimeClient = (url: string, heard: TroubleHeard): Promise<LiveClient> =>
+  import("@neon/realtime/client").then(({ createRealtimeClient }) =>
+    createRealtimeClient({
+      url,
+      // Note that the client reports a retried admission only at its debug level.
+      logLevel: "debug",
+      logger: (entry) => {
+        const trouble = troubleOf(entry);
+        if (trouble !== undefined) heard(trouble);
+      },
+    }),
+  );
 
 export interface AccountInboxFollowDependencies {
   /** The sealed statements, fetched from the service; a failure where it answered none. */
   readonly live: () => Effect.Effect<AccountInboxLiveAnswer | { readonly failure: string }>;
-  /** Realtime's client at the address the service named, loaded where it must be. */
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /** Realtime's client at the address the service named, loaded where it must be, telling `heard` what it reports going wrong. */
+  readonly openLive: (url: string, heard: TroubleHeard) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock: when an answer was read, and how far back a failed run is still told. */
   readonly now: () => number;
   /** The answer, each time it changes. */
@@ -135,17 +181,19 @@ function whole(rows: PartRows): Option.Option<AccountInboxLiveRows> {
 /**
  * The answers the live rows make, for as long as the subscriptions stand:
  * each part subscribed to, its rows decoded as they arrive, and every seal
- * renewed before it expires. It fails where a subscription stops for good.
+ * renewed before it expires, what Realtime's client reports going wrong told
+ * to `heard`. It fails where a subscription stops for good.
  */
 function liveAnswers(
   dependencies: AccountInboxFollowDependencies,
   first: AccountInboxLiveAnswer,
+  heard: TroubleHeard,
 ): Stream.Stream<AccountInboxAnswer, LiveBroken> {
   return Stream.callback<AccountInboxAnswer, LiveBroken>((queue) =>
     Effect.gen(function* () {
       const client = yield* Effect.acquireRelease(
         Effect.tryPromise({
-          try: async () => dependencies.openLive(first.url),
+          try: async () => dependencies.openLive(first.url, heard),
           catch: () => new LiveBroken({ reason: "Realtime's client did not load" }),
         }),
         (opened) => Effect.sync(() => opened.close()),
@@ -182,42 +230,54 @@ function liveAnswers(
         });
         return subscription;
       };
+      // Note that Realtime's client throws where it refuses a seal, and a throw here would end the whole follow in silence.
       const subscriptions = yield* Effect.acquireRelease(
-        Effect.sync(() => ({
-          items: follow(first.queries.items, accountInboxLiveRowSchemas.items, (read) => {
-            rows.items = read;
+        Effect.try({
+          try: () => ({
+            items: follow(first.queries.items, accountInboxLiveRowSchemas.items, (read) => {
+              rows.items = read;
+            }),
+            planless: follow(
+              first.queries.planless,
+              accountInboxLiveRowSchemas.planless,
+              (read) => {
+                rows.planless = read;
+              },
+            ),
+            plans: follow(first.queries.plans, accountInboxLiveRowSchemas.plans, (read) => {
+              rows.plans = read;
+            }),
+            automations: follow(
+              first.queries.automations,
+              accountInboxLiveRowSchemas.automations,
+              (read) => {
+                rows.automations = read;
+              },
+            ),
+            failedRuns: follow(
+              first.queries.failedRuns,
+              accountInboxLiveRowSchemas.failedRuns,
+              (read) => {
+                rows.failedRuns = read;
+              },
+            ),
+            chatAsks: follow(
+              first.queries.chatAsks,
+              accountInboxLiveRowSchemas.chatAsks,
+              (read) => {
+                rows.chatAsks = read;
+              },
+            ),
+            chatNotices: follow(
+              first.queries.chatNotices,
+              accountInboxLiveRowSchemas.chatNotices,
+              (read) => {
+                rows.chatNotices = read;
+              },
+            ),
           }),
-          planless: follow(first.queries.planless, accountInboxLiveRowSchemas.planless, (read) => {
-            rows.planless = read;
-          }),
-          plans: follow(first.queries.plans, accountInboxLiveRowSchemas.plans, (read) => {
-            rows.plans = read;
-          }),
-          automations: follow(
-            first.queries.automations,
-            accountInboxLiveRowSchemas.automations,
-            (read) => {
-              rows.automations = read;
-            },
-          ),
-          failedRuns: follow(
-            first.queries.failedRuns,
-            accountInboxLiveRowSchemas.failedRuns,
-            (read) => {
-              rows.failedRuns = read;
-            },
-          ),
-          chatAsks: follow(first.queries.chatAsks, accountInboxLiveRowSchemas.chatAsks, (read) => {
-            rows.chatAsks = read;
-          }),
-          chatNotices: follow(
-            first.queries.chatNotices,
-            accountInboxLiveRowSchemas.chatNotices,
-            (read) => {
-              rows.chatNotices = read;
-            },
-          ),
-        })),
+          catch: () => new LiveBroken({ reason: "Realtime's client refused a seal" }),
+        }),
         (standing) =>
           Effect.sync(() => {
             for (const subscription of Object.values(standing)) subscription.unsubscribe();
@@ -283,11 +343,21 @@ export function followAccountInbox(
   return Effect.gen(function* () {
     let answered = false;
     let stopped = NOT_DELIVERED;
+    // What Realtime's client last reported going wrong for the subscription standing, if anything.
+    let trouble: string | undefined;
+    const heard: TroubleHeard = (said) => {
+      trouble = said;
+    };
     const watchdog = Effect.forkChild(
       Effect.gen(function* () {
         yield* Effect.sleep(FIRST_ANSWER_BOUND);
         if (answered) return;
-        const unanswered = new LiveUnanswered({ reason: stopped });
+        const unanswered = new LiveUnanswered({
+          reason:
+            trouble === undefined
+              ? stopped
+              : `${stopped}; Realtime's client last reported ${trouble}`,
+        });
         yield* Effect.logWarning(unanswered.message);
         yield* ErrorReporter.report(Cause.fail(unanswered));
       }),
@@ -307,7 +377,8 @@ export function followAccountInbox(
         return yield* Effect.sleep(LIVE_RESTART);
       }
       stopped = NOT_DELIVERED;
-      yield* Stream.runForEach(liveAnswers(dependencies, sealed), (answer) =>
+      trouble = undefined;
+      yield* Stream.runForEach(liveAnswers(dependencies, sealed, heard), (answer) =>
         Effect.sync(() => {
           answered = true;
           dependencies.publish(answer);

@@ -159,8 +159,11 @@ export interface CodingAgentsDependencies {
   kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
-  /** Realtime's client at an address, which the account inbox is followed over; Realtime's own outside a test. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /** Realtime's client at an address, which the account inbox is followed over, telling `heard` what it reports going wrong; Realtime's own outside a test. */
+  openLive?: (
+    url: string,
+    heard: (trouble: string) => void,
+  ) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export interface CodingAgentsComposer extends Composer {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   ACCOUNT_CHAT_REASON,
@@ -55,11 +56,16 @@ import {
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Duration, Effect, ErrorReporter, Layer, Schema } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import type { LiveClient } from "./account-inbox-follow.js";
+import { afterEach, vi } from "vitest";
+import { type LiveClient, openRealtimeClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import { reporterLayer } from "./effect/seams.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -527,7 +533,14 @@ function fakeService() {
   };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+function subject(
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    /** Whether the account inbox is followed over Realtime's own client, through the socket the test stubs, in place of the scripted one. */
+    ownRealtime?: boolean;
+  } = {},
+) {
   return Effect.gen(function* () {
     const service = fakeService();
     const realtime = fakeRealtime();
@@ -542,7 +555,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-      openLive: realtime.open,
+      openLive: options.ownRealtime === true ? openRealtimeClient : realtime.open,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -599,6 +612,40 @@ const SEALED: AccountInboxLiveAnswer = {
 };
 
 /**
+ * A sealed statement as Realtime's own client admits one before sending it:
+ * a compact JWE under the header Realtime seals with, opaque past it, and a
+ * fingerprint of 64 hex digits. The scripted statements above are refused by
+ * that client as it is handed them.
+ */
+function realtimeSealed(part: string) {
+  const segment = (text: string) => Buffer.from(text).toString("base64url");
+  return {
+    capability: [
+      segment(JSON.stringify({ alg: "dir", enc: "A256GCM", v: 1 })),
+      "",
+      segment(`iv-${part}`),
+      segment(`sealed-${part}`),
+      segment(`tag-${part}`),
+    ].join("."),
+    queryFingerprint: createHash("sha256").update(part).digest("hex"),
+    expiresAt: NOW + 60_000,
+  };
+}
+
+const REALTIME_SEALED: AccountInboxLiveAnswer = {
+  url: SEALED.url,
+  queries: {
+    items: realtimeSealed("items"),
+    planless: realtimeSealed("planless"),
+    plans: realtimeSealed("plans"),
+    automations: realtimeSealed("automations"),
+    failedRuns: realtimeSealed("failedRuns"),
+    chatAsks: realtimeSealed("chatAsks"),
+    chatNotices: realtimeSealed("chatNotices"),
+  },
+};
+
+/**
  * Realtime as a script: the address each client was opened at, each part's
  * subscription by its capability, the seals each was renewed with, and a
  * way to deliver rows to one or stop it for good.
@@ -641,6 +688,71 @@ function fakeRealtime() {
     },
     fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
     subscribed: () => [...listeners.keys()].toSorted(),
+  };
+}
+
+/** A frame the stubbed socket sends, as Realtime's protocol spells the two it needs. */
+type RealtimeServerFrame =
+  | { readonly type: "ready" }
+  | {
+      readonly type: "subscribe_rejected";
+      readonly request_id: string;
+      readonly code: string;
+      readonly message: string;
+      readonly retry_after_ms: number;
+    };
+
+/** A subscription Realtime's client sent, read off its frame; none for any other frame. */
+const readSubscribe = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ type: Schema.Literal("subscribe"), request_id: Schema.String }),
+  ),
+);
+
+/**
+ * Realtime's socket as a Realtime whose backend cannot start answers it,
+ * stubbed where Realtime's own client opens one, the client's one process
+ * boundary: ready at once, and every subscription refused with `code`, to be
+ * asked for again after a hint, as production's proxy refused each one while
+ * its backend's logical slot would not start.
+ */
+function refusingRealtimeSocket(code: string) {
+  return class RefusingRealtimeSocket {
+    readyState = 0;
+    readonly #listeners: ((event: { readonly data: string }) => void)[] = [];
+
+    constructor() {
+      queueMicrotask(() => {
+        this.readyState = 1;
+        this.#receive({ type: "ready" });
+      });
+    }
+
+    addEventListener(type: string, listener: (event: { readonly data: string }) => void) {
+      if (type === "message") this.#listeners.push(listener);
+    }
+
+    send(frame: string) {
+      const subscribe = readSubscribe(frame);
+      if (Option.isNone(subscribe)) return;
+      queueMicrotask(() =>
+        this.#receive({
+          type: "subscribe_rejected",
+          request_id: subscribe.value.request_id,
+          code,
+          message: "Realtime is unavailable",
+          retry_after_ms: 30_000,
+        }),
+      );
+    }
+
+    close() {
+      this.readyState = 3;
+    }
+
+    #receive(frame: RealtimeServerFrame) {
+      for (const listener of this.#listeners) listener({ data: JSON.stringify(frame) });
+    }
   };
 }
 
@@ -1247,6 +1359,52 @@ it.effect(
       yield* settled;
       assert.equal(reported.length, 1);
       assert.ok(realtime.subscribed().length > 0);
+    }),
+);
+
+it.effect(
+  "a follow Realtime will not admit is reported with what Realtime's own client last reported, its code among it, and no address or seal",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("WebSocket", refusingRealtimeSocket("backend_unavailable"));
+      // Realtime's client loaded already, as a host that has followed before holds it.
+      yield* Effect.promise(() => import("@neon/realtime/client"));
+      const { call, seal } = yield* subject({ ownRealtime: true });
+      const { lines, reported, layer } = heard();
+      seal(REALTIME_SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+
+      yield* TestClock.adjust("30 seconds");
+      yield* settled;
+      assert.equal(reported.length, 1);
+      const said = lines.filter((line) => line.includes("account inbox"));
+      assert.deepEqual(said, [
+        "the account inbox's live read has not answered in 30 seconds: Realtime has not delivered every part; Realtime's client last reported subscription_retry_scheduled (backend_unavailable)",
+      ]);
+      for (const sealedPart of Object.values(REALTIME_SEALED.queries)) {
+        assert.ok(!said[0]?.includes(sealedPart.capability));
+      }
+      assert.ok(!said[0]?.includes(REALTIME_SEALED.url));
+    }),
+);
+
+it.effect(
+  "a seal Realtime's own client refuses is let go and asked for again after a pause, rather than ending the follow",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("WebSocket", refusingRealtimeSocket("backend_unavailable"));
+      yield* Effect.promise(() => import("@neon/realtime/client"));
+      const { call, seal, asked } = yield* subject({ ownRealtime: true });
+      // The scripted statements are no compact JWE, which Realtime's client throws on as it is handed one.
+      seal(SEALED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      assert.deepEqual(asked, ["account-inbox-live"]);
+
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(asked, ["account-inbox-live", "account-inbox-live"]);
     }),
 );
 
