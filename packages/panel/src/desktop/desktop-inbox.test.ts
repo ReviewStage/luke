@@ -56,7 +56,7 @@ import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -64,8 +64,9 @@ import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -94,6 +95,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
+import { SidebarInbox } from "./sidebar-inbox.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -424,11 +426,14 @@ function mount(
     standing = [BILLING, INVITES],
     archived = [],
     room,
+    sidebar = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
     archived?: readonly TaskSummary[];
     room?: ShellRoom;
+    /** Whether the inbox-first sidebar lists the Inbox, read once for it and the page, which then shows the chosen item alone. */
+    sidebar?: boolean;
   } = {},
 ) {
   const asked: Asked = {
@@ -451,47 +456,52 @@ function mount(
     const [taskless, setWaiting] = useState(firstTaskless);
     setTaskless = setWaiting;
     setTasks = setListed;
-    return createElement(DesktopInbox, {
-      tasks: tasksControl({
-        me: READER.userId,
-        workspace: listedWorkspace,
-        tasks: listed,
-        archived,
-        listRead,
-        sidePanel: sidePanel ?? tasksControl().sidePanel,
-        inbox: [
-          { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
-          { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
-        ],
-        inboxTasks: holding,
-        inboxTaskless: taskless,
-        inboxView: {
-          open: true,
-          chosen,
-          onOpen: () => undefined,
-          onClose: () => {
-            asked.closed += 1;
-          },
-          onChoose: setChosen,
-          listed: listAsked,
-          onListed: setListAsked,
-          pages: undefined,
-          onRereadPages: () => undefined,
-          onTaskAgents: () => undefined,
+    const control = tasksControl({
+      me: READER.userId,
+      workspace: listedWorkspace,
+      tasks: listed,
+      archived,
+      listRead,
+      sidePanel: sidePanel ?? tasksControl().sidePanel,
+      inbox: [
+        { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
+        { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
+      ],
+      inboxTasks: holding,
+      inboxTaskless: taskless,
+      inboxView: {
+        open: true,
+        chosen,
+        onOpen: () => undefined,
+        onClose: () => {
+          asked.closed += 1;
         },
-        onShowTask: (taskId) => asked.shownTasks.push(taskId),
-        onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
-        onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
-        automationsView: {
-          ...tasksControl().automationsView,
-          onOpen: (place) => {
-            if (place?.kind === AUTOMATIONS_PAGE.EDIT)
-              asked.shownAutomations.push(place.automationId);
-          },
-          onClose: () => undefined,
+        onChoose: setChosen,
+        onOpenItem: setChosen,
+        listed: listAsked,
+        onListed: setListAsked,
+        onSingle: (single: boolean) => {
+          toldSingle.push(single);
         },
-      }),
+        pages: undefined,
+        onRereadPages: () => undefined,
+        onTaskAgents: () => undefined,
+      },
+      onShowTask: (taskId) => asked.shownTasks.push(taskId),
+      onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
+      onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
+      automationsView: {
+        ...tasksControl().automationsView,
+        onOpen: (place) => {
+          if (place?.kind === AUTOMATIONS_PAGE.EDIT)
+            asked.shownAutomations.push(place.automationId);
+        },
+        onClose: () => undefined,
+      },
     });
+    return sidebar
+      ? createElement(SharedListing, { tasks: control })
+      : createElement(DesktopInbox, { tasks: control });
   }
   function Panelled({ at }: { at: ShellRoom }) {
     const sidePanel = useSidePanel(
@@ -512,6 +522,29 @@ function mount(
   const page = room === undefined ? createElement(Page) : createElement(Panelled, { at: room });
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
+}
+
+/** What the Inbox told the window of whether it shows one column, in order. */
+let toldSingle: boolean[] = [];
+
+/** The Inbox as the inbox-first shell draws it: read once, listed in the sidebar, and its chosen item alone in the plan's place. */
+function SharedListing({ tasks }: { tasks: TasksControl }) {
+  const listing = useInboxListing(tasks);
+  return createElement(
+    Fragment,
+    null,
+    createElement(
+      "aside",
+      { className: "desktop-sidebar" },
+      createElement(SidebarInbox, {
+        tasks,
+        listing,
+        shown: true,
+        onOpen: tasks.inboxView.onOpenItem,
+      }),
+    ),
+    createElement("main", null, createElement(DesktopInbox, { tasks, listing })),
+  );
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -6667,4 +6700,63 @@ test("a thread's row leads with what its open ask asks, then its latest message:
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 1 of 3 · Agent: ${said}`]);
+});
+
+test("with the inbox-first sidebar the sidebar lists the Inbox's items, read once with the page, and the page shows the chosen item alone, a press on a row choosing it", async () => {
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  const sidebar =
+    page.querySelector("aside.desktop-sidebar") ?? assert.fail("the sidebar is drawn");
+  assert.ok(
+    sidebar.querySelector('.inbox-tasks[data-placement="sidebar"]'),
+    "the sidebar lists the Inbox",
+  );
+  assert.equal(
+    page.querySelector("main .inbox-tasks"),
+    null,
+    "the page draws no list of its own beside the item",
+  );
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
+  assert.equal(
+    rowNamed(page, "Expire after 7 days?").getAttribute("aria-current"),
+    "page",
+    "the item shown is the sidebar's current row",
+  );
+  assert.equal(
+    page.querySelector('main .inbox-view-items header button[aria-label="Back to Inbox"]'),
+    null,
+    "the item offers no way back to a list that stays in sight",
+  );
+});
+
+test("with the inbox-first sidebar the item shown stands alone for the window's history and links, and an item a link names that no read holds is not found in the place, the sidebar's list choosing nothing", async () => {
+  toldSingle = [];
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  // Note that before an item stands the Inbox is told no column, since a list step there would be one no column shows, and Back would land on it.
+  assert.equal(toldSingle[0], false, "no list step stands before the first item");
+  assert.equal(toldSingle.at(-1), true, "the item stands alone, whatever the room's width");
+  act(() =>
+    chooseFromOutside({
+      taskId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+  const place = page.querySelector<HTMLElement>("main .inbox-view-items");
+  assert.ok(place !== null && !place.hidden, "the place stands in sight");
+  assert.match(place.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
