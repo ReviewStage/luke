@@ -1109,14 +1109,24 @@ const WHOLE_FILE_ITEM = "file";
 /** How much room stands above a whole file's first line and below its last, in pixels: the File tab's rows' own (`styles/tasks.css`'s `.code-lines`). */
 const WHOLE_FILE_EDGE = 6;
 
-/** How many files' keys `wholeFileKey` keeps, as many as the pool keeps results for and more, the oldest let go first. */
-const WHOLE_FILE_KEYS_KEPT = 64;
+/**
+ * How many files' keys `wholeFileKey` keeps, each a name at a revision with
+ * the text it was handed: as many as the pool keeps results for
+ * (\`HIGHLIGHT_CACHE_ENTRIES\`), since a key past those names colours the pool
+ * no longer holds, the oldest let go first.
+ */
+const WHOLE_FILE_KEYS_KEPT = 16;
 
-/** The key each whole file's colours were last kept under in the pool's cache, by its name and then its revision, with the text it was handed. */
-const wholeFileKeys = new Map<
-  string,
-  Map<string, { readonly text: string; readonly key: string }>
->();
+/** A whole file's key, kept with the text it was handed under its name at its revision. */
+interface WholeFileKey {
+  readonly name: string;
+  readonly revision: string;
+  readonly text: string;
+  readonly key: string;
+}
+
+/** The keys kept, oldest first, each a file's name at a revision. */
+let wholeFileKeys: readonly WholeFileKey[] = [];
 
 /** How many whole files were read under a key of their own, which names each in the pool's cache. */
 let wholeFilesRead = 0;
@@ -1127,20 +1137,20 @@ let wholeFilesRead = 0;
  * same text, so a file opened again takes its colours at once; and one
  * counted afresh for any other, so a text that changed never takes another's
  * colours. Note that a count names it, not the name and revision, because a
- * key is never built from identifiers (`AGENTS.md`'s TypeScript rules).
+ * key is never built from identifiers (\`AGENTS.md\`'s TypeScript rules); and
+ * that only the newest \`WHOLE_FILE_KEYS_KEPT\` are kept, whatever their names,
+ * so no file's texts pile up across its revisions.
  */
 function wholeFileKey(name: string, revision: string, text: string): string {
-  const revisions = wholeFileKeys.get(name) ?? new Map();
-  const held = revisions.get(revision);
-  if (held?.text === text) return held.key;
-  wholeFilesRead += 1;
-  const key = `whole-${wholeFilesRead}`;
-  revisions.set(revision, { text, key });
-  // Note that a name read again moves to the end, so the oldest is the one let go.
-  wholeFileKeys.delete(name);
-  wholeFileKeys.set(name, revisions);
-  const oldest = wholeFileKeys.keys().next();
-  if (wholeFileKeys.size > WHOLE_FILE_KEYS_KEPT && !oldest.done) wholeFileKeys.delete(oldest.value);
+  const same = (each: WholeFileKey) => each.name === name && each.revision === revision;
+  const held = wholeFileKeys.find(same);
+  if (held?.text !== text) wholeFilesRead += 1;
+  const key = held?.text === text ? held.key : `whole-${wholeFilesRead}`;
+  // Note that the key read moves to the end, so the oldest is the one let go.
+  wholeFileKeys = [
+    ...wholeFileKeys.filter((each) => !same(each)),
+    { name, revision, text, key },
+  ].slice(-WHOLE_FILE_KEYS_KEPT);
   return key;
 }
 
@@ -1288,11 +1298,13 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
         void highlighting.follow(next.look);
         view.setOptions(optionsFor(next));
       }
+      const another =
+        next.name !== was.name || next.text !== was.text || next.revision !== was.revision;
+      // Note that lines picked in a file are no pick in another.
+      if (another) picked = undefined;
       if (
+        another ||
         !sameLook(next.look, was.look) ||
-        next.name !== was.name ||
-        next.text !== was.text ||
-        next.revision !== was.revision ||
         !sameFileNotes(next.annotations, was.annotations)
       ) {
         view.setItems([itemOf(next)]);

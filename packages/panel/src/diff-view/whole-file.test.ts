@@ -185,6 +185,19 @@ test("lines picked by pressing their numbers are the reader's pick, until the vi
   assert.equal(handle.pickedLines(), undefined);
 });
 
+test("lines picked in one file are no pick once another file takes its place", async () => {
+  const { host, handle } = mountFile(props());
+  await nextFrame();
+  const number = drawnRoot(host).querySelector('[data-column-number="2"]');
+  assert.ok(number);
+  const at = { bubbles: true, composed: true, button: 0, pointerId: 1, pointerType: "mouse" };
+  number.dispatchEvent(new PointerEvent("pointerdown", at));
+  document.dispatchEvent(new PointerEvent("pointerup", at));
+  assert.deepEqual(handle.pickedLines(), { startLine: 2, endLine: 2 });
+  handle.update(props({ name: "src/other.ts", text: "let other = 1;\nlet more = 2;\n" }));
+  assert.equal(handle.pickedLines(), undefined);
+});
+
 test("a patch drawn alone draws each note in the view's own element under its line", async () => {
   const host = document.createElement("div");
   document.body.append(host);
