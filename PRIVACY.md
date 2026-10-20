@@ -107,7 +107,10 @@ recordings"); those turns are never sent to Luke's voice window or his
 call window, which draw none of them. Your default model, effort, and
 context size for a coding agent are kept with your account preferences on our
 service, set in Settings › Coding agents or by the model you last started
-with.
+with. Where a Luke link you open in a browser goes, staying there or handed
+to Luke for Mac, is kept with them too, set in Settings › Account; Luke in a
+browser on a Mac reads it each time it loads a link that names something in
+Luke.
 
 A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
@@ -1264,8 +1267,11 @@ only when you press Send.
   and its workers also run as sessions on Vercel Workflow, which keeps each
   session's history (the messages, files, tool calls, and answers its model
   works from) so the session can pick up where it stopped. Deleting a task or
-  your account ends each of its sessions for good, a turn still running
-  included. When a session of Luke's ends, Vercel deletes that history at
+  your account asks Vercel Workflow to end each of its sessions for good, a
+  turn still running included; a session that could not be reached or did
+  not confirm in time is noted in our service's logs and left as it stood,
+  and the delete goes on without it, its history kept under Vercel's own
+  retention. When a session of Luke's ends, Vercel deletes that history at
   once, though the session's ids, status, and times may stay as long as
   Vercel's own retention. This holds for a session started on or after
   13 October 2026. For now, a coding agent's session keeps its history after
@@ -1273,6 +1279,11 @@ only when you press Send.
   find out why a session stopped partway, and Vercel deletes it after that.
   A session of Luke's started before then, and the session of a worker
   either one hands work to, keeps its history under Vercel's own retention.
+- Neon, asked directly by Luke on your Mac or in a browser, which sees its
+  network address: while you are signed in, Luke follows what waits on you
+  across your account, for the Inbox, over Neon's Realtime service, with a
+  short-lived query our service seals for your account, and Neon sends back
+  the rows of that inbox as they change.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke
   opens, every four hours, and when you ask from Luke's menu or Settings,
@@ -1317,11 +1328,15 @@ follows your account in that browser: signing out files what follows under
 nobody, and deleting your account in one tab stops the recording in every
 tab of that browser until you sign in again. It sends Sentry reports of the
 errors it did not handle and of a tab that could not draw, and performance
-traces for about one page load in ten, using Sentry's default data
+traces for about one page load in ten, and a warning for each kind of request
+the page's security policy refused, once in each tab, naming only the
+policy's directive and the refused address's origin, or the browser's own
+word for it, such as inline, all using Sentry's default data
 collection, as described under "Crash and performance reports from the Mac
 app", where the page's address, your browser's details, and the addresses of
 the requests it made take the place of the Mac's. Your browser contacts
-PostHog and Sentry directly, so each sees your network address.
+PostHog, Sentry, and Neon (see "Who we send it to") directly, so each sees
+your network address.
 
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the
@@ -1398,10 +1413,11 @@ and error, performance, and agent reports by Sentry.
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
-  Luke in that service's own settings. It ends every session of yours on
-  Vercel Workflow and, shortly after, deletes their sandboxes with the
-  snapshots no other sandbox uses; the session history Vercel Workflow keeps
-  goes as described under "Who we send it to", and anything stored only on
+  Luke in that service's own settings. It asks Vercel Workflow to end every
+  session of yours, noting in our logs any it could not, and, shortly after,
+  deletes their sandboxes with the snapshots no other sandbox uses; the
+  session history Vercel Workflow keeps goes as described under "Who we send
+  it to", and anything stored only on
   your Mac stays there until you remove it.
 
 ## Google user data
