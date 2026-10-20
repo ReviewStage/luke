@@ -927,6 +927,8 @@ export const inboxMessageRequestSchema = EffectSchema.Struct({
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
   /** The answer to the thread's open ask, which names it; absent on a plain reply. */
   answers: EffectSchema.optionalKey(inboxAnswersSchema),
+  /** The revision of the notice the reply was written on, which it settles where the notice still stands there; absent where it settles none, as from a client before it. */
+  revision: EffectSchema.optionalKey(countedNumber),
 }).check(
   EffectSchema.makeFilter(
     ({ text, attachments, answers }) => answers !== undefined || hasWordsOrFiles(text, attachments),

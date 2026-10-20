@@ -35,6 +35,7 @@ import {
 } from "../composer-drafts.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import {
+  awaitsNod,
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
   type InboxDraft,
@@ -523,7 +524,9 @@ export function useTaskInbox(input: {
       if (message === undefined || out.current.has(item.id)) return;
       out.current.add(item.id);
       const { text, attachments, answers } = message;
-      const words = JSON.stringify([text, attachments, answers]);
+      // Note that a reply on a notice names the revision shown, so it settles that notice and never one posted since.
+      const revision = thread !== undefined && awaitsNod(item, thread) ? item.revision : undefined;
+      const words = JSON.stringify([text, attachments, answers, revision]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, words });
@@ -546,6 +549,7 @@ export function useTaskInbox(input: {
           text,
           ...(attachments.length === 0 ? undefined : { attachments }),
           ...(answers === undefined ? undefined : { answers }),
+          ...(revision === undefined ? undefined : { revision }),
           clientKey: key,
         })
         .catch((): CodingAgentInboxMessagedView => UNANSWERED)

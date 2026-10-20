@@ -11,6 +11,7 @@ import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
+  INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
@@ -247,6 +248,13 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         assert.equal(
           refusalOf(yield* withdrawAsk(agent, input({ key: "pr-ready", reason: "Merged." }))),
           INBOX_REFUSAL.NO_OPEN_ASK,
+        );
+        for (let at = 1; at < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; at += 1) {
+          yield* post(agent, { key: `pr-${at}`, title: "PR ready", body: "Opened." });
+        }
+        assert.equal(
+          refusalOf(yield* post(agent, { key: "pr-more", title: "PR ready", body: "Opened." })),
+          INBOX_REFUSAL.TOO_MANY_NOTICES,
         );
       }),
   );
@@ -519,10 +527,14 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           yield* TestClock.adjust(Duration.seconds(1));
           yield* post(agent, { key: QUEUE.key, body: text });
         }
+        // The agent's words after the answer bring the thread back as a notice, which the member's reply on it settles.
+        const notice = yield* onlyItem(agent);
+        assert.equal(notice.status, INBOX_STATUS.OPEN);
         yield* TestClock.adjust(Duration.seconds(1));
         yield* postInboxMessage(agent.userId, asked.id, {
           text: "Great.",
           clientKey: randomUUID(),
+          revision: notice.revision,
         });
 
         const settled = yield* readOwnInbox(agent);

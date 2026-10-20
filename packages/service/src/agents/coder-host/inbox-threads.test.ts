@@ -38,6 +38,7 @@ import {
   closeInboxItem,
   closeInboxItemAsMember,
   INBOX_ASK_ANSWER,
+  INBOX_POST_REFUSAL,
   type InboxPostRefusal,
   postInboxItem,
   postInboxMessage,
@@ -956,7 +957,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a post that asks nothing takes no place among the open asks, so an agent holding as many as it may still posts one, and notices left open keep no ask from being posted",
+    "a post that asks nothing takes no place among the open asks, so an agent holding as many as it may still posts one, and notices left open keep no ask from being posted; past as many open notices, one more is refused until the developer acknowledges one, while a follow-up on one stands",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -981,7 +982,37 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         });
 
         assert.ok(Result.isFailure(refused));
-        assert.equal(posted(note).status, INBOX_STATUS.OPEN);
+        assert.deepEqual(
+          yield* postInboxThread(agent, { key: "one-more-notice", title: "More", body: "More." }),
+          Result.fail(INBOX_POST_REFUSAL.TOO_MANY_NOTICES),
+          "the notice bound counts the notices open, whatever the ask bound holds",
+        );
+        assert.deepEqual(
+          note,
+          Result.fail(INBOX_POST_REFUSAL.TOO_MANY_NOTICES),
+          "a post from before version 5 that asks nothing is held to the notice bound too",
+        );
+        const first = posted(
+          yield* postInboxThread(agent, { key: "notice-0", body: "Redeployed from main." }),
+        );
+        assert.equal(first.status, INBOX_STATUS.OPEN, "a follow-up on a notice still open stands");
+        yield* answerInboxItem(
+          agent.userId,
+          first.id,
+          first.revision,
+          { reply: INBOX_REPLY.ACKNOWLEDGED },
+          randomUUID(),
+        );
+        assert.equal(
+          posted(
+            yield* postInboxItem(agent, {
+              key: "preview-up",
+              title: "The preview is up",
+              response: { type: INBOX_RESPONSE.NONE },
+            }),
+          ).status,
+          INBOX_STATUS.OPEN,
+        );
       }),
   );
 
@@ -1058,7 +1089,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a member's words on a notice settle it as their nod, and taken back for a hand-off that failed leave it waiting again; the agent's withdrawal finds no ask on it",
+    "a member's words on a notice settle it as their nod at the revision they were shown and no other, and taken back for a hand-off that failed leave it waiting again; the agent's withdrawal finds no ask on it",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -1072,9 +1103,39 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         assert.ok(Option.isNone(yield* closeInboxItem(agent, "preview-up", "No longer needed.")));
         yield* later;
 
+        const stale = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, notice.id, {
+            text: "Thanks for the last one.",
+            clientKey: randomUUID(),
+            revision: notice.revision - 1,
+          }),
+        );
+        assert.equal(
+          stale.item.status,
+          INBOX_STATUS.OPEN,
+          "a reply to what came before settles nothing",
+        );
+        yield* later;
+        const plain = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, notice.id, {
+            text: "Hm.",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(
+          plain.item.status,
+          INBOX_STATUS.OPEN,
+          "a reply naming no revision settles nothing",
+        );
+        yield* later;
+
         const clientKey = randomUUID();
         const written = Option.getOrThrow(
-          yield* postInboxMessage(agent.userId, notice.id, { text: "Looks good.", clientKey }),
+          yield* postInboxMessage(agent.userId, notice.id, {
+            text: "Looks good.",
+            clientKey,
+            revision: notice.revision,
+          }),
         );
         assert.deepEqual(
           [written.item.status, written.item.answer, written.item.answeredBy?.userId],
@@ -1086,7 +1147,11 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         const back = Option.getOrThrow(yield* readInboxItem(agent.userId, notice.id)).item;
         assert.deepEqual(
           [back.status, back.answer, back.thread?.map((message) => message.text)],
-          [INBOX_STATUS.OPEN, undefined, ["It deploys from main."]],
+          [
+            INBOX_STATUS.OPEN,
+            undefined,
+            ["It deploys from main.", "Thanks for the last one.", "Hm."],
+          ],
         );
       }),
   );

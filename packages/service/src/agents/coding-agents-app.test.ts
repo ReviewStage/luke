@@ -5608,7 +5608,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const sent = readAnswer(
           inboxMessagedSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* message(replied.success.id, { text: "Nice work.", clientKey: randomUUID() }),
+          yield* message(replied.success.id, {
+            text: "Nice work.",
+            clientKey: randomUUID(),
+            revision: replied.success.revision,
+          }),
         );
         assert.equal(sent.item.status, INBOX_STATUS.ANSWERED);
         assert.equal(eve.sent.length, before + 1, "a reply with words reaches the agent");

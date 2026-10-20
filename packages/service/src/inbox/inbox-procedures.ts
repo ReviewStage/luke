@@ -366,7 +366,8 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
  * workspaces, open or settled, whichever member started its agent, and
  * answers with the item as it then stands. The message is written first,
  * with its files, moving the item's last change and nothing else of it
- * but that it settles a notice as the member's nod does, and then handed
+ * but that it settles the notice at the revision the request names as the
+ * member's nod does, and then handed
  * to the agent as one of the developer's messages, under
  * its own lead and its files with it, through the one steer path
  * (`coder-host/steer.ts`), which opens a turn for an agent that stopped as
@@ -394,9 +395,10 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly clientKey: string;
     readonly attachments: readonly CodingAgentAttachment[];
     readonly answers?: InboxAnswers | undefined;
+    readonly revision?: number | undefined;
   },
 ) {
-  const { text, clientKey, attachments, answers } = asked;
+  const { text, clientKey, attachments, answers, revision } = asked;
   if (answers !== undefined) {
     return yield* answeredByReply(seams, writer, request, userId, itemId, {
       text,
@@ -406,7 +408,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
     });
   }
   const posted = yield* hostedStoreOrUnavailable(
-    postInboxMessage(userId, itemId, { text, clientKey, files: attachments }),
+    postInboxMessage(userId, itemId, { text, clientKey, files: attachments, revision }),
   );
   if (Option.isNone(posted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { item, outcome } = posted.value;
@@ -488,12 +490,13 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       context,
     }) {
       const itemId = yield* rowIdOf(input.params.id);
-      const { text, clientKey, attachments = [], answers } = input.body;
+      const { text, clientKey, attachments = [], answers, revision } = input.body;
       return yield* messaged(seams, writer, context.request, context.userId, itemId, {
         text,
         clientKey,
         attachments,
         answers,
+        revision,
       });
     }),
     close: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).close.effect(function* ({

@@ -100,6 +100,8 @@ export const INBOX_TOOLS = {
       `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options, or boolean, each named by its label and required where it must be filled; ` +
       "or no fields for an answer in their own words); never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
       "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread. " +
+      "It waits in their inbox until they acknowledge it, which never reaches you unless they write something; " +
+      `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
       "A thread holds one open ask, and a newer ask replaces it. " +
       "waits is whether you need to hear the answer as a message: decide and answer wait unless you set it false, and do waits only where you set it true. " +
       "An answer you do not wait for is kept for you to read, though one carrying their words or a file still reaches you as a message. " +
@@ -195,6 +197,7 @@ export const INBOX_REFUSAL = {
   NO_TITLE:
     "Not posted: you have no thread under that key, and the first post under a key names its title.",
   TOO_MANY: `Not posted: you hold ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks already. Withdraw one you no longer need first.`,
+  TOO_MANY_NOTICES: `Not posted: the developer has ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} notices of yours to acknowledge. Follow up on one under its key, or wait until they do.`,
   TOO_MANY_PICTURES: `Not posted: a message draws at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} pictures from your sandbox.`,
   NO_OPTIONS: "Not posted: a decide's options each stand under a label of their own.",
   UNKNOWN_RECOMMENDATION: "Not posted: recommended names no option's label.",
@@ -411,6 +414,8 @@ function storeRefusal(refusal: InboxPostRefusal): string {
   switch (refusal) {
     case INBOX_POST_REFUSAL.TOO_MANY_OPEN:
       return INBOX_REFUSAL.TOO_MANY;
+    case INBOX_POST_REFUSAL.TOO_MANY_NOTICES:
+      return INBOX_REFUSAL.TOO_MANY_NOTICES;
     case INBOX_POST_REFUSAL.NO_TITLE:
       return INBOX_REFUSAL.NO_TITLE;
     case INBOX_POST_REFUSAL.NO_AGENT:
