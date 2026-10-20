@@ -39,9 +39,11 @@ import {
   AVATAR_SIZE,
   Avatar,
   Badge,
-  Button,
+  CHIP_LOOK,
+  CHIP_SIZE,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
+  Chip,
   ChoiceBar,
   type ChoiceItem,
   COUNT_TONE,
@@ -60,9 +62,12 @@ import {
   linesCount,
   PAGE_FRAME,
   ProviderMark,
+  SCROLL_FADE,
+  SCROLL_FADE_INSET,
+  SCROLL_GUTTER,
+  ScrollArea,
   Skeleton,
   SkeletonRegion,
-  Switch,
   TEXT_BUTTON_TONE,
   TextButton,
   useMenu,
@@ -117,9 +122,10 @@ import {
 } from "./agent-changes-tab.js";
 import { threadPreview } from "./changes-model.js";
 import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
-import { centreWithin, scrollerOf } from "./code-pane.js";
+import { scrollerOf } from "./code-pane.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
+  type ConversationFilters,
   type ConversationFiltersControl,
   type ConversationHidden,
   conversationHidden,
@@ -246,9 +252,11 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * (`pull-request-reactions.tsx`). A thread's file and lines take it to
  * Files changed, and its ⋯ to the other view or its link copied, each
  * through the window's route for the thread's link, which brings it into
- * view there (`thread-reveal.tsx`). Over the conversation, stage-cli's two filters,
- * Hide bots and Hide resolved, each counting what it leaves out and kept
- * across launches (`conversation-filters.ts`). Every name and word here is
+ * view there (`thread-reveal.tsx`). The Description and the Conversation
+ * each fold under a heading that sticks to the view's top while it is in
+ * view, the Conversation's ending in stage-cli's two filters, Hide resolved
+ * and Hide bots, each counting what it leaves out; the filters and the folds
+ * are kept across launches (`conversation-filters.ts`). Every name and word here is
  * the repository's, so the tab is left out of the screen recording
  * (`ph-no-capture`).
  */
@@ -295,9 +303,6 @@ const PULL_REQUEST_WORDS = {
   commentCount: (count: number) => `${count} ${count === 1 ? "comment" : "comments"}`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
-  /** What the folded checks' control says while folded, by how many checks there are in all. */
-  showAll: (count: number) => `Show all ${count}`,
-  SHOW_LESS: "Show less",
   /** What the Files changed tab's count says after the lines left to review. */
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
@@ -405,9 +410,6 @@ const CHECK_ORDER: readonly CheckState[] = [
   CHECK_STATE.SKIPPED,
 ];
 
-/** How many checks stand before the list folds, as stage-cli folds its own; a check that failed or still runs never folds away. */
-const CHECKS_UNFOLDED = 5;
-
 /** The size, in CSS pixels, a check's avatar is drawn at (`AVATAR_SIZE.INLINE`), and the density GitHub is asked for it at. */
 const CHECK_AVATAR_PIXELS = 16;
 const CHECK_AVATAR_DENSITY = 2;
@@ -420,14 +422,6 @@ function durationOf(check: PullRequestCheck): string | undefined {
   if (check.startedAt === null || check.completedAt === null) return undefined;
   const ran = check.completedAt - check.startedAt;
   return ran < RAN_AT_LEAST_MS ? undefined : workingTime(ran);
-}
-
-/** How many of the checks, in the order the service ranks them, stand unfolded: the first five, and past them every one that failed or still runs. */
-function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
-  const asking = checks.filter(
-    (check) => check.state === CHECK_STATE.FAILED || check.state === CHECK_STATE.PENDING,
-  ).length;
-  return Math.max(CHECKS_UNFOLDED, asking);
 }
 
 /** What the side panel's toolbar ⋯ offers on the pull request: it opened on GitHub, and the page read again, dimmed while a read is out, which a refresh would only repeat. */
@@ -506,23 +500,64 @@ function reviewersOf(
   ].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** A section of the page: its heading, what it counts beside it, and what it holds. */
+/** Whether a section that folds stands open, and the press that opens or folds it. */
+interface SectionFold {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * A section of the page: its heading, what it counts beside it, and what it
+ * holds. One that folds (`fold`) heads itself with a press across its whole
+ * row, the chevron leading, which opens and folds it as the app's own
+ * disclosure does, its motion and its reduced motion the disclosure's; what
+ * stands at the row's end (`end`) keeps its own presses rather than folding
+ * it. That row sticks to the top of the Conversation's scroller while its
+ * section is in view, and the next section's pushes it off (tasks.css).
+ */
 function Section({
   title,
   count,
+  fold,
+  end,
   children,
 }: {
   title: string;
   count?: ReactNode;
+  fold?: SectionFold | undefined;
+  end?: ReactNode;
   children: ReactNode;
 }): React.JSX.Element {
+  const heading = (
+    <h3 className="pull-request-heading">
+      {title}
+      {count === undefined ? null : <span className="pull-request-count">{count}</span>}
+    </h3>
+  );
+  if (fold === undefined) {
+    return (
+      <section className="pull-request-section" aria-label={title}>
+        {heading}
+        {children}
+      </section>
+    );
+  }
   return (
     <section className="pull-request-section" aria-label={title}>
-      <h3 className="pull-request-heading">
-        {title}
-        {count === undefined ? null : <span className="pull-request-count">{count}</span>}
-      </h3>
-      {children}
+      <Fold open={fold.open} onOpenChange={fold.onOpenChange}>
+        <FoldSummary className="pull-request-section-head">
+          <DisclosureChevron />
+          {heading}
+          {end === undefined ? null : (
+            // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps its controls' presses from folding the section whose head they stand in; the controls inside are the presses.
+            // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the wrapper keeps the same way.
+            <span className="pull-request-section-end" onClick={keptInHead}>
+              {end}
+            </span>
+          )}
+        </FoldSummary>
+        <FoldBody className="pull-request-section-body">{children}</FoldBody>
+      </Fold>
     </section>
   );
 }
@@ -659,12 +694,7 @@ function CheckRow({
   );
 }
 
-/**
- * Every check, in the order the service ranks them, failures first, under a
- * count of each standing. Past five the list folds, as stage-cli's does,
- * behind a control that shows them all and folds them again; a check that
- * failed or still runs stands above the fold however many there are.
- */
+/** Every check, in the order the service ranks them, failures first, then those still running, then the rest, under a count of each standing. */
 function Checks({
   agentId,
   checks,
@@ -674,38 +704,21 @@ function Checks({
   checks: readonly PullRequestCheck[];
   live: boolean;
 }): React.JSX.Element {
-  const [unfolded, setUnfolded] = useState(false);
-  const listId = useId();
   const counts = CHECK_ORDER.flatMap((state) => {
     const count = checks.filter((check) => check.state === state).length;
     return count === 0 ? [] : [`${count} ${CHECK_WORDS[state]}`];
   });
-  const folds = checks.length > unfoldedCountOf(checks);
-  const shown = folds && !unfolded ? checks.slice(0, unfoldedCountOf(checks)) : checks;
   return (
     <Section title="Checks" count={counts.length === 0 ? undefined : counts.join(", ")}>
       {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
-        <>
-          <div id={listId}>
-            <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
-              {shown.map((check, at) => (
-                // Note that two checks may share a name across Apps, so a row is keyed by its place too.
-                <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
-              ))}
-            </List>
-          </div>
-          {folds ? (
-            <Button
-              aria-expanded={unfolded}
-              aria-controls={listId}
-              onClick={() => setUnfolded((was) => !was)}
-            >
-              {unfolded ? PULL_REQUEST_WORDS.SHOW_LESS : PULL_REQUEST_WORDS.showAll(checks.length)}
-            </Button>
-          ) : null}
-        </>
+        <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
+          {checks.map((check, at) => (
+            // Note that two checks may share a name across Apps, so a row is keyed by its place too.
+            <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
+          ))}
+        </List>
       )}
     </Section>
   );
@@ -1344,16 +1357,18 @@ function DescriptionPart({
   reactions,
   subject,
   picture,
+  fold,
 }: {
   part: Part<CodingAgentOverviewPullRequest>;
   reactions: readonly ReactionGroup[] | undefined;
   /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
   subject: string | undefined;
   picture: GitHubPictureDrawer;
+  fold: SectionFold;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
   return (
-    <Section title="Description">
+    <Section title="Description" fold={fold}>
       {part.kind === PART.PENDING ? (
         <PartSkeleton
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
@@ -1375,17 +1390,22 @@ function DescriptionPart({
   );
 }
 
-/** The conversation as its read stands: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
+/** The conversation as its read stands, under its heading and its filters: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
 function ConversationPart({
   parts,
   filters,
+  filterControls,
+  fold,
   kept,
   url,
   now,
   picture,
 }: {
   parts: OverviewParts;
-  filters: ConversationFiltersControl["filters"];
+  filters: ConversationFilters;
+  /** Hide resolved and Hide bots, at the end of the section's heading. */
+  filterControls: ReactNode;
+  fold: SectionFold;
   /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
   kept: ReadonlySet<string>;
   /** The pull request's page, which the earlier entries left on GitHub open. */
@@ -1397,7 +1417,7 @@ function ConversationPart({
   const part = parts.conversation;
   if (part.kind !== PART.LANDED) {
     return (
-      <Section title="Conversation">
+      <Section title="Conversation" fold={fold} end={filterControls}>
         {part.kind === PART.PENDING ? (
           <PartSkeleton
             label={PULL_REQUEST_WORDS.READING_CONVERSATION}
@@ -1418,6 +1438,8 @@ function ConversationPart({
     <Section
       title="Conversation"
       count={earlier + conversation.length === 0 ? undefined : earlier + conversation.length}
+      fold={fold}
+      end={filterControls}
     >
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
@@ -1635,7 +1657,7 @@ function tabsOf(
   ];
 }
 
-/** One of the conversation's filters: its word, how many it would leave out once the conversation is read, and its switch, the word and the count pressing it too. */
+/** One of the conversation's filters: a compact chip pressed while it is on, its word and how many it would leave out once the conversation is read. */
 function ConversationFilter({
   label,
   count,
@@ -1650,27 +1672,25 @@ function ConversationFilter({
   on: boolean;
   onChange: (on: boolean) => void;
 }): React.JSX.Element {
-  const switchId = useId();
   const noteId = useId();
   const note = count === undefined ? undefined : describe(count);
   const filter = (
     <span className="pull-request-filter">
-      {/* Note that the word and the count label the switch, so a press on either turns it too. */}
-      <label htmlFor={switchId}>
+      <Chip
+        look={CHIP_LOOK.FILTER}
+        size={CHIP_SIZE.COMPACT}
+        aria-label={label}
+        aria-pressed={on}
+        aria-describedby={note === undefined ? undefined : noteId}
+        onClick={() => onChange(!on)}
+      >
         {label}
         {count === undefined ? null : (
-          <span className="pull-request-count" aria-hidden="true">
+          <span className="pull-request-filter-count" aria-hidden="true">
             {count.toLocaleString()}
           </span>
         )}
-      </label>
-      <Switch
-        id={switchId}
-        checked={on}
-        label={label}
-        describedBy={note === undefined ? undefined : noteId}
-        onChange={onChange}
-      />
+      </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>
           {note}
@@ -1681,8 +1701,8 @@ function ConversationFilter({
   return note === undefined ? filter : <Tooltip label={note}>{filter}</Tooltip>;
 }
 
-/** The row over the conversation that stays put while it scrolls: Hide resolved and Hide bots, as stage-cli orders them, each counting what it leaves out once read. */
-function ConversationFilterRow({
+/** Hide resolved and Hide bots, as stage-cli orders them, at the end of the Conversation's heading, each counting what it leaves out once read. */
+function ConversationFilterChips({
   control,
   hidden,
 }: {
@@ -1691,7 +1711,7 @@ function ConversationFilterRow({
 }): React.JSX.Element {
   const { filters, change } = control;
   return (
-    <div className="pull-request-filters">
+    <>
       <ConversationFilter
         label={PULL_REQUEST_WORDS.HIDE_RESOLVED}
         count={hidden?.resolved}
@@ -1706,11 +1726,21 @@ function ConversationFilterRow({
         on={filters.hideBots}
         onChange={(hideBots) => change({ hideBots })}
       />
-    </div>
+    </>
   );
 }
 
-/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them, and, once the conversation is read, the box a new comment is written in at its foot. */
+/**
+ * The Conversation tab: the description, then the comments, reviews, and
+ * threads, in one scroll, and, once the conversation is read, the box a new
+ * comment is written in at its foot. Each of the two sections folds under
+ * its heading, the choice kept for every pull request
+ * (`conversation-filters.ts`), and its heading sticks to the scroller's top
+ * while it is in view, what scrolls under it fading beneath it
+ * (`SCROLL_FADE_INSET.BAND`) rather than cut at its edge. A thread or an
+ * entry brought into view opens a folded Conversation, so its card is drawn
+ * to land on.
+ */
 function ConversationView({
   agentId,
   parts,
@@ -1731,38 +1761,58 @@ function ConversationView({
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
-  const filters = useConversationFilters();
+  const choices = useConversationFilters();
+  const { filters, change } = choices;
   const conversation = landed(parts.conversation)?.conversation;
+  const asked = landing?.ask;
+  const conversationOpen = filters.conversationOpen;
+  useEffect(() => {
+    if (asked !== undefined && !conversationOpen) change({ conversationOpen: true });
+  }, [asked, conversationOpen, change]);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Pull request conversation"
-      inset={DETAIL_PAGE_INSET.READING}
-      toolbar={
-        <ConversationFilterRow
-          control={filters}
-          hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
-        />
-      }
+    // Note that it is in the tab order, because it scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by.
+    <ScrollArea
+      role="region"
+      aria-label="Pull request conversation"
+      tabIndex={0}
+      fade={SCROLL_FADE.START}
+      fadeInset={SCROLL_FADE_INSET.BAND}
+      gutter={SCROLL_GUTTER.STABLE}
     >
-      <DescriptionPart
-        part={parts.pullRequest}
-        reactions={landed(parts.conversation)?.descriptionReactions}
-        subject={landed(parts.conversation)?.descriptionSubject}
-        picture={picture}
-      />
-      <ThreadLandingProvider value={landing}>
-        <ConversationPart
-          parts={parts}
-          filters={filters.filters}
-          kept={kept}
-          url={url}
-          now={now}
+      <div className="pull-request-page">
+        <DescriptionPart
+          part={parts.pullRequest}
+          reactions={landed(parts.conversation)?.descriptionReactions}
+          subject={landed(parts.conversation)?.descriptionSubject}
           picture={picture}
+          fold={{
+            open: filters.descriptionOpen,
+            onOpenChange: (descriptionOpen) => change({ descriptionOpen }),
+          }}
         />
-      </ThreadLandingProvider>
-      {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
-    </DetailPage>
+        <ThreadLandingProvider value={landing}>
+          <ConversationPart
+            parts={parts}
+            filters={filters}
+            filterControls={
+              <ConversationFilterChips
+                control={choices}
+                hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+              />
+            }
+            fold={{
+              open: conversationOpen,
+              onOpenChange: (open) => change({ conversationOpen: open }),
+            }}
+            kept={kept}
+            url={url}
+            now={now}
+            picture={picture}
+          />
+        </ThreadLandingProvider>
+        {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -1785,10 +1835,24 @@ interface ThreadJump {
   readonly ask: number;
 }
 
-/** A card brought into sight in the Conversation's own scroller, never by `scrollIntoView`, which would scroll every box around it (panel AGENTS.md). */
+/**
+ * A card brought into sight in the Conversation's own scroller, never by
+ * `scrollIntoView`, which would scroll every box around it (panel
+ * AGENTS.md): centred in the room under the heading stuck at the scroller's
+ * top and the fade beneath it, which the scroller's own scroll padding
+ * clears, and, where it is taller than that room, its top standing just
+ * under them rather than behind the heading.
+ */
 function centreCard(card: HTMLElement): void {
   const scroller = scrollerOf(card);
-  if (scroller !== undefined) centreWithin(scroller, card);
+  if (scroller === undefined) return;
+  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
+  const clear = Number.isNaN(padding) ? 0 : padding;
+  const box = scroller.getBoundingClientRect();
+  const at = card.getBoundingClientRect();
+  const top = box.top + clear;
+  const centred = at.top + at.height / 2 - (top + (box.height - clear) / 2);
+  scroller.scrollTop += Math.min(centred, at.top - top);
 }
 
 /**
@@ -2007,9 +2071,10 @@ const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
 
 /**
  * The views' own scrollers, whose scroll alone folds the header: the
- * Conversation's and the Checks' page column, and the diff list's.
+ * Checks' page column, the Conversation's scroller, and the diff list's.
  */
-const VIEW_SCROLLER = ".luke-detail-page-main, .diff-list > .luke-scroll-area";
+const VIEW_SCROLLER =
+  ".luke-detail-page-main, .pull-request-view > .luke-scroll-area, .diff-list > .luke-scroll-area";
 
 /**
  * Whether `box` is the shown view's own scroller, drawn in the tab at
