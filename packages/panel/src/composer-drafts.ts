@@ -102,12 +102,34 @@ const draftPlaceSchema = Schema.Union([
 /** Where one draft goes. */
 export type DraftPlace = typeof draftPlaceSchema.Type;
 
+/**
+ * New task's words on one of the workspace's own issues, as a build from
+ * before Luke kept no issues stored them. No card opens on an issue now, so
+ * such an entry is read past rather than taken for the workspace's own
+ * draft, which it would displace, and goes once its account writes again.
+ */
+const issueDraftPlaceSchema = Schema.Struct({
+  kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
+  workspaceId: Schema.NullOr(Schema.String),
+  issueId: Schema.String,
+});
+
+/** A place as storage may hold it: one of today's, or New task's on an issue (`issueDraftPlaceSchema`). */
+const storedPlaceSchema = Schema.Union([issueDraftPlaceSchema, draftPlaceSchema]);
+
+type StoredPlace = typeof storedPlaceSchema.Type;
+
+/** Whether a place storage holds is one a box opens today. */
+function isDraftPlace(place: StoredPlace): place is DraftPlace {
+  return !("issueId" in place);
+}
+
 /** The drafts as storage keeps them: each place's words, a card's picks where it holds some, and the account that wrote them, the latest written last. */
 const storedDrafts = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
       accountId: Schema.NullOr(Schema.String),
-      place: draftPlaceSchema,
+      place: storedPlaceSchema,
       text: Schema.String,
       choices: Schema.optionalKey(Schema.Array(Schema.String)),
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
@@ -157,17 +179,13 @@ function readStored(): readonly StoredDraft[] {
   return readKept(STORAGE_KEY, storedDrafts, []);
 }
 
-/** The owner's kept drafts; storage keeps no files, and no draft of files alone. */
+/** The owner's kept drafts; storage keeps no files, and no draft of files alone, or of a place no box opens now. */
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .map(({ place, text, choices = [], values = [] }) => ({
-      place,
-      text,
-      attachments: [],
-      choices,
-      values,
-    }))
+    .flatMap(({ place, text, choices = [], values = [] }) =>
+      isDraftPlace(place) ? [{ place, text, attachments: [], choices, values }] : [],
+    )
     .filter(stored);
 }
 
