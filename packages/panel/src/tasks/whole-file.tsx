@@ -171,6 +171,12 @@ function useWholeFileFind(
       }));
     // Note that a card is watched while a query stands, since it draws its own words anew, its age among them, with no draw of the file's.
     const watchNotes = () => {
+      const standing = new Set(read.current.notes.map((note) => note.key));
+      for (const [key, stop] of state.watching) {
+        if (standing.has(key)) continue;
+        stop();
+        state.watching.delete(key);
+      }
       for (const note of read.current.notes) {
         if (!state.watching.has(note.key)) {
           state.watching.set(
