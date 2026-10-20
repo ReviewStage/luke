@@ -19,7 +19,7 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -183,25 +183,20 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-        const value: CodingAgentInboxAnswerView = {
-          items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      const value: CodingAgentInboxAnswerView = {
-        items: INBOXES.get(request.payload.taskId) ?? [],
-        cursor: "1",
-      };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-    },
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   fakeActPort({
+    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
+      const value: CodingAgentInboxAnswerView = {
+        items: AGENT_INBOXES.get(agentId) ?? [],
+        cursor: "1",
+      };
+      return Promise.resolve(value);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
+      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
+      return Promise.resolve(value);
+    },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId ?? "");

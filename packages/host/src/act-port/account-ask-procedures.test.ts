@@ -137,13 +137,17 @@ function windowPort(
     ActPortDependencies,
     "account" | "settings"
   >;
-  // SAFETY: no agent, automation, factory, or integration act is called here, so their hosts are never reached.
+  // SAFETY: no agent, inbox, chat, automation, factory, or integration act is called here, so their hosts are never reached.
   const elsewhere = {
+    agentInbox: { host: {} },
     agents: { host: {}, notices: {} },
     automations: { host: {} },
     factory: { host: {} },
     integrations: { host: {} },
-  } as Pick<ActPortDependencies, "agents" | "automations" | "factory" | "integrations">;
+  } as Pick<
+    ActPortDependencies,
+    "agentInbox" | "agents" | "automations" | "factory" | "integrations"
+  >;
   const handler = createActPortHandler(
     { ...unreached, ...elsewhere, accountAsks: { host }, issues, workspaces },
     platform,

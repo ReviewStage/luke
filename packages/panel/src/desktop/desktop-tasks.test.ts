@@ -39,7 +39,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -956,13 +956,12 @@ test("with Chat off for the account, a Chat tab kept on the task's strip draws n
 test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
   const marked: string[] = [];
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
-        const { itemId, unread } = request.payload;
-        marked.push(`${unread ? "unread" : "read"}:${itemId}`);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: itemId, unread } });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
+  });
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
+      marked.push(`${unread ? "unread" : "read"}:${itemId}`);
+      return Promise.resolve({ id: itemId, unread });
     },
   });
   const SHIP = {

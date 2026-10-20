@@ -285,7 +285,6 @@ function hostRowDependencies(
       callStanding: () => false,
       colourCode: highlightSnippet,
     },
-    codingAgents: { host },
   };
 }
 
@@ -309,6 +308,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    agentInbox: { host },
     agents: { host, notices },
     automations: { host },
     factory: { host },

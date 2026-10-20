@@ -9,6 +9,7 @@ import { RUN_PROFILE } from "@luke/host/app-state";
 import {
   ACCOUNT_ACT_KIND,
   AGENT_ACT_KIND,
+  AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
@@ -796,6 +797,7 @@ let sentActs: string[] = [];
 const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...ACCOUNT_ACT_KIND,
   ...AGENT_ACT_KIND,
+  ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
@@ -821,7 +823,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, a Factory world, or its coding agents, and an account or settings act, is refused, as `app:act` refused it before it moved onto the port.
+    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, and an account or settings act, is refused, as `app:act` refused it before it moved onto the port.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });

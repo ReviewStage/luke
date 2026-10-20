@@ -192,7 +192,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         colourCode: highlightSnippet,
       },
-      codingAgents: { host: operator.host },
     },
     platformRows,
   );
@@ -248,6 +247,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           resumeSessionReplay: operator.resumeSessionReplay,
         },
         accountAsks: { host: operator.host },
+        agentInbox: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
         factory: { host: operator.host },
