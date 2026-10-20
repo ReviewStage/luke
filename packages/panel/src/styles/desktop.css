@@ -8199,3 +8199,30 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   -webkit-line-clamp: 3;
   overflow-wrap: anywhere;
 }
+
+/* On a phone a card wears its Status chip under its name, on the name's
+   inset, which moves it without a drag (`tasks-board.tsx`); its menu stands
+   over the cards below while it is open. */
+.tasks-board-card-status {
+  display: flex;
+  padding: 0 var(--row-inset) var(--luke-space-6);
+}
+
+.tasks-board .sidebar-task-item:has(.tasks-board-card-status [aria-expanded="true"]) {
+  z-index: 2;
+}
+
+/* On a phone the Board's tabs, one for each status, take the whole line
+   above its one column, and scroll sideways where they need more; the
+   column's cards fill its height, so a card's Status menu has the column's
+   room to drop into. */
+.tasks-board-tabs {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 100%;
+  flex-direction: column;
+}
+
+.desktop-shell[data-room="narrow"] .tasks-board-column-scroll {
+  flex: 1 1 auto;
+}

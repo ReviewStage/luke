@@ -659,7 +659,7 @@ export function DesktopShell({
             ) : boardOpen ? (
               <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
                 <Suspense fallback={<BoardLoading onExit={tasks.boardView.onClose} />}>
-                  <TasksBoard tasks={tasks} />
+                  <TasksBoard tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : automationsOpen ? (
