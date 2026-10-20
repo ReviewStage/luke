@@ -195,6 +195,8 @@ export function createInProcessBridge<Sender = unknown>(
       onBrowserState: neverDelivered,
       onBrowserKey: neverDelivered,
       onBrowserFocus: neverDelivered,
+      // A tab is pushed nothing: it follows no issues over Neon Realtime, and reads them once.
+      onIssues: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,

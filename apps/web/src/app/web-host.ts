@@ -264,6 +264,9 @@ function platformRows(
     [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
       Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
+    // A tab is pushed no issues: it follows none over Neon Realtime, and reads them once.
+    [ACT_KIND.ISSUES_FOLLOW]: () => undefined,
+    [ACT_KIND.ISSUES_UNFOLLOW]: () => undefined,
   };
 }
 
