@@ -460,6 +460,13 @@ function keepDraft(store: RelayStateStore, eveTurnId: string, key: string, draft
   );
 }
 
+/** The events that end a turn, whose own write carries whatever the turn held. */
+const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
+  "turn.completed",
+  "turn.failed",
+  "turn.cancelled",
+]);
+
 /** One call a request of eve's asks for, as the record names it. */
 interface RequestedCall {
   readonly callId: string;
@@ -706,6 +713,8 @@ export class StreamRelay {
     return Effect.suspend(() => {
       const turn = standing.state.get().turns[eveTurnId];
       if (turn === undefined || !holdsUnwritten(turn)) return Effect.void;
+      // The turn's end lands what it holds in its own write (`#tell`), ahead of its answer or its end.
+      if (TURN_END_EVENTS.has(type)) return Effect.void;
       const boundary = type === "step.completed" || type === "message.received";
       if (!boundary && journaledWithin(turn, this.#seams.now())) return Effect.void;
       return Effect.asVoid(this.#land(eveTurnId, standing, []));

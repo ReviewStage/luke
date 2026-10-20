@@ -203,4 +203,32 @@ it.layer(getTestDB())("a running turn's journal written in batches", (it) => {
         assert.deepEqual(refusals, []);
       }),
   );
+
+  it.effect(
+    "a turn that ends past the interval lands what it held in the one write that finishes the journal, at one revision past the last",
+    () =>
+      Effect.gen(function* () {
+        const { relayed, tick, past, refusals } = yield* setUp;
+        yield* tenCallsAsked(relayed);
+        for (const callId of CALLS) {
+          yield* tick(1);
+          yield* relayed(answered(callId));
+        }
+        const held = yield* past({ seq: 0, revision: 0 });
+
+        yield* tick(JOURNAL_WRITE_INTERVAL_MS);
+        yield* relayed({
+          type: "turn.failed",
+          data: { ...TURN, code: "MODEL_CALL_FAILED", message: "upstream failed" },
+        });
+        const ended = yield* past(held.cursor);
+        assert.equal(ended.cursor.revision, held.cursor.revision + 1);
+        assert.ok(ended.read.ok);
+        assert.deepEqual(
+          callsOf(ended.read.value[0]?.message.parts ?? []).map((call) => call.unknown),
+          CALLS.map(() => false),
+        );
+        assert.deepEqual(refusals, []);
+      }),
+  );
 });
