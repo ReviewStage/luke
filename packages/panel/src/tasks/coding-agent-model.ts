@@ -1062,16 +1062,24 @@ export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
  * The agents with one agent's run read from its own transcript page or an
  * answer about it, where that knows better than the list: its status, and
  * the start a working line counts from, which moves with each turn and is
- * none while a message awaits one.
+ * none while a message awaits one. Where the agent already stands so, the
+ * agents are answered as they were, so a page that moved nothing redraws
+ * nothing that reads them.
  */
 export function withAgentRun(
   agents: readonly CodingAgentSummary[],
   agentId: string,
   run: AgentRun,
 ): readonly CodingAgentSummary[] {
+  const standing = agents.find((agent) => agent.id === agentId);
+  if (
+    standing === undefined ||
+    (standing.status === run.status && standing.runStartedAt === run.runStartedAt)
+  ) {
+    return agents;
+  }
   return agents.map((agent) => {
     if (agent.id !== agentId) return agent;
-    if (agent.status === run.status && agent.runStartedAt === run.runStartedAt) return agent;
     const { runStartedAt: _was, ...held } = agent;
     return run.runStartedAt === undefined
       ? { ...held, status: run.status }
@@ -1168,8 +1176,19 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
 
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
-  return message.parts.map(agentPart);
+  const read = partsRead.get(message);
+  if (read !== undefined) return read;
+  const parts = message.parts.map(agentPart);
+  partsRead.set(message, parts);
+  return parts;
 }
+
+/**
+ * Each message's parts as last read, by the message: a message is never
+ * changed in place (a page that rewrites one hands a new one), and a
+ * running agent's transcript reads every message's parts on every page.
+ */
+const partsRead = new WeakMap<CodingAgentMessage, readonly AgentPart[]>();
 
 /** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
 export function settledPlanEdits(messages: readonly CodingAgentMessage[]): number {
