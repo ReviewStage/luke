@@ -2895,6 +2895,8 @@ interface InboxAskAnswered {
   readonly item: InboxItem;
   readonly outcome: InboxAskAnswer;
   readonly refusal?: string;
+  /** The ask this write answered, where it took the answer, which the item's thread read may no longer carry. */
+  readonly ask?: InboxAsk;
 }
 
 /**
@@ -2988,7 +2990,11 @@ export function answerInboxAsk(
           now,
         });
         const item = yield* itemAsWritten(userId, itemId);
-        return Option.some({ item, outcome: INBOX_ASK_ANSWER.TAKEN });
+        return Option.some({
+          item,
+          outcome: INBOX_ASK_ANSWER.TAKEN,
+          ...(ask === undefined ? undefined : { ask }),
+        });
       }),
     ),
   );

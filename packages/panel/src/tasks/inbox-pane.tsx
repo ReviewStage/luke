@@ -108,6 +108,7 @@ import {
   decideButtons,
   decidedOf,
   decisionsOf,
+  doDecision,
   fieldValueOf,
   INBOX_HOLDER,
   INBOX_MISSING,
@@ -137,6 +138,7 @@ import {
   threadCut,
   threadEntries,
   withDecision,
+  withDoPress,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -1879,6 +1881,7 @@ function AskControls({
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
       const ticked = new Set(shownTicks(ask, draft));
+      const decision = doDecision(ask, draft);
       return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
@@ -1898,16 +1901,16 @@ function AskControls({
           <div className="inbox-ask-presses">
             <AskPress
               label={ASK_PRESS.DONE}
-              pressed={draft.press === INBOX_REPLY.DONE}
+              pressed={decision === INBOX_REPLY.DONE}
               disabled={disabled}
-              onPress={() => press(INBOX_REPLY.DONE)}
+              onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.DONE))}
             />
             <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
-              pressed={draft.press === INBOX_REPLY.NOT_DONE}
+              pressed={decision === INBOX_REPLY.NOT_DONE}
               disabled={disabled}
-              onPress={() => press(INBOX_REPLY.NOT_DONE)}
+              onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.NOT_DONE))}
             />
           </div>
         </>
