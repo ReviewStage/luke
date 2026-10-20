@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
@@ -83,6 +84,8 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       return Promise.resolve(done(undefined));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
+    case ACT_KIND.CHAPTERS_MODEL_READ:
+      return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.PROVIDER_KEYS_READ:
       return Promise.resolve(done({ keys }));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
@@ -174,6 +177,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
 
   assert.deepEqual(placeholders(page), [
     ["Loading your default", 3],
+    ["Loading your chapters model", 1],
     ["Loading your keys", 2],
   ]);
   await settle();

@@ -7,6 +7,7 @@ import {
   type AccountInboxEntry,
   accountInboxAnswerSchema,
 } from "@luke/features/account-inbox-wire";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
@@ -354,6 +355,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHAPTERS;
+      }),
+    readChaptersModel: () =>
+      Effect.sync(() => {
+        asked.push("chapters-model");
+        return { model: CHAPTERS_MODEL.HAIKU };
+      }),
+    writeChaptersModel: (model) =>
+      Effect.sync(() => {
+        asked.push(`chapters-model-write:${model}`);
+        return { model };
       }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
@@ -984,6 +995,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       CHAPTERS,
     );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_READ), {
+      model: CHAPTERS_MODEL.HAIKU,
+    });
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
+      { model: CHAPTERS_MODEL.OPUS },
+    );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
       OVERVIEW.pullRequest,
@@ -1160,6 +1178,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}#11`,
       `chapters:${AGENT_ID}`,
       `chapters-generate:${AGENT_ID}#11`,
+      "chapters-model",
+      `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `overview-pull-request:${AGENT_ID}`,
       `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,

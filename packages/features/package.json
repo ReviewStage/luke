@@ -31,6 +31,7 @@
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",
     "./coding-agent-failure-words": "./src/coding-agent-failure-words.js",
+    "./chapters-model-choice": "./src/chapters-model-choice.js",
     "./chat-mentions": "./src/chat-mentions.js",
     "./chat-wire": "./src/chat-wire.js",
     "./coding-agent-view": "./src/coding-agent-view.js",

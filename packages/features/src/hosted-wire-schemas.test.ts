@@ -464,6 +464,8 @@ const EFFECT_MODULE_SCHEMAS = {
     pullRequestChaptersParamsSchema: pullRequestChaptersView.pullRequestChaptersParamsSchema,
     pullRequestChaptersAnswerViewSchema:
       pullRequestChaptersView.pullRequestChaptersAnswerViewSchema,
+    chaptersModelWriteParamsSchema: pullRequestChaptersView.chaptersModelWriteParamsSchema,
+    chaptersModelAnswerViewSchema: pullRequestChaptersView.chaptersModelAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pullRequestChaptersView>,
   "pull-request-write-wire": {
     mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,

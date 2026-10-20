@@ -66,6 +66,8 @@ import {
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
+  type ChaptersModelAnswerView,
+  chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
 } from "@luke/features/pull-request-chapters-view";
@@ -113,6 +115,8 @@ export type CodingAgentClient = Pick<
   HostedCodingAgentClient,
   | "chapters"
   | "generateChapters"
+  | "readChaptersModel"
+  | "writeChaptersModel"
   | "models"
   | "readDefault"
   | "writeDefault"
@@ -473,6 +477,20 @@ function composed(
         );
         const answer = yield* asked(client.generateChapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CHAPTERS_MODEL_READ]: () =>
+      Effect.map(asked(client.readChaptersModel()), (answer) =>
+        carried<ChaptersModelAnswerView>(answer),
+      ),
+    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: (params) =>
+      Effect.gen(function* () {
+        const { model } = yield* read(
+          chaptersModelWriteParamsSchema,
+          params,
+          "the chapters model names one of the models Settings offers",
+        );
+        const answer = yield* asked(client.writeChaptersModel(model));
+        return carried<ChaptersModelAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {

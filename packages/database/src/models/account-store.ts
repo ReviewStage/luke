@@ -1,3 +1,8 @@
+import {
+  CHAPTERS_MODEL_LIST,
+  type ChaptersModelId,
+  chaptersModelFrom,
+} from "@luke/features/chapters-model-choice";
 import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
 import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -28,7 +33,8 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * What the account group reads and writes of an account: the erasure, the
  * cross-device snapshot behind `/api/account/preferences`, which is the
  * settings preferences, the coding agents' default model, effort, and
- * context window, and the experiments the account turned on, and the plan template behind
+ * context window, the model the account's Generate chapters runs on, and
+ * the experiments the account turned on, and the plan template behind
  * `/api/account/plan-template`, a column of the same row that neither path
  * reads of the other, whose every change is kept as a revision
  * (`plan-template-revisions.ts`). Every function here is an effect over the ambient `SqlClient`
@@ -45,6 +51,8 @@ export interface AccountPreferencesRow {
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
   codingAgent: ModelChoice;
+  /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
+  chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
   experiments: ExperimentChoices;
   /**
@@ -68,6 +76,7 @@ export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   linkOpen?: LinkOpen;
   codingAgent?: ModelChoice;
+  chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
 }
 
@@ -140,6 +149,7 @@ const PREFERENCE_COLUMNS = {
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
   codingAgentContextWindow: accountPreference.codingAgentContextWindow,
+  chaptersModel: accountPreference.chaptersModel,
   experiments: accountPreference.experiments,
   updatedAt: accountPreference.updatedAt,
 };
@@ -150,6 +160,7 @@ const PreferenceRowSchema = Schema.Struct({
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
   codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
+  chaptersModel: Schema.NullOr(Schema.String),
   experiments: Schema.NullOr(WireValueSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
 });
@@ -179,6 +190,8 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
       }) ?? {},
     codingAgent,
+    // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
+    chaptersModel: chaptersModelFrom(row.chaptersModel),
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
     experiments: experimentChoicesFrom(row.experiments ?? undefined) ?? NO_EXPERIMENTS,
     updatedAt: row.updatedAt ?? undefined,
@@ -246,6 +259,7 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
+  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   updatedAt: Schema.Date,
 });
@@ -257,6 +271,7 @@ function writtenColumns(write: PreferenceWrite) {
   return {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
+    ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
     ...(write.codingAgent === undefined
       ? undefined
@@ -299,9 +314,9 @@ const upsertPreference = SqlSchema.findOne({
 
 /**
  * Writes each part the write carries over what stood — the preferences
- * whole, the coding-agent default whole, the experiments key by key — and answers the snapshot as it
+ * whole, the coding-agent default whole, the chapters model, the experiments key by key — and answers the snapshot as it
  * now stands. The instant moves with the shared preferences part alone,
- * so a coding-agent choice or a link choice never reads to a Mac as a
+ * so a coding-agent choice, a chapters model, or a link choice never reads to a Mac as a
  * settings snapshot it has to take.
  */
 export function writeAccountPreferences(
@@ -316,6 +331,7 @@ export function writeAccountPreferences(
       ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
       ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+      ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };
     const row = yield* upsertPreference(stored).pipe(

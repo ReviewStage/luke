@@ -3,6 +3,7 @@ import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   type PullRequestChaptersFailure,
 } from "@luke/database/pull-request-chapters-vocabulary";
+import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import {
   CHAPTER_KIND,
@@ -69,9 +70,10 @@ import {
  * the literal `\n` a model escapes twice is read as the newline it meant.
  *
  * The model is a seam (`ChaptersModel`), as an agent's title model is:
- * production reaches Anthropic with Luke's own key on one fixed fast model
- * (`chaptersModelOf`), never through the account's meter, and a test hands
- * in a scripted model. The whole generation is bounded in time
+ * production reaches Anthropic with Luke's own key on the Claude model the
+ * member who pressed Generate chose in Settings, Haiku unless they changed
+ * it (`chaptersModelOf`, `@luke/features/chapters-model-choice`), never
+ * through the account's meter, and a test hands in a scripted model. The whole generation is bounded in time
  * (`CHAPTERS_BOUNDS.TIMEOUT`), and every way it fails is one of the store's
  * four kinds (`PULL_REQUEST_CHAPTERS_FAILURE`). A failure is logged by its
  * kind alone: neither the diff nor the answer leaves here but to the model
@@ -98,9 +100,6 @@ export const CHAPTERS_BOUNDS = {
   /** How hard the model is asked to think: grouping and judging risk earn more than a title's least. */
   EFFORT: "medium",
 } as const;
-
-/** The one model chapters are told on: Claude's fast model, at Anthropic's own id, the one an agent's title runs on. */
-const CHAPTERS_MODEL_ID = "claude-haiku-5-5";
 
 /** The AI SDK's word for a call the provider stopped on its own policy, as Anthropic's refusal reads. */
 const FINISH_REFUSED = "content-filter";
@@ -389,12 +388,14 @@ function unseen(each: ChapterHunk): boolean {
 }
 
 /**
- * The model chapters are told on, on Luke's own Anthropic key and never the
- * account's meter, or nothing where the deployment holds no key, as the
- * hosted route reads it from `HostedEnvironment`'s `anthropicKey`.
+ * The Claude model chapters are told on, the one the member who pressed
+ * Generate chose, on Luke's own Anthropic key and never the account's
+ * meter, or nothing where the deployment holds no key, as the hosted route
+ * reads it from `HostedEnvironment`'s `anthropicKey`.
  */
 export function chaptersModelOf(
   anthropicKey: Redacted.Redacted | undefined,
+  modelId: ChaptersModelId,
   fetch?: typeof globalThis.fetch,
 ): ChaptersModel | undefined {
   if (anthropicKey === undefined) return undefined;
@@ -403,7 +404,7 @@ export function chaptersModelOf(
     apiKey: Redacted.value(anthropicKey),
     ...(fetch === undefined ? undefined : { fetch }),
   };
-  return { id: CHAPTERS_MODEL_ID, model: createAnthropic(settings)(CHAPTERS_MODEL_ID) };
+  return { id: modelId, model: createAnthropic(settings)(modelId) };
 }
 
 /**

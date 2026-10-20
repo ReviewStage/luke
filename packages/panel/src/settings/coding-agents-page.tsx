@@ -48,14 +48,16 @@ import {
 } from "../tasks/coding-agent-model.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { ApiKeysSection } from "./api-keys-section.js";
+import { ChaptersModelSection } from "./chapters-model-section.js";
 import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
  *
- * The page is two groups under their own headings: this file's Default
- * model, then the account's own API keys (`api-keys-section.tsx`). The two
+ * The page is three groups under their own headings: this file's Default
+ * model, the model a Generate chapters runs on (`chapters-model-section.tsx`),
+ * then the account's own API keys (`api-keys-section.tsx`). The two
  * share the one read of the keys, so a
  * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
@@ -417,6 +419,7 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
   return (
     <>
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
+      <ChaptersModelSection signedIn={signedIn} />
       <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
     </>
   );
