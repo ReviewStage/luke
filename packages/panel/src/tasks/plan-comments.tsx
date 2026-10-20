@@ -73,7 +73,7 @@ import {
 import { ActorMark, ActorRef } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { coarsePointerNow } from "../coarse-pointer.js";
+import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -144,7 +144,7 @@ const REVEAL_ROOM = 96;
 const CARD_GAP = 8;
 
 /** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
-const BUBBLE_ROOM_TOUCH = 16 + 48;
+const BUBBLE_ROOM_TOUCH = FINGER_SELECTION_GAP + 48;
 
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {

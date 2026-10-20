@@ -4742,13 +4742,18 @@ ol.transcript-list {
 .agent-composer-field {
   position: relative;
   --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+  --agent-composer-field-lines: calc(
+    8 *
+    var(--luke-type-body-leading) +
+    var(--agent-composer-field-block)
+  );
 }
 
 .agent-composer-input {
   box-sizing: border-box;
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
-  max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  max-height: var(--agent-composer-field-lines);
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
@@ -7048,9 +7053,16 @@ button.picture-frame {
   padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
+.comment-field .agent-composer-field {
+  --agent-composer-field-lines: calc(
+    8 *
+    1.45em +
+    10px
+  ); /* off-scale: eight lines and the padding */
+}
+
 .comment-field .agent-composer-input {
   min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
-  max-height: calc(8 * 1.45em + 10px); /* off-scale: eight lines and the padding */
   padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
   line-height: 1.45;
 }

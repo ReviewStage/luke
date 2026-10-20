@@ -207,7 +207,11 @@ body,
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 }
 
-.app-stage[data-surface="desktop"]:has(.desktop-shell[data-sidebar-collapsed="true"]) {
+/* The work column starts at the window's edge where no sidebar stands beside
+   it: folded away, or a narrow room's, which shows one place at a time. */
+.app-stage[data-surface="desktop"]:has(
+  .desktop-shell:is([data-sidebar-collapsed="true"], [data-room="narrow"])
+) {
   --work-left: 0px;
 }
 
@@ -318,33 +322,21 @@ body,
   display: none;
 }
 
-.app-stage[data-surface="desktop"]:has(.desktop-shell[data-room="narrow"]) {
-  --work-left: 0px;
-}
-
 /* A narrow room is a phone's, whose keyboard takes half the screen: a box's
-   field stops growing at a share of what is seen (`--luke-stage-height`),
-   and scrolls past it, so the words written to and the box writing them both
-   keep a part of the screen. Home's card keeps its five lines under the cap,
-   since Home scrolls. */
-.desktop-shell[data-room="narrow"] .agent-composer-field {
-  --agent-composer-field-lines: calc(
-    8 *
-    var(--luke-type-body-leading) +
-    var(--agent-composer-field-block)
-  );
+   field stops growing at a share of what is seen (`--luke-stage-height`)
+   short of its eight lines (tasks.css), and scrolls past it, so the words
+   written to and the box writing them both keep a part of the screen. Home's
+   card keeps its five lines under the cap, since Home scrolls. New task's
+   dialog portals out of the shell, so it reads the shell's room off the
+   document's root (`stage-room.ts`), and its Start stays in the card above
+   the keyboard. */
+.desktop-shell[data-room="narrow"] .agent-composer-field,
+[data-luke-room="narrow"] .new-task .agent-composer-field {
   --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
 }
 
-.desktop-shell[data-room="narrow"] .comment-field .agent-composer-field {
-  --agent-composer-field-lines: calc(
-    8 *
-    1.45em +
-    10px
-  ); /* off-scale: as `.comment-field .agent-composer-input` */
-}
-
-.desktop-shell[data-room="narrow"] .agent-composer-input {
+.desktop-shell[data-room="narrow"] .agent-composer-input,
+[data-luke-room="narrow"] .new-task .new-task-composer .agent-composer-input {
   max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
 }
 
@@ -6673,6 +6665,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   --tab-gap: var(--luke-icon-gap);
   --tab-close: var(--luke-space-24);
   --tab-close-inset: var(--luke-space-4);
+  /* The mask that fades a label out beneath the × over its end; off-scale:
+     the fade runs 10px. */
+  --tab-close-fade: linear-gradient(
+    to left,
+    transparent calc(var(--tab-close) + var(--tab-close-inset)),
+    #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
+  );
   position: relative;
   display: flex;
   max-width: 200px;
@@ -6888,22 +6887,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .tab[data-closable="true"][data-selected="false"]:hover .tab-button {
-  mask-image: linear-gradient(
-    to left,
-    transparent calc(var(--tab-close) + var(--tab-close-inset)),
-    #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
-  );
+  mask-image: var(--tab-close-fade);
 }
 
 /* A screen with no hover fades a label under its × at rest, as under the
    pointer, but a marked tab's, which keeps room for its mark. */
 @media (hover: none) {
   .tab[data-closable="true"][data-selected="false"][data-marked="false"] .tab-button {
-    mask-image: linear-gradient(
-      to left,
-      transparent calc(var(--tab-close) + var(--tab-close-inset)),
-      #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
-    );
+    mask-image: var(--tab-close-fade);
   }
 }
 
@@ -7806,23 +7797,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .new-task-composer .agent-composer-actions {
   margin-left: auto;
-}
-
-/* The dialog portals out of the shell, so it reads the shell's room off the
-   document's root (`stage-room.ts`): on a phone, its field stops growing at
-   the same share of what is seen as a box's in the shell does, so Start stays
-   in the card above the keyboard. */
-[data-luke-room="narrow"] .new-task .agent-composer-field {
-  --agent-composer-field-lines: calc(
-    8 *
-    var(--luke-type-body-leading) +
-    var(--agent-composer-field-block)
-  );
-  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
-}
-
-[data-luke-room="narrow"] .new-task .new-task-composer .agent-composer-input {
-  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
 }
 
 /* A card too narrow for its placeholder on one line, as on a phone, wraps

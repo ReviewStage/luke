@@ -15,6 +15,13 @@ import { useEffect, useState } from "react";
 /** The media query a finger answers: the device's main pointer is coarse. */
 export const COARSE_POINTER = "(pointer: coarse)";
 
+/**
+ * How far what is offered on a finger's selection stands under the words,
+ * past the knob of the handle that ends them: `--luke-space-16`, the gap
+ * `.comment-bubble[data-below]` stands at (tasks.css).
+ */
+export const FINGER_SELECTION_GAP = 16;
+
 /** Whether the device's main pointer is a finger, now. */
 export function coarsePointerNow(): boolean {
   return window.matchMedia(COARSE_POINTER).matches;
