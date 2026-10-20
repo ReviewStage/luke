@@ -40,5 +40,16 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     /** Who a coding agent's commits are by: the Luke GitHub App's bot and its noreply address, set in the checkout's own config. */
     GIT_NAME: "LUKE_GIT_NAME",
     GIT_EMAIL: "LUKE_GIT_EMAIL",
+    /** Which step of deepening a shallow checkout the run is (`DEEPEN_STEP`); its presence is what makes a run one. */
+    DEEPEN: "LUKE_DEEPEN",
   },
+} as const;
+
+/**
+ * The two steps a coding agent's shallow checkout is deepened by: the probe
+ * of whether it is still shallow, and the fetch of the rest of its history.
+ */
+export const DEEPEN_STEP = {
+  PROBE: "probe",
+  FETCH: "fetch",
 } as const;

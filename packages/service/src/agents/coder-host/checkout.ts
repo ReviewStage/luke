@@ -24,10 +24,13 @@ import type { StoreFailure } from "../../http/store-failure.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   type CheckoutIdentity,
+  checkoutIsShallow,
   cloneRepository,
+  deepenRepository,
   REPOSITORY_REFUSAL,
   type RepositorySandbox,
   runInSandbox,
+  SHALLOW_CLONE_DEPTH,
   setCheckoutIdentity,
 } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
@@ -36,19 +39,22 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 /**
  * checkout.ts -- a coding agent's checkout of its repository, whose its commits are, and the credential its sandbox pushes through.
  *
- * The agent's repository is checked out once, as its sandbox opens, on the
- * same terms as the brain's checkout (`repository-shell.ts`): the
- * installation of its task's workspace is confirmed to reach it and a token
- * minted for that one repository, set at
- * the sandbox's firewall for the clone alone and withdrawn after it. What
- * differs is the token and the depth: the token carries contents and pull
- * requests write, since the agent pushes a branch and opens a pull request
- * from it, and the clone is the whole history, since a branch and a pull
- * request are cut from it. The token is then handed back for the authored
- * sandbox file to set at the firewall for the session's own commands, in
- * the shape `credentialPolicy` gives it (`terminal/agent-sandbox.ts`), which
- * is where `gh` and `git push` reach GitHub; it never enters the sandbox's
- * filesystem or environment. An installation token is good for an hour, so
+ * The agent's repository is checked out in two steps. As its sandbox opens,
+ * it is checked out shallow, on the same terms as the brain's checkout
+ * (`repository-shell.ts`): the installation of its task's workspace is
+ * confirmed to reach it and a read token minted for that one repository,
+ * set at the sandbox's firewall for the clone alone and withdrawn after it,
+ * and the clone is one commit deep, so a sandbox opened to read the code,
+ * as a call's first look at it does, opens fast and holds no credential.
+ * The first write deepens it (`deepenAgentCheckout`): a write token is
+ * minted, carrying contents and pull requests write, since the agent pushes
+ * a branch and opens a pull request from it, and set at the firewall for
+ * the fetch of the rest of the history alone, since a branch and a pull
+ * request are cut from it; the commit identity is set; and the token is
+ * handed back for the authored file to set at the firewall for the
+ * session's own commands, in the shape `credentialPolicy` gives it
+ * (`terminal/agent-sandbox.ts`), which is where `gh` and `git push` reach
+ * GitHub; it never enters the sandbox's filesystem or environment. An installation token is good for an hour, so
  * the host mints another on the same terms when the session's step hook
  * finds the one standing old. No developer's sign-in token ever stands at
  * the firewall. Where only its starter's own classic token reaches the
@@ -294,39 +300,46 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
   return { name: bot.login, email: noreplyAddress(bot) };
 });
 
+/** A refusal of the repository's shell, as the checkout's own. */
+function refusedWith(failure: { readonly reason: string }): CheckoutRefused {
+  return new CheckoutRefused({ reason: failure.reason });
+}
+
 /**
- * The agent's repository checked out whole, at the branch it was started on
- * where its row names one and at the current default branch otherwise, into
- * the sandbox, with its commit identity set in it; answers the credential
- * minted for it, for the caller to set at the firewall for the commands
- * that follow. The checkout is recorded under the name the agent's row
- * holds. Note that the identity is read ahead of the clone, so an account
- * GitHub cannot name costs no clone; and that a start branch deleted since
- * the start fails the clone, which says so in git's own words.
+ * The agent's repository checked out shallow, one commit deep, at the
+ * branch it was started on where its row names one and at the current
+ * default branch otherwise, into the sandbox, on a read token that stands
+ * at the firewall for the clone alone. The checkout is recorded under the
+ * name the agent's row holds. Nothing else is set: no commit identity and
+ * no credential, which the first write's deepen sets
+ * (`deepenAgentCheckout`). Note that a start branch deleted since the start
+ * fails the clone, which says so in git's own words.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
     agent: WithRepository<CodingAgent>,
     sandbox: RepositorySandbox,
-  ): Effect.fn.Return<RepositoryCredential, CheckoutRefused | StoreFailure, CheckoutServices> {
-    const minted = yield* agentRepositoryToken(target, agent);
-    const author = yield* agentAuthor(target, agent);
-    const identity = yield* commitIdentity(target, agent, author, minted);
-    const refused = (failure: { readonly reason: string }) =>
-      new CheckoutRefused({ reason: failure.reason });
+  ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
+    const app = yield* GitHubApp;
+    const reached = yield* Effect.gen(function* () {
+      const workspace = yield* agentWorkspace(target, agent);
+      if (Option.isNone(workspace)) return Option.none();
+      return yield* app.repositoryReadToken(workspace.value, agent.repository, agentMember(agent));
+    }).pipe(Effect.mapError(refusedBy));
+    if (Option.isNone(reached))
+      return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+    const { repository, token, access } = reached.value;
     yield* cloneRepository(
       sandbox,
       {
-        fullName: minted.fullName,
-        defaultBranch: agent.startBranch ?? minted.defaultBranch,
+        fullName: repository.fullName,
+        defaultBranch: agent.startBranch ?? repository.defaultBranch,
         recordedAs: agent.repository,
       },
-      minted.token,
-      { access: minted.access },
-    ).pipe(Effect.mapError(refused));
-    yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refused));
-    return { token: minted.token, fullName: minted.fullName, access: minted.access };
+      token,
+      { depth: SHALLOW_CLONE_DEPTH, access },
+    ).pipe(Effect.mapError(refusedWith));
   },
 );
 
@@ -353,6 +366,38 @@ export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolde
       reason: `\`${MAKE_WORKING_FOLDER}\` exited ${made.exitCode}`,
     });
   }
+});
+
+/**
+ * The agent's shallow checkout deepened to the whole history of its branch,
+ * with its commit identity set in it, as its first write asks; answers the
+ * write credential minted for it, for the caller to set at the firewall for
+ * the commands that follow, or none where the checkout already holds its
+ * whole history, whose credential the session already stands on. Note that
+ * the identity is read ahead of the fetch, so an account GitHub cannot name
+ * costs no fetch; and that a fetch two writes began at once runs once
+ * (`deepenRepository`), each answering the credential for its caller to set.
+ */
+export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentCheckout")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<
+  Option.Option<RepositoryCredential>,
+  CheckoutRefused | StoreFailure,
+  CheckoutServices
+> {
+  if (!(yield* checkoutIsShallow(sandbox).pipe(Effect.mapError(refusedWith)))) {
+    return Option.none();
+  }
+  const minted = yield* agentRepositoryToken(target, agent);
+  const author = yield* agentAuthor(target, agent);
+  const identity = yield* commitIdentity(target, agent, author, minted);
+  yield* deepenRepository(sandbox, minted.fullName, minted.token, minted.access).pipe(
+    Effect.mapError(refusedWith),
+  );
+  yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refusedWith));
+  return Option.some({ token: minted.token, fullName: minted.fullName, access: minted.access });
 });
 
 /**

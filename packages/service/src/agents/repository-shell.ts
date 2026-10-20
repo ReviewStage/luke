@@ -11,7 +11,7 @@ import { taskWorkspace } from "../github/workspace-repository.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
-import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
+import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 
 /**
  * repository-shell.ts -- the brain's one source read: a shell command run in the brain session's sandbox, on a checkout of the task's GitHub repository.
@@ -159,6 +159,34 @@ const IDENTITY_SCRIPT = [
   `git config user.email "$${SANDBOX_VARIABLE.GIT_EMAIL}"`,
 ].join("\n");
 
+/**
+ * Whether the standing checkout is shallow, as git prints it: `true` for a
+ * clone cut at a depth, `false` for one holding its whole history.
+ */
+const SHALLOW_PROBE_SCRIPT = "git rev-parse --is-shallow-repository";
+
+/** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
+const DEEPEN_LOCK_WAIT_SECONDS = 120;
+
+/**
+ * The rest of a shallow checkout's history fetched, from the workspace
+ * root. Note that two first writes of one session may deepen at once, so
+ * the fetch runs under a lock of its own and asks again under it, so the
+ * second finds the history whole and fetches nothing; and that a lock a
+ * stopped sandbox left standing is waited on for a bounded while and then
+ * taken over, so no deepen waits forever.
+ */
+const DEEPEN_SCRIPT = [
+  "set -e",
+  "mkdir -p .luke",
+  "lock=.luke/deepening",
+  "waited=0",
+  `until mkdir "$lock" 2>/dev/null; do waited=$((waited + 1)); [ "$waited" -le ${DEEPEN_LOCK_WAIT_SECONDS} ] || break; sleep 1; done`,
+  `trap 'rmdir "$lock" 2>/dev/null || true' EXIT`,
+  "cd repository",
+  `if [ "$(${SHALLOW_PROBE_SCRIPT})" = true ]; then git fetch --quiet --unshallow; fi`,
+].join("\n");
+
 /** The model's command, run by its own bash under the time bound and the clean environment, from the checkout root. Note that the variable is read by the outer bash, ahead of `env -i`, so the command reaches the inner bash as an argument and no variable. */
 const COMMAND_SCRIPT = `timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s env -i ${COMMAND_CLEAN_ENVIRONMENT} bash -c "$${SANDBOX_VARIABLE.COMMAND}"`;
 
@@ -228,8 +256,11 @@ export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
   readonly reason: string;
 }> {}
 
-/** The brain's checkout is one commit deep: it is read and never pushed from. */
-const BRAIN_CLONE_DEPTH = "1";
+/**
+ * A shallow checkout is one commit deep: the brain's, which is read and
+ * never pushed from, and a coding agent's until its first write deepens it.
+ */
+export const SHALLOW_CLONE_DEPTH = "1";
 
 /** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of (the default branch, or a coding agent's start branch), and the name the checkout's record keeps where a caller spells it otherwise. */
 export interface CheckoutRepository {
@@ -320,18 +351,20 @@ export function runInSandbox(
 }
 
 /**
- * The clone made in the sandbox with the token at the firewall, or the
- * refusal that stopped it: what the brain's checkout and a coding agent's
- * share. The token stands at the firewall for the clone alone: the policy is
- * set back to open internet as the clone ends, however it ended, so no later
- * command runs under it, and a caller that wants the token standing for its
- * own commands sets it again afterwards.
+ * A run of git's against GitHub with the token at the firewall, for the
+ * repository's own git endpoint alone, and the refusal for a git that
+ * failed. The token stands for the run alone: the policy is set back to
+ * open internet as the run ends, however it ended, and in a finalizer, so
+ * an interrupted run leaves no credential standing either, no later command
+ * runs under it, and a caller that wants the token standing for its own
+ * commands sets it again afterwards.
  */
-export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(function* (
+const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential")(function* (
   sandbox: RepositorySandbox,
-  confirmed: CheckoutRepository,
+  fullName: string,
   token: Redacted.Redacted,
-  { depth, access = { kind: GITHUB_ACCESS.APP } }: CheckoutDepth = {},
+  access: GitHubTokenAccess,
+  run: Effect.Effect<CommandResult, RepositoryRefusal>,
 ): Effect.fn.Return<void, RepositoryRefusal> {
   const setNetworkPolicy = sandbox.setNetworkPolicy;
   if (setNetworkPolicy === undefined)
@@ -341,6 +374,28 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
       try: () => setNetworkPolicy(next),
       catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     });
+  const timed = run.pipe(
+    Effect.timeoutOrElse({
+      duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
+      orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
+    }),
+  );
+  yield* policy(cloneNetworkPolicy(fullName, token, access));
+  const ran = yield* Effect.ensuring(timed, Effect.ignore(policy(OPEN_INTERNET)));
+  if (ran.exitCode !== 0) return yield* gitRefusal(ran);
+});
+
+/**
+ * The clone made in the sandbox with the token at the firewall, or the
+ * refusal that stopped it: what the brain's checkout and a coding agent's
+ * share, the token standing for the clone alone (`underCloneCredential`).
+ */
+export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(function* (
+  sandbox: RepositorySandbox,
+  confirmed: CheckoutRepository,
+  token: Redacted.Redacted,
+  { depth, access = { kind: GITHUB_ACCESS.APP } }: CheckoutDepth = {},
+): Effect.fn.Return<void, RepositoryRefusal> {
   const clone = runInSandbox(
     sandbox,
     {
@@ -355,17 +410,53 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
       },
     },
     REPOSITORY_REFUSAL.CHECKOUT_FAILED,
-  ).pipe(
-    Effect.timeoutOrElse({
-      duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
-      orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
-    }),
   );
-  yield* policy(cloneNetworkPolicy(confirmed.fullName, token, access));
-  // Note that the policy is opened again whatever the clone answered, and in
-  // a finalizer, so an interrupted clone leaves no credential standing either.
-  const cloned = yield* Effect.ensuring(clone, Effect.ignore(policy(OPEN_INTERNET)));
-  if (cloned.exitCode !== 0) return yield* gitRefusal(cloned);
+  yield* underCloneCredential(sandbox, confirmed.fullName, token, access, clone);
+});
+
+/**
+ * Whether the checkout standing in the sandbox is shallow, as a coding
+ * agent's opens; refused where git could not say, a sandbox with no
+ * checkout among them.
+ */
+export const checkoutIsShallow = /* @__PURE__ */ Effect.fn("web/checkoutIsShallow")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<boolean, RepositoryRefusal> {
+  const probed = yield* runInSandbox(
+    sandbox,
+    {
+      command: SHALLOW_PROBE_SCRIPT,
+      workingDirectory: SANDBOX_PATH.CHECKOUT,
+      env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.DEEPEN]: DEEPEN_STEP.PROBE },
+    },
+    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
+  );
+  if (probed.exitCode !== 0) return yield* gitRefusal(probed);
+  return probed.stdout.trim() === "true";
+});
+
+/**
+ * The rest of the standing checkout's history fetched, with the token at
+ * the firewall for the fetch alone (`underCloneCredential`), so a shallow
+ * checkout holds its branch's whole history after, as one cloned whole
+ * would; one already whole fetches nothing.
+ */
+export const deepenRepository = /* @__PURE__ */ Effect.fn("web/deepenRepository")(function* (
+  sandbox: RepositorySandbox,
+  fullName: string,
+  token: Redacted.Redacted,
+  access: GitHubTokenAccess,
+): Effect.fn.Return<void, RepositoryRefusal> {
+  const fetch = runInSandbox(
+    sandbox,
+    {
+      command: DEEPEN_SCRIPT,
+      workingDirectory: SANDBOX_PATH.WORKSPACE,
+      env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.DEEPEN]: DEEPEN_STEP.FETCH },
+    },
+    REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+  );
+  yield* underCloneCredential(sandbox, fullName, token, access, fetch);
 });
 
 /** Who a checkout's commits are by; a git identity is a name and an address as git takes them. */
@@ -425,7 +516,7 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
     return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
   const { repository: confirmed, token, access } = reached.value;
   yield* cloneRepository(sandbox, { ...confirmed, recordedAs: repository }, token, {
-    depth: BRAIN_CLONE_DEPTH,
+    depth: SHALLOW_CLONE_DEPTH,
     access,
   });
 });

@@ -27,7 +27,7 @@ import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
-import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
+import { CODER_TOOL, repositoryToolsOf, taskToolsOf } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
 const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
@@ -245,7 +245,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent on a task is offered edit_plan, show_page, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
+test("an agent on a task is offered edit_plan, show_page, the comment tools, and the whiteboard's, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -253,13 +253,20 @@ test("an agent on a task is offered edit_plan, show_page, and the comment tools,
     CODER_TOOL.REPLY_TO_COMMENT,
     CODER_TOOL.RESOLVE_THREAD,
   ];
-  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort();
+  const board = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD];
+  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments, ...board].sort();
   const handedItsTask = { taskId: "plan-1", prompt: null };
   const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
   assert.deepEqual(offered(handedItsTask), all);
   assert.deepEqual(offered(handedPrompt), all);
   assert.deepEqual(offered(automation), []);
+});
+
+test("an agent with a repository is offered show_code, on a task or not, and one with no repository is not", () => {
+  const offered = (agent: Parameters<typeof repositoryToolsOf>[0]) => [...repositoryToolsOf(agent)];
+  assert.deepEqual(offered({ repository: "Acme/Relay" }), [CODER_TOOL.SHOW_CODE]);
+  assert.deepEqual(offered({ repository: null }), []);
 });
 
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
