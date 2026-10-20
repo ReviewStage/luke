@@ -271,6 +271,29 @@ test("a section stands over its tasks, which Tasks leaves out", async () => {
   assert.equal(header === null ? undefined : heardName(header), "Launch");
 });
 
+test("a filter by person leaves out a section's task it would leave out of the list", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({
+      [WORKSPACE.id]: { grouping: "repository", order: "updated", assignedTo: "user-ada" },
+    }),
+  );
+  const sidebar = await mountSidebar([], SECTIONS, {
+    workspace: shared,
+    workspaces: [shared],
+    me: "user-ada",
+    tasks: [
+      { ...INVITES, assignee: { userId: "user-grace", name: "Grace Hopper" } },
+      { ...RETRIES, assignee: { userId: "user-ada", name: "Ada Lovelace" } },
+    ],
+  });
+
+  assert.deepEqual(namesIn(sidebar, "Sections"), []);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+});
+
 test("the status filter leaves a section's backlog task out as it does the list's, and counts it among those it hides", async () => {
   const sidebar = await mountSidebar([], SECTIONS, {
     tasks: [

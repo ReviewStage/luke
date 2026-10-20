@@ -56,6 +56,8 @@ export interface TaskListViewControl {
   readonly onAssignedTo: (assignedTo: string | undefined) => void;
   /** Lists everyone's tasks assigned to anyone, letting go of both filters by person in one choice. */
   readonly onEveryone: () => void;
+  /** Lists every task one member created, whoever it is assigned to, in one choice, as their page's Show all asks. */
+  readonly onCreatedByAlone: (createdBy: string) => void;
   /** Lists the tasks of these statuses, in `TASK_STATUS_ORDER`. */
   readonly onStatuses: (statuses: readonly TaskStatus[]) => void;
 }
@@ -104,6 +106,10 @@ export function useTaskListView(
     onAssignedTo: (assignedTo) => {
       const { assignedTo: _standing, ...rest } = view;
       choose(assignedTo === undefined ? rest : { ...rest, assignedTo });
+    },
+    onCreatedByAlone: (createdBy) => {
+      const { assignedTo: _assigned, ...rest } = view;
+      choose({ ...rest, createdBy });
     },
     onEveryone: () => {
       const { createdBy: _created, assignedTo: _assigned, ...rest } = view;

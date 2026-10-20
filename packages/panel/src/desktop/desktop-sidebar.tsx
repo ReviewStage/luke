@@ -140,7 +140,7 @@ import {
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view.js";
-import { SidebarTask } from "./task-actions.js";
+import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useArchivedView, useTaskListView } from "./task-list-view.js";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
 import { useRowDrag } from "./use-row-drag.js";
@@ -254,8 +254,8 @@ interface RowContext {
   readonly order: TaskOrder;
   /** Whether the rows are the archived tasks, which no Archive is offered for. */
   readonly archived: boolean;
-  /** Whether a teammate's task wears its creator's face: not while the list holds one creator's tasks. */
-  readonly faces: boolean;
+  /** Which faces a task's row may wear: no creator's while the list holds one creator's tasks, and no assignee's while it holds those assigned to one member. */
+  readonly faces: RowFaces;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
   readonly inSight: boolean;
   /** Hears a row let go over a section, Tasks, or Pinned, while the account keeps sections; none while it does not. */
@@ -265,19 +265,19 @@ interface RowContext {
 /**
  * One group's rows, each a plan's or an agent's with no plan, showing the
  * time the list's order chooses. A row says what its group does not: its
- * repository's name where `repository` names one, and a teammate's face
- * unless `face` is off, as under a group by creator.
+ * repository's name where `repository` names one, and the faces `faces`
+ * lets it wear (`rowFaceOf`): under a group by creator, its assignee's alone.
  */
 function TaskRows({
   rows,
   context,
   repository,
-  face = context.faces,
+  faces = context.faces,
 }: {
   rows: readonly TaskRow[];
   context: RowContext;
   repository?: (row: TaskRow) => string | undefined;
-  face?: boolean;
+  faces?: RowFaces;
 }): React.JSX.Element {
   // Note that the rows keep the view's order, so a row is dragged only out of them, into a section or Pinned.
   const { dropOut } = context;
@@ -304,7 +304,7 @@ function TaskRows({
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
-            face={face}
+            faces={faces}
             onOpen={() => context.onOpen(row.task.id)}
           />
         ) : (
@@ -317,7 +317,7 @@ function TaskRows({
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
-            face={face}
+            face={faces.creator && faces.assignee}
             shown={context.tasks.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
             onPin={pinOf(context.tasks, row.agent)}
@@ -810,7 +810,9 @@ function CreatorSection({
         count={group.rows.length}
         onToggle={() => folds.toggleCreator(group.creatorId)}
       />
-      {rows.length === 0 ? null : <TaskRows rows={rows} context={context} face={false} />}
+      {rows.length === 0 ? null : (
+        <TaskRows rows={rows} context={context} faces={{ ...context.faces, creator: false }} />
+      )}
     </div>
   );
 }
@@ -1275,10 +1277,24 @@ function sectionedTasks(
   return { sections, taskIds };
 }
 
-/** A section as the status filter leaves it: its tasks of the statuses shown, and any with no status, each with its entry, in its order. */
-function sectionInStatuses(drawn: DrawnSection, statuses: readonly TaskStatus[]): DrawnSection {
+/**
+ * A section as the view's filters leave it: its tasks of the statuses shown,
+ * and any with no status, of the creator and the assignee the view names,
+ * where it names them, each with its entry, in its order.
+ */
+function sectionInView(
+  drawn: DrawnSection,
+  statuses: readonly TaskStatus[],
+  createdBy: string | undefined,
+  assignedTo: string | undefined,
+): DrawnSection {
+  const people = new Set(
+    taskRowsAssignedTo(taskRowsCreatedBy(drawn.tasks.map(taskRow), createdBy), assignedTo).map(
+      (row) => (row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id),
+    ),
+  );
   const kept = drawn.tasks.filter(
-    (task) => task.status === undefined || statuses.includes(task.status),
+    (task) => people.has(task.id) && (task.status === undefined || statuses.includes(task.status)),
   );
   const keptIds = new Set(kept.map((task) => task.id));
   return {
@@ -1555,9 +1571,11 @@ function SidebarColumn({
     sectionsShown ? tasks.workspace?.id : undefined,
     tasks.listed.tasks.filter((task) => task.pinnedAt === undefined),
   );
-  // The status filter thins the sections' tasks as it thins the list's, a row dropped among them landing among those drawn.
+  // The view's filters thin the sections' tasks as they thin the list's, a row dropped among them landing among those drawn.
   const statuses = shownStatuses(taskView.view);
-  const shownSections = sectioned.sections.map((drawn) => sectionInStatuses(drawn, statuses));
+  const shownSections = sectioned.sections.map((drawn) =>
+    sectionInView(drawn, statuses, createdBy, assignedTo),
+  );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
@@ -1613,7 +1631,7 @@ function SidebarColumn({
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
     order: taskView.view.order,
-    faces: createdBy === undefined && assignedTo === undefined,
+    faces: { creator: createdBy === undefined, assignee: assignedTo === undefined },
     archived: archive.shown,
     inSight: overlay.inSight,
     dropOut: sectionsShown ? dropRow : undefined,
@@ -1831,7 +1849,7 @@ function SidebarColumn({
                           open={current(task.id)}
                           unread={unread(task)}
                           now={now}
-                          face={context.faces}
+                          faces={context.faces}
                           onOpen={() => context.onOpen(task.id)}
                         />
                       ),

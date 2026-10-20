@@ -501,6 +501,19 @@ export function TaskActions({
   );
 }
 
+/**
+ * Which faces a row may wear: its creator's, which a list holding one
+ * creator's tasks or grouped by creator already says, and its assignee's,
+ * which a list holding the tasks assigned to one member already says.
+ */
+export interface RowFaces {
+  readonly creator: boolean;
+  readonly assignee: boolean;
+}
+
+/** Every face a row may wear, as a list naming nobody draws it. */
+const EVERY_FACE: RowFaces = { creator: true, assignee: true };
+
 /** The face a task's row wears, and whether it is its assignee's rather than its creator's. */
 interface RowFace {
   readonly actor: Actor;
@@ -510,18 +523,21 @@ interface RowFace {
 /**
  * Who a task's row names by face: the member it is assigned to where that
  * is someone other than the reader, nobody where it is the reader, and on a
- * task no one is assigned to, whoever else created it (`teammateCreator`).
+ * task no one is assigned to, whoever else created it (`teammateCreator`);
+ * each only where `faces` lets the row wear that kind, the list saying it
+ * already otherwise.
  */
 function rowFaceOf(
   task: TaskSummary,
   reader: ReturnType<typeof useMemberDirectory>,
+  faces: RowFaces,
 ): RowFace | undefined {
   const { assignee } = task;
   if (assignee === undefined) {
-    const creator = teammateCreator(task, reader);
+    const creator = faces.creator ? teammateCreator(task, reader) : undefined;
     return creator === undefined ? undefined : { actor: creator, assigned: false };
   }
-  if (assignee.userId === reader.readerId) return undefined;
+  if (assignee.userId === reader.readerId || !faces.assignee) return undefined;
   return {
     actor: personActor(assignee, reader.members, reader.readerId, reader.former),
     assigned: true,
@@ -560,7 +576,7 @@ export function SidebarTask({
   now,
   at = task.updatedAt,
   repository,
-  face = true,
+  faces = EVERY_FACE,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -577,8 +593,8 @@ export function SidebarTask({
   at?: number;
   /** The repository's name the row says, muted before its time, where the list hands one. */
   repository?: string | undefined;
-  /** Whether the row wears a person's face (`rowFaceOf`), which a group by creator, or a filter by person, says instead. */
-  face?: boolean;
+  /** Which faces the row may wear (`rowFaceOf`): a group by creator, or a filter by person, says the one it names instead. */
+  faces?: RowFaces;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -587,8 +603,7 @@ export function SidebarTask({
     drawn: true,
     unread,
   });
-  const person = rowFaceOf(task, useMemberDirectory());
-  const worn = face ? person : undefined;
+  const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);

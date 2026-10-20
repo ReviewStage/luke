@@ -1040,3 +1040,23 @@ test("⌘K's Show tasks assigned to me lists yours, and Show everyone's tasks le
   assert.equal(taskRows(sidebar).length, 3);
   assert.equal(chip(sidebar), null);
 });
+
+test("a list that names the creator, by its filter or its groups, still wears the face of whoever else is assigned", async () => {
+  const assignedToMaya = TASKS.map((each) =>
+    each.id === "t-2" ? { ...each, assignee: { userId: "user-maya", name: "Maya Okafor" } } : each,
+  );
+  const sidebar = await mountRead(ACME, assignedToMaya);
+  choose(sidebar, "Created by", "Charles Pan");
+
+  assert.deepEqual(heardFaces(sidebar), [
+    ["Billing empty states", undefined],
+    ["Fix flaky deploy", "(assigned to Maya Okafor)"],
+  ]);
+
+  choose(sidebar, "Created by", "Anyone");
+  choose(sidebar, "Group by", "Creator");
+  assert.deepEqual(
+    heardFaces(sidebar).filter(([, heard]) => heard !== undefined),
+    [["Fix flaky deploy", "(assigned to Maya Okafor)"]],
+  );
+});
