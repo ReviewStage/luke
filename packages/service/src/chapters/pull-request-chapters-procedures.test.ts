@@ -269,11 +269,18 @@ const standing = (
     });
     const ask = (
       as: string | undefined,
-      init: { readonly method?: string; readonly number?: number; readonly body?: string } = {},
+      init: {
+        readonly method?: string;
+        readonly number?: number;
+        /** Each `number` the query names, repeated as a client might send them. */
+        readonly numbers?: readonly string[];
+        readonly body?: string;
+      } = {},
     ) =>
       Effect.gen(function* () {
         const url = new URL(`/api/agents/${agent.id}/chapters`, ORIGIN);
         if (init.number !== undefined) url.searchParams.set("number", String(init.number));
+        for (const more of init.numbers ?? []) url.searchParams.append("number", more);
         const headers = new Headers({ "content-type": "application/json" });
         if (as !== undefined) headers.set("authorization", `Bearer ${as}`);
         const response = yield* Effect.promise(() =>
@@ -497,6 +504,24 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           yield* ask(owner, { method: "POST", number: NUMBER, body: '{"head":"x"}' }),
           refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
+      }),
+  );
+
+  it.effect(
+    "a query naming the number twice, or naming no number, is refused as invalid on both procedures, and nothing is read or generated",
+    () =>
+      Effect.gen(function* () {
+        const { owner, github, model, ask } = yield* standing();
+        const invalid = refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        for (const method of ["GET", "POST"]) {
+          assert.deepEqual(yield* ask(owner, { method, numbers: ["7", "8"] }), invalid, method);
+          assert.deepEqual(yield* ask(owner, { method, numbers: ["seven"] }), invalid, method);
+        }
+        assert.equal(
+          github.sent.some((sent) => new URL(sent.url).pathname.includes("/pulls")),
+          false,
+        );
+        assert.equal(model.asked(), 0);
       }),
   );
 });
