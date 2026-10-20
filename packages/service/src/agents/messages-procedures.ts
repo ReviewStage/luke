@@ -338,7 +338,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
                 cursorOfWire(after),
                 Option.match(taskConversationLiveStatements(context.userId, taskId), {
                   onNone: () => [],
-                  onSome: ({ mark }) => [mark],
+                  onSome: ({ mark, workers }) => [mark, workers],
                 }),
               ),
       );

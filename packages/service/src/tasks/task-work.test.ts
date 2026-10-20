@@ -1162,7 +1162,9 @@ test("a held reader looks again as the conversation's mark changes over Realtime
     standingFor(target),
   );
   const { cursor } = await database.run(brainTurnsPage(target, undefined));
-  const { mark } = Option.getOrThrow(taskConversationLiveStatements(target.userId, target.taskId));
+  const { mark, workers } = Option.getOrThrow(
+    taskConversationLiveStatements(target.userId, target.taskId),
+  );
 
   const answered = await database.run(
     Effect.gen(function* () {
@@ -1179,7 +1181,7 @@ test("a held reader looks again as the conversation's mark changes over Realtime
           }),
       };
       const read = yield* Effect.forkChild(
-        brainPagePast(target, cursor, [mark]).pipe(Effect.provideService(LiveWake, wake)),
+        brainPagePast(target, cursor, [mark, workers]).pipe(Effect.provideService(LiveWake, wake)),
       );
       yield* Deferred.await(parked);
       const db = yield* Database;
@@ -1189,7 +1191,7 @@ test("a held reader looks again as the conversation's mark changes over Realtime
         .where(eq(turns.conversationId, target.conversationId));
       yield* Deferred.succeed(fired, undefined);
       const page = yield* Fiber.join(read);
-      assert.deepEqual(watched, [mark.sql]);
+      assert.deepEqual(watched, [mark.sql, workers.sql]);
       return page;
     }).pipe(Effect.provide(TestClock.layer())),
   );

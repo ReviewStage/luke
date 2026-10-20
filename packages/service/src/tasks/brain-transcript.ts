@@ -326,7 +326,7 @@ const pageOfLook = (
  * ended since the hold began, so a worker that ends beside one still
  * running is heard at once; or the empty page and the cursor to read on
  * from once the hold is out. Between looks it waits on the `live`
- * statements over Neon Realtime (the conversation's mark,
+ * statements over Neon Realtime (the conversation's mark and its workers,
  * `taskConversationLiveStatements`), and its safety beat.
  */
 export function brainPagePast(
