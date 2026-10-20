@@ -97,7 +97,6 @@ import {
   decideButtons,
   decidedOf,
   decisionsOf,
-  everyStepTicked,
   fieldValueOf,
   formFilled,
   INBOX_HOLDER,
@@ -121,6 +120,7 @@ import {
   sentStamp,
   settledAt,
   settlementOf,
+  shownTicks,
   THREAD_ENTRY,
   threadCut,
   threadEntries,
@@ -292,19 +292,11 @@ export function LinkBlock({
 
 /** One block this build knows, drawn as its type is. */
 function KnownBlock({
-  itemId,
   block,
-  images,
-  onImage,
-  onRetryImage,
   openLink,
   code,
 }: {
-  itemId: string;
   block: InboxBlock;
-  images: TaskInboxControl["images"];
-  onImage: TaskInboxControl["onImage"];
-  onRetryImage: TaskInboxControl["onRetryImage"];
   openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
@@ -327,12 +319,7 @@ function KnownBlock({
     case INBOX_BLOCK.IMAGE:
       return (
         <div data-inbox-image="">
-          <InboxPicture
-            door={{ itemId, images, onImage, onRetryImage }}
-            attachmentId={block.attachmentId}
-            alt={block.alt}
-            caption={undefined}
-          />
+          <InboxPicture attachmentId={block.attachmentId} alt={block.alt} caption={undefined} />
         </div>
       );
   }
@@ -341,16 +328,10 @@ function KnownBlock({
 /** The item's context: each block in turn, drawn as its type is, and a line for one this build does not know. */
 function Blocks({
   item,
-  images,
-  onImage,
-  onRetryImage,
   openLink,
   code,
 }: {
   item: InboxItem;
-  images: TaskInboxControl["images"];
-  onImage: TaskInboxControl["onImage"];
-  onRetryImage: TaskInboxControl["onRetryImage"];
   openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element | null {
@@ -360,16 +341,7 @@ function Blocks({
       {item.blocks.map((block, index) =>
         // Blocks have no key of their own, and are never reordered: a change to an item draws them whole again.
         knownBlock(block) ? (
-          <KnownBlock
-            key={index}
-            itemId={item.id}
-            block={block}
-            images={images}
-            onImage={onImage}
-            onRetryImage={onRetryImage}
-            openLink={openLink}
-            code={code}
-          />
+          <KnownBlock key={index} block={block} openLink={openLink} code={code} />
         ) : (
           <Text key={index} tone={TEXT_TONE.MUTED}>
             {NEWER_LUKE.BLOCK}
@@ -1605,7 +1577,7 @@ function AskPress({
  * An open ask's controls, each attaching its answer to the reply rather
  * than sending it: a `decide`'s options numbered for the keys, or its two
  * small buttons where it is a yes or no in other words; a `do`'s steps as
- * checkboxes, then Mark done once every one is ticked, and Couldn't do it;
+ * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
  * an `answer`'s fields, then Submit once the required ones are filled, or
  * its Answer, whose reply's words are the answer.
  */
@@ -1647,7 +1619,7 @@ function AskControls({
       );
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
-      const ticked = new Set(draft.steps ?? []);
+      const ticked = new Set(shownTicks(ask, draft));
       return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
@@ -1657,7 +1629,7 @@ function AskControls({
                 <Checkbox
                   checked={ticked.has(at)}
                   disabled={disabled}
-                  onChange={() => onDraft(withStep(draft, at))}
+                  onChange={() => onDraft(withStep(ask, draft, at))}
                 >
                   {step}
                 </Checkbox>
@@ -1667,7 +1639,7 @@ function AskControls({
           <div className="inbox-ask-presses">
             <AskPress
               label={ASK_PRESS.DONE}
-              disabled={disabled || !everyStepTicked(ask, draft)}
+              disabled={disabled}
               onPress={() => press(INBOX_REPLY.DONE)}
             />
             <AskPress
@@ -1808,7 +1780,14 @@ function AskBox({
   }
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
   const drafted = open ? doors?.draft : undefined;
-  const head = askHeadWords(ask, drafted === undefined ? undefined : (drafted.steps ?? []));
+  const head = askHeadWords(
+    ask,
+    drafted === undefined
+      ? undefined
+      : ask.type === INBOX_ASK.DO
+        ? shownTicks(ask, drafted)
+        : (drafted.steps ?? []),
+  );
   const standing = (() => {
     switch (ask.status) {
       case INBOX_ASK_STATUS.OPEN:
@@ -2287,14 +2266,7 @@ export function InboxPane({
                             </>
                           }
                         >
-                          <Blocks
-                            item={item}
-                            images={control.images}
-                            onImage={control.onImage}
-                            onRetryImage={control.onRetryImage}
-                            openLink={doors.openLink}
-                            code={doors.code}
-                          />
+                          <Blocks item={item} openLink={doors.openLink} code={doors.code} />
                           {open ? (
                             // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
                             <div

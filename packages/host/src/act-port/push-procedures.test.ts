@@ -72,3 +72,59 @@ it("each stream of a reloading window keeps its own unsent document", async () =
   await after.return?.(undefined);
   assert.equal(pushes.listening(WINDOW), false);
 });
+
+it("a held window's reload stays held, and its release sends the newest document to the new page", async () => {
+  const pushes = new WindowPushes();
+  pushes.holdState(WINDOW, true);
+  const page = pushes.stream(WINDOW, undefined);
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
+  let read: number | string | undefined;
+  const reading = page.next().then((result) => {
+    read = heard(result);
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(read, undefined);
+
+  pushes.holdState(WINDOW, false);
+  await reading;
+  assert.equal(read, 2);
+  await page.return?.(undefined);
+});
+
+it("a document queued but unread as its window is held waits for the release, and goes out once", async () => {
+  const pushes = new WindowPushes();
+  const page = pushes.stream(WINDOW, undefined);
+  pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
+  pushes.holdState(WINDOW, true);
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
+  assert.equal(heard(await page.next()), PUSH.SHOW_TASK);
+  let read: number | string | undefined;
+  const reading = page.next().then((result) => {
+    read = heard(result);
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(read, undefined);
+
+  pushes.holdState(WINDOW, false);
+  await reading;
+  assert.equal(read, 2);
+  pushes.push(WINDOW, PUSH.MENU_COMMAND, "settings");
+  // Nothing else was queued for it: the next read is the event pushed after.
+  assert.equal(heard(await page.next()), PUSH.MENU_COMMAND);
+  await page.return?.(undefined);
+});
+
+it("an event pushed to a held window goes out behind the document held before it", async () => {
+  const pushes = new WindowPushes();
+  const page = pushes.stream(WINDOW, undefined);
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(1));
+  pushes.holdState(WINDOW, true);
+  pushes.push(WINDOW, PUSH.APP_STATE, documentAt(2));
+  pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+
+  const reads = [await page.next(), await page.next()].map(heard);
+  assert.deepEqual(reads, [2, PUSH.SHOW_TASK]);
+  await page.return?.(undefined);
+});

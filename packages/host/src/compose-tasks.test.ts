@@ -1243,6 +1243,26 @@ it.effect("a refresh that reads what the view already holds tells the window not
 );
 
 it.effect(
+  "a refresh that lists another plan holds the plans it had already listed as the objects it held",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([billing]);
+      const { call, tasks } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const listed = tasks.snapshot();
+      service.tasks = [billing, invites];
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+
+      assert.deepEqual(tasks.snapshot().tasks, [summary(billing), summary(invites)]);
+      assert.equal(tasks.snapshot().tasks[0], listed.tasks[0]);
+      assert.equal(tasks.snapshot().workspaces, listed.workspaces);
+    }),
+);
+
+it.effect(
   "the window's refresh lists the agents with no plan beside the plans, and a list read that fails keeps them",
   () =>
     Effect.gen(function* () {

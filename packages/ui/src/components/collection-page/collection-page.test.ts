@@ -2,7 +2,7 @@
 
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { Button } from "../button/button.js";
 import { List, ListRow } from "../list-row/list-row.js";
 import { PAGE_FRAME } from "../page-frame/page-frame.js";
@@ -26,9 +26,20 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
+/** The browser's ResizeObserver, which jsdom lacks, silent since nothing here resizes; a row measures its title with one. */
+class StandInObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 /** The tasks page at `state`, its search held in the page's caller as an app holds it. */
