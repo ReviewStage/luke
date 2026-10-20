@@ -6,7 +6,6 @@ import {
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
-  inboxAttachmentIdsIn,
   inboxAttachmentOf,
   inboxPictureDestination,
 } from "@luke/features/inbox-attachment-link";
@@ -164,20 +163,25 @@ export interface InboxCommentFiles {
 
 /**
  * A comment's files as they are drawn after its words, each in the order
- * attached: a picture its words already name left out, since it stands
- * where they name it, as an agent's pictures do, then the pictures and
- * every other file apart, as each is drawn in its own way.
+ * attached: a picture its words already draw left out, since it stands
+ * where they draw it, as an agent's pictures do, then the pictures and
+ * every other file apart, as each is drawn in its own way. Note that only
+ * a picture the words draw as one is left out (`picturesDrawn`): a file
+ * they only link to, quote in code, or name as a picture though it is
+ * none is still drawn here, so it can still be opened.
  */
 export function inboxCommentFiles(
   files: readonly InboxFile[],
   words: string | undefined,
   itemId: string,
 ): InboxCommentFiles {
-  const named = new Set(words === undefined ? [] : inboxAttachmentIdsIn(words, itemId));
-  const after = files.filter((file) => !named.has(file.attachmentId));
   const picture = (file: InboxFile) =>
     attachmentView({ name: file.name, mediaType: file.mediaType, url: "" }) ===
     ATTACHMENT_VIEW.IMAGE;
+  const drawn = new Set(
+    words === undefined ? [] : picturesDrawn(words, itemId).map((each) => each.attachmentId),
+  );
+  const after = files.filter((file) => !(picture(file) && drawn.has(file.attachmentId)));
   return {
     pictures: after.filter(picture),
     others: after.filter((file) => !picture(file)),
