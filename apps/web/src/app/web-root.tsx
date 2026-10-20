@@ -11,6 +11,11 @@
  * stands the runtime on its reporter, as the desktop's main stands its own,
  * and reports through it a tab that could draw nothing, as the desktop's
  * window root does.
+ *
+ * Until the panel draws, the tab shows the shell's frame app.html stands in
+ * the root element, which the root's first render replaces; a tab that can
+ * draw nothing takes the frame down, so it is never left looking as though
+ * the panel were still coming.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -67,8 +72,9 @@ function installTabHistory<State>(
 
 /**
  * Composes the host in the tab, installs its doors, and draws the panel into
- * the element given once its document has been read. A tab whose host cannot
- * stand, or whose document cannot be read, draws nothing, as a desktop window
+ * the element given once its document has been read, in place of whatever
+ * frame the element held. A tab whose host cannot stand, or whose document
+ * cannot be read, empties the element and draws nothing, as a desktop window
  * does, and answers nothing to close.
  */
 export async function mountWebApp(
@@ -117,6 +123,7 @@ export async function mountWebApp(
     // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
     sentry.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
     uninstall();
+    rootElement.replaceChildren();
     await runtime.dispose();
     return undefined;
   }

@@ -81,7 +81,75 @@
     <meta name="apple-mobile-web-app-title" content="Luke" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The shell's frame, drawn the moment the page and its stylesheet land,
+         while the host stands in the tab and reads the session, which only
+         then draws the panel: React's first render replaces it, and a tab
+         that can draw nothing takes it down (`src/app/web-root.tsx`). It is
+         built of the shell's own classes (`@luke/panel`'s `desktop.css`), so
+         each box stands where the shell's does. The sidebar stands only where
+         this browser last drew it pinned and the stage is wide enough to pin
+         it, which the head's script reads (`public/app-theme.js`); everywhere
+         else, a phone or a visitor signed out among it, the work column is
+         the whole frame, and Luke's face comes up in it should the wait run
+         on (`src/app/app.css`). -->
+    <div id="root">
+      <div class="app-stage boot-frame" data-surface="desktop" aria-hidden="true">
+        <div class="desktop-stage">
+          <div class="desktop-shell">
+            <aside class="desktop-sidebar">
+              <div class="desktop-drag-strip"></div>
+              <div class="sidebar-identity">
+                <span class="sidebar-identity-face">
+                  <svg class="luke-face" viewBox="48 51 146 146" aria-hidden="true" focusable="false">
+                    <g transform="rotate(-8 120 124)">
+                      <path
+                        d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-width="16"
+                        stroke-linejoin="round"
+                      />
+                      <ellipse cx="78" cy="92" rx="12" ry="12" fill="currentColor" />
+                      <ellipse cx="162" cy="92" rx="12" ry="12" fill="currentColor" />
+                    </g>
+                  </svg>
+                </span>
+                <span class="sidebar-identity-copy">
+                  <span class="sidebar-identity-name">Luke</span>
+                </span>
+              </div>
+              <div class="sidebar-places">
+                <span class="luke-nav-item boot-frame-row"></span>
+                <span class="luke-nav-item boot-frame-row"></span>
+                <span class="luke-nav-item boot-frame-row"></span>
+                <span class="luke-nav-item boot-frame-row"></span>
+                <span class="luke-nav-item boot-frame-row"></span>
+                <span class="luke-nav-item boot-frame-row"></span>
+              </div>
+            </aside>
+            <main class="desktop-main">
+              <span class="sidebar-identity-face boot-frame-mark">
+                <svg class="luke-face" viewBox="48 51 146 146" aria-hidden="true" focusable="false">
+                  <g transform="rotate(-8 120 124)">
+                    <path
+                      d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-width="16"
+                      stroke-linejoin="round"
+                    />
+                    <ellipse cx="78" cy="92" rx="12" ry="12" fill="currentColor" />
+                    <ellipse cx="162" cy="92" rx="12" ry="12" fill="currentColor" />
+                  </g>
+                </svg>
+              </span>
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>
 </html>
