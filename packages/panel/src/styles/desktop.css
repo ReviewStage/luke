@@ -3565,26 +3565,26 @@ ul.actor-stack {
 }
 
 .inbox-stamp > svg,
-.inbox-ask-standing > svg {
+.inbox-ask-standing > svg,
+.inbox-ask-settled > svg {
   width: 12px;
   height: 12px;
   flex: none;
 }
 
 .inbox-stamp[data-tone="ahead"] > svg,
-.inbox-ask-standing[data-tone="ahead"] > svg {
+.inbox-ask-settled > svg {
   color: var(--luke-color-complete);
 }
 
-.inbox-stamp[data-tone="back"] > svg,
-.inbox-ask-standing[data-tone="back"] > svg {
+.inbox-stamp[data-tone="back"] > svg {
   color: var(--luke-color-danger-text);
 }
 
 /* The ask closing the message that asks it: a bordered card, its head the
    ask's kind and where it stands, its controls under a hairline while it
-   waits. Once answered, the card heads the reply that answered it, its
-   controls under the same hairline as the answer left them. A replaced or
+   waits. Once answered, the card heads the reply that answered it with no
+   head of its own, its controls as the answer left them. A replaced or
    withdrawn ask is its head alone, a replaced one struck through. */
 .inbox-ask {
   display: flex;
@@ -3634,7 +3634,28 @@ ul.actor-stack {
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-12);
+}
+
+.inbox-ask-body {
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* An answered ask of words alone, which draws no card, ends the agent's
+   message with a small pill saying it was answered, its check in the
+   complete ink. */
+.inbox-ask-settled {
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--luke-space-6);
+  min-height: var(--luke-space-24);
+  padding-inline: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The press an answer gave wears its glyph in the tone of what it did,

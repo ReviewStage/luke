@@ -1887,15 +1887,18 @@ function AnsweredPress({
 }
 
 /**
- * An answered ask's controls as the answer left them, in the look they had
- * while it waited and taking nothing: a `decide`'s options with the picks
- * checked, or its two small buttons with the one pressed marked; a `do`'s
- * steps ticked as they were sent, over Mark done and Couldn't do it with
- * the one pressed marked; an `answer`'s fields, each holding what it was
- * given, empty where it was left empty. An `answer` of no fields draws
- * nothing here, its reply's words being the answer.
+ * The ask a member's reply answered, at the head of that reply under their
+ * face and name, in the reply's stamp's place: the ask's card with no head
+ * of its own, its controls as the answer left them, in the look they had
+ * while it waited and taking nothing, which say how it was answered: a
+ * `decide`'s options with the picks checked, or its two small buttons with
+ * the one pressed marked; a `do`'s steps ticked as they were sent, over
+ * Mark done and Couldn't do it with the one pressed marked; an `answer`'s
+ * fields, each holding what it was given, empty where it was left empty.
+ * An `answer` of no fields draws no card, its reply's words being the
+ * answer and the agent's message saying it was answered (`AskBox`).
  */
-function AskAnswered({
+function AnsweredCard({
   ask,
   title,
   answers,
@@ -1907,8 +1910,10 @@ function AskAnswered({
 }): React.JSX.Element | null {
   const draft = answeredDraft(ask, answers);
   const body = (controls: React.ReactNode) => (
-    <div className="inbox-ask-answered" data-inbox-answered="">
-      {controls}
+    <div className="inbox-ask" data-inbox-ask={INBOX_ASK_STATUS.ANSWERED}>
+      <div className="inbox-ask-answered" data-inbox-answered="">
+        {controls}
+      </div>
     </div>
   );
   switch (ask.type) {
@@ -1976,37 +1981,16 @@ function AskAnswered({
 }
 
 /**
- * The ask a member's reply answered, at the head of that reply under their
- * face and name: the ask's card, its kind and how it was answered at its
- * head, "Chose 7 days" or "Couldn't do it 1/3" with the answer's glyph,
- * and its controls under it as the answer left them (`AskAnswered`). It
- * stands in the reply's stamp's place, marking the message as the answer.
+ * What ends an agent's message whose ask of words alone was answered, where
+ * the thread read carries the reply: a small pill saying "Answered", with
+ * no card, the reply's words being the answer.
  */
-function AnsweredCard({
-  ask,
-  title,
-  answers,
-}: {
-  ask: InboxKnownAsk;
-  title: string;
-  answers: InboxAnswers;
-}): React.JSX.Element {
-  const stamp = sentStamp(answers, ask);
+function AnsweredMarker(): React.JSX.Element {
   return (
-    <div className="inbox-ask" data-inbox-ask={INBOX_ASK_STATUS.ANSWERED}>
-      <div className="inbox-ask-head">
-        <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
-        <span className="inbox-ask-standing" data-tone={stamp.tone}>
-          {stamp.tone === ANSWER_TONE.AHEAD ? (
-            <CheckIcon aria-hidden="true" />
-          ) : (
-            <Undo2Icon aria-hidden="true" />
-          )}
-          {stamp.words}
-        </span>
-      </div>
-      <AskAnswered ask={ask} title={title} answers={answers} />
-    </div>
+    <span className="inbox-ask-settled" data-inbox-settled="">
+      <CheckIcon aria-hidden="true" />
+      {ANSWERED}
+    </span>
   );
 }
 
@@ -2045,8 +2029,10 @@ function WithdrawnLine({
  * The box closing a message that asks: a card whose head says what it asks
  * and where it stands, "Waiting on you" while it waits, its controls under
  * it; once answered, nothing, the card standing at the head of the reply
- * that answered it (`AnsweredCard`), or "Answered" alone where the thread
- * read no longer carries that reply; a replaced ask
+ * that answered it (`AnsweredCard`), or, for an ask of words alone, which
+ * draws no card, a small "Answered" marker (`AnsweredMarker`); a card
+ * saying "Answered" alone where the thread read no longer carries that
+ * reply; a replaced ask
  * struck through and marked so; a withdrawn one with why, or who closed the
  * item; and an ask this build does not know a line naming a newer Luke.
  */
@@ -2082,7 +2068,10 @@ function AskBox({
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
   // The card goes with the reply that answered it, wherever the thread read still carries that reply.
   const answered = ask.status === INBOX_ASK_STATUS.ANSWERED;
-  if (answered && answerOf(thread, message.id)?.answers !== undefined) return null;
+  if (answered && answerOf(thread, message.id)?.answers !== undefined) {
+    // An answer of words alone draws no card, so its marker says here that it was answered.
+    return ask.type === INBOX_ASK.ANSWER && ask.fields === undefined ? <AnsweredMarker /> : null;
+  }
   const drafted = open ? doors?.draft : undefined;
   const head = askHeadWords(
     ask,
