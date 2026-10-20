@@ -418,7 +418,7 @@ export function IssuePickerChip({
   };
 
   return (
-    <div className="issue-picker-chip" data-align={align} {...placement} ref={box}>
+    <div className="issue-picker-chip" {...placement} ref={box}>
       {trigger !== undefined ? (
         <Chip
           ref={button}

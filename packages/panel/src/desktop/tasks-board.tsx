@@ -1,5 +1,6 @@
 import {
   TASK_BOUNDS,
+  TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
   TASK_STATUS_ORDER,
@@ -126,6 +127,9 @@ function boardState(tasks: TasksControl, empty: boolean): CollectionState {
 function repositoryName(repository: string): string {
   return repository.slice(repository.indexOf("/") + 1);
 }
+
+/** What a press must land on to carry a card: the press that opens it, which reaches every edge of the card but its foot's controls. */
+const CARD_HANDLE = ".tasks-board-card-press";
 
 /** The column a narrow board shows first: where a task starts. */
 const FIRST_SHOWN: TaskStatus = TASK_STATUS.TODO;
@@ -284,17 +288,16 @@ function TaskBoardCard({
         </span>
       ) : null}
       <div className="tasks-board-card-foot">
-        {task.priority === undefined ? null : (
-          <CardStandingChip
-            label="Priority"
-            value={task.priority}
-            order={TASK_PRIORITY_ORDER}
-            words={TASK_PRIORITY_WORDS}
-            mark={(priority) => <TaskPriorityMark priority={priority} />}
-            named={false}
-            onPick={(priority) => onStanding({ priority })}
-          />
-        )}
+        {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
+        <CardStandingChip
+          label="Priority"
+          value={task.priority ?? TASK_PRIORITY.NONE}
+          order={TASK_PRIORITY_ORDER}
+          words={TASK_PRIORITY_WORDS}
+          mark={(priority) => <TaskPriorityMark priority={priority} />}
+          named={false}
+          onPick={(priority) => onStanding({ priority })}
+        />
         <CardStandingChip
           label="Status"
           value={task.status ?? FIRST_SHOWN}
@@ -348,7 +351,9 @@ function TaskBoardColumnView({
   onOpen: (task: TaskSummary) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
 }): React.JSX.Element {
+  // Note that a card is carried by its press alone, so a press on one of its chips, its ⋯, or a menu they drop stays that control's.
   const drag = useRowDrag(undefined, {
+    handle: CARD_HANDLE,
     onDropOut: (from, zone) => {
       const task = column.tasks[from];
       const status = TASK_STATUS_ORDER.find((each) => each === zone);

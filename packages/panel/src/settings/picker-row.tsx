@@ -36,13 +36,22 @@ import { ChangedMark } from "./marks.js";
  * stands it in `@luke/ui`'s `SettingsRow`.
  */
 
-/** Which of the chip's edges the menu hangs from: its trailing edge, where a settings column is, or its leading edge, where a chip leads its line. */
+/**
+ * Which of the chip's edges the menu hangs from: its trailing edge, where a
+ * settings column is, its leading edge, where a chip leads its line, or
+ * whichever leaves the menu more room as it opens, where a chip may stand
+ * anywhere along a row that wraps.
+ */
 export const PICKER_ALIGN = {
   START: "start",
   END: "end",
+  AUTO: "auto",
 } as const;
 
 export type PickerAlign = (typeof PICKER_ALIGN)[keyof typeof PICKER_ALIGN];
+
+/** The edge a menu hangs from once placed: the leading or the trailing one. */
+type PlacedAlign = Exclude<PickerAlign, typeof PICKER_ALIGN.AUTO>;
 
 /** How the menu stands against the chip: below it, or above it where the window leaves more room there. */
 const PICKER_SIDE = {
@@ -55,6 +64,9 @@ type PickerSide = (typeof PICKER_SIDE)[keyof typeof PICKER_SIDE];
 /** The gap the menu keeps from the chip and from the window's edge, which its placement subtracts from the room. */
 const MENU_GAP = 6;
 
+/** The least width a menu is worth drawing at from the chip's leading edge before an automatic one hangs from its trailing edge. */
+const LEAST_MENU_WIDTH = 280;
+
 /** The least height the list is worth drawing at below the chip before the menu turns to the room above. */
 const LEAST_LIST_HEIGHT = 160;
 
@@ -63,8 +75,8 @@ const MENU_CHROME_HEIGHT = 48;
 
 /**
  * Where the menu fits: the side with room for its list, the list height
- * that side allows, and the widest the menu may stand from the chip's edge
- * it hangs from before what clips it cuts its far side off.
+ * that side allows, the chip's edge it hangs from, and the widest the menu
+ * may stand from that edge before what clips it cuts its far side off.
  */
 function pickerPlacement(input: {
   /** The chip's edges, in window coordinates. */
@@ -85,12 +97,19 @@ function pickerPlacement(input: {
     (input.roomBottom - input.chipBottom) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const above = (input.chipTop - input.roomTop) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const side = below >= LEAST_LIST_HEIGHT || below >= above ? PICKER_SIDE.BELOW : PICKER_SIDE.ABOVE;
-  const across =
-    input.align === PICKER_ALIGN.END
-      ? input.chipRight - input.roomLeft
-      : input.roomRight - input.chipLeft;
+  const fromStart = input.roomRight - input.chipLeft;
+  const fromEnd = input.chipRight - input.roomLeft;
+  // Note that an automatic menu hangs from the leading edge while that leaves it room, as a chip leading its line does.
+  const align: PlacedAlign =
+    input.align === PICKER_ALIGN.AUTO
+      ? fromStart / input.scale >= LEAST_MENU_WIDTH || fromStart >= fromEnd
+        ? PICKER_ALIGN.START
+        : PICKER_ALIGN.END
+      : input.align;
+  const across = align === PICKER_ALIGN.END ? fromEnd : fromStart;
   return {
     side,
+    align,
     listMax: Math.floor(Math.max(side === PICKER_SIDE.BELOW ? below : above, 0)),
     widthMax: Math.floor(Math.max(across / input.scale - MENU_GAP, 0)),
   };
@@ -122,13 +141,15 @@ function roomAround(chip: HTMLElement): ViewportBox {
 /** The attributes the box holding a chip and its menu wears, which say where the menu hangs. */
 interface PickerPlacementProps {
   readonly "data-side": PickerSide;
+  readonly "data-align": PlacedAlign;
   readonly style: React.CSSProperties | undefined;
 }
 
 /**
  * Where a chip's menu hangs as it opens, from the chip's edge `align`
- * names, as the attributes the box holding the chip and the menu wears:
- * `data-side`, the list's cap as `--settings-picker-list-max`, and the
+ * names, or the one with more room for an automatic one, as the attributes
+ * the box holding the chip and the menu wears: `data-side`, `data-align`
+ * for the edge, the list's cap as `--settings-picker-list-max`, and the
  * menu's widest as `--settings-picker-width-max`. Every chip whose menu
  * drops from a form row, a Settings picker and the repository chip in a
  * dialog or an editor, is placed by it, so none runs past the window's foot
@@ -168,6 +189,7 @@ export function usePickerPlacement(
 
   return {
     "data-side": placement?.side ?? PICKER_SIDE.BELOW,
+    "data-align": placement?.align ?? (align === PICKER_ALIGN.END ? align : PICKER_ALIGN.START),
     style:
       placement === undefined
         ? undefined
@@ -248,7 +270,7 @@ export function Picker({
   };
 
   return (
-    <span className="settings-picker" ref={row} {...placement} data-align={align}>
+    <span className="settings-picker" ref={row} {...placement}>
       <Chip
         ref={chip}
         look={CHIP_LOOK.FIELD}

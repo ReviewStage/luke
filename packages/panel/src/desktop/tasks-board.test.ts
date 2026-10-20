@@ -460,3 +460,37 @@ test("a right-click on a card drops the task's own menu", async () => {
   assert.ok(labels.includes("Archive"), "the menu offers Archive");
   assert.deepEqual(opened, []);
 });
+
+test("a press on a card's chip carried onto another column is that chip's, and moves no card", async () => {
+  const board = await mountBoard();
+  layCardsOut(board);
+  const chip = chipOf(board, "t-39", "Priority");
+  const box = chip.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
+  const from = { x: box.x + 20, y: box.y + 20 };
+
+  act(() => {
+    chip.dispatchEvent(pointer("pointerdown", from.x, from.y));
+    window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
+    window.dispatchEvent(pointer("pointermove", 750, 120));
+    window.dispatchEvent(pointer("pointerup", 750, 120));
+  });
+
+  assert.deepEqual(sent, []);
+});
+
+test("a task from a service before priorities offers No priority on its card, and a pick sends one", async () => {
+  const { priority: _priority, ...older } = task(
+    30,
+    "Older task",
+    TASK_STATUS.TODO,
+    TASK_PRIORITY.NONE,
+  );
+  const board = await mountBoard([older]);
+  const chip = chipOf(board, "t-30", "Priority");
+
+  assert.equal(chip.getAttribute("aria-label"), "Priority: No priority");
+  act(() => chip.click());
+  pick("High");
+
+  assert.deepEqual(sent, [["t-30", { priority: TASK_PRIORITY.HIGH }]]);
+});

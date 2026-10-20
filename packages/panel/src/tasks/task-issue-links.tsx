@@ -23,6 +23,7 @@ import {
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
@@ -218,8 +219,10 @@ export function TaskIssueLinks({
         ))}
         {editable && offered ? (
           <li className="task-issue-links-add">
+            {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}
+              align={PICKER_ALIGN.AUTO}
               linearIn={linearIn}
               githubIn={githubIn}
               workspaceId={workspaceId}

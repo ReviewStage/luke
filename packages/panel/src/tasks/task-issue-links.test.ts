@@ -18,7 +18,7 @@ import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -88,6 +88,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
 
@@ -422,4 +423,40 @@ test("on a phone the chips wrap rather than run past the page, each cutting its 
   } finally {
     laid.remove();
   }
+});
+
+/**
+ * Where Link issue's menu hangs once the chip stands `left` pixels in from a
+ * 390px window's left edge, 90px wide: the edge it hangs from, and the widest
+ * the menu may stand. jsdom lays nothing out, so the chip's place is answered
+ * as the window would lay it.
+ */
+async function linkMenuAt(left: number) {
+  vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+  const { container } = await mount({ links: [SAFARI] });
+  const chip =
+    [...container.querySelectorAll<HTMLElement>("button")].find(
+      (each) => each.textContent === "Link issue",
+    ) ?? assert.fail("Link issue stands");
+  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(left, 100, 90, 28));
+  press(chip);
+  await settle();
+  const box = chip.closest<HTMLElement>(".issue-picker-chip") ?? assert.fail("the picker's box");
+  return {
+    align: box.dataset.align,
+    widest: Number.parseFloat(box.style.getPropertyValue("--settings-picker-width-max")),
+  };
+}
+
+test("Link issue near the window's right edge hangs its menu from its trailing edge, so the menu keeps its room", async () => {
+  const { align, widest } = await linkMenuAt(290);
+  assert.equal(align, "end");
+  assert.ok(widest >= 280, `the menu may stand ${widest}px wide`);
+});
+
+test("Link issue near the row's start hangs its menu from its leading edge", async () => {
+  const { align, widest } = await linkMenuAt(16);
+  assert.equal(align, "start");
+  assert.ok(widest >= 280, `the menu may stand ${widest}px wide`);
 });
