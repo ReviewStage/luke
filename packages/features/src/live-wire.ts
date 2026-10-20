@@ -102,7 +102,7 @@ export function liveDigestOf(
 }
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
-const sealedLiveQuerySchema = EffectSchema.Struct({
+export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */

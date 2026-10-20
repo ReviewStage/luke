@@ -32,6 +32,8 @@ import {
   max,
   notExists,
   or,
+  type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
@@ -927,6 +929,43 @@ export function noReceiptOfLine() {
 }
 
 /**
+ * The condition that a line no turn took is one of the developer's lines to
+ * the agent, rather than one a call said or typed, whose ask a call answers
+ * without a turn of the agent's: what both the held read and the live
+ * statement count as awaiting a turn.
+ */
+function lineOfTheAgents(): SQL {
+  return sql`(${messages.metadata} ->> 'channel' is distinct from ${MESSAGE_CHANNEL.VOICE} and ${messages.metadata} ->> 'voice_session_id' is null)`;
+}
+
+/**
+ * When the newest of the developer's lines standing with no turn yet was
+ * written in the coding-agent conversation `conversationId` names, by the
+ * same rule `awaitingLinesOfReached` reads, or null where none stands: what
+ * a live statement selects so its reader judges the line's grace
+ * (`@luke/features/coding-agent-status`) without the statement reading the
+ * clock.
+ */
+export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | null> {
+  // Note that the newest instant is selected bare, because Drizzle's `max` casts it to text
+  // and a cast through text is no immutable function, which a live statement must hold to.
+  return sql<Date | null>`(${queryBuilder
+    .select({ newestAt: sql<Date | null>`max(${messages.createdAt})` })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+        eq(messages.role, MESSAGE_ROLE.USER),
+        isNull(messages.turnId),
+        lineOfTheAgents(),
+        noReceiptOfLine(),
+      ),
+    )})`;
+}
+
+/**
  * When the newest of the developer's lines standing with no turn yet was
  * written, in each coding-agent conversation named that holds one: each is
  * a message the session took and the next turn will receive, which is what
@@ -960,8 +999,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
-            sql`${messages.metadata} ->> 'channel' is distinct from ${MESSAGE_CHANNEL.VOICE}`,
-            sql`${messages.metadata} ->> 'voice_session_id' is null`,
+            lineOfTheAgents(),
             noReceiptOfLine(),
           ),
         )

@@ -11,6 +11,10 @@
  * the rows change. A deployment whose Realtime is misconfigured answers
  * `unavailable`, and the desktop asks again a moment later.
  *
+ * `GET /api/live/tasks` answers the task list the same way: the tasks the
+ * account reaches and every agent of them and with no task, as two sealed
+ * statements built with the account's id (`task-list-live.ts`).
+ *
  * `GET /api/live/task-board?id=` answers one task's whiteboard the same way,
  * as one statement that marks where it stands, after the task is read as
  * the account, so one it does not reach is not found, as its board read
@@ -94,6 +98,7 @@ import {
   taskConversationLiveStatements,
 } from "../tasks/brain-transcript.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
+import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
@@ -217,6 +222,12 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         ownFailedRunsLiveStatement(context.userId),
         (parts, failedRuns) => ({ ...parts, failedRuns }),
       );
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    tasks: signedIn.tasks.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const statements = taskListLiveStatements(context.userId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),
