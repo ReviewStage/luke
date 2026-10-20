@@ -8,13 +8,10 @@ import {
   type CodingAgentBriefText,
   type CodingAgentPlace,
   type CodingAgentStarted,
-  codingAgentLineOf,
   createCodingAgent,
   dispatchMentioningServers,
-  listCodingAgentLines,
   listCodingAgents,
   listPublishedCodingAgents,
-  listWorkspaceCodingAgentLines,
   type NewCodingAgent,
   readCodingAgent,
   readCodingAgentOfConversation,
@@ -134,6 +131,21 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 3,
 };
 
+/** Text the size of a long plan, which an agent may be handed and no list line carries. */
+const LARGE_TEXT = "Any member may invite a teammate by email, and the invite expires.\n".repeat(
+  4_000,
+);
+
+/** What a list reads of an agent: its row without the text it was handed, whether that was a prompt, and its automation's name. */
+function listedLine({
+  planSnapshot: _planSnapshot,
+  prompt,
+  automationOrigin,
+  ...row
+}: CodingAgent) {
+  return { ...row, automationName: automationOrigin?.name ?? null, handedPrompt: prompt !== null };
+}
+
 it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   it.effect(
     "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
@@ -148,15 +160,15 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         // Another account's write names no agent of theirs, and another account's read names none of this one's.
         yield* recordCodingAgentPublished(userId, theirs.id, PULL_REQUEST);
         assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId, other.taskId]), [
-          { agent: codingAgentLineOf(agent), published: PULL_REQUEST },
+          { agent: listedLine(agent), published: PULL_REQUEST },
         ]);
         assert.deepEqual(yield* listPublishedCodingAgents(other.userId, [other.taskId]), [
-          { agent: codingAgentLineOf(theirs), published: null },
+          { agent: listedLine(theirs), published: null },
         ]);
 
         yield* recordCodingAgentPublished(userId, agent.id, null);
         assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId]), [
-          { agent: codingAgentLineOf(agent), published: null },
+          { agent: listedLine(agent), published: null },
         ]);
       }),
   );
@@ -172,7 +184,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId]), []);
       assert.deepEqual(
         yield* listPublishedCodingAgents(userId, [taskId], { includeArchived: true }),
-        [{ agent: codingAgentLineOf(archived), published: null }],
+        [{ agent: listedLine(archived), published: null }],
       );
     }),
   );
@@ -307,7 +319,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
         assert.deepEqual(yield* listCodingAgents(teammate, task.id), [agent]);
         assert.deepEqual(yield* listPublishedCodingAgents(teammate, [task.id]), [
-          { agent: codingAgentLineOf(agent), published: null },
+          { agent: listedLine(agent), published: null },
         ]);
         assert.deepEqual(yield* readCodingAgent(teammate, agent.id), Option.some(agent));
         assert.deepEqual(
@@ -354,14 +366,9 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   );
 });
 
-/** Text the size of a long plan, which an agent may be handed and no list line carries. */
-const LARGE_TEXT = "Any member may invite a teammate by email, and the invite expires.\n".repeat(
-  4_000,
-);
-
-it.layer(getTestDB())("the coding agents' list lines", (it) => {
+it.layer(getTestDB())("the plan list's agent lines", (it) => {
   it.effect(
-    "an agent handed a large plan or prompt lists as the line its own read draws, naming its brief, its automation, and its source, and carrying none of the text it was handed",
+    "agents handed a large plan or prompt are listed beside their task and with none, naming their brief, automation, and source, and carrying none of the text they were handed",
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;
@@ -393,38 +400,13 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
               prompt: LARGE_TEXT,
               body: LARGE_TEXT,
             },
+            startedFrom: source,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "reviewstage/luke",
           }),
         );
-        const full = yield* Effect.forEach([snapshotted, continued, taskless], (agent) =>
-          Effect.map(readCodingAgent(userId, agent.id), Option.getOrThrow),
-        );
-        const [snapshotLine, continuedLine, tasklessLine] = full.map(codingAgentLineOf);
-
-        const published = yield* listPublishedCodingAgents(userId, [taskId]);
-        assert.deepEqual(published, [
-          { agent: snapshotLine, published: null },
-          { agent: continuedLine, published: null },
-        ]);
-        assert.deepEqual(
-          published.map(({ agent }) => [agent.handedPrompt, agent.startedFrom]),
-          [
-            [false, null],
-            [true, source],
-          ],
-        );
-        assert.deepEqual(yield* listCodingAgentLines(userId, taskId), [
-          snapshotLine,
-          continuedLine,
-        ]);
-        assert.deepEqual(yield* listWorkspaceCodingAgentLines(userId, workspaceId, { limit: 10 }), [
-          tasklessLine,
-          continuedLine,
-          snapshotLine,
-        ]);
 
         const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
         assert.deepEqual(
@@ -434,30 +416,33 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
             { id: snapshotted.id, title: "Invite emails", model: snapshotted.model },
           ],
         );
-        const [row, ...others] = yield* listTasklessAgents(userId, { includeArchived: false });
-        assert.deepEqual(others, []);
+        const rows = yield* listTasklessAgents(userId, { includeArchived: false });
         assert.deepEqual(
-          {
-            id: row?.id,
-            brief: row?.brief,
-            automationId: row?.automationId,
-            automationName: row?.automationName,
-            workspaceId: row?.workspaceId,
-            repository: row?.repository,
-          },
-          {
-            id: taskless.id,
-            brief: CODING_AGENT_BRIEF.PROMPT,
-            automationId: null,
-            automationName: "Nightly triage",
-            workspaceId,
-            repository: "reviewstage/luke",
-          },
+          rows.map((row) => ({
+            id: row.id,
+            planId: row.planId,
+            brief: row.brief,
+            automationId: row.automationId,
+            automationName: row.automationName,
+            from: row.from,
+            workspaceId: row.workspaceId,
+            repository: row.repository,
+          })),
+          [
+            {
+              id: taskless.id,
+              planId: null,
+              brief: CODING_AGENT_BRIEF.PROMPT,
+              automationId: null,
+              automationName: "Nightly triage",
+              from: source,
+              workspaceId,
+              repository: "reviewstage/luke",
+            },
+          ],
         );
-        assert.ok(
-          !JSON.stringify(row).includes(LARGE_TEXT.slice(0, 40)),
-          "the row carries no text",
-        );
+        const answered = JSON.stringify([listed, rows]);
+        assert.ok(!answered.includes(LARGE_TEXT.slice(0, 40)), "the list carries no text");
       }),
   );
 });
