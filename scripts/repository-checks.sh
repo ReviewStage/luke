@@ -48,10 +48,11 @@ fi
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host`, `@luke/host/effect`, `@luke/host/act-router`, and
-# `@luke/host/client` are walked the same way, because the host, its act
-# table, and the client core that keeps the app-state document are meant to
-# load in a browser tab: their graphs name no `node:` module, no `ws`, no
+# `@luke/host` and every door of it a browser loads are walked the same way:
+# `/effect`, `/client`, `/act-port`, `/act-router`, `/service-layer` and
+# `/agent-notices`, which the web app runs the host in a tab through, and
+# `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
+# (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
 # `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
 # `@luke/host/node`. The walk crosses into `@luke/credentials` through the
@@ -70,9 +71,21 @@ node --input-type=module -e '
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host, @luke/host/effect, @luke/host/act-router, and @luke/host/client",
+      name: "@luke/host and the doors of it a browser loads",
       root: "packages/host/src",
-      entries: ["index.ts", "effect/index.ts", "act-router/index.ts", "client/index.ts"],
+      entries: [
+        "index.ts",
+        "effect/index.ts",
+        "client/index.ts",
+        "act-port/index.ts",
+        "act-router/index.ts",
+        "service-layer.ts",
+        "agent-notices.ts",
+        "acts.ts",
+        "app-state.ts",
+        "bridge.ts",
+        "contract/index.ts",
+      ],
       forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
       follows: ["@luke/credentials"],

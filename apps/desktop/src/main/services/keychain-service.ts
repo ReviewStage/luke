@@ -1,11 +1,11 @@
-import type { HostSeams } from "@luke/host";
+import type { SecretCipher } from "@luke/host";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
 import { Effect } from "effect";
 import { safeStorage } from "electron";
 
 export interface KeychainService extends EffectDesktopService {
   /** The one cipher the host encrypts a credential with, and the one place `safeStorage` is named. */
-  readonly cipher: HostSeams["cipher"];
+  readonly cipher: SecretCipher;
 }
 
 /**
