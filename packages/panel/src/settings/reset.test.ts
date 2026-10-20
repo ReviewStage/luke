@@ -126,7 +126,7 @@ test("captions turned on while the Voice page holds only its way in offer no res
   );
 });
 
-/** A store holding `start`, whose reset returns the whole Appearance group to its defaults in one write, as the host's does. */
+/** A store holding `start`, whose reset returns the Appearance group to its defaults in one write but for the fields it is asked to keep, as the host's does. */
 function appearanceStore(start: typeof settings) {
   let held = start;
   const writes: SettingsWrites = {
@@ -134,12 +134,19 @@ function appearanceStore(start: typeof settings) {
       held = Object.assign(settingsView(), held, { [field]: value });
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
-    reset: () => {
-      held = Object.assign(settingsView(), held, {
+    reset: (_scope, kept) => {
+      const reset = {
         theme: APP_SETTING_DEFAULTS.theme,
         zoom: APP_SETTING_DEFAULTS.zoom,
         openAtLogin: APP_SETTING_DEFAULTS.openAtLogin,
-      });
+      };
+      held = Object.assign(
+        settingsView(),
+        held,
+        Object.fromEntries(
+          Object.entries(reset).filter(([field]) => !kept.some((each) => each === field)),
+        ),
+      );
       return Promise.resolve({
         status: ACTION_RESULT_STATUS.ACCEPTED,
         settings: appSettingsWire(held),

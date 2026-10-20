@@ -77,7 +77,7 @@ function windowPort(
         held = { ...held, stored: { ...held.stored, [field]: value } };
         return accepted();
       }),
-    resetSettings: (scope, reporter) =>
+    resetSettings: (scope, _kept, reporter) =>
       Effect.sync(() => {
         writes.push([scope, reporter]);
         return accepted();
@@ -117,7 +117,7 @@ async function everyKindRefused(client: ActPortClient) {
       client[SETTINGS_ACT_KIND.SETTING_UPDATE]({ field: "stopHotkey", value: "Control+Alt+S" }),
     ),
     [SETTINGS_ACT_KIND.SETTINGS_RESET]: await refusal(
-      client[SETTINGS_ACT_KIND.SETTINGS_RESET]({ scope: SETTINGS_RESET_SCOPE.VOICE }),
+      client[SETTINGS_ACT_KIND.SETTINGS_RESET]({ scope: SETTINGS_RESET_SCOPE.VOICE, kept: [] }),
     ),
     [SETTINGS_ACT_KIND.EXPERIMENT_SET]: await refusal(
       client[SETTINGS_ACT_KIND.EXPERIMENT_SET]({ experiment: "factory", on: true }),
@@ -201,6 +201,7 @@ it("a reset answers only once the stop key's deferred reapply is back, which a s
   let answered = false;
   const reset = client[SETTINGS_ACT_KIND.SETTINGS_RESET]({
     scope: SETTINGS_RESET_SCOPE.VOICE,
+    kept: [],
   }).then((result) => {
     answered = true;
     return result;
@@ -246,7 +247,7 @@ it("a value its field's guard refuses, or a key the payload does not take, is re
 
 it("a reset or an experiment switch carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
   const { client, writes } = windowPort();
-  const reset = { scope: SETTINGS_RESET_SCOPE.VOICE, unexpected: true } as const;
+  const reset = { scope: SETTINGS_RESET_SCOPE.VOICE, kept: [], unexpected: true } as const;
   const experiment = { experiment: "factory", on: true, unexpected: true } as const;
 
   assert.equal(

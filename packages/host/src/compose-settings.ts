@@ -82,6 +82,13 @@ interface SettingsLinks {
   readonly endLiveSession: Effect.Effect<void>;
 }
 
+/** The fields a reset keeps, as a call names them: none where absent, and nothing usable where any is not a setting. */
+function keptFields(value: UnparsedWireValue): readonly AppSettingField[] | undefined {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return undefined;
+  const fields = value.filter(isAppSettingField);
+  return fields.length === value.length ? fields : undefined;
+}
 export interface SettingsComposer extends Composer {
   readonly store: SettingsStore;
   readonly recordProductEvent: RecordProductEvent;
@@ -548,8 +555,10 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           const scope = params.scope;
           if (!isSettingsResetScope(scope))
             return yield* invalid("scope is not one this build knows");
+          const kept = keptFields(params.kept);
+          if (kept === undefined) return yield* invalid("kept must name settings");
           const result = yield* settingsWrite(
-            () => store.resetSettings(scope),
+            () => store.resetSettings(scope, kept),
             (saved) =>
               saved.reason
                 ? Effect.void
@@ -559,6 +568,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
                       const definition = APP_SETTING_SCHEMA[field];
                       if (!("resetScope" in definition) || definition.resetScope !== scope)
                         continue;
+                      if (kept.includes(field)) continue;
                       yield* applyHostSettingSideEffect(field, saved.settings);
                     }
                   }),

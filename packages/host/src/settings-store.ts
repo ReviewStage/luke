@@ -987,15 +987,22 @@ export class SettingsStore {
    * scopes are fixed by this build and none reaches a credential, an account,
    * or the agent pairing, whose own row already offers the provider's default.
    * A scope already at its defaults writes nothing, like any other setter
-   * asked for the value it holds.
+   * asked for the value it holds. The fields `kept` are left as the file
+   * holds them, inside the same write: the rows the asking page does not
+   * draw, so a reset never returns a choice its reader could not see, and
+   * never writes back an older reading over another window's newer one.
    */
-  resetSettings(scope: SettingsResetScope): Effect.Effect<SettingsUpdateResult, PlatformError> {
+  resetSettings(
+    scope: SettingsResetScope,
+    kept: readonly AppSettingField[] = [],
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) => {
         const next: PersistedSettings = { ...persisted };
         for (const field of APP_SETTING_FIELDS) {
           const definition = APP_SETTING_SCHEMA[field];
           if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+          if (kept.includes(field)) continue;
           if (definition.guard(undefined).valid) delete next[field];
           else Object.assign(next, { [field]: definition.default });
         }

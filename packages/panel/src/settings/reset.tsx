@@ -96,9 +96,9 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
  * slot.
  *
- * The page resets only the rows it draws: the store resets the whole group
- * in one write, so a row the page leaves out, Zoom in a browser, is written
- * straight back as it stood, and the Undo holds only what the page showed.
+ * The page resets only the rows it draws: it names the group's rows it
+ * leaves out, Zoom in a browser, and the store keeps them inside the one
+ * write, so nothing the reader could not see changes.
  */
 function ResetPageButton({
   scope,
@@ -114,33 +114,26 @@ function ResetPageButton({
   const toast = useToast();
   const reset = (asked: SettingsResetScope): Promise<ActionResult> => {
     const before = settings;
-    return writes.reset(asked).then((result) => {
+    const unseen = APP_SETTING_FIELDS.filter(
+      (field) => APP_SETTING_SCHEMA[field].resetScope === asked && !settingVisible(field, rows),
+    );
+    return writes.reset(asked, unseen).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
         return result;
       }
-      const changed = changedBy(before, appSettingsView(result.settings), asked);
-      const unseen = changed.filter(([field]) => !settingVisible(field, rows));
-      const held = changed.filter(([field]) => settingVisible(field, rows));
-      return writeBack(writes, unseen).then((kept) => {
-        if (!kept) {
+      const held = changedBy(before, appSettingsView(result.settings), asked);
+      const undo = () =>
+        writeBack(writes, held).then((taken) => {
+          if (taken) return;
           toast({ words: UNDO_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-        }
-        sayReset(asked, held);
-        return result;
+        });
+      toast({
+        words: RESET_NOTES[asked],
+        tone: TOAST_TONE.DONE,
+        action: { label: UNDO_LABEL, onPress: undo },
       });
-    });
-  };
-  const sayReset = (asked: SettingsResetScope, held: readonly HeldSetting[]): void => {
-    const undo = () =>
-      writeBack(writes, held).then((taken) => {
-        if (taken) return;
-        toast({ words: UNDO_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-      });
-    toast({
-      words: RESET_NOTES[asked],
-      tone: TOAST_TONE.DONE,
-      action: { label: UNDO_LABEL, onPress: undo },
+      return result;
     });
   };
   const { busy, run } = useSettingWrite(reset);
