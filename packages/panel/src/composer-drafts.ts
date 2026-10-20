@@ -449,6 +449,21 @@ export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "s
 }
 
 /**
+ * The steps of an inbox thread's open `do` ask its draft ticks, as the box
+ * reads it now (`draftOfItem`), which its row counts; none where no draft
+ * stands. Note that it answers the draft's own list, so a row draws again
+ * only as a tick changes, never on a word typed.
+ */
+export function useInboxItemTicked(
+  item: Pick<InboxItem, "id" | "revision" | "status">,
+): readonly number[] | undefined {
+  return useAtomValue(
+    draftsAtom,
+    (drafts) => drafts.find((kept) => isInbox(kept) && draftOfItem(kept.place, item))?.steps,
+  );
+}
+
+/**
  * The inbox cards' drafts of a plan, or of the agents with none where it is
  * null. Note that the list answered is the very one it was until one of its
  * drafts changes, so the inbox reading it draws again only then, never on a

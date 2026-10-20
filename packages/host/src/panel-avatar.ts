@@ -12,12 +12,11 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
-import type { UnparsedWireValue } from "@luke/wire";
-import { channels } from "./bridge.js";
+import { PUSH, type PushName, type PushPayload } from "./contract/pushes.js";
 
-/** The panel's page as the relay reaches it: its own `webContents`, and nothing wider. */
+/** The panel's page as the relay reaches it: its own pushes, and nothing wider. */
 export interface AvatarPage {
-  send(channel: string, payload: UnparsedWireValue): void;
+  push<Name extends PushName>(push: Name, payload: PushPayload<Name>): void;
 }
 
 /**
@@ -38,13 +37,11 @@ export class PanelAvatarRelay {
   /** The grant to join with, or nothing once the session is to close. */
   showAvatarSession(grant: AvatarGrant | undefined): void {
     this.#grant = grant;
-    // SAFETY: the grant is the structured-clone value `avatarGrantFromWire` reads on the page.
-    this.#page()?.send(channels.onAvatarSession, grant as UnparsedWireValue);
+    this.#page()?.push(PUSH.AVATAR_SESSION, grant);
   }
 
   feedAvatar(feed: AvatarFeed): void {
-    // SAFETY: the feed is the structured-clone value `avatarFeedFromWire` admitted.
-    this.#page()?.send(channels.onAvatarFeed, feed as UnparsedWireValue);
+    this.#page()?.push(PUSH.AVATAR_FEED, feed);
   }
 
   /**
@@ -53,14 +50,12 @@ export class PanelAvatarRelay {
    * never heard of is offered again by the window that wants it.
    */
   signalView(signal: AvatarViewSignal): void {
-    // SAFETY: the signal is the structured-clone value `avatarViewSignalFromWire` admitted.
-    this.#page()?.send(channels.onAvatarViewSignal, signal as UnparsedWireValue);
+    this.#page()?.push(PUSH.AVATAR_VIEW_SIGNAL, signal);
   }
 
   /** A fresh page has drawn: it is handed the grant standing, if one does. */
   pageDrew(): void {
     if (this.#grant === undefined) return;
-    // SAFETY: as in `showAvatarSession`.
-    this.#page()?.send(channels.onAvatarSession, this.#grant as UnparsedWireValue);
+    this.#page()?.push(PUSH.AVATAR_SESSION, this.#grant);
   }
 }

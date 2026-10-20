@@ -50,6 +50,7 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
 import {
   type TaskSections,
   type TaskSectionWrite,
@@ -88,8 +89,13 @@ import {
   TASK_CALL_FAILURE,
   type TaskCallFailure,
   type TaskCodeAnswer,
+  type TaskIssueCallFailure,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
+  type TasksIssueLinkAnswer,
+  type TasksIssueLinksAnswer,
+  type TasksIssueRelateAnswer,
+  type TasksIssueUnlinkAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TaskWorkAnswer,
@@ -179,6 +185,31 @@ function hostedResult<Answer, Failure extends TaskCallFailure>(
       const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
       return failure === undefined ? UNANSWERED : ({ ok: false, failure } as const);
     },
+  });
+}
+
+/** The refusals a call on a task's linked issues can answer with, by the service's own word for each. */
+const TASK_ISSUE_REFUSALS = new Map<HostedApiError, TaskIssueCallFailure>([
+  [HOSTED_API_ERROR.NOT_FOUND, TASK_CALL_FAILURE.NOT_FOUND],
+  [HOSTED_API_ERROR.TASK_ARCHIVED, TASK_CALL_FAILURE.TASK_ARCHIVED],
+  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, TASK_CALL_FAILURE.LINEAR_UNAVAILABLE],
+]);
+
+/** A call on a task's linked issues as the window hears it: the answer, or why there is none, a refusal it does not name as unanswered. */
+function issueView<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  Answer | { readonly failure: TaskIssueCallFailure },
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.match(asked, {
+    onSuccess: (answer): Answer | { readonly failure: TaskIssueCallFailure } => answer,
+    onFailure: (failed) => ({
+      failure:
+        (failed._tag === "HostedRefused" ? TASK_ISSUE_REFUSALS.get(failed.refusal) : undefined) ??
+        TASK_CALL_FAILURE.UNANSWERED,
+    }),
   });
 }
 
@@ -504,6 +535,45 @@ export class HostedTaskClient {
     return orNothing(
       askHosted(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
     );
+  }
+
+  /** The issues one task links, each with where it stands now, read live by the service; or why there are none. */
+  readIssueLinks(
+    taskId: string,
+  ): Effect.Effect<TasksIssueLinksAnswer, never, HttpClient.HttpClient> {
+    return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
+  }
+
+  /** An issue linked to one task, which the service reads from its provider first; or why none was linked. */
+  linkIssue(
+    taskId: string,
+    issue: TaskIssueChoice,
+  ): Effect.Effect<TasksIssueLinkAnswer, never, HttpClient.HttpClient> {
+    return issueView(
+      askHosted(this.#hosted.plans.linkIssue, { params: { id: taskId }, body: issue }),
+    );
+  }
+
+  /** Which keyword one task's pull requests write of one of its links; or why it stands as it was. */
+  relateIssue(
+    taskId: string,
+    linkId: string,
+    relation: TaskIssueRelation,
+  ): Effect.Effect<TasksIssueRelateAnswer, never, HttpClient.HttpClient> {
+    return issueView(
+      askHosted(this.#hosted.plans.relateIssue, {
+        params: { id: taskId, link: linkId },
+        body: { relation },
+      }),
+    );
+  }
+
+  /** One of a task's links let go; or why it stands. */
+  unlinkIssue(
+    taskId: string,
+    linkId: string,
+  ): Effect.Effect<TasksIssueUnlinkAnswer, never, HttpClient.HttpClient> {
+    return issueView(askHosted(this.#hosted.plans.unlinkIssue, { id: taskId, link: linkId }));
   }
 
   /** The issues of a repository the workspace's installation reaches, as New task's picker asks for them, or that the installation grants none; nothing where the service did not answer. */

@@ -797,6 +797,7 @@ export function PlanBody({
   reader = NO_READER,
   agents,
   standing: taskStanding,
+  underTitle,
 }: {
   task: Task;
   live: boolean;
@@ -819,6 +820,8 @@ export function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
+  /** What the task's own page draws under its name and byline, ahead of its text, as its linked issues; nothing elsewhere. */
+  underTitle?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -1091,6 +1094,7 @@ export function PlanBody({
                 <TaskStandingChips task={task} onSet={taskStanding.onSet} />
               )}
               <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+              {underTitle}
               <ChangedLine looks={looks} marks={marks} />
             </>
           ) : null}

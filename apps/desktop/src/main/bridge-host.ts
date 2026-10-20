@@ -5,7 +5,6 @@ import type { AppStateSnapshot } from "@luke/host/app-state";
 import {
   ACT_PORT,
   BRIDGE,
-  type Bridge,
   type BridgeArgumentsFor,
   type BridgeMethod,
   type BridgeResultFor,
@@ -25,17 +24,13 @@ type BridgeHandler<Method extends BridgeMethod> = (
   ...args: BridgeArgumentsFor<Method>
 ) => BridgeResultFor<Method> | Promise<BridgeResultFor<Method>>;
 
-type SubscribeMethod = {
-  [Method in BridgeMethod]: Bridge[Method]["kind"] extends "subscribe" ? Method : never;
-}[BridgeMethod];
-
 /**
  * Every entry a window sends and the router does not answer: what one window
  * reports about itself. Derived rather than listed, so an entry added to the
  * bridge is an entry this registrar demands a handler for, and the only way
  * to add an effect without one is to add an act.
  */
-type ReportMethod = Exclude<BridgeMethod, SubscribeMethod | "act" | "requestAppState">;
+type ReportMethod = Exclude<BridgeMethod, "act" | "requestAppState">;
 
 export type ReportHandlers = { readonly [Method in ReportMethod]: BridgeHandler<Method> };
 
@@ -64,7 +59,8 @@ type ErasedHandler = (context: BridgeContext, ...args: never[]) => unknown;
  * Every channel the sandboxed renderers reach this process through, attached
  * once and in one place. There are four kinds and no fifth: the one act
  * channel, whose router decides everything; the act port, whose procedures
- * answer the kinds that have moved onto it; the one state read; and the
+ * answer the kinds that have moved onto it and stream what main pushes the
+ * window (`window/window-pushes.ts`); the one state read; and the
  * reports, each a window saying something only it knows. A window that loaded
  * before this ran would meet an unhandled invoke, so it runs between the
  * composition and its start.

@@ -1,8 +1,14 @@
-import { channels } from "@luke/host/bridge";
+import { PUSH, type PushPayload } from "@luke/host/contract";
 import { stopHotkeyCandidates, voiceHotkeyCandidates } from "@luke/settings";
-import type { UnparsedWireValue } from "@luke/wire";
 import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
 import { type TalkKeyEdges, talkKeyWatcher } from "../native/talk-key";
+import { windowPushes } from "./window-pushes";
+
+/** What the keys this registrar holds push to the voice window. */
+type HotkeyPush =
+  | typeof PUSH.VOICE_HOTKEY_PRESS
+  | typeof PUSH.VOICE_HOTKEY_RELEASE
+  | typeof PUSH.STOP_HOTKEY_PRESS;
 
 /**
  * The two Luke keys, in the order they outrank one another. Talk takes any
@@ -163,7 +169,7 @@ export class HotkeyRegistrar {
             // The stop ends whatever hold the fallback had begun, so the next
             // talk press starts one rather than ending one already over.
             this.#fallbackTalking = false;
-            this.#sendPress(channels.onStopHotkeyPress);
+            this.#sendPress(PUSH.STOP_HOTKEY_PRESS, undefined);
           },
           chosen: undefined,
           accelerator: undefined,
@@ -281,14 +287,12 @@ export class HotkeyRegistrar {
     return state.candidates(state.chosen, []).includes(chord) || chord === state.accelerator;
   }
 
-  #sendTo(
+  #sendTo<Name extends HotkeyPush>(
     webContents: WebContents | undefined,
-    channel: string,
-    payload?: UnparsedWireValue,
+    push: Name,
+    payload: PushPayload<Name>,
   ): void {
-    if (!webContents) return;
-    if (payload === undefined) webContents.send(channel);
-    else webContents.send(channel, payload);
+    if (webContents) windowPushes.push(webContents, push, payload);
   }
 
   #voiceHostContents(): WebContents | undefined {
@@ -296,13 +300,13 @@ export class HotkeyRegistrar {
   }
 
   /** A press the recording row is owed rather than the voice host. */
-  #sendPress(channel: string, payload?: UnparsedWireValue): void {
+  #sendPress<Name extends HotkeyPush>(push: Name, payload: PushPayload<Name>): void {
     if (this.#shortcutCapturing) return;
-    this.#sendTo(this.#voiceHostContents(), channel, payload);
+    this.#sendTo(this.#voiceHostContents(), push, payload);
   }
 
   /** What a talk press carries: the task it is about, where the panel has one open. */
-  #talkPress(): UnparsedWireValue | undefined {
+  #talkPress(): PushPayload<typeof PUSH.VOICE_HOTKEY_PRESS> {
     const taskId = this.#host.talkTaskId();
     return taskId === undefined ? undefined : { taskId };
   }
@@ -318,9 +322,8 @@ export class HotkeyRegistrar {
     const voiceHost = this.#voiceHostContents();
     if (this.#shortcutCapturing || !voiceHost) return;
     this.#fallbackTalking = !this.#fallbackTalking;
-    if (this.#fallbackTalking)
-      this.#sendTo(voiceHost, channels.onVoiceHotkeyPress, this.#talkPress());
-    else voiceHost.send(channels.onVoiceHotkeyRelease);
+    if (this.#fallbackTalking) this.#sendTo(voiceHost, PUSH.VOICE_HOTKEY_PRESS, this.#talkPress());
+    else this.#sendTo(voiceHost, PUSH.VOICE_HOTKEY_RELEASE, undefined);
   }
 
   /**
@@ -373,8 +376,9 @@ export class HotkeyRegistrar {
     const candidates = state.candidates(state.chosen, this.#taken(HOTKEY_RANK.TALK));
     if (candidates.length === 0) return false;
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
-      onPress: () => this.#sendPress(channels.onVoiceHotkeyPress, this.#talkPress()),
-      onRelease: () => this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
+      onPress: () => this.#sendPress(PUSH.VOICE_HOTKEY_PRESS, this.#talkPress()),
+      onRelease: () =>
+        this.#sendTo(this.#voiceHostContents(), PUSH.VOICE_HOTKEY_RELEASE, undefined),
       onRegistered: (accelerator) => {
         state.accelerator = accelerator;
         this.#host.hotkeyChanged(HOTKEY_RANK.TALK);

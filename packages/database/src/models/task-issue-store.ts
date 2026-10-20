@@ -13,6 +13,7 @@ import { Database, type DatabaseServices, type QueryError, queryBuilder } from "
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
 import { InstantColumnSchema } from "./columns.js";
+import { TaskArchived } from "./task-store.js";
 import { reachableTask } from "./workspace-store.js";
 
 /**
@@ -28,7 +29,11 @@ import { reachableTask } from "./workspace-store.js";
  * a link past either is refused and nothing is written. The task's row is
  * held while a link is counted and written, so two links made at once
  * cannot both take the last place, and a task's links read in the order
- * they were made, the first of them first. A description is kept to
+ * they were made, the first of them first. A link, a relation, and an
+ * unlink are a task's edits, so an archived task takes none of them, refused
+ * with `TaskArchived` under the task's lock as a rename is; a refresh of what
+ * a link's chip draws, its key and title as the provider last answered them,
+ * is a read's and lands on an archived task too. A description is kept to
  * `LINEAR_BOUNDS.MAX_DESCRIPTION_CHARS`, whoever read it. Every function is
  * an effect over the ambient `SqlClient` and names no database of its own.
  */
@@ -119,11 +124,11 @@ function taskReached(userId: string, taskId: string): SQL {
  */
 const lockLinkedTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, archivedAt: Schema.NullOr(InstantColumnSchema) }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: task.id })
+        .select({ id: task.id, archivedAt: task.archivedAt })
         .from(task)
         .where(reachableTask(userId, taskId))
         .for("no key update"),
@@ -215,6 +220,21 @@ const updateRelation = SqlSchema.findOneOption({
     ),
 });
 
+const updateDrawn = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...LinkKeySchema.fields, key: Schema.String, title: Schema.String }),
+  Result: TaskIssueLinkSchema,
+  execute: ({ userId, taskId, linkId, key, title }) =>
+    Database.use((db) =>
+      db
+        .update(taskIssue)
+        .set({ key, title })
+        .where(
+          and(eq(taskIssue.id, linkId), eq(taskIssue.taskId, taskId), taskReached(userId, taskId)),
+        )
+        .returning(LINK_COLUMNS),
+    ),
+});
+
 const removeLink = SqlSchema.findOneOption({
   Request: LinkKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -230,11 +250,33 @@ const removeLink = SqlSchema.findOneOption({
 });
 
 /**
+ * The edit run with the task's row held, where the account reaches the
+ * task: nothing where it reaches none, and refused with `TaskArchived`
+ * where the task is archived, nothing written either way.
+ */
+function onLiveTask<A, E>(
+  userId: string,
+  taskId: string,
+  edit: Effect.Effect<Option.Option<A>, E, DatabaseServices>,
+): Effect.Effect<Option.Option<A>, TaskIssueStoreFailure | TaskArchived | E, DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockLinkedTask({ userId, taskId });
+        if (Option.isNone(locked)) return Option.none<A>();
+        if (locked.value.archivedAt !== null) return yield* new TaskArchived();
+        return yield* edit;
+      }),
+    ),
+  );
+}
+
+/**
  * Links the issue to the task as the account, from now, and answers the
  * link; nothing where the account reaches no such task. Refused with
- * `TaskIssueLinked` where the task links the issue already, and with
- * `TaskIssuesFull` where it links `TASK_BOUNDS.MAX_ISSUES` issues, nothing
- * written either way.
+ * `TaskIssueLinked` where the task links the issue already, with
+ * `TaskIssuesFull` where it links `TASK_BOUNDS.MAX_ISSUES` issues, and with
+ * `TaskArchived` where the task is archived, nothing written any way.
  */
 export function linkTaskIssue(
   userId: string,
@@ -242,35 +284,33 @@ export function linkTaskIssue(
   link: NewTaskIssueLink,
 ): Effect.Effect<
   Option.Option<TaskIssueLink>,
-  TaskIssueStoreFailure | TaskIssuesFull | TaskIssueLinked,
+  TaskIssueStoreFailure | TaskIssuesFull | TaskIssueLinked | TaskArchived,
   DatabaseServices
 > {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const locked = yield* lockLinkedTask({ userId, taskId });
-        if (Option.isNone(locked)) return Option.none();
-        const [standing] = yield* countLinks(taskId);
-        if ((standing?.held ?? 0) >= TASK_BOUNDS.MAX_ISSUES) return yield* new TaskIssuesFull();
-        const createdAt = stampAfter(yield* DateTime.nowAsDate, standing?.latest ?? null);
-        const written = yield* insertLink({
-          taskId,
-          provider: link.provider,
-          externalId: link.externalId,
-          repository: link.repository ?? null,
-          number: link.number ?? null,
-          key: link.key,
-          url: link.url,
-          title: link.title,
-          description: link.description.slice(0, LINEAR_BOUNDS.MAX_DESCRIPTION_CHARS),
-          relation: link.relation ?? TASK_ISSUE_RELATION.CLOSES,
-          linkedBy: userId,
-          createdAt,
-        });
-        if (Option.isNone(written)) return yield* new TaskIssueLinked();
-        return written;
-      }),
-    ),
+  return onLiveTask(
+    userId,
+    taskId,
+    Effect.gen(function* () {
+      const [standing] = yield* countLinks(taskId);
+      if ((standing?.held ?? 0) >= TASK_BOUNDS.MAX_ISSUES) return yield* new TaskIssuesFull();
+      const createdAt = stampAfter(yield* DateTime.nowAsDate, standing?.latest ?? null);
+      const written = yield* insertLink({
+        taskId,
+        provider: link.provider,
+        externalId: link.externalId,
+        repository: link.repository ?? null,
+        number: link.number ?? null,
+        key: link.key,
+        url: link.url,
+        title: link.title,
+        description: link.description.slice(0, LINEAR_BOUNDS.MAX_DESCRIPTION_CHARS),
+        relation: link.relation ?? TASK_ISSUE_RELATION.CLOSES,
+        linkedBy: userId,
+        createdAt,
+      });
+      if (Option.isNone(written)) return yield* new TaskIssueLinked();
+      return written;
+    }),
   );
 }
 
@@ -286,21 +326,50 @@ export function listTaskIssues(
   return findLinks({ userId, taskId });
 }
 
-/** Sets which keyword a pull request writes of a link of the task, and answers the link; nothing where the account reaches no such link. */
+/**
+ * Sets which keyword a pull request writes of a link of the task, and
+ * answers the link; nothing where the account reaches no such link, and
+ * refused with `TaskArchived` where the task is archived.
+ */
 export function relateTaskIssue(
   userId: string,
   taskId: string,
   linkId: string,
   relation: TaskIssueRelation,
-): Effect.Effect<Option.Option<TaskIssueLink>, TaskIssueStoreFailure, DatabaseServices> {
-  return updateRelation({ userId, taskId, linkId, relation });
+): Effect.Effect<
+  Option.Option<TaskIssueLink>,
+  TaskIssueStoreFailure | TaskArchived,
+  DatabaseServices
+> {
+  return onLiveTask(userId, taskId, updateRelation({ userId, taskId, linkId, relation }));
 }
 
-/** Takes a link off the task; false where the account reaches no such link. The issue itself is the provider's and is left as it stands. */
+/**
+ * What a link's chip draws, its key and title, as its provider answered
+ * them on a read, and answers the link; nothing where the account reaches
+ * no such link. Its description, relation, and the rest stand as they were.
+ */
+export function refreshTaskIssue(
+  userId: string,
+  taskId: string,
+  linkId: string,
+  drawn: { readonly key: string; readonly title: string },
+): Effect.Effect<Option.Option<TaskIssueLink>, TaskIssueStoreFailure, DatabaseServices> {
+  return updateDrawn({ userId, taskId, linkId, ...drawn });
+}
+
+/**
+ * Takes a link off the task; false where the account reaches no such link,
+ * and refused with `TaskArchived` where the task is archived. The issue
+ * itself is the provider's and is left as it stands.
+ */
 export function unlinkTaskIssue(
   userId: string,
   taskId: string,
   linkId: string,
-): Effect.Effect<boolean, TaskIssueStoreFailure, DatabaseServices> {
-  return Effect.map(removeLink({ userId, taskId, linkId }), Option.isSome);
+): Effect.Effect<boolean, TaskIssueStoreFailure | TaskArchived, DatabaseServices> {
+  return Effect.map(
+    onLiveTask(userId, taskId, removeLink({ userId, taskId, linkId })),
+    Option.isSome,
+  );
 }

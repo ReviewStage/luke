@@ -21,6 +21,7 @@ import {
   type IssueProceduresDependencies,
   type PlatformActProcedures,
   type TasksProceduresDependencies,
+  WindowPushes,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -140,19 +141,28 @@ function windowPort(
     ActPortDependencies,
     "account" | "settings"
   >;
-  // SAFETY: no agent, inbox, chat, automation, factory, or integration act is called here, so their hosts are never reached.
+  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
   const elsewhere = {
     agentInbox: { host: {} },
     agents: { host: {}, notices: {} },
     automations: { host: {} },
     factory: { host: {} },
     integrations: { host: {} },
+    taskIssues: { host: {} },
   } as Pick<
     ActPortDependencies,
-    "agentInbox" | "agents" | "automations" | "factory" | "integrations"
+    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
   >;
   const handler = createActPortHandler(
-    { ...unreached, ...elsewhere, accountAsks: { host }, issues, tasks, workspaces },
+    {
+      ...unreached,
+      ...elsewhere,
+      accountAsks: { host },
+      issues,
+      pushes: new WindowPushes(),
+      tasks,
+      workspaces,
+    },
     platform,
   );
   const { port1, port2 } = new MessageChannel();
