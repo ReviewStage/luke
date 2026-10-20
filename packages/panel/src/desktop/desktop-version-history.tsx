@@ -864,3 +864,13 @@ export function DesktopVersionHistory({
     </div>
   );
 }
+
+/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+export function TaskVersionHistory({
+  tasks,
+  ...view
+}: Omit<Parameters<typeof DesktopVersionHistory>[0], "subject"> & {
+  tasks: TasksControl;
+}): React.JSX.Element {
+  return <DesktopVersionHistory {...view} subject={taskVersionSubject(tasks)} />;
+}

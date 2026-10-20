@@ -21,6 +21,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import {
   type LinkDrawer,
   MARKDOWN_MARK,
@@ -232,6 +233,9 @@ function EditTime({
     ) : (
       <TextButton
         aria-label={label}
+        // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
+        onPointerEnter={VERSION_HISTORY.prefetch}
+        onFocus={VERSION_HISTORY.prefetch}
         onClick={(event) => {
           event.stopPropagation();
           onShow();

@@ -200,6 +200,26 @@ function ListRows(): React.JSX.Element {
           </List>
         </div>
       </CatalogSection>
+      <CatalogSection id="list-row-dense-long" title="Dense rows cut short">
+        <div className="catalog-narrow">
+          <List label="Tabs" density={LIST_DENSITY.DENSE}>
+            <ListRow
+              leading={<UserIcon />}
+              title="Draw the summary panel's tabs with a fade at their end"
+              description="Coding agent"
+              meta="2h"
+              onPress={() => undefined}
+            />
+            <ListRow
+              leading={<UserIcon />}
+              title="Plan"
+              description="The plan this task is talked through in, as Luke keeps it"
+              onPress={() => undefined}
+            />
+            <ListRow leading={<UserIcon />} title="Inbox" meta="3" onPress={() => undefined} />
+          </List>
+        </div>
+      </CatalogSection>
       <CatalogSection id="list-row-narrow" title="Long words in a narrow column">
         <div className="catalog-narrow">
           <List label="Tasks">

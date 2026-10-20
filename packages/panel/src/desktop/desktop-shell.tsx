@@ -2,12 +2,15 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  BackIcon,
   COLLECTION_STATE,
   CollectionPage,
   ComposeIcon,
+  DetailPage,
   IconButton,
+  NavItem,
   PAGE_FRAME,
   ScrollArea,
   SettingsPage,
@@ -28,6 +31,7 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history.js"
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { Shortcut } from "../shortcut.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
@@ -40,22 +44,20 @@ import {
   type AutomationsPlace,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
+import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopChat } from "./desktop-chat.js";
-import { DesktopFactory } from "./desktop-factory.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
+import { FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
-import { PersonPage } from "./person-page.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { taskCardOf } from "./task-card.js";
@@ -108,6 +110,91 @@ function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks"
     />
+  );
+}
+
+/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Board's does. */
+function FactoryLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_FACTORY, onExit);
+  return (
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Factory"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Factory</h1>
+            <ExperimentTag />
+          </div>
+        </header>
+      }
+      state={COLLECTION_STATE.LOADING}
+      loadingLabel="Reading tasks…"
+    />
+  );
+}
+
+/** What stands while a person's page's chunk loads: its frame, their name where the place that opened it knew it, and its own way out. */
+function PersonLoading({
+  name,
+  onExit,
+}: {
+  name: string | undefined;
+  onExit: () => void;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, onExit);
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label={name ?? "Profile"}
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">
+              {name ?? <Skeleton width={PERSON_SKELETON_NAME} />}
+            </h1>
+          </div>
+        </header>
+      }
+    >
+      {null}
+    </DetailPage>
+  );
+}
+
+/** How wide the placeholder name stands while a person's page's chunk loads, as the page's own does. */
+const PERSON_SKELETON_NAME = "180px";
+
+/**
+ * What stands while a version history's chunk loads: its frame, the list's
+ * column where the sidebar stood, and its own way out, its Back row and
+ * Escape, so the history is left as it would be once drawn.
+ */
+function VersionHistoryLoading({
+  onExit,
+  hidden,
+}: {
+  onExit: () => void;
+  hidden: HiddenColumns;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
+  return (
+    <div className="desktop-version-history">
+      <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
+        <div className="desktop-drag-strip" />
+        <NavItem
+          icon={<BackIcon />}
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
+          onClick={onExit}
+        >
+          Back
+        </NavItem>
+      </nav>
+      <section className="version-page" aria-label="Version" hidden={hidden.item}>
+        <div className="desktop-drag-strip" />
+      </section>
+    </div>
   );
 }
 
@@ -552,21 +639,31 @@ export function DesktopShell({
   // A plan's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
+    const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
     return (
       <div className="desktop-shell" data-room={room}>
         {/* A chip in a version's words hangs the cards the plan's own words do. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
-            <DesktopVersionHistory
-              sidebar={sidebar}
-              room={room}
-              history={history}
-              subject={taskVersionSubject(tasks)}
-              account={account}
-              call={call}
-              onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
-              onRestored={history.onLeaveVersionHistory}
-            />
+            <Suspense
+              fallback={
+                <VersionHistoryLoading
+                  onExit={exitHistory}
+                  hidden={hiddenColumns(room, tasks.history.listed)}
+                />
+              }
+            >
+              <VERSION_HISTORY.Route
+                sidebar={sidebar}
+                room={room}
+                history={history}
+                tasks={tasks}
+                account={account}
+                call={call}
+                onExit={exitHistory}
+                onRestored={history.onLeaveVersionHistory}
+              />
+            </Suspense>
           </ChipCards>
         </MentionedAgents>
         <CaptionStrip {...captions} />
@@ -647,16 +744,24 @@ export function DesktopShell({
                 at={pagePerson}
                 active={tasks.shown}
               >
-                <PersonPage
-                  tasks={tasks}
-                  userId={pagePerson}
-                  name={tasks.personView.name}
-                  staged={sidebar.staged}
-                />
+                <Suspense
+                  fallback={
+                    <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />
+                  }
+                >
+                  <PERSON_PAGE.Route
+                    tasks={tasks}
+                    userId={pagePerson}
+                    name={tasks.personView.name}
+                    staged={sidebar.staged}
+                  />
+                </Suspense>
               </PageFind>
             ) : factoryOpen ? (
               <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
-                <DesktopFactory tasks={tasks} />
+                <Suspense fallback={<FactoryLoading onExit={tasks.factoryView.onClose} />}>
+                  <FACTORY.Route tasks={tasks} />
+                </Suspense>
               </PageFind>
             ) : boardOpen ? (
               <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
