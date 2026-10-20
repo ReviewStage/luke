@@ -21,8 +21,11 @@ import { ChartEmpty, ChartFrame } from "./chart-frame";
 const RETENTION_FILL_FLOOR_PERCENT = 8;
 
 /**
- * The share past which a cell's fill is strong enough that the page's light
- * foreground stops clearing it, so the text flips to the dark background tone.
+ * The share past which a cell's fill is strong enough that the page's text
+ * stops clearing it, in the dark theme, so the text flips to the ink the
+ * palette sets on a fill of the accent's family. That ink is dark in both
+ * themes, so in the light theme, where the text is dark already and the fill
+ * is thinned against a light card, the flip changes the ink by almost nothing.
  */
 const RETENTION_TEXT_FLIP_SHARE = 0.75;
 
@@ -31,7 +34,7 @@ function retentionCellStyle(share: number): React.CSSProperties {
   return {
     backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
     color:
-      share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-ground)" : "var(--luke-color-text)",
+      share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-on-accent)" : "var(--luke-color-text)",
   };
 }
 

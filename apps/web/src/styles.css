@@ -75,7 +75,8 @@
   /* The page's palette, its fonts, its 4px space scale, and its corner are
      the web profile's in `@luke/ui` (`tokens/palettes.css`, `profiles.css`),
      read here as its `--luke-*` roles. A page is light unless its root asks for the dark
-     theme the admin dashboard and the OAuth cards are drawn in. */
+     theme: the app and the admin dashboard ask for it from the account's
+     Theme setting (`public/app-theme.js`), the OAuth cards by their own page. */
   font-optical-sizing: auto;
   font-synthesis: none;
 }
