@@ -384,7 +384,11 @@ the login, and the expiry, never the token. Our service uses it only to call
 GitHub for you: to list the repositories it can push to, and to read, check
 out, commit to, and open pull requests on the repository of a task or coding
 agent you start on it, where no GitHub App installation connected to the
-workspace reaches that repository. In a coding agent's sandbox it is set at
+workspace reaches that repository. Once a minute it reads the reviews, comments, and
+checks on the open pull requests of your coding agents that run on it, to wake
+those agents. It also asks GitHub whether your token can read the repository
+of a teammate's task or coding agent that runs on their own token, to decide
+whether you see it, and keeps that answer for up to an hour. In a coding agent's sandbox it is set at
 the network firewall on that one repository's paths alone, and never enters
 the sandbox, a command, or its output. After you save it, neither your Mac nor
 any answer from our service holds the token again, and we never log it or send
