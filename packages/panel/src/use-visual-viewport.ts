@@ -24,10 +24,11 @@
  *
  * Note that WebKit sizes `innerWidth` and `innerHeight` to the visual
  * viewport under a pinch (WebKit bug 174362), where every other engine keeps
- * the layout viewport's, so zoomed in the window's height is the one last
- * read at the page's own scale. Where `innerWidth` still spans the zoomed box
- * times its scale, `innerHeight` is the layout viewport's, and a window that
- * shrinks for the keyboard (Android's `resizes-content`) is read as it is.
+ * the layout viewport's, so there the window's height is its `innerHeight`
+ * times the scale, which a window resized while zoomed changes and a pinch
+ * does not. Where `innerWidth` still spans the zoomed box times its scale,
+ * `innerHeight` is the layout viewport's, and a window that shrinks for the
+ * keyboard (Android's `resizes-content`) is read as it is.
  */
 
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -59,6 +60,19 @@ function unzoomed(viewport: VisualViewport): boolean {
 }
 
 /**
+ * The window's height while zoomed in. WebKit's `innerHeight` is the layout
+ * viewport's over the scale, cut to a whole pixel, so scaled back up it may
+ * fall short of the height by up to the scale: within that of the height
+ * last known, the height last known stands, and past it the window was
+ * resized.
+ */
+function zoomedWindowHeight(viewport: VisualViewport, known: number): number {
+  if (!windowFollowsPinch(viewport)) return window.innerHeight;
+  const scaled = window.innerHeight * viewport.scale;
+  return Math.abs(scaled - known) <= viewport.scale ? known : Math.round(scaled);
+}
+
+/**
  * Writes the visual viewport's height and the keyboard's inset on the root
  * as they change, and takes them away again on unmount. Note that it writes
  * before the window paints, so a phone never draws a frame measured by the
@@ -71,10 +85,11 @@ export function useVisualViewport(): void {
     const root = document.documentElement.style;
     /** Where the stage begins, as last measured at the page's own scale. */
     let top = 0;
-    /** The window's height, as last read at the page's own scale; a panel mounted zoomed in reads it scaled back up where the window follows the pinch. */
-    let unzoomedHeight = window.innerHeight * (windowFollowsPinch(viewport) ? viewport.scale : 1);
+    /** The window's height as last known, zoomed in or not. */
+    let windowHeight = unzoomed(viewport)
+      ? window.innerHeight
+      : zoomedWindowHeight(viewport, window.innerHeight);
     const write = () => {
-      let windowHeight: number;
       let bottom: number;
       if (unzoomed(viewport)) {
         // A panned viewport (`offsetTop`) is seen, not covered: what stands
@@ -82,11 +97,10 @@ export function useVisualViewport(): void {
         // keyboard's.
         const seen = visibleViewport();
         top = seen.top;
-        unzoomedHeight = window.innerHeight;
-        windowHeight = unzoomedHeight;
+        windowHeight = window.innerHeight;
         bottom = seen.bottom;
       } else {
-        windowHeight = windowFollowsPinch(viewport) ? unzoomedHeight : window.innerHeight;
+        windowHeight = zoomedWindowHeight(viewport, windowHeight);
         // Note that rounding keeps a pinch's fractions from moving the stage by a pixel.
         bottom = Math.min(windowHeight, top + Math.round(viewport.height * viewport.scale));
       }

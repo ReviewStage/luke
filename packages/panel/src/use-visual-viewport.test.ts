@@ -38,7 +38,8 @@ class FakeVisualViewport extends EventTarget {
   /** The window's size as its engine answers it. */
   get window() {
     const shrink = this.engine === ENGINE.WEBKIT ? this.scale : 1;
-    return { width: WINDOW_WIDTH / shrink, height: this.layoutHeight / shrink };
+    // Note that WebKit cuts the window's size to a whole pixel.
+    return { width: WINDOW_WIDTH / shrink, height: Math.trunc(this.layoutHeight / shrink) };
   }
 
   /** The viewport changed as a phone changes it, announced by the event it fires. */
@@ -168,6 +169,26 @@ test("in webkit a panel first drawn zoomed in measures the stage by the window a
   viewport.change({ height: 400, scale: 2 }, "resize");
   standViewport(viewport);
   mount();
+  assert.equal(readOverBody("--luke-stage-height"), "800px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+});
+
+test("in webkit a window resized while zoomed in is measured at its new height, with no keyboard read into what it lost", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  mount();
+  act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
+  act(() => viewport.change({ height: 300, layoutHeight: 600 }, "resize"));
+  assert.equal(readOverBody("--luke-stage-height"), "600px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+});
+
+test("in webkit a window cut to a whole pixel at a fractional zoom keeps the stage still", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  mount();
+  // At three times over, WebKit answers the 800px window as 266px, which scaled back up is 798px.
+  act(() => viewport.change({ height: 800 / 3, scale: 3 }, "resize"));
   assert.equal(readOverBody("--luke-stage-height"), "800px");
   assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
 });
