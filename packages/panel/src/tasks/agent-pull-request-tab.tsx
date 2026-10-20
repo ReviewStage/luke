@@ -131,6 +131,7 @@ import {
   PendingComment,
   type PendingComments,
   PendingCommentsProvider,
+  PendingSurfaceProvider,
   pendingThreadsOf,
   usePendingComment,
   usePendingThread,
@@ -2227,17 +2228,19 @@ function PullRequestTabBody({
                 aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
                 hidden={none || view !== PULL_REQUEST_VIEW.FILES}
               >
-                <AgentChangesTab
-                  agentId={agentId}
-                  control={control}
-                  shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-                  repository={repository}
-                  tree={tree}
-                  threads={changesThreads}
-                  lineComments={{ pending: pendingReview, onWritten: written }}
-                  reads={changes}
-                  reveal={threadJumps.filesReveal}
-                />
+                <PendingSurfaceProvider value={shown && !none && view === PULL_REQUEST_VIEW.FILES}>
+                  <AgentChangesTab
+                    agentId={agentId}
+                    control={control}
+                    shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                    repository={repository}
+                    tree={tree}
+                    threads={changesThreads}
+                    lineComments={{ pending: pendingReview, onWritten: written }}
+                    reads={changes}
+                    reveal={threadJumps.filesReveal}
+                  />
+                </PendingSurfaceProvider>
               </div>
             </div>
           </AnchorsContext.Provider>

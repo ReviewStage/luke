@@ -2336,7 +2336,8 @@ const VIEWER_PENDING_READ = 10;
  * the side a comment counts on on the thread alone, and its REST reads of a
  * pending comment answer no line at all; the member's own pending threads
  * stand among the pull request's threads on their own token, the newest
- * last.
+ * last; each thread's first comment is read beside its last ones, which
+ * says whether it was published before the member's pending replies.
  */
 const VIEWER_PENDING_QUERY = `query ViewerPendingReview($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
@@ -2347,6 +2348,7 @@ const VIEWER_PENDING_QUERY = `query ViewerPendingReview($owner: String!, $name: 
       reviewThreads(last: ${OVERVIEW_BOUNDS.MAX_THREADS}) {
         nodes {
           id path line startLine diffSide startDiffSide
+          opening: comments(first: 1) { nodes { state } }
           comments(last: ${OVERVIEW_BOUNDS.MAX_THREAD_COMMENTS}) {
             nodes {
               id state body bodyHTML createdAt
@@ -2393,6 +2395,13 @@ const ViewerPendingAnswerSchema = Schema.Struct({
                           startLine: Schema.NullOr(Schema.Number),
                           diffSide: GraphQLSideSchema,
                           startDiffSide: Schema.NullOr(GraphQLSideSchema),
+                          opening: Schema.optionalKey(
+                            Schema.Struct({
+                              nodes: Schema.Array(
+                                Schema.NullOr(Schema.Struct({ state: Schema.String })),
+                              ),
+                            }),
+                          ),
                           comments: Schema.Struct({
                             nodes: Schema.Array(
                               Schema.NullOr(
@@ -2457,7 +2466,8 @@ function pendingCommentsOf(pull: PendingAnswerPull, reviewId: string): GitHubPen
     const side = SIDE_OF_GRAPHQL[thread.diffSide];
     const startSide = thread.startDiffSide === null ? null : SIDE_OF_GRAPHQL[thread.startDiffSide];
     const oneLine = thread.startLine === thread.line && (startSide === null || startSide === side);
-    const published = thread.comments.nodes.some(
+    // Note that the thread's first comment is read beside its last ones, since a long run of pending replies can push every published one out of that window.
+    const published = [...(thread.opening?.nodes ?? []), ...thread.comments.nodes].some(
       (each) => each !== null && each.state !== PENDING_STATE,
     );
     return thread.comments.nodes.flatMap((comment) => {

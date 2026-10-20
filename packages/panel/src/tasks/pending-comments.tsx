@@ -122,6 +122,15 @@ export function usePendingComment(key: string | undefined): PendingReviewComment
   return key === undefined ? undefined : pending.get(key);
 }
 
+const PendingSurfaceContext = createContext(true);
+
+/**
+ * Whether the surface the pending comments under it are drawn on is shown:
+ * Files changed hidden behind another view of the tab is not, and a
+ * Delete's question asked there goes with it.
+ */
+export const PendingSurfaceProvider = PendingSurfaceContext.Provider;
+
 /** Whether a thread is one a pending comment starts, which has no id to reply or resolve by, and no page on GitHub yet. */
 export function usePendingThread(thread: ReviewThread): boolean {
   return usePendingComment(thread.comments[0]?.url) !== undefined;
@@ -160,6 +169,11 @@ function EditForm({
     <div
       className="pull-request-thread-reply"
       onKeyDown={(event) => {
+        // Note that ⌘↩ saves this comment alone, so it goes no further: the Review panel around a listed comment submits the whole review on it.
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.stopPropagation();
+          return;
+        }
         if (event.key !== "Escape" || busy) return;
         event.stopPropagation();
         onCancel();
@@ -215,7 +229,8 @@ export function PendingComment({
   const writing = useThreadWriting();
   const writes = usePullRequestWrites(writing?.agentId ?? "", writing?.onWritten ?? noop);
   const [editing, setEditing] = useState(false);
-  const deleting = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+  const surfaceOpen = useContext(PendingSurfaceContext);
+  const deleting = useConfirmDialog({ subject: true, surfaceOpen }, () =>
     writes
       .write({ action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: draft.id })
       .then(

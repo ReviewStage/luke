@@ -4925,4 +4925,40 @@ test("the member's pending comments stand on their lines in Files changed, marke
     (each) => each.querySelector(".pull-request-pending-where")?.textContent,
   );
   assert.deepEqual(listed, ["src/invite.ts · line 13", "src/invite.ts · line 12"]);
+
+  // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
+  const entry =
+    panel.querySelector<HTMLElement>(".pull-request-pending-list > li") ?? assert.fail();
+  act(() => commentOffer(entry, "Edit").click());
+  typeInto(entry, "Pending comment", "Still once, really?");
+  const field = entry.querySelector("textarea") ?? assert.fail("the edit's field");
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  await settle();
+  assert.deepEqual(
+    changes.slice(2).map(([, change]) => change),
+    [
+      {
+        action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT,
+        commentId: "PRRC_reply",
+        body: "Still once, really?",
+      },
+    ],
+  );
+  act(() => commentOffer(panel, "Cancel").click());
+
+  // A Delete asked in Files changed goes as another view of the tab is chosen.
+  act(() => commentOffer(card, "Delete").click());
+  assert.ok(document.querySelector('[role="alertdialog"]'), "Delete asks first");
+  await act(async () => option(tab, "Conversation").click());
+  await settle();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });

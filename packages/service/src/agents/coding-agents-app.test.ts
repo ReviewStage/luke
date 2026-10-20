@@ -1841,7 +1841,8 @@ function mutationName(query: string): string {
 /**
  * The pull request's threads as the member's own token reads them for their
  * pending review: a published thread they replied on in it, a thread their
- * pending review starts on a range of the old side, a thread another's
+ * pending review starts on a range of the old side, a published thread
+ * whose last comments are all their pending replies, a thread another's
  * pending review starts, and one whose comments are all published.
  */
 const PENDING_THREADS = [
@@ -1890,6 +1891,27 @@ const PENDING_THREADS = [
           body: "Why drop these?",
           bodyHTML: null,
           createdAt: "2026-10-01T11:00:00Z",
+          author: { __typename: "User", login: "teammate", databaseId: 8 },
+          pullRequestReview: { id: "PRR_own" },
+        },
+      ],
+    },
+  },
+  {
+    id: "PRRT_long",
+    path: "src/invite.ts",
+    line: 20,
+    startLine: 20,
+    diffSide: "RIGHT",
+    startDiffSide: null,
+    opening: { nodes: [{ state: "SUBMITTED" }] },
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_long",
+          state: "PENDING",
+          body: "And here?",
+          createdAt: "2026-10-01T10:30:00Z",
           author: { __typename: "User", login: "teammate", databaseId: 8 },
           pullRequestReview: { id: "PRR_own" },
         },
@@ -2998,6 +3020,19 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
               html: "<p>Still?</p>",
               body: "Still?",
               at: Date.parse("2026-10-01T10:00:00Z"),
+              by: { login: "teammate", bot: false },
+            },
+            {
+              id: "PRRC_long",
+              threadId: "PRRT_long",
+              path: "src/invite.ts",
+              line: 20,
+              startLine: null,
+              side: "right",
+              startSide: null,
+              html: null,
+              body: "And here?",
+              at: Date.parse("2026-10-01T10:30:00Z"),
               by: { login: "teammate", bot: false },
             },
             {
