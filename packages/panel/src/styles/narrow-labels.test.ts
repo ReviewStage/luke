@@ -16,7 +16,8 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * buttons to a glyph and a letter, take a line of their own there, and Start
  * keeps its word rather than folding to ▶. A sent message's byline, ending
  * at the bubble's right edge, cuts a long sender short rather than pushing
- * its buttons off the column's left edge.
+ * it off the column's left edge, in a narrow room and on the desktop's and
+ * the web's width alike, where a narrow pane is as tight as a phone.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -134,27 +135,29 @@ function byline(room: string) {
   };
 }
 
-test("in a narrow room a sent message's byline keeps its buttons and its time inside the column, who sent it giving way to an ellipsis", () => {
-  const { actions, sender, sentAt } = byline("narrow");
-  assert.equal(sender.minWidth, "0px", "who sent it may narrow past its name");
-  assert.equal(actions.flexShrink, "0", "the buttons keep their width");
-  assert.equal(sentAt.flexShrink, "0", "the time keeps its width");
-});
+for (const room of ["narrow", "wide"]) {
+  test(`in a ${room} room a sent message's byline keeps its buttons and its time inside the column, who sent it giving way to an ellipsis`, () => {
+    const { actions, sender, sentAt } = byline(room);
+    assert.equal(sender.minWidth, "0px", "who sent it may narrow past its name");
+    assert.equal(actions.flexShrink, "0", "the buttons keep their width");
+    assert.equal(sentAt.flexShrink, "0", "the time keeps its width");
+  });
 
-test("in a narrow room a sender named in plain words, one the window cannot place, ends in an ellipsis rather than running past its byline", () => {
-  laid = layContainersAt({}, { touch: true });
-  const shell = document.body.appendChild(document.createElement("div"));
-  shell.className = "desktop-shell";
-  shell.dataset.room = "narrow";
-  const words = shell
-    .appendChild(document.createElement("div"))
-    .appendChild(document.createElement("span"))
-    .appendChild(document.createElement("span"));
-  words.className = "message-sender-words";
-  words.textContent = "a-sender-name-too-long-to-stand-beside-anything-on-a-phone";
-  const style = getComputedStyle(words);
-  assert.deepEqual(
-    [style.overflow, style.textOverflow, style.whiteSpace, style.minWidth],
-    ["hidden", "ellipsis", "nowrap", "0px"],
-  );
-});
+  test(`in a ${room} room a sender named in plain words, one the window cannot place, ends in an ellipsis rather than running past its byline`, () => {
+    laid = layContainersAt({}, { touch: room === "narrow" });
+    const shell = document.body.appendChild(document.createElement("div"));
+    shell.className = "desktop-shell";
+    shell.dataset.room = room;
+    const words = shell
+      .appendChild(document.createElement("div"))
+      .appendChild(document.createElement("span"))
+      .appendChild(document.createElement("span"));
+    words.className = "message-sender-words";
+    words.textContent = "a-sender-name-too-long-to-stand-beside-anything-in-its-column";
+    const style = getComputedStyle(words);
+    assert.deepEqual(
+      [style.overflow, style.textOverflow, style.whiteSpace, style.minWidth],
+      ["hidden", "ellipsis", "nowrap", "0px"],
+    );
+  });
+}
