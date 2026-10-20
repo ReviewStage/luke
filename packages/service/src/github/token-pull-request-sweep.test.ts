@@ -207,7 +207,7 @@ const openTokenAgent = (
 /** One sweep at the instant given, over the GitHub and eve given. */
 const sweepAt = (
   at: number,
-  github: ReturnType<typeof githubHolding>,
+  github: Pick<ReturnType<typeof githubHolding>, "layer">,
   eve: ReturnType<typeof fakeEve>,
 ) =>
   sweepTokenPullRequests(eve.eveFor, GITHUB_FIXTURE_TOKEN_RING, new Date(at)).pipe(
