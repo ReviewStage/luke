@@ -48,7 +48,6 @@ import {
 } from "./plan-comment-wire.js";
 import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
 import {
-  HOSTED_SERVICE_PATH,
   planAttachmentPath,
   planAttachmentsPath,
   planCommentsPath,
