@@ -24,8 +24,10 @@ import {
  * where the asked one would run past the room, and is pushed back inside
  * where neither fits; it is never wider than the room leaves. The room is
  * the nearest box marked `data-popover-room` (the desktop's side panel),
- * cut to the window, or else the window, measured as the layer opens,
- * before it is painted, again whenever the layer, its anchor, its room, or
+ * cut to the window, or else the window; an owner whose layer may hang out
+ * of its box, as a tab strip's "+" menu hangs over the column beside the
+ * side panel, asks for what is seen of the window alone. It is measured
+ * as the layer opens, before it is painted, again whenever the layer, its anchor, its room, or
  * the window resizes, and again whenever anything scrolls, since a scroll
  * moves the anchor inside its room. The layer is held by the anchor's edge
  * it was asked to line up with, so a button that grows or shrinks from its
@@ -35,6 +37,14 @@ import {
  */
 
 export { POPOVER_ALIGN, type PopoverAlign } from "./popover-place.js";
+
+/** What a popover keeps within: its marked room cut to what is seen of the window, or what is seen of the window alone. */
+export const POPOVER_BOUNDS = {
+  ROOM: "room",
+  WINDOW: "window",
+} as const;
+
+export type PopoverBounds = (typeof POPOVER_BOUNDS)[keyof typeof POPOVER_BOUNDS];
 
 /** The width a popover asks for unless its owner asks another, the desktop's searchable menu's own, which the room may narrow. */
 const POPOVER_WIDTH = 340;
@@ -59,9 +69,14 @@ function placeStyle(
     : { ...edge, ...cssCustomProperties({ "--luke-popover-room": `${room}px` }) };
 }
 
+/** The box marking the room around `element` where its popover keeps to one, or none. */
+function markedRoom(element: HTMLElement, bounds: PopoverBounds): Element | null {
+  return bounds === POPOVER_BOUNDS.ROOM ? element.closest(POPOVER_ROOM) : null;
+}
+
 /** The room a popover inside `element` may fill: its marked room cut to what can be seen of the window, or that. */
-function roomAround(element: HTMLElement): Box {
-  const marked = element.closest(POPOVER_ROOM)?.getBoundingClientRect();
+function roomAround(element: HTMLElement, bounds: PopoverBounds): Box {
+  const marked = markedRoom(element, bounds)?.getBoundingClientRect();
   const seen = visibleViewport();
   return {
     left: Math.max(marked?.left ?? seen.left, seen.left),
@@ -80,11 +95,14 @@ function roomAround(element: HTMLElement): Box {
 export function AnchoredPopover({
   align,
   width = POPOVER_WIDTH,
+  bounds = POPOVER_BOUNDS.ROOM,
   children,
 }: {
   align: PopoverAlign;
   /** The width it asks for, a form's wider than a menu's. */
   width?: number;
+  /** What it keeps within: its marked room unless its owner asks for the window. */
+  bounds?: PopoverBounds;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
@@ -97,7 +115,7 @@ export function AnchoredPopover({
     const measure = () => {
       const next = popoverPlace({
         anchor: anchor.getBoundingClientRect(),
-        room: roomAround(anchor),
+        room: roomAround(anchor, bounds),
         width,
         height: drawn.getBoundingClientRect().height,
         align,
@@ -111,7 +129,7 @@ export function AnchoredPopover({
     const observer = new ResizeObserver(measure);
     observer.observe(drawn);
     observer.observe(anchor);
-    const room = anchor.closest(POPOVER_ROOM);
+    const room = markedRoom(anchor, bounds);
     if (room !== null) observer.observe(room);
     window.addEventListener("resize", measure);
     // Note that the visual viewport is heard too, because a phone's keyboard
@@ -131,7 +149,7 @@ export function AnchoredPopover({
       viewport?.removeEventListener("scroll", measure);
       document.removeEventListener("scroll", measure, { capture: true });
     };
-  }, [align, width]);
+  }, [align, width, bounds]);
 
   return (
     <div

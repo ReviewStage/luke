@@ -1,6 +1,7 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  AnchoredPopover,
   CloseIcon,
   CopyIcon,
   EllipsisIcon,
@@ -8,12 +9,14 @@ import {
   PencilIcon,
   PinIcon,
   PlusIcon,
+  POPOVER_ALIGN,
+  POPOVER_BOUNDS,
   UnpinIcon,
   useMenu,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCopyToast } from "../copy-feedback.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
@@ -56,14 +59,6 @@ const TRANSCRIPT_COPIED_NOTE = "Transcript copied";
 
 /** What the toast says when a tab's transcript could not be read whole for a copy. */
 const TRANSCRIPT_UNREAD_NOTE = "The transcript could not be copied. Try again.";
-
-/** Which edge of the "+" its menu hangs from: its left, or its right where the window leaves no room. */
-const MENU_SIDE = {
-  START: "start",
-  END: "end",
-} as const;
-
-type MenuSide = (typeof MENU_SIDE)[keyof typeof MENU_SIDE];
 
 /** A tab's pin to the sidebar, as its menu offers it: whether it stands, and the press that sets it or takes it away. */
 export interface TabPin {
@@ -306,10 +301,14 @@ export interface AddEntry {
 /**
  * The "+" after a strip's last tab, and the menu it drops: the shared
  * searchable one, as the repository and model pickers drop, over the rows
- * its column lists. It hangs from the "+"'s left edge, or from its right
- * where the window ends before the menu would, measured before it is
- * painted. Opening it asks `onOpen` to read what the rows say again, as the
- * Start menu reads its models, so an agent whose tab is not shown, which
+ * its column lists. It hangs under the "+" in `@luke/ui`'s anchored
+ * popover, from the "+"'s left edge, or from its right where what is seen
+ * of the window ends before the menu would, or pushed back inside where
+ * neither edge keeps it there, as a phone's row leaves a "+" mid-way along
+ * it. It keeps to the window rather than the side panel, so on the desktop
+ * the side panel's menu still hangs over the column beside it. Opening it
+ * asks `onOpen` to read what the rows say again, as the Start menu reads
+ * its models, so an agent whose tab is not shown, which
  * nothing follows, says where it stands now rather than where it last did.
  * ⌘T's ask opens it as a press does, once its column is on screen to take
  * it (`answers`).
@@ -336,17 +335,9 @@ export function AddTabButton({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
-  const [side, setSide] = useState<MenuSide>(MENU_SIDE.START);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
-
-  useLayoutEffect(() => {
-    const menu = root.current?.querySelector(".searchable-menu") ?? null;
-    if (!open || menu === null) return;
-    const room = document.documentElement.clientWidth;
-    setSide(menu.getBoundingClientRect().right > room ? MENU_SIDE.END : MENU_SIDE.START);
-  }, [open]);
 
   // Note that the ask is answered once and then let go, because the "+"
   // stands again each time its column is shown, and an ask still standing
@@ -354,7 +345,6 @@ export function AddTabButton({
   useEffect(() => {
     if (!asked || !answers) return;
     onAnswered();
-    setSide(MENU_SIDE.START);
     setOpen(true);
     onOpen?.();
   }, [asked, answers, onAnswered, onOpen]);
@@ -372,7 +362,7 @@ export function AddTabButton({
   };
 
   return (
-    <div ref={root} className="tab-add-anchor" data-side={side}>
+    <div ref={root} className="tab-add-anchor">
       <Tooltip label={label} command={APP_COMMAND.NEW_TAB}>
         <IconButton
           ref={opener}
@@ -386,29 +376,30 @@ export function AddTabButton({
               close();
               return;
             }
-            setSide(MENU_SIDE.START);
             setOpen(true);
             onOpen?.();
           }}
         />
       </Tooltip>
       {drawn.mounted ? (
-        <SearchableMenu
-          leaving={drawn.leaving}
-          ref={drawn.ref}
-          id={menuId}
-          className="tab-add-menu"
-          label={label}
-          placeholder={placeholder}
-          rows={entries.map((entry) => entry.row)}
-          value={undefined}
-          noMatch={noMatch}
-          onPick={pick}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-          }}
-        />
+        <AnchoredPopover align={POPOVER_ALIGN.START} bounds={POPOVER_BOUNDS.WINDOW}>
+          <SearchableMenu
+            leaving={drawn.leaving}
+            ref={drawn.ref}
+            id={menuId}
+            className="tab-add-menu"
+            label={label}
+            placeholder={placeholder}
+            rows={entries.map((entry) => entry.row)}
+            value={undefined}
+            noMatch={noMatch}
+            onPick={pick}
+            onClose={close}
+            onLeave={(left) => {
+              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+            }}
+          />
+        </AnchoredPopover>
       ) : null}
     </div>
   );
