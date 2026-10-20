@@ -26,7 +26,9 @@ import {
  * option is not chosen; a count's glyph says its state in words; the
  * app's `data-` attributes reach the bar; and a bar folding together folds
  * every option once their names no longer fit, and unfolds once they would;
- * and an option that says more hangs the app's hint saying it.
+ * an option that says more hangs the app's hint saying it; and the thumb
+ * stands under the chosen option, slides to one chosen next, and follows it
+ * where an option before it goes.
  */
 
 declare global {
@@ -436,4 +438,51 @@ test("an option that says more hangs the app's hint saying it, and one that says
   );
   assert.equal(option(page, "Conversation").closest("[data-hint]"), null);
   assert.ok(heard.every((label) => label === "+60 −7 total"));
+});
+
+test("the thumb stands under the chosen option, slides to one chosen next, and follows it where an option before it goes", () => {
+  // Note that jsdom lays nothing out and has no ResizeObserver, so each option's box is the test's, 100px wide in a row, and only a draw places the thumb.
+  const optionsOf = (element: HTMLElement) => [
+    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+  ];
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(() => 100);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => 28);
+  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(() => 0);
+  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return optionsOf(this).indexOf(this) * 100;
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (items: readonly ChoiceItem<View>[], value: View) =>
+    act(() =>
+      root.render(
+        createElement(ChoiceBar<View>, {
+          label: "Pull request",
+          items,
+          value,
+          onChange: () => undefined,
+          look: CHOICE_BAR_LOOK.SEGMENTED,
+        }),
+      ),
+    );
+  const thumbAt = () =>
+    container
+      .querySelector<HTMLElement>(".luke-choice-bar")
+      ?.style.getPropertyValue("--luke-choice-bar-thumb-x");
+  try {
+    draw(OPEN_ITEMS, VIEW.CHECKS);
+    assert.equal(thumbAt(), "100px", "the thumb stands under the chosen option");
+    draw(OPEN_ITEMS, VIEW.FILES);
+    assert.equal(thumbAt(), "200px", "it slides to the option chosen next");
+    draw(
+      OPEN_ITEMS.filter((item) => item.value !== VIEW.CONVERSATION),
+      VIEW.FILES,
+    );
+    assert.equal(thumbAt(), "100px", "an option before it gone, it follows the chosen one");
+  } finally {
+    vi.restoreAllMocks();
+  }
 });
