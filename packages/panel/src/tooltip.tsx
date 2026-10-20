@@ -94,7 +94,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { coarsePointerNow } from "./coarse-pointer.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import { Shortcut } from "./shortcut.js";
 
@@ -172,7 +171,6 @@ const cardLingerAtom = Atom.family((_tooltip: string) =>
 interface AnchorProps {
   "aria-describedby"?: string | undefined;
   "aria-keyshortcuts"?: string | undefined;
-  "data-touch-hint"?: "" | undefined;
   onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
   onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
   onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
@@ -502,8 +500,6 @@ export function Tooltip({
   const anchor = cloneElement(children, {
     ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
     ...(chord === undefined ? undefined : { "aria-keyshortcuts": shortcutAria(chord) }),
-    // Under a finger a held link opens its hint, not the system's own callout (tooltip.css).
-    ...(label !== undefined && coarsePointerNow() ? { "data-touch-hint": "" } : undefined),
     onPointerEnter: (event) => {
       own.onPointerEnter?.(event);
       // A touch has no hover to rest, so it shows nothing.

@@ -58,10 +58,7 @@ export function useRowPlace(): RowPlace | undefined {
  * apply from where it stands; none with a mouse, which drags it, or for a
  * row in no list that reorders.
  */
-export function rowMoveActions(
-  place: RowPlace | undefined,
-  run: RowRun = ROW_RUN.DOWN,
-): MenuAction[] {
+function rowMoveActions(place: RowPlace | undefined, run: RowRun = ROW_RUN.DOWN): MenuAction[] {
   if (place === undefined || !coarsePointerNow()) return [];
   const { at, count, onMove } = place;
   const along = run === ROW_RUN.ALONG;

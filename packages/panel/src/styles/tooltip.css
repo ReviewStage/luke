@@ -11,14 +11,3 @@
 .tooltip-chord {
   --shortcut-ink: var(--luke-color-tooltip-chord);
 }
-
-/* Under a finger, a link held opens its hint (`tooltip.tsx`) rather than
-   iOS's own callout over the link, nor a selection of its words, which iOS
-   starts on a hold of its own that races the hint's. */
-@media (pointer: coarse) {
-  a[data-touch-hint] {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-}

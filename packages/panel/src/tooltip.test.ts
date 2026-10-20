@@ -161,7 +161,11 @@ const cardStands = () => card() !== null && !card()?.hasAttribute("data-leaving"
 const WORKED = createElement(Tooltip, {
   label: "Worked for 3m",
   card: createElement("p", null, "Began at 9:14 AM"),
-  children: createElement("p", { "data-worked": "" }, "Worked for 3m"),
+  children: createElement(
+    "p",
+    { "data-worked": "", "aria-describedby": undefined },
+    "Worked for 3m",
+  ),
 });
 
 test("under a finger, a tap on words that are no control opens their card at once, and another tap closes it", () => {
@@ -245,7 +249,11 @@ test("a control whose long press opens its context menu shows no hint for the ho
     createElement(Tooltip, {
       label: "Fix the refresh",
       card: createElement("p", null, "acme/relay#42"),
-      children: createElement("button", { type: "button", "data-long-press": "" }, "Fix"),
+      children: createElement(
+        "button",
+        { type: "button", "data-long-press": "", "aria-describedby": undefined },
+        "Fix",
+      ),
     }),
   );
 
