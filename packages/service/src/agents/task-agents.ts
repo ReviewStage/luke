@@ -4,12 +4,14 @@ import {
   type CodingAgentStoreEffect,
   latestTurnsOfReached,
   listPublishedCodingAgents,
+  listPublishedCodingAgentsById,
   listTasklessCodingAgents,
   type PublishedCodingAgentLine,
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
   type TasklessAgent,
@@ -149,6 +151,13 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   };
 }
 
+/** An agent's pull request as its sidebar row carries it, where it opened one: as a task's row names its own. */
+function pullRequestOf(published: CodingAgentPullRequest | null | undefined) {
+  if (published == null) return undefined;
+  const { number, title, url, state, checks } = published;
+  return { pullRequest: { number, title, url, state, checks } };
+}
+
 /** The account's listed tasks, each carrying its agents in brief, whichever member started each, where it has any; the tasks' order and every other field as listed. */
 export function withTaskAgents(
   userId: string,
@@ -202,6 +211,12 @@ export function listTasklessAgents(
 ): CodingAgentStoreEffect<readonly TasklessAgent[]> {
   return Effect.gen(function* () {
     const agents = yield* listTasklessCodingAgents(userId, options);
+    // What each published, as a task's row carries its agents' pull requests.
+    const held = yield* listPublishedCodingAgentsById(
+      userId,
+      agents.map((agent) => agent.id),
+    );
+    const published = new Map(held.map(({ agent, published }) => [agent.id, published]));
     const conversationIds = agents.map((agent) => agent.conversationId);
     // The agents were read through their workspaces' gate, and each conversation is its starter's.
     const turns = yield* latestTurnsOfReached(conversationIds);
@@ -221,6 +236,7 @@ export function listTasklessAgents(
         activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
         ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),
+        ...pullRequestOf(published.get(agent.id)),
       };
     });
   });

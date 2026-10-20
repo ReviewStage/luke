@@ -189,6 +189,43 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     }),
   );
 
+  it.effect(
+    "an agent with no plan carries the pull request it opened in its row, as a plan's row carries its agents'",
+    () =>
+      Effect.gen(function* () {
+        const { userId, taskId } = yield* openTask;
+        const workspaceId = started(yield* createCodingAgent(userId, start(taskId))).organizationId;
+        const taskless = (repository: string) =>
+          Effect.map(
+            createCodingAgent(userId, {
+              taskId: null,
+              organizationId: workspaceId,
+              planSnapshot: null,
+              prompt: "Sweep the copy.",
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository,
+            }),
+            started,
+          );
+        const published = yield* taskless("reviewstage/luke");
+        const quiet = yield* taskless("reviewstage/luke");
+        yield* recordCodingAgentPublished(userId, published.id, PULL_REQUEST);
+
+        const rows = yield* listTasklessAgents(userId, { includeArchived: false });
+        const { number, title, url, state, checks } = PULL_REQUEST;
+        assert.deepEqual(rows.find((row) => row.id === published.id)?.pullRequest, {
+          number,
+          title,
+          url,
+          state,
+          checks,
+        });
+        assert.equal(rows.find((row) => row.id === quiet.id)?.pullRequest, undefined);
+      }),
+  );
+
   it.effect("a plan's listed pull request names the agent that opened it, whose tab it opens", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
