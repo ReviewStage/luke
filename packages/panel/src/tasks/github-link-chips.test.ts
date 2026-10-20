@@ -32,7 +32,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * installation, and one the App answers nothing for stays as its address
  * says. A card names who opened it by their face, a pull request's by
  * its avatar, with how long ago it moved, its size, branches, labels, and
- * counts. Synthetic workspace, plan, pull requests, and issues.
+ * counts. A pull request's link standing alone in words drawn as a document
+ * is a row that hangs the same card. Synthetic workspace, plan, pull
+ * requests, and issues.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -183,8 +185,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
-async function drawn(text: string, workspace: Workspace) {
+/** The words drawn on the plan's page in a window holding `workspace`, as a document where asked, and every act the window asked. */
+async function drawn(text: string, workspace: Workspace, asDocument = false) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -218,7 +220,7 @@ async function drawn(text: string, workspace: Workspace) {
         AtomRegistry.make(),
         createElement(TaskMentions, {
           value: PAGE,
-          children: createElement(TranscriptWords, { text }),
+          children: createElement(TranscriptWords, { text, asDocument }),
         }),
       ),
     ),
@@ -432,5 +434,25 @@ test("a pull request's card names its first six labels and counts the rest, so a
     "e",
     "f",
     "+2",
+  ]);
+});
+
+test("a pull request's link standing alone in words drawn as a document is a row hanging the card its chip hangs", async () => {
+  const chip = await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  const chipNotes = cardNotes(chip.container.querySelector("[data-mention-ref]") ?? undefined);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawn(MERGED, ACME_WITH_GITHUB, true);
+  const row = container.querySelector('[data-lone-link="pull-request"] button') ?? undefined;
+
+  assert.equal(container.querySelectorAll("[data-mention-ref]").length, 0, "the link is its row");
+  assert.deepEqual(cardNotes(row), chipNotes);
+  assert.deepEqual(cardNotes(row), [
+    "relay#42 · Merged · +120 −30 in 4 files",
+    "Opened by octo-dev · merged 2h ago",
+    "main ← invite-expiry",
+    "7 comments · 1 commit",
   ]);
 });

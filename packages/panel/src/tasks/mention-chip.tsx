@@ -561,6 +561,41 @@ function OptionalNote({ words }: { words: string | undefined }): ReactNode {
 }
 
 /**
+ * The card a mention's chip hangs, for a row that names the same thing
+ * rather than a chip, as a pull request's or a page's lone link card does
+ * (`lone-link-card.tsx`), so the row and the chip hang one card.
+ */
+export function MentionChipCard({
+  mention,
+  target,
+  name,
+  doors,
+  standing,
+}: {
+  mention: Mention;
+  /** Its link's target as written. */
+  target: string;
+  /** The name the row calls it. */
+  name: string;
+  doors: MentionDoors;
+  /** What its provider answered for it, as the row read it. */
+  standing: LinkStanding | undefined;
+}): ReactNode {
+  const known = useKnownNames();
+  return (
+    <MentionCard
+      mention={mention}
+      target={target}
+      name={name}
+      state={mentionState(mention, doors)}
+      doors={doors}
+      known={known}
+      standing={standing}
+    />
+  );
+}
+
+/**
  * What a chip calls a mention: the name it was written with, unless it was
  * written as its bare address and the window holds better, the name of the
  * plan, the page, the agent, or the person it names, or the key and title a provider
