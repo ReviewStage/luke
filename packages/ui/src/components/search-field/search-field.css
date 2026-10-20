@@ -80,6 +80,13 @@
     display: none;
   }
 
+  /* Under a finger there is no key to summon the field with. */
+  @media (hover: none) and (pointer: coarse) {
+    .luke-search-field-shortcut {
+      display: none;
+    }
+  }
+
   /* The clear is nested in the well: as far inside its edge on every side
      as it is from the end, with the corner that inset leaves. */
   .luke-search-field-clear {

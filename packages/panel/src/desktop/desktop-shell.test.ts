@@ -19,7 +19,7 @@ import {
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -45,7 +45,12 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -547,6 +552,20 @@ test("Factory's sidebar row and its command stand only while the account has its
   await settle();
   assert.ok(placeRow(on, "Factory"));
   assert.equal(runAppCommand(APP_COMMAND.FACTORY), true);
+});
+
+test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  mount(false);
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handCapabilities(DESKTOP_CAPABILITIES);
+  mount(false);
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
 });
 
 test("a press on Factory's row in a floating sidebar puts the sidebar away, as every row's does", async () => {

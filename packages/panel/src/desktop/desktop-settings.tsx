@@ -3,7 +3,7 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
@@ -128,12 +128,14 @@ function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.El
 function GroupHeading({
   group,
   listed,
+  capabilities,
 }: {
   group: SettingsPageGroup;
   listed: Workspace | undefined;
+  capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
-    return <h2 className="section-heading">{settingsGroupHeadingOf(group)}</h2>;
+    return <h2 className="section-heading">{settingsGroupHeadingOf(group, capabilities)}</h2>;
   }
   return (
     <h2 className="section-heading settings-nav-workspace">
@@ -225,8 +227,8 @@ export function DesktopSettings({
   const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
-  const reset = pageResetControl(settings.view, settings.settings, writes);
   const rows = settingsRowsInput(settings);
+  const reset = pageResetControl(settings.view, settings.settings, writes, rows);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -319,7 +321,11 @@ export function DesktopSettings({
                 ) : (
                   shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
                     <section key={group} className="settings-nav-group">
-                      <GroupHeading group={group} listed={listed} />
+                      <GroupHeading
+                        group={group}
+                        listed={listed}
+                        capabilities={settings.capabilities}
+                      />
                       <ul>
                         {pages.map((view) => (
                           <SettingsPageRow

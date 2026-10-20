@@ -377,7 +377,9 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           label="Minimize inline comments"
           detail={
             <>
-              Or press <Shortcut chord={MINIMIZE_CHORD} spoken /> in the list
+              <span className="shortcut-hint">
+                Or press <Shortcut chord={MINIMIZE_CHORD} spoken /> in the list
+              </span>
             </>
           }
           checked={settings.diffMinimizeComments}
