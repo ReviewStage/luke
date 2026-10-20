@@ -46,6 +46,13 @@ export function downloadText(file: {
   return Promise.resolve(true);
 }
 
+/** Puts a PNG, its bytes in base64, on the browser's clipboard as a picture. */
+export function copyPng(png: string): Promise<void> {
+  const bytes = Uint8Array.from(atob(png), (each) => each.charCodeAt(0));
+  const item = new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) });
+  return navigator.clipboard.write([item]);
+}
+
 /**
  * Opens a page in a tab of its own, which reaches nothing of this one, where
  * its address is an http or https one, as the desktop's `web.open` takes it.
@@ -119,6 +126,7 @@ export function webPlatform(
 ): AppPlatform {
   const platform: AppPlatform = {
     copyText: (words) => navigator.clipboard.writeText(words),
+    copyImage: copyPng,
     saveFile: downloadText,
     focusPanel: () => window.focus(),
     pageFrameUrl: () => new URL(PAGE_IN_MAC_APP, location.origin).href,

@@ -8,6 +8,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
@@ -22,7 +23,8 @@ import { IMAGE_OPENING, type ImageOpening } from "./use-image-zoom.js";
  * edges again, and a mouse counting its wheel in lines zooms as one counting
  * pixels does. Two fingers on a touch screen pinch it about the point
  * between them, and a picture asked to open at its own pixels does so from
- * its top left corner once it loads. jsdom lays nothing out, so each picture is
+ * its top left corner once it loads. Copy image puts the picture shown on
+ * the clipboard as the PNG it is. jsdom lays nothing out, so each picture is
  * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
  * screenshot to.
  */
@@ -362,4 +364,21 @@ test("the zoom buttons name the bare keys that do the same", () => {
     document.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-keyshortcuts");
   assert.equal(named("Zoom in"), "=");
   assert.equal(named("Zoom out"), "-");
+});
+
+test("Copy image puts the picture shown on the clipboard as its PNG, and its glyph turns to the check", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({
+    copyImage: (png) => {
+      copied.push(png);
+      return Promise.resolve();
+    },
+  });
+  const viewer = opened();
+  viewer.key("ArrowRight");
+  viewer.press("Copy image");
+  await act(async () => undefined);
+  assert.deepEqual(copied, [PIXEL], "the PNG's own bytes, whatever the address says after them");
+  const glyph = document.querySelector('button[aria-label="Copy image"] .copy-glyph');
+  assert.equal(glyph?.getAttribute("data-state"), "copied");
 });

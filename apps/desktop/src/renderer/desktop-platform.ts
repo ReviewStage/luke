@@ -21,6 +21,7 @@ import { applySessionReplay } from "./session-replay";
  */
 export const DESKTOP_PLATFORM: AppPlatform = {
   copyText: (words) => askAct(ACT_KIND.WINDOW_COPY_TEXT, { words }),
+  copyImage: (png) => askAct(ACT_KIND.WINDOW_COPY_IMAGE, { png }),
   saveFile: ({ name, text }) => askAct(ACT_KIND.WINDOW_SAVE_FILE, { name, text }),
   focusPanel: () => tellAct(ACT_KIND.WINDOW_FOCUS_PANEL),
   pageFrameUrl,

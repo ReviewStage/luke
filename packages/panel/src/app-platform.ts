@@ -2,7 +2,7 @@
  * app-platform.ts -- what this window can do that only its platform can: installed by its root before anything reads it.
  *
  * The bridge (`app-bridge.ts`) reaches the host; this reaches what stands
- * beside it. Copying, saving a file, bringing the panel forward, the address
+ * beside it. Copying words or a picture, saving a file, bringing the panel forward, the address
  * an agent's page is drawn from, the folder the panel's static files are
  * served from, the menu bar, a shortcut being recorded, a counted surface
  * event, and a link opened outside the window are each
@@ -32,6 +32,8 @@ type AdminDashboardWay = { readonly href: string } | { readonly open: () => void
 export interface AppPlatform {
   /** Puts the words on the system clipboard; rejects where the clipboard refused them. */
   copyText(words: string): Promise<void>;
+  /** Puts a picture on the system clipboard, given as a PNG's bytes in base64; rejects where the clipboard refused it. */
+  copyImage(png: string): Promise<void>;
   /** Saves the text as a file of the name given, where the person chooses; answers whether it was saved rather than declined. */
   saveFile(file: { readonly name: string; readonly text: string }): Promise<boolean>;
   /** Brings the panel forward, where the shell can. */
