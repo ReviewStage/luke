@@ -13,14 +13,18 @@ You run in one of two hosts, and the steps are the same in both; only the
 commands differ. In Conductor, a worker is a Conductor workspace driven by the
 `conductor` CLI. In Luke, you are a coding agent and a worker is another
 coding agent on your own task, driven by your agent tools: never make a task
-for a worker. Use the column for the host you are in:
+for a worker. Where you work on no task (an automation may start you on
+none), make one task for the whole rollout with `create_task`, named for the
+plan or the issue, before the first worker, and take "your own task" below as
+that one: pass its id as `taskId` wherever the table starts or lists workers.
+Use the column for the host you are in:
 
 | Action | Conductor | Luke |
 | --- | --- | --- |
 | Ask the user | `AskUserQuestion` | `post_to_inbox` with a `decide` or `answer` ask, which waits for the reply |
 | Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
-| Start a worker | `conductor workspace create` (below) | `start_agent` without `taskId`, on your own task, with `title` set to the PR title, the brief as `prompt`, plus `model` and `effort` (below) |
+| Start a worker | `conductor workspace create` (below) | `start_agent` on your own task (no `taskId`, or the rollout task's id where you work on none), with `title` set to the PR title, the brief as `prompt`, plus `model` and `effort` (below) |
 | Worker's base branch | `--branch <base-branch>` | `start_agent`'s `branch` |
 | Open a PR | `gh pr create --base <base-branch>` | `open_pull_request` with `base` |
 | Message a worker | `conductor message create --session <sessionId>` | `message_agent` with its agent id |
@@ -29,7 +33,7 @@ for a worker. Use the column for the host you are in:
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
 | Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your agent id, and "report to me" |
 | Archive a worker | `conductor workspace archive <workspaceId>` | `update_agent` with `archived: true` and a short `reason`, once the agent is idle |
-| Keep the rollout together | The workspaces' own list | Your own task: every worker starts on it, so its agents are the rollout, and `list_agents` with `thisTask` lists them |
+| Keep the rollout together | The workspaces' own list | Your own task: every worker starts on it, so its agents are the rollout, and `list_agents` with `thisTask` (or the rollout task's `taskId`) lists them |
 | Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
 Arguments: the plan (a file path, a Linear issue key such as `LUKE-159`, or
@@ -69,7 +73,8 @@ restack worker once it reports the restack done, and a stopped or dead worker
 once a continuation has taken its PR over. Archive each as soon as it is
 done, not in a batch at the end, and never leave one for the user to clean
 up. The table's "Archive a worker" row says how. In Luke, archive only the
-worker agents; your task is the one you work on, and it stays.
+worker agents; your task stays, and so does a rollout task you made because
+you work on none, for the user to keep or archive.
 
 Split the plan into small PRs and draw the dependency graph. Every PR gets
 its own worker, which builds, opens, and babysits that one PR, so review
@@ -108,7 +113,7 @@ BRIEF
 ```
 
 In Luke, start every worker on the task you work on: call `start_agent`
-without `taskId`, so each worker stands among your task's agents, as each
+without `taskId` (with the rollout task's id where you work on none), so each worker stands among your task's agents, as each
 Conductor workspace stands in the workspaces' list, and its branch, PR, and
 transcript stay under the task the developer started the rollout from. Make
 no task for a worker with `create_task`, and make or move no sidebar section
@@ -258,7 +263,7 @@ PR of its own, and reports when done. Then archive it and tell every held worker
 ## Step 4: Finish
 
 Before you report, check that nothing you started is left standing: in
-Luke, `list_agents` with `thisTask` shows none of the rollout's workers
+Luke, `list_agents` with `thisTask` (or the rollout task's `taskId`) shows none of the rollout's workers
 unarchived, restack workers and replaced workers among them; in
 Conductor, none of the rollout's workspaces is left in the workspaces' list. Archive
 whatever is left. When every PR has merged, or been closed because it was
@@ -277,7 +282,8 @@ issue, update the issue with the merged PRs.
 - Workers never restack; a restack runs only in a restack worker, while
   every affected worker holds.
 - In Luke, every worker runs on your own task; never make a task or a
-  sidebar section for one.
+  sidebar section for one. Only an orchestrator on no task makes a task,
+  one for the whole rollout.
 - You archive what you started: every worker, as soon as its work is
   done. The user never cleans up after a rollout.
 - Do not archive a worker while its PR is unmerged, unless a continuation
