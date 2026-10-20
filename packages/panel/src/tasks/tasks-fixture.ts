@@ -212,7 +212,7 @@ const FIXTURE_CODE: TaskCode = {
   firstLine: 1,
   lineCount: 14,
   lines: [
-    'import { db } from "../db";',
+    'import { db } from "../db.js";',
     "",
     "// An invite link is good once, and for seven days.",
     "export async function acceptInvite(token: string) {",
