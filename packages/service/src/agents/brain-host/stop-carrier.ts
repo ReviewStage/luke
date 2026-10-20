@@ -5,11 +5,11 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { Effect, type Schema } from "effect";
-import { describeUnreachable, EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
+import { type AgentSessions, describeUnreachable, EVE_CANCEL_OUTCOME } from "./eve-sessions.js";
 
 /** What carrying a waiting ask's Stop at its turn's start needs: eve as the carrier reaches it, the writer's stamp, the clock, and where a refusal is said. */
 export interface StopCarrierSeams {
-  readonly eve: Pick<EveSessions, "cancel">;
+  readonly eve: Pick<AgentSessions, "cancel">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly now: () => number;
   readonly report: (message: string) => void;

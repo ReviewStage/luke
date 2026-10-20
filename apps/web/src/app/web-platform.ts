@@ -7,6 +7,7 @@
  * one static page saying it opens in the Mac app.
  */
 
+import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
 import { inAppScheme, LINK_ORIGIN } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
@@ -127,6 +128,8 @@ export function webPlatform(
     recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openGitHubTab,
     openWeb: openTab,
+    // The dashboard is served on the tab's own origin, so the Admin row links to it there.
+    adminDashboard: () => ({ href: new URL(ADMIN_PAGE_PATH, location.origin).href }),
     applySessionReplay: lazySessionReplay(),
     ...(linkPlatform === LINK_PLATFORM.MAC ? { macAppLink } : undefined),
     notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,

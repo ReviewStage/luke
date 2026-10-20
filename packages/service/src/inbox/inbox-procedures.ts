@@ -365,13 +365,16 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Writes a member's message on the thread of one item of the account's
  * workspaces, open or settled, whichever member started its agent, and
  * answers with the item as it then stands. The message is written first,
- * with its files, moving the item's last change and nothing else of it,
- * and then handed to the agent as one of the developer's messages, under
+ * with its files, moving the item's last change and nothing else of it
+ * but that it settles the notice at the revision the request names as the
+ * member's nod does, and then handed
+ * to the agent as one of the developer's messages, under
  * its own lead and its files with it, through the one steer path
  * (`coder-host/steer.ts`), which opens a turn for an agent that stopped as
  * a message typed in its tab does. A hand-off that fails, is interrupted,
  * or dies takes the message back off the thread, so the thread never shows
- * a message the agent was not told, where this send wrote it; a message
+ * a message the agent was not told, where this send wrote it, and a notice
+ * it settled waits on the nod again; a message
  * sent again under its key is the one already written and handed off
  * again, which the steer's own key makes reach the agent once, and another
  * message under a key already taken, by another member or with other words
@@ -392,9 +395,10 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly clientKey: string;
     readonly attachments: readonly CodingAgentAttachment[];
     readonly answers?: InboxAnswers | undefined;
+    readonly revision?: number | undefined;
   },
 ) {
-  const { text, clientKey, attachments, answers } = asked;
+  const { text, clientKey, attachments, answers, revision } = asked;
   if (answers !== undefined) {
     return yield* answeredByReply(seams, writer, request, userId, itemId, {
       text,
@@ -404,7 +408,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
     });
   }
   const posted = yield* hostedStoreOrUnavailable(
-    postInboxMessage(userId, itemId, { text, clientKey, files: attachments }),
+    postInboxMessage(userId, itemId, { text, clientKey, files: attachments, revision }),
   );
   if (Option.isNone(posted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { item, outcome } = posted.value;
@@ -486,12 +490,13 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       context,
     }) {
       const itemId = yield* rowIdOf(input.params.id);
-      const { text, clientKey, attachments = [], answers } = input.body;
+      const { text, clientKey, attachments = [], answers, revision } = input.body;
       return yield* messaged(seams, writer, context.request, context.userId, itemId, {
         text,
         clientKey,
         attachments,
         answers,
+        revision,
       });
     }),
     close: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).close.effect(function* ({

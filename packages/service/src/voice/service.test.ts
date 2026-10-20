@@ -43,6 +43,7 @@ import {
   send,
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
+import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
 import type { LogEntry } from "./log.js";
 import {
   listening,
@@ -267,7 +268,7 @@ test("a session is authorized, counted, created, registered to its account, atta
   const session = create.body.session;
   assert.ok(isRecord(session));
   assert.deepEqual(create.body.transport, { type: LIVE_TRANSPORT_TYPE, sdp: SDP_OFFER });
-  assert.equal(session.instructions, sessionInstructions());
+  assert.equal(session.instructions, sessionInstructions(backendToolsOf(CALL_BACKEND.TASK)));
   assert.deepEqual(session.delegation, { type: LIVE_DELEGATION_TARGET.CLIENT });
   assert.equal(session.store, false);
   assert.equal(session.model, LIVE_DEFAULTS.MODEL);

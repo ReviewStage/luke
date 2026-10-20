@@ -20,6 +20,7 @@ import {
   inboxReplyAnswers,
   inboxReplyRefusal,
   inboxResponseAsk,
+  inboxThreadPostInputSchema,
 } from "./inbox-wire.js";
 import {
   countedNumber,
@@ -195,6 +196,31 @@ test("an ask maps to the version 4 response nearest it", () => {
     fields: REGION.fields,
   });
   assert.deepEqual(inboxAskResponse(WORDS), { type: INBOX_RESPONSE.TEXT });
+});
+
+test("an agent's answer ask keeps the option its select recommends, as the version 4 response it posts does", () => {
+  const ask = {
+    type: INBOX_ASK.ANSWER,
+    fields: [
+      {
+        type: INBOX_FIELD.SELECT,
+        label: "Region",
+        options: ["us-east", "eu-west"],
+        recommended: "eu-west",
+      },
+    ],
+  } as const;
+  const posted = read(inboxThreadPostInputSchema, {
+    key: "deploy-region",
+    title: "Where should it deploy?",
+    body: "Two regions are free.",
+    ask,
+  });
+  assert.deepEqual(posted?.ask, ask);
+  assert.deepEqual(posted?.ask && inboxAskResponse(posted.ask), {
+    type: INBOX_RESPONSE.FORM,
+    fields: ask.fields,
+  });
 });
 
 test("a stored version 4 response maps to the ask it stands for, and an acknowledgement to none", () => {
@@ -388,4 +414,39 @@ test("an answer with fields takes their values filled, and one without takes wor
   for (const [ask, answers, words, refusal] of refusals) {
     assert.equal(inboxAnswersRefusal(ask, answers, words), refusal, refusal);
   }
+});
+
+test("a form filled in part is taken with a required field left empty, as is one given words or a file beside it, while one given nothing at all is not", () => {
+  const submitted = (values: { label: string; value: string | number | boolean }[]) => ({
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.SUBMITTED,
+    values,
+  });
+  const file = { attachmentId: ITEM_ID, name: "plan.pdf", mediaType: "application/pdf" };
+  const partial = submitted([{ label: "Replicas", value: 3 }]);
+  assert.equal(inboxAnswersRefusal(REGION, partial, ""), undefined);
+  assert.equal(inboxAnswersRefusal(REGION, submitted([]), "Whichever is cheaper."), undefined);
+  assert.equal(inboxAnswersRefusal(REGION, submitted([]), "", [file]), undefined);
+  assert.equal(
+    inboxAnswersRefusal(REGION, submitted([]), "  "),
+    "A required field of the form is empty.",
+  );
+  const owner = {
+    type: INBOX_ASK.ANSWER,
+    fields: [{ type: INBOX_FIELD.TEXT, label: "Owner", required: true }],
+  } as const;
+  assert.equal(
+    inboxAnswersRefusal(owner, submitted([{ label: "Owner", value: "  " }]), "Ask ops."),
+    "A required field of the form is empty.",
+    "a required field left empty is absent, never there blank",
+  );
+
+  const form = { response: { type: INBOX_RESPONSE.FORM, fields: REGION.fields } };
+  const reply = { reply: INBOX_REPLY.SUBMITTED, values: partial.values };
+  assert.equal(inboxReplyRefusal(form, reply), undefined);
+  assert.equal(inboxReplyRefusal(form, { ...reply, values: [], note: "Either." }), undefined);
+  assert.equal(
+    inboxReplyRefusal(form, { ...reply, values: [] }),
+    "A required field of the form is empty.",
+  );
 });

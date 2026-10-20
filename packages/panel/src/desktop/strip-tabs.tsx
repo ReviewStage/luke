@@ -16,7 +16,7 @@ import {
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCopyToast } from "../copy-feedback.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
@@ -201,9 +201,11 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
  * right-click that act on what it shows (`contentActions`), in the same
  * groups, after what its body hands up while it is drawn (`handed`), and
  * none of the tab's own keeping, Close, Close others, and Pin tab, which
- * stay on the right-click alone.
+ * stay on the right-click alone. An agent's own page offers the same in
+ * its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is acted
+ * on as a task's is.
  */
-function contentActionGroups(doors: TabDoors): MenuAction[][] {
+export function contentActionGroups(doors: TabDoors): MenuAction[][] {
   const { rename, terminal, copies, archive } = contentActions(doors);
   return [doors.handed ?? [], rename, terminal, copies, archive].filter(
     (group) => group.length > 0,
@@ -494,5 +496,9 @@ export function useTabViews(): TabViews {
   const onWorkerHeld = useCallback((callId: string, transcript: HeldTranscript) => {
     setHeld((was) => ({ ...was, workers: new Map(was.workers).set(callId, transcript) }));
   }, []);
-  return { held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus };
+  // The same views across draws while nothing held moves, so the panes they are handed to hold.
+  return useMemo(
+    () => ({ held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus }),
+    [held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus],
+  );
 }

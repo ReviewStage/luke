@@ -18,7 +18,11 @@ import {
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "./brain-host/channel.js";
 import type { SessionOwnership } from "./brain-host/door.js";
 import { productionBrainHostSeams } from "./brain-host/production.js";
-import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./coder-host/channel.js";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "./coder-host/channel.js";
 import { productionCoderHostSeams } from "./coder-host/production.js";
 
 /**
@@ -94,7 +98,7 @@ const doorsFrom = (variables: {
         {
           secret: coder.deploymentSecret(),
           admits: CODER_DEPLOYMENT_TURNS,
-          presents: DEPLOYMENT_PRESENCE.ACCOUNT,
+          presents: CODER_DEPLOYMENT_PRESENCE,
         },
         async () => undefined,
       ).auth,
@@ -119,8 +123,13 @@ function underAuthorization(
   });
 }
 
-/** Everything the deployment asks of the brain under an authorization: each kind of turn opened and followed up, a cancel, a retire, and a stream read. */
-function brainAsks(authorization: string): readonly Request[] {
+/**
+ * Everything the deployment asks of either eve service under an
+ * authorization: each kind of turn opened and followed up, the brain's
+ * planning call and a call speaking into a coding agent alike, a cancel, a
+ * retire, and a stream read.
+ */
+function deploymentAsks(authorization: string): readonly Request[] {
   return [
     underAuthorization(authorization, "/eve/v1/session", "POST", BRAIN_HOST_TURN.TYPED),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}`, "POST", BRAIN_HOST_TURN.TYPED),
@@ -129,16 +138,6 @@ function brainAsks(authorization: string): readonly Request[] {
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/cancel`, "POST"),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/reset`, "POST"),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/stream`, "GET"),
-  ];
-}
-
-/** Everything the deployment asks of a coding agent under an authorization: a typed opening and follow-up, a cancel, and a retire. */
-function coderAsks(authorization: string): readonly Request[] {
-  return [
-    underAuthorization(authorization, "/eve/v1/session", "POST", BRAIN_HOST_TURN.TYPED),
-    underAuthorization(authorization, `/eve/v1/session/${SESSION}`, "POST", BRAIN_HOST_TURN.TYPED),
-    underAuthorization(authorization, `/eve/v1/session/${SESSION}/cancel`, "POST"),
-    underAuthorization(authorization, `/eve/v1/session/${SESSION}/reset`, "POST"),
   ];
 }
 
@@ -159,14 +158,14 @@ const verdictsUnder = (
   authorization: string,
 ) =>
   Effect.all({
-    brain: verdicts(doors.brain, brainAsks(authorization)),
-    coder: verdicts(doors.coder, coderAsks(authorization)),
+    brain: verdicts(doors.brain, deploymentAsks(authorization)),
+    coder: verdicts(doors.coder, deploymentAsks(authorization)),
   });
 
 /** Every ask refused at both doors as nobody signed in. */
 const REFUSED_EVERYWHERE = {
   brain: Array.from({ length: 7 }, () => 401),
-  coder: Array.from({ length: 4 }, () => 401),
+  coder: Array.from({ length: 7 }, () => 401),
 };
 
 it.effect(
@@ -178,7 +177,7 @@ it.effect(
       const cron = yield* verdictsUnder(doors, `Bearer ${CRON_SECRET}`);
       assert.deepEqual(own, {
         brain: Array.from({ length: 7 }, () => ACCOUNT),
-        coder: Array.from({ length: 4 }, () => ACCOUNT),
+        coder: Array.from({ length: 7 }, () => ACCOUNT),
       });
       assert.deepEqual(cron, REFUSED_EVERYWHERE);
     }),

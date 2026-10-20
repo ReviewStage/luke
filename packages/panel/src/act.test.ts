@@ -27,6 +27,7 @@ afterEach(() => {
 /** This window's act port, served the account asks' procedures alone, standing as `actor`. */
 function openActPort(actor: ActSender): void {
   const noKeys = () => Effect.succeed({ keys: [] });
+  const noToken = () => Effect.succeed({ token: null });
   const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   const port = testActPort(
     accountAskProcedures({
@@ -34,6 +35,9 @@ function openActPort(actor: ActSender): void {
         providerKeysRead: noKeys,
         providerKeySave: noKeys,
         providerKeyRemove: noKeys,
+        githubTokenRead: noToken,
+        githubTokenSave: noToken,
+        githubTokenRemove: noToken,
         planTemplateRead: notTemplated,
         planTemplateWrite: notTemplated,
         planTemplateRevisions: notTemplated,

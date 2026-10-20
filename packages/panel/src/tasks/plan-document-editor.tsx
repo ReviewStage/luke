@@ -13,7 +13,6 @@ import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
-import { useCoarsePointer } from "../coarse-pointer.js";
 import { markdownClass } from "../markdown-message.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
@@ -22,6 +21,7 @@ import {
   type MentionNode,
   type MentionNodeDoors,
   PLACEMENT_END,
+  type PlacedWords,
   type PlanEditorHandle,
   type PlanEditorModule,
   type PlanEditorPlacement,
@@ -47,9 +47,7 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
  * the caret where the click landed, and so does a press on the empty room
- * around the text (`useTextRoom`); a finger's tap only reads, and its second
- * tap on the same block opens the text (`PlanEditing.tapped`), so reading
- * on a phone raises no keyboard. The editor is TipTap, from the editor
+ * around the text (`useTextRoom`); the editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
  * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
@@ -60,8 +58,7 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * the caret at its end; and Esc in the editor saves and selects the section
  * the caret stood in. The title is edited where it stands (Return or ↓ goes
  * into the text, ↑ on the text's first line comes back to it, Esc saves and
- * selects it), and on a finger's device it stands as plain words until a
- * second tap on it, and again once it is left. It is saved by renaming the task as the typing pauses and as it
+ * selects it) and saved by renaming the task as the typing pauses and as it
  * is left, so the name never enters the text; meanwhile its words are drawn
  * as the task's name wherever the window names it. The words save as the
  * developer pauses (`use-plan-editing.ts`), and the service merges them with
@@ -81,6 +78,9 @@ export const EDITOR_ROOM_CLASS = "plan-document-editor";
 
 /** What the text says while the editor's bundle could not be loaded. */
 const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+
+/** What the developer does that ends the editor keeping the words it opened on where they stood: a scroll, a press, or a key. */
+const KEEPING_ENDS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
@@ -118,6 +118,104 @@ function editsOnClick(target: EventTarget): boolean {
     target instanceof Element &&
     target.closest("a, button, input, label, [data-mention-ref], .plan-unit-row") !== null
   );
+}
+
+/** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
+function rangeAt(x: number, y: number): Range | null {
+  // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
+  const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
+  if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
+  const position = page.caretPositionFromPoint?.(x, y) ?? null;
+  if (position === null) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  return range;
+}
+
+/** Where the top of a range's line stands in the window, or its words' element's where the browser draws no box for it. */
+function lineTop(range: Range, words: Text): number {
+  // Note that a range's boxes are read as possibly missing, since a page with no layout, as a test's is, draws none.
+  const measured: Partial<Pick<Range, "getClientRects">> = range;
+  const box = measured.getClientRects?.()[0];
+  return box?.top ?? words.parentElement?.getBoundingClientRect().top ?? 0;
+}
+
+/** Whether a text node stands in a code block, as `PlacedWords` counts it. */
+function inCode(text: Node): boolean {
+  return text.parentElement?.closest("pre") != null;
+}
+
+/**
+ * The words a click at a point landed on in a section's drawn block, as the
+ * editor finds them again (`PlacedWords`); none where it landed on no words.
+ */
+function wordsUnder(
+  block: HTMLElement,
+  section: number,
+  x: number,
+  y: number,
+): PlacedWords | undefined {
+  const range = rangeAt(x, y);
+  const words = range?.startContainer;
+  if (range == null || !(words instanceof Text) || !block.contains(words)) return undefined;
+  const text = words.data;
+  const code = inCode(words);
+  let occurrence = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null && at !== words; at = walker.nextNode()) {
+    if (at.textContent === text && inCode(at) === code) occurrence += 1;
+  }
+  return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
+}
+
+/** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
+function drawnWordsTop(body: HTMLElement, words: PlacedWords): number | undefined {
+  const block = body.querySelectorAll(`[${TEXT_BLOCK_ATTRIBUTE}]`)[words.section];
+  if (block === undefined) return undefined;
+  let seen = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (!(at instanceof Text) || at.data !== words.text || inCode(at) !== words.code) continue;
+    if (seen === words.occurrence) {
+      const range = document.createRange();
+      range.setStart(at, Math.min(words.offset, at.data.length));
+      return lineTop(range, at);
+    }
+    seen += 1;
+  }
+  return undefined;
+}
+
+/**
+ * The words the caret stood on kept where they stood as the editor closes,
+ * as `PlanDocumentEditor` keeps the words a click landed on as it opens:
+ * the drawn text may draw what stands above them at another height than the
+ * editor did, a picture, a table or a diagram's preview say, so the column
+ * is scrolled by as much as the drawn text moved them. Answers where the
+ * closing editor leaves its words (`PlanDocumentEditor`'s `closedOn`).
+ */
+export function useWordsKeptOnClose(
+  taskId: string,
+  open: boolean,
+  body: React.RefObject<HTMLElement | null>,
+  scroller: React.RefObject<HTMLElement | null>,
+): React.RefObject<PlacedWords | undefined> {
+  const closedOn = useRef<PlacedWords | undefined>(undefined);
+  // The task the editor opened on, so words left by one closed as another opens move nothing.
+  const openedOn = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (open) {
+      openedOn.current = taskId;
+      return;
+    }
+    const words = closedOn.current;
+    closedOn.current = undefined;
+    if (words === undefined || openedOn.current !== taskId) return;
+    const top = body.current === null ? undefined : drawnWordsTop(body.current, words);
+    if (top !== undefined && scroller.current !== null)
+      scroller.current.scrollTop += top - words.top;
+  }, [open]);
+  return closedOn;
 }
 
 /** Where a text's words stand in the window. */
@@ -202,8 +300,8 @@ export function useTextRoom({
   /** Whether the editor stands open, whose focus a press on the room keeps. */
   open: boolean;
   room?: React.RefObject<HTMLElement | null> | undefined;
-  /** Puts the caret where a press on the room asks, at the click's `timeStamp`; none where the text takes no caret. */
-  onPlace: ((placement: PlanEditorPlacement, at: number) => void) | undefined;
+  /** Puts the caret where a press on the room asks; none where the text takes no caret. */
+  onPlace: ((placement: PlanEditorPlacement) => void) | undefined;
 }): void {
   const latest = useRef({ box, onPlace, open });
   latest.current = { box, onPlace, open };
@@ -232,7 +330,7 @@ export function useTextRoom({
     const click = (event: MouseEvent) => {
       if (clearing || selecting()) return;
       const at = placement(event);
-      if (at !== undefined) latest.current.onPlace?.(at, event.timeStamp);
+      if (at !== undefined) latest.current.onPlace?.(at);
     };
     column.addEventListener("mousedown", press);
     column.addEventListener("click", click);
@@ -298,16 +396,14 @@ export function DocumentBlock({
         prefetchEditorBundle();
         editing.select(host);
       }}
-      // Note that a press on a control is a tap of its own, which lets go of the block's first tap; it is heard on the way down, since a control may keep its click from bubbling.
-      onClickCapture={(event) => {
-        if (event.target instanceof Element && !editsOnClick(event.target)) editing.disarm();
-      }}
       onClick={(event) => {
         // Note that a click on a menu or a card portaled out of the block still
         // bubbles here through React's tree, and opens no editor.
         if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) return;
-        if (!editsOnClick(event.target) || !editing.tapped(host, event.timeStamp)) return;
-        editing.open({ x: event.clientX, y: event.clientY });
+        if (!editsOnClick(event.target)) return;
+        const { clientX: x, clientY: y } = event;
+        const words = wordsUnder(event.currentTarget, section, x, y);
+        editing.open(words === undefined ? { x, y } : { x, y, words });
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -330,40 +426,6 @@ function caretAtEnd(element: HTMLElement): void {
   range.collapse(false);
   window.getSelection()?.removeAllRanges();
   window.getSelection()?.addRange(range);
-}
-
-/** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
-function rangeAt(x: number, y: number): Range | null {
-  // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
-  const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
-  if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
-  const position = page.caretPositionFromPoint?.(x, y) ?? null;
-  if (position === null) return null;
-  const range = document.createRange();
-  range.setStart(position.offsetNode, position.offset);
-  return range;
-}
-
-/** The caret where a tap landed in an element's words, or at their end where the browser cannot say. */
-function caretAt(element: HTMLElement, x: number, y: number): void {
-  const range = rangeAt(x, y);
-  if (range === null || !element.contains(range.startContainer)) {
-    caretAtEnd(element);
-    return;
-  }
-  element.focus();
-  window.getSelection()?.removeAllRanges();
-  window.getSelection()?.addRange(range);
-}
-
-/**
- * The title's words made editable at once, ahead of the render that keeps
- * them so. Note that this is done on the element itself, because a phone
- * raises its keyboard only for a focus made within the tap that asked for it.
- */
-function editableNow(element: HTMLElement): void {
-  element.setAttribute("contenteditable", "plaintext-only");
-  element.tabIndex = -1;
 }
 
 /** The title's words as a name: trimmed, and cut to the bound as the name field's own `maxLength` cuts a paste. */
@@ -391,10 +453,7 @@ function boundTitle(element: HTMLElement): void {
  * refused rename puts the saved name back here and everywhere, unless words
  * were typed since it was asked for, which are the newest and are kept for
  * the next pause to ask for again. Each Rename chosen from the title's ⋯
- * puts the caret at its end, as ↑ from the text's first line does. On a
- * device worked by a finger its words are plain words until a second tap on
- * them (`PlanEditing.tapped`) or the keyboard goes into them, and again once
- * they are left, so a tap while reading raises no keyboard.
+ * puts the caret at its end, as ↑ from the text's first line does.
  */
 export function EditableTitle({
   name,
@@ -419,21 +478,9 @@ export function EditableTitle({
   const text = useRef<HTMLDivElement>(null);
   const [pause, restartPause] = useAtom(titlePauseAtom);
   const stamp = useRef(0);
-  // Whether the words were gone into to be typed, which a finger's device reads them as plain words until.
-  const coarse = useCoarsePointer();
-  const [armed, setArmed] = useState(false);
-  const reading = coarse && !armed;
-  const enter = (element: HTMLElement) => {
-    editableNow(element);
-    setArmed(true);
-  };
-  const enterAtEnd = (element: HTMLElement) => {
-    enter(element);
-    caretAtEnd(element);
-  };
   // ↑ on the text's first line comes back into the title, its caret at the end.
   useSelectedOnClose(editing, EDITOR_PLACE.TITLE, () => {
-    if (text.current !== null) enterAtEnd(text.current);
+    if (text.current !== null) caretAtEnd(text.current);
   });
   // Whether the words as they stand were saved as the title was left, so a blur that follows renames nothing again.
   const saved = useRef(true);
@@ -450,7 +497,7 @@ export function EditableTitle({
   useEffect(() => {
     if (renaming === renamed.current || text.current === null) return;
     renamed.current = renaming;
-    enterAtEnd(text.current);
+    caretAtEnd(text.current);
   }, [renaming]);
   useLayoutEffect(() => {
     const element = text.current;
@@ -522,7 +569,7 @@ export function EditableTitle({
         if (steppedByArrow(event)) return;
         if (event.key !== "Enter" || text.current === null) return;
         event.preventDefault();
-        enterAtEnd(text.current);
+        caretAtEnd(text.current);
       }}
     >
       <div className="markdown task-title ph-no-capture">
@@ -531,21 +578,14 @@ export function EditableTitle({
           ref={text}
           className="markdown-heading task-title-text"
           data-level="1"
-          contentEditable={reading ? false : "plaintext-only"}
+          contentEditable="plaintext-only"
           suppressContentEditableWarning
           role="textbox"
           aria-label="Task name"
-          aria-readonly={reading ? true : undefined}
-          // Note that the words read take no focus, so a tap on them focuses the block rather than words no keyboard can type in.
-          tabIndex={reading ? undefined : -1}
+          tabIndex={-1}
           spellCheck
           onFocus={() => {
             saved.current = false;
-          }}
-          onClick={(event) => {
-            if (!reading || !editing.tapped(EDITOR_PLACE.TITLE, event.timeStamp)) return;
-            enter(event.currentTarget);
-            caretAt(event.currentTarget, event.clientX, event.clientY);
           }}
           onInput={(event) => {
             saved.current = false;
@@ -557,10 +597,7 @@ export function EditableTitle({
             stamp.current += 1;
             restartPause(stamp.current);
           }}
-          onBlur={(event) => {
-            save(event.currentTarget);
-            setArmed(false);
-          }}
+          onBlur={(event) => save(event.currentTarget)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
@@ -769,6 +806,7 @@ export function PlanDocumentEditor({
   mentions,
   scroller,
   handle,
+  closedOn,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -781,8 +819,17 @@ export function PlanDocumentEditor({
   scroller?: React.RefObject<HTMLElement | null> | undefined;
   /** Where the mounted editor's handle is kept, for the merged answers and for a comment started on its words. */
   handle: React.RefObject<PlanEditorHandle | undefined>;
+  /** Where the words the caret stood on are left as the editor closes, for the drawn text to keep them where they stood (`useWordsKeptOnClose`). */
+  closedOn?: React.RefObject<PlacedWords | undefined> | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
+  // Note that this runs before the editor itself is taken down, so its caret is still measured.
+  useLayoutEffect(
+    () => () => {
+      if (closedOn !== undefined) closedOn.current = handle.current?.caretWords();
+    },
+    [],
+  );
   // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
   const comments = usePlanCommentsControl();
   const commentAnchors =
@@ -811,6 +858,35 @@ export function PlanDocumentEditor({
       else handle.current.focusAt(placement);
     },
   });
+  // Note that the words a click opened the editor on are kept where they
+  // stood, since the editor may draw what stands above them at another
+  // height than the text did, a picture, a table or a diagram's preview say,
+  // and again each time the editor's height changes as what it draws later
+  // lands, a diagram's preview or a chip, until the developer scrolls,
+  // presses, or types.
+  const ready = AsyncResult.isSuccess(module);
+  useLayoutEffect(() => {
+    if (!ready) return;
+    // Note that a press on the room while the bundle loaded is where the editor opens, which keeps no words.
+    const place = pending ?? editing.placement;
+    const target = place !== undefined && "words" in place ? place.words?.top : undefined;
+    const column = scroller?.current;
+    const text = room.current;
+    if (target === undefined || column == null || text === null) return;
+    const keep = () => {
+      const top = handle.current?.wordsTop();
+      if (top !== undefined) column.scrollTop += top - target;
+    };
+    keep();
+    const observer = new ResizeObserver(keep);
+    observer.observe(text);
+    const release = () => {
+      observer.disconnect();
+      for (const kind of KEEPING_ENDS) column.removeEventListener(kind, release);
+    };
+    for (const kind of KEEPING_ENDS) column.addEventListener(kind, release, { passive: true });
+    return release;
+  }, [ready]);
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
   const once = (close: () => void) => {

@@ -18,7 +18,15 @@ import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentCardReading, agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
@@ -198,7 +206,9 @@ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
       // The summary keeps working on the pin it holds.
     }
   }, [kept]);
-  return { pinned: fixtureMode ? staged : kept, onToggle, wide, onMeasured: setWide };
+  const pinned = fixtureMode ? staged : kept;
+  // The same pin across draws while none of it moves, so the column it is handed to is not drawn again for a new one.
+  return useMemo(() => ({ pinned, onToggle, wide, onMeasured: setWide }), [pinned, onToggle, wide]);
 }
 
 /** How the summary stands now, whether its card hangs, and the presses that change either. */

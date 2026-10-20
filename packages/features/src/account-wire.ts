@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 
 /**
- * account-wire.ts -- the account's preferences snapshot and its deletion, as `/api/account/*` carries them.
+ * account-wire.ts -- the account's preferences snapshot, its access, and its deletion, as `/api/account/*` carries them.
  *
  * The snapshot is the settings vocabulary's (`@luke/settings`), which sits
  * above this boundary, so each part is declared here only as far as the wire
@@ -42,4 +42,13 @@ export const accountPreferencesWriteSchema = EffectSchema.Struct({
 /** The account erased (POST). */
 export const accountDeleteAnswerSchema = EffectSchema.Struct({
   deleted: EffectSchema.Literal(true),
+});
+
+/**
+ * What the signed-in account may open in the app's clients (GET): whether it
+ * is an admin, and nothing of any other account. A client draws by it and
+ * authorizes nothing: the admin dashboard's own gate decides every read.
+ */
+export const accountAccessAnswerSchema = EffectSchema.Struct({
+  admin: EffectSchema.Boolean,
 });

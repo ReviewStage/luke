@@ -90,7 +90,7 @@ test("a message that reached a turn while it ran stands where it arrived: betwee
   assert.deepEqual(rowsOf(turn, false), [
     ["2 tool calls", ["a", "b"]],
     "GitHub reviewed the pull request.",
-    ["1 tool call", ["c"]],
+    "c",
     "Fixed.",
   ]);
   // A stretch with no call between two messages keeps its rows, as a lead with none does.
@@ -99,7 +99,22 @@ test("a message that reached a turn while it ran stands where it arrived: betwee
       [call("a"), arrived("First."), thought("Read both."), arrived("Second."), words("Done.")],
       false,
     ),
-    [["1 tool call", ["a"]], "First.", "Read both.", "Second.", "Done."],
+    ["a", "First.", "Read both.", "Second.", "Done."],
+  );
+});
+
+test("a finished turn whose lead is one call alone draws that call on its own row rather than folding it, and a call with a thought beside it still folds", () => {
+  assert.deepEqual(rowsOf([call("delete_section"), words("Deleted.")], false), [
+    "delete_section",
+    "Deleted.",
+  ]);
+  assert.deepEqual(rowsOf([subagent("Compare the queues."), words("Seven days.")], false), [
+    "Compare the queues.",
+    "Seven days.",
+  ]);
+  assert.deepEqual(
+    rowsOf([thought("Delete it."), call("delete_section"), words("Deleted.")], false),
+    [["1 tool call", ["Delete it.", "delete_section"]], "Deleted."],
   );
 });
 

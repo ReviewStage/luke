@@ -11,6 +11,7 @@ import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
+  INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
@@ -222,7 +223,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a first post naming no title is refused and writes nothing; a first post that asks nothing opens a thread that waits on nobody",
+    "a first post naming no title is refused and writes nothing; a first post that asks nothing opens a notice the agent reads as no ask of its own, which no withdrawal finds",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -237,11 +238,24 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             {
               key: "pr-ready",
               title: "PR ready",
-              status: INBOX_STATUS.ANSWERED,
+              status: INBOX_STATUS.OPEN,
               thread: [{ from: "you", text: "Opened." }],
             },
           ],
         });
+        const notice = yield* onlyItem(agent);
+        assert.deepEqual([notice.status, notice.needsReply], [INBOX_STATUS.OPEN, false]);
+        assert.equal(
+          refusalOf(yield* withdrawAsk(agent, input({ key: "pr-ready", reason: "Merged." }))),
+          INBOX_REFUSAL.NO_OPEN_ASK,
+        );
+        for (let at = 1; at < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; at += 1) {
+          yield* post(agent, { key: `pr-${at}`, title: "PR ready", body: "Opened." });
+        }
+        assert.equal(
+          refusalOf(yield* post(agent, { key: "pr-more", title: "PR ready", body: "Opened." })),
+          INBOX_REFUSAL.TOO_MANY_NOTICES,
+        );
       }),
   );
 
@@ -270,7 +284,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "an ask its shape admits but cannot ask is refused, and a recommended value on a field is not kept",
+    "an ask its shape admits but cannot ask is refused, and a select field keeps the option it recommends",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -290,6 +304,21 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           [answer([{ type: INBOX_FIELD.SELECT, label: "Channel" }]), INBOX_REFUSAL.SELECT_OPTIONS],
           [
             answer([
+              {
+                type: INBOX_FIELD.SELECT,
+                label: "Channel",
+                options: ["Email", "Slack"],
+                recommended: "SMS",
+              },
+            ]),
+            INBOX_REFUSAL.SELECT_RECOMMENDATION,
+          ],
+          [
+            answer([{ type: INBOX_FIELD.TEXT, label: "Channel", recommended: "Slack" }]),
+            INBOX_REFUSAL.SELECT_RECOMMENDATION,
+          ],
+          [
+            answer([
               { type: INBOX_FIELD.TEXT, label: "Channel" },
               { type: INBOX_FIELD.BOOLEAN, label: "Channel" },
             ]),
@@ -304,8 +333,13 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         }
         assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
 
-        const channel = { type: INBOX_FIELD.SELECT, label: "Channel", options: ["Email", "Slack"] };
-        yield* post(agent, answer([{ ...channel, recommended: "Slack" }]));
+        const channel = {
+          type: INBOX_FIELD.SELECT,
+          label: "Channel",
+          options: ["Email", "Slack"],
+          recommended: "Slack",
+        };
+        yield* post(agent, answer([channel]));
         const item = yield* onlyItem(agent);
         assert.deepEqual(item.response, { type: INBOX_RESPONSE.FORM, fields: [channel] });
       }),
@@ -513,10 +547,14 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           yield* TestClock.adjust(Duration.seconds(1));
           yield* post(agent, { key: QUEUE.key, body: text });
         }
+        // The agent's words after the answer bring the thread back as a notice, which the member's reply on it settles.
+        const notice = yield* onlyItem(agent);
+        assert.equal(notice.status, INBOX_STATUS.OPEN);
         yield* TestClock.adjust(Duration.seconds(1));
         yield* postInboxMessage(agent.userId, asked.id, {
           text: "Great.",
           clientKey: randomUUID(),
+          revision: notice.revision,
         });
 
         const settled = yield* readOwnInbox(agent);

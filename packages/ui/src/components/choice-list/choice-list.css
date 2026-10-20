@@ -2,7 +2,8 @@
    a quiet fill at rest, the strong fill once hovered, the strong fill ringed
    once checked so it reads apart from the hover that shares it. A settled
    list keeps the pick in the checked look and steps the rest back to an
-   outline in muted words. */
+   outline in muted words; a read-only one keeps the open look at full
+   strength. */
 
 @layer components {
   .luke-choice-list {
@@ -101,6 +102,12 @@
   .luke-choice:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  /* A read-only list records a choice made, so its rows stand at full
+     strength: an answer given, never one faded while it waits. */
+  .luke-choice-list[data-read-only="true"] > .luke-choice:disabled {
+    opacity: 1;
   }
 
   .luke-choice-mark {

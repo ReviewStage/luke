@@ -21,7 +21,11 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { CONVERSATION_KIND, type MessageSender } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  type ConversationRuntime,
+  type MessageSender,
+} from "../storage-vocabulary.js";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -81,6 +85,12 @@ export const conversations = pgTable(
     label: text("label"),
     /** Whether a settled child owes its parent a completion; false on every child opened now, eve handing its findings to the parent turn itself. */
     expectsCompletion: boolean("expects_completion").notNull().default(true),
+    /** What answers the conversation's turns, settled as it is opened; null on a conversation from before the column, which runs on eve. */
+    runtime: text("runtime").$type<ConversationRuntime>(),
+    /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on eve's and before the harness answers one. */
+    nativeSession: text("native_session"),
+    /** The digest of the bearer the conversation's runner presents at Luke's MCP server, never the bearer itself; null where no runner holds one. */
+    runnerTokenHash: text("runner_token_hash"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
@@ -103,6 +113,11 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
+    // Luke's MCP server finds the conversation a runner's bearer stands for by the bearer's digest,
+    // on every tool call; one digest names one conversation.
+    uniqueIndex("conversations_runner_token_hash")
+      .on(table.runnerTokenHash)
+      .where(sql`${table.runnerTokenHash} is not null`),
   ],
 );
 

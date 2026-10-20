@@ -31,6 +31,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
   type CodingAgentLine,
+  hasRepository,
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
   pinCodingAgent,
@@ -371,7 +372,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
       const number = yield* pullRequestNumberOf(input.number === undefined ? [] : [input.number]);
       const pullRequest = yield* askedPullRequest(yield* published, userId, agent, number);
-      if (pullRequest === null) return { pullRequest };
+      if (pullRequest === null || !hasRepository(agent)) return { pullRequest: null };
       const listed = yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);
@@ -407,6 +408,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      */
     reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
+      // An agent with no repository has none to offer reviewers or labels of.
+      if (!hasRepository(agent)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
       return yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);

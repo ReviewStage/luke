@@ -41,7 +41,7 @@ export const TRANSCRIPT_PART_TYPE = {
 } as const;
 
 /** The words of a line, as the one text part of its message. */
-export const transcriptTextPartSchema = EffectSchema.Struct({
+const transcriptTextPartSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(TRANSCRIPT_PART_TYPE.TEXT),
   text: EffectSchema.String,
 });
@@ -59,7 +59,7 @@ export const transcriptTextPartSchema = EffectSchema.Struct({
  * SDK's type spells them, so a message read here is one of its messages
  * without a copy.
  */
-export const transcriptMessageSchema = EffectSchema.Struct({
+const transcriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
   parts: EffectSchema.mutable(EffectSchema.Array(transcriptTextPartSchema)),
@@ -83,7 +83,7 @@ export type TranscriptMessage = typeof transcriptMessageSchema.Type;
  * its messages in the order they opened, and what its record says of the
  * call where it says it.
  */
-export const transcriptCallSchema = EffectSchema.Struct({
+const transcriptCallSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** Epoch milliseconds the call started. */
   startedAt: countedNumber,

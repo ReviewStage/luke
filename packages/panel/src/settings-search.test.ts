@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
@@ -116,7 +117,7 @@ test("the Workspace page's group reads Integrations, under its Workspace page ap
   );
 });
 
-test("searching GitHub while signed in finds Integrations' GitHub row and nothing on the Account page", () => {
+test("searching GitHub while signed in finds Integrations' GitHub row and Profile's, and a personal access token finds Profile's alone", () => {
   const entries = settingsSearchEntries({
     settings: settingsView(),
     voiceControlsDrawn: true,
@@ -131,9 +132,15 @@ test("searching GitHub while signed in finds Integrations' GitHub row and nothin
       ?.items.map((entry) => entry.id),
     [INTEGRATION_PROVIDER.GITHUB],
   );
-  assert.equal(
-    groups.some((group) => group.page === SETTINGS_VIEW.ACCOUNT),
-    false,
+  assert.deepEqual(
+    groups.find((group) => group.page === SETTINGS_VIEW.ACCOUNT)?.items.map((entry) => entry.id),
+    [SETTINGS_SEARCH_ROW.GITHUB_ACCESS],
+  );
+  assert.deepEqual(
+    (searchSettings(entries, "personal access token")?.groups ?? []).map((group) =>
+      group.items.map((entry) => entry.id),
+    ),
+    [[SETTINGS_SEARCH_ROW.GITHUB_ACCESS]],
   );
 });
 
@@ -168,10 +175,21 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Video calls", "Keyframe"]) {
     assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
   }
+  for (const query of ["Inbox-first", "in place of your task list"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Inbox-first sidebar"], query);
+  }
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Code review", "Browser tab", "Sections", "Chat", "Video calls", "Factory"],
+      [
+        "Inbox-first sidebar",
+        "Code review",
+        "Browser tab",
+        "Sections",
+        "Chat",
+        "Video calls",
+        "Factory",
+      ],
       query,
     );
   }

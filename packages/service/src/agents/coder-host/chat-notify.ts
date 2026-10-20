@@ -47,7 +47,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import type { EveSessions } from "../brain-host/eve-sessions.js";
+import type { AgentSessions } from "../brain-host/eve-sessions.js";
 import { type ChatNames, chatNamesOf } from "./chat-names.js";
 import { steerCodingAgent } from "./steer.js";
 
@@ -181,7 +181,7 @@ export const CHAT_DOORS: ChatNoticeDoors = { luke: hold, human: tellPerson };
  * the deployment reaches no eve, the writer, and the account posting.
  */
 export interface ChatTelling {
-  readonly eveFor: (starterUserId: string) => EveSessions | undefined;
+  readonly eveFor: (starterUserId: string) => AgentSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly userId: string;
   readonly organizationId: string;

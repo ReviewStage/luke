@@ -265,14 +265,17 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
 }
 
 /**
- * eve's session routes for one caller, sending the kinds of turn `Turn`
- * names. Note that the two calls that carry a message are properties rather
+ * An agent's sessions for one caller, sending the kinds of turn `Turn`
+ * names: open, follow up, cancel a turn, retire, and listen. Every caller
+ * holds this interface rather than an implementation, so the runtime that
+ * answers a conversation can change beneath it; eve's session routes, below,
+ * are the one implementation today. Note that the two calls that carry a message are properties rather
  * than methods, because TypeScript checks a method's parameters both ways: a
  * client composed for one kind alone, such as the voice function's for a
  * spoken ask, would pass for one that sends any kind, and the narrowing
  * would hold nothing.
  */
-export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
+export interface AgentSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   /** Opens a session over the conversation with its first message; eve's answer names the session, whose first turn is the message's. */
   readonly open: (message: EveMessage<Turn>) => Effect.Effect<EveOpened, EveUnreachable>;
   /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
@@ -366,7 +369,7 @@ export interface EveSessionsOptions {
 /** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
 export type EveSessionsComposer = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: EveSessionsOptions,
-) => EveSessions<Turn>;
+) => AgentSessions<Turn>;
 
 /** The headers the caller's identity travels as: the deployment's bearer with the account beside it, or the account's own authorization as it came. */
 function callerHeaders(caller: EveCaller) {
@@ -506,7 +509,7 @@ function readReset({ status, body }: EveAnswer): EveReset {
 function sessionsOver<Turn extends BrainHostTurn>(
   client: HttpClient.HttpClient,
   options: EveSessionsOptions,
-): EveSessions<Turn> {
+): AgentSessions<Turn> {
   const identity = callerHeaders(options.caller);
   const { mount } = options;
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
@@ -570,6 +573,6 @@ export const eveSessionsComposer: Effect.Effect<EveSessionsComposer, never, Http
 /** eve's client for one caller, over the calling fiber's `HttpClient`. */
 export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
   options: EveSessionsOptions,
-): Effect.Effect<EveSessions<Turn>, never, HttpClient.HttpClient> {
+): Effect.Effect<AgentSessions<Turn>, never, HttpClient.HttpClient> {
   return Effect.map(eveSessionsComposer, (compose) => compose<Turn>(options));
 }

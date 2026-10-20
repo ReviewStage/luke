@@ -57,7 +57,7 @@ import { InlineRef } from "../inline-ref.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -310,7 +310,7 @@ function KnownAgentMark({
   known: KnownNames;
 }): React.JSX.Element {
   const workspaceId = useWordsWorkspaceId(where);
-  const held = useAppState() !== undefined;
+  const held = useAppSlice(APP_STATE_HELD);
   const model = known.agentModels.get(agentId);
   // Note that nothing is read before main's document lands, because the agent may be among those it lists.
   if (model !== undefined || !held) return harnessMark(model);
@@ -561,6 +561,41 @@ function OptionalNote({ words }: { words: string | undefined }): ReactNode {
 }
 
 /**
+ * The card a mention's chip hangs, for a row that names the same thing
+ * rather than a chip, as a pull request's or a page's lone link card does
+ * (`lone-link-card.tsx`), so the row and the chip hang one card.
+ */
+export function MentionChipCard({
+  mention,
+  target,
+  name,
+  doors,
+  standing,
+}: {
+  mention: Mention;
+  /** Its link's target as written. */
+  target: string;
+  /** The name the row calls it. */
+  name: string;
+  doors: MentionDoors;
+  /** What its provider answered for it, as the row read it. */
+  standing: LinkStanding | undefined;
+}): ReactNode {
+  const known = useKnownNames();
+  return (
+    <MentionCard
+      mention={mention}
+      target={target}
+      name={name}
+      state={mentionState(mention, doors)}
+      doors={doors}
+      known={known}
+      standing={standing}
+    />
+  );
+}
+
+/**
  * What a chip calls a mention: the name it was written with, unless it was
  * written as its bare address and the window holds better, the name of the
  * plan, the page, the agent, or the person it names, or the key and title a provider
@@ -675,6 +710,7 @@ function MentionChip({
             }
       }
       card={card}
+      linkHref={press === undefined ? undefined : target}
       data-mention-ref=""
       data-kind={mention.kind}
       data-state={state}
@@ -833,6 +869,7 @@ function PlaceChip({
         openLink(href);
       }}
       card={card}
+      linkHref={href}
       data-mention-ref=""
       data-kind={MENTION_KIND_PLACE}
     />

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, type KeyObject, randomUUID, sign } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
@@ -7,7 +7,9 @@ import { accountProviderKey } from "@luke/database/schemas/account-provider-key"
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import {
+  chatGptHostAnswerSchema,
   FAST_ACCESS,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
@@ -17,7 +19,12 @@ import {
 } from "@luke/features/provider-key-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
+import {
+  HTTP_STATUS,
+  jsonResponse,
+  type RecordedRequest,
+  recordingHttpClient,
+} from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -57,6 +64,45 @@ const PROVIDER_URL = {
   [PROVIDER_KEY_PROVIDER.OPENAI]: "https://api.openai.com/v1/models",
 } as const;
 
+/** OpenAI's authorization server, which a ChatGPT sign-in's removal reaches. */
+const AUTH_ORIGIN = "https://auth.openai.com";
+const REVOCATION_URL = `${AUTH_ORIGIN}/oauth/revoke`;
+const DISCOVERY_URL = `${AUTH_ORIGIN}/.well-known/openid-configuration`;
+const JWKS_URL = `${AUTH_ORIGIN}/.well-known/jwks.json`;
+
+/** A signing key of the fake OpenAI's, generated for this file: its id, its private half, and its public half as a JWK. */
+function signingKey(kid: string) {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const { kty = "", n = "", e = "" } = publicKey.export({ format: "jwk" });
+  return { kid, privateKey, jwk: { kty, n, e, kid, alg: "RS256" } };
+}
+
+const OPENAI_KEY = signingKey("openai-key-1");
+const ROTATED_KEY = signingKey("openai-key-2");
+const FORGED_KEY = signingKey("openai-key-1");
+
+/** An RS256 JWT of the claims, signed by the key given and naming its id. */
+function signedJwt(
+  claims: Record<string, WireBoundaryInput>,
+  key: { kid: string; privateKey: KeyObject },
+) {
+  const part = (value: WireBoundaryInput) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const signed = `${part({ alg: "RS256", kid: key.kid, typ: "JWT" })}.${part(claims)}`;
+  return `${signed}.${sign("RSA-SHA256", Buffer.from(signed), key.privateKey).toString("base64url")}`;
+}
+
+/** OpenAI's authorization server as a save and a removal reach it: discovery, the published keys, and a revocation that succeeds. */
+const openAiAuth =
+  (published: readonly { jwk: Record<string, string> }[] = [OPENAI_KEY]) =>
+  (request: RecordedRequest): Response => {
+    if (request.url === DISCOVERY_URL) {
+      return jsonResponse({ revocation_endpoint: REVOCATION_URL, jwks_uri: JWKS_URL });
+    }
+    if (request.url === JWKS_URL) return jsonResponse({ keys: published.map(({ jwk }) => jwk) });
+    return new Response(null, { status: HTTP_STATUS.OK });
+  };
+
 /** Where Anthropic is asked whether a key's organization may run fast mode. */
 const FAST_CHECK_URL = "https://api.anthropic.com/v1/messages";
 
@@ -82,6 +128,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 interface Answer {
@@ -114,7 +161,13 @@ type FastAnswers = ReadonlyMap<string, Response>;
 
 /** Two accounts behind their own bearers, a provider, and the procedures answering under the ring given. */
 const openAccounts = (
-  options: { ring?: string; provider?: ProviderAnswers; fast?: FastAnswers } = {},
+  options: {
+    ring?: string;
+    provider?: ProviderAnswers;
+    fast?: FastAnswers;
+    /** OpenAI's authorization server, where a test reaches it. */
+    auth?: (request: RecordedRequest) => Response;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -128,9 +181,11 @@ const openAccounts = (
     ]);
     const answers = options.provider ?? ACCEPTING;
     const provider = recordingHttpClient((request) =>
-      request.url === FAST_CHECK_URL
-        ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))
-        : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
+      new URL(request.url).origin === AUTH_ORIGIN
+        ? (options.auth ?? openAiAuth())(request)
+        : request.url === FAST_CHECK_URL
+          ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))
+          : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
     );
     const logged: string[] = [];
     const procedures = providerKeysProcedures({
@@ -181,9 +236,9 @@ const answer = (
 
 function request(
   userId: string | undefined,
-  init: { method?: string; body?: WireBoundaryInput; query?: string } = {},
+  init: { method?: string; body?: WireBoundaryInput; query?: string; path?: string } = {},
 ) {
-  const url = new URL(KEYS_PATH, ORIGIN);
+  const url = new URL(init.path ?? KEYS_PATH, ORIGIN);
   if (init.query !== undefined) url.search = init.query;
   return new Request(url, {
     method: init.method ?? "GET",
@@ -198,8 +253,75 @@ function request(
 const save = (userId: string, provider: ProviderKeyProvider, key: string) =>
   request(userId, { method: "PUT", body: { provider, key } });
 
-const remove = (userId: string, provider: string) =>
-  request(userId, { method: "DELETE", query: `provider=${provider}` });
+const remove = (userId: string, provider: string, kind?: string) =>
+  request(userId, {
+    method: "DELETE",
+    query: kind === undefined ? `provider=${provider}` : `provider=${provider}&kind=${kind}`,
+  });
+
+/** A Claude setup-token as `claude setup-token` prints one: an OAuth token's prefix, synthetic throughout. */
+const SETUP_TOKEN = "sk-ant-oat01-test-setup-token-000000000000000000000000tokn";
+
+const saveToken = (userId: string, provider: ProviderKeyProvider, key: string) =>
+  request(userId, {
+    method: "PUT",
+    body: { provider, key, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN },
+  });
+
+const ISSUED_CLIENT = "oaiapp_test_client";
+const CHATGPT_SUBJECT = "chatgpt-subject-0000";
+
+/** An ID token's claims as OpenAI issues them for the sign-in below, expiring long after any test's clock. */
+const ID_CLAIMS = {
+  iss: AUTH_ORIGIN,
+  aud: ISSUED_CLIENT,
+  sub: CHATGPT_SUBJECT,
+  exp: 4_000_000_000,
+} as const;
+
+/** An access token's claims as OpenAI documents them for this flow; no expiry, so the answered lifetime stands. */
+const ACCESS_CLAIMS = {
+  iss: AUTH_ORIGIN,
+  aud: "https://api.openai.com/v1",
+  client_id: ISSUED_CLIENT,
+  sub: "opaque-subject",
+} as const;
+
+/** A JWT of the claims with a signature nothing checks, as a save reads an access token's claims unsigned. */
+function unsignedJwt(claims: Record<string, WireBoundaryInput>) {
+  const part = (value: WireBoundaryInput) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${part({ alg: "RS256", typ: "JWT" })}.${part(claims)}.unchecked-signature`;
+}
+
+/** A ChatGPT sign-in as the desktop hands one over, synthetic throughout, its ID token signed by the fake OpenAI. */
+const SIGN_IN = {
+  clientId: ISSUED_CLIENT,
+  accountId: CHATGPT_SUBJECT,
+  accessToken: unsignedJwt(ACCESS_CLAIMS),
+  refreshToken: "test-refresh-token-0000000000000000000ref",
+  idToken: signedJwt(ID_CLAIMS, OPENAI_KEY),
+  expiresInSeconds: 3600,
+  scopes: ["chatgpt.tokens.use.direct", "offline_access", "openid"],
+} as const;
+
+/** What of a sign-in must never leave the seal. */
+const SIGN_IN_SECRETS = [SIGN_IN.accessToken, SIGN_IN.refreshToken, SIGN_IN.idToken];
+
+const CREDENTIALS_PATH = "/api/account/chatgpt/credentials";
+const HOST_PATH = "/api/account/chatgpt/host";
+
+const saveSignIn = (userId: string, overrides: Record<string, WireBoundaryInput> = {}) =>
+  request(userId, { method: "PUT", path: CREDENTIALS_PATH, body: { ...SIGN_IN, ...overrides } });
+
+const removeSignIn = (userId: string) =>
+  remove(userId, PROVIDER_KEY_PROVIDER.OPENAI, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
+
+const readHost = (body: WireBoundaryInput) => {
+  const read = readEither(chatGptHostAnswerSchema)(unparsedWire(body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
+  return read.success;
+};
 
 /** The answer as the wire reads it, failing the test where it is not the wire's. */
 function keysOf(answered: Answer): ProviderKeysAnswer {
@@ -275,7 +397,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         keysOf(yield* later.ask(save(later.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, unsaid)));
 
         const fastOf = (userId: string) =>
-          Effect.map(listProviderKeyRows(userId), (rows) =>
+          Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) =>
             rows.map((row) => [row.provider, row.fastAccess]),
           );
         assert.deepEqual(yield* fastOf(owner), [
@@ -502,6 +624,380 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
         assert.deepEqual(checks, []);
+      }),
+  );
+  it.effect(
+    "a Claude setup-token is kept sealed and unverified as a subscription beside the keys, never sent to a provider, answered or logged, and removed by its kind for the bearer's account alone",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 hour");
+        const savedAt = yield* Clock.currentTimeMillis;
+
+        const saved = yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN));
+        const othersRead = keysOf(yield* ask(request(other)));
+        const othersRemoval = keysOf(
+          yield* ask(
+            remove(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+        const keyRemoval = keysOf(yield* ask(remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC)));
+        const stored = JSON.stringify(
+          yield* db.select().from(accountProviderKey).where(eq(accountProviderKey.userId, owner)),
+        );
+        const removed = keysOf(
+          yield* ask(
+            remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+
+        const subscription = {
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          hint: "sk-ant-…tokn",
+          addedAt: savedAt,
+          status: PROVIDER_KEY_STATUS.UNVERIFIED,
+          statusAt: savedAt,
+        };
+        assert.deepEqual(keysOf(saved), { keys: [], subscriptions: [subscription] });
+        assert.deepEqual(othersRead, { keys: [] }, "another account reads none of it");
+        assert.deepEqual(othersRemoval, { keys: [] }, "another account removes none of it");
+        assert.deepEqual(
+          keyRemoval,
+          { keys: [], subscriptions: [subscription] },
+          "a removal naming no kind takes an API key and leaves the subscription",
+        );
+        assert.deepEqual(removed, { keys: [] });
+        assert.deepEqual(checks, [], "no provider is asked about a setup-token");
+        assert.ok(!saved.text.includes(SETUP_TOKEN));
+        assert.ok(!stored.includes(SETUP_TOKEN));
+        assert.ok(!stored.includes(Buffer.from(SETUP_TOKEN).toString("base64")));
+        assert.ok(logged.every((line) => !line.includes(SETUP_TOKEN)));
+      }),
+  );
+
+  it.effect(
+    "a setup-token is kept beside an Anthropic API key and an API key beside a setup-token, each removed by its own kind, and one spelled as no setup-token or saved for OpenAI keeps nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
+        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)));
+        keysOf(yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+        const checksBefore = checks.length;
+
+        const tokenBesideKey = keysOf(
+          yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
+        );
+        const checksAfterToken = checks.length;
+        const keyBesideToken = keysOf(
+          yield* ask(save(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
+        );
+        const checksAfterKey = checks.length;
+        const tokenRemoved = keysOf(
+          yield* ask(
+            remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+        const keyRemoved = keysOf(yield* ask(remove(other, PROVIDER_KEY_PROVIDER.ANTHROPIC)));
+        const apiKeyAsToken = keysOf(
+          yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
+        );
+        const forOpenAi = keysOf(
+          yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.OPENAI, SETUP_TOKEN)),
+        );
+
+        const keyHints = (answer: typeof tokenBesideKey) =>
+          answer.keys.map(({ provider, hint }) => [provider, hint]);
+        const tokenHints = (answer: typeof tokenBesideKey) =>
+          answer.subscriptions?.map(({ provider, kind, hint }) => [provider, kind, hint]);
+        const anthropicKey = [[PROVIDER_KEY_PROVIDER.ANTHROPIC, "sk-ant-…wxyz"]];
+        const anthropicToken = [
+          [PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN, "sk-ant-…tokn"],
+        ];
+        assert.equal(tokenBesideKey.rejected, undefined);
+        assert.deepEqual(keyHints(tokenBesideKey), anthropicKey);
+        assert.deepEqual(tokenHints(tokenBesideKey), anthropicToken);
+        assert.equal(checksAfterToken, checksBefore, "no provider is asked about a setup-token");
+        assert.equal(keyBesideToken.rejected, undefined);
+        assert.ok(checksAfterKey > checksAfterToken, "the API key is checked with its provider");
+        assert.deepEqual(keyHints(keyBesideToken), anthropicKey);
+        assert.deepEqual(tokenHints(keyBesideToken), anthropicToken);
+        assert.deepEqual(keyHints(tokenRemoved), anthropicKey, "the API key outlives the token");
+        assert.equal(tokenRemoved.subscriptions, undefined);
+        assert.deepEqual(keyRemoved.keys, [], "the token outlives the API key");
+        assert.deepEqual(tokenHints(keyRemoved), anthropicToken);
+        assert.deepEqual(apiKeyAsToken.rejected, PROVIDER_KEY_REJECTION.INVALID);
+        assert.deepEqual(apiKeyAsToken.subscriptions, keyRemoved.subscriptions);
+        assert.deepEqual(forOpenAi.rejected, PROVIDER_KEY_REJECTION.WRONG_PROVIDER);
+        assert.equal(forOpenAi.subscriptions, undefined);
+        assert.ok(logged.every((line) => !line.includes(SETUP_TOKEN)));
+      }),
+  );
+
+  it.effect("setup-token saves are braked with key saves, ten an hour per account", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE });
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        keysOf(yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+      }
+
+      const braked = keysOf(
+        yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
+      );
+      const othersSave = keysOf(
+        yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
+      );
+
+      assert.equal(braked.rejected, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
+      assert.equal(othersSave.rejected, undefined);
+    }),
+  );
+
+  it.effect(
+    "a ChatGPT sign-in the desktop hands over is kept sealed and answered under subscriptions as its hint alone, and none of it is answered, logged, or stored in the clear",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 hour");
+        const savedAt = yield* Clock.currentTimeMillis;
+
+        const saved = yield* ask(saveSignIn(owner));
+        const othersRead = keysOf(yield* ask(request(other)));
+
+        assert.deepEqual(keysOf(saved), {
+          keys: [],
+          subscriptions: [
+            {
+              provider: PROVIDER_KEY_PROVIDER.OPENAI,
+              kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+              hint: "ChatGPT",
+              addedAt: savedAt,
+              status: PROVIDER_KEY_STATUS.UNVERIFIED,
+              statusAt: savedAt,
+            },
+          ],
+        });
+        assert.deepEqual(othersRead, { keys: [] });
+        assert.ok(
+          checks.every(
+            (check) => check.method === "GET" && [DISCOVERY_URL, JWKS_URL].includes(check.url),
+          ),
+          "a save only reads OpenAI's published keys, and sends it no credential",
+        );
+        const rows = yield* db
+          .select()
+          .from(accountProviderKey)
+          .where(eq(accountProviderKey.userId, owner));
+        assert.equal(rows[0]?.accessExpiresAt?.getTime(), savedAt + 3_600_000);
+        const stored = JSON.stringify(rows);
+        for (const secret of SIGN_IN_SECRETS) {
+          assert.ok(!saved.text.includes(secret));
+          assert.ok(!stored.includes(secret));
+          assert.ok(logged.every((line) => !line.includes(secret)));
+        }
+      }),
+  );
+
+  it.effect(
+    "a sign-in without the plan's scope, one under the registration client, and a pasted one keep nothing and say why; one beside an OpenAI API key stands beside it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        const noUsage = keysOf(
+          yield* ask(saveSignIn(owner, { scopes: ["openid", "offline_access"] })),
+        );
+        const registrationClient = keysOf(
+          yield* ask(saveSignIn(owner, { clientId: "dynamic_agent_client" })),
+        );
+        const pasted = keysOf(
+          yield* ask(
+            request(owner, {
+              method: "PUT",
+              body: {
+                provider: PROVIDER_KEY_PROVIDER.OPENAI,
+                key: SIGN_IN.refreshToken,
+                kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+              },
+            }),
+          ),
+        );
+        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
+        const besideKey = keysOf(yield* ask(saveSignIn(owner)));
+
+        assert.deepEqual(
+          [noUsage, registrationClient, pasted].map((answered) => [
+            answered.rejected,
+            answered.subscriptions,
+          ]),
+          [
+            [PROVIDER_KEY_REJECTION.INVALID, undefined],
+            [PROVIDER_KEY_REJECTION.INVALID, undefined],
+            [PROVIDER_KEY_REJECTION.INVALID, undefined],
+          ],
+        );
+        assert.equal(besideKey.rejected, undefined);
+        assert.equal(besideKey.keys.length, 1);
+        assert.deepEqual(
+          besideKey.subscriptions?.map(({ kind }) => kind),
+          [PROVIDER_KEY_KIND.CHATGPT_OAUTH],
+        );
+      }),
+  );
+
+  it.effect(
+    "the account's ChatGPT host id is minted on its first read, the same on every read after, and its own",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE });
+        const read = (userId: string) =>
+          Effect.map(ask(request(userId, { path: HOST_PATH })), (answered) => {
+            assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+            return readHost(answered.body).extAgentHostId;
+          });
+
+        const first = yield* read(owner);
+        const again = yield* read(owner);
+        const others = yield* read(other);
+
+        assert.match(first, /^urn:uuid:[0-9a-f-]{36}$/u);
+        assert.equal(again, first);
+        assert.notEqual(others, first);
+      }),
+  );
+
+  it.effect(
+    "removing the ChatGPT sign-in revokes its refresh token at OpenAI first and answers whether OpenAI confirmed it",
+    () =>
+      Effect.gen(function* () {
+        let revocationStatus: number = HTTP_STATUS.OK;
+        const { owner, ask, checks } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: (incoming) =>
+            incoming.url === REVOCATION_URL
+              ? new Response(null, { status: revocationStatus })
+              : openAiAuth()(incoming),
+        });
+        keysOf(yield* ask(saveSignIn(owner)));
+
+        const removed = keysOf(yield* ask(removeSignIn(owner)));
+        const revocation = checks.find((check) => check.url === REVOCATION_URL);
+        const form = new URLSearchParams(
+          yield* Effect.promise(() => new Response(revocation?.init.body).text()),
+        );
+
+        assert.deepEqual(removed, { keys: [] });
+        assert.deepEqual(
+          [form.get("token"), form.get("token_type_hint"), form.get("client_id")],
+          [SIGN_IN.refreshToken, "refresh_token", SIGN_IN.clientId],
+        );
+
+        keysOf(yield* ask(saveSignIn(owner)));
+        revocationStatus = HTTP_STATUS.BAD_REQUEST;
+        assert.deepEqual(keysOf(yield* ask(removeSignIn(owner))), {
+          keys: [],
+          revocationUnconfirmed: true,
+        });
+      }),
+  );
+
+  it.effect(
+    "a sign-in whose ID token OpenAI did not sign for its issued client, has expired, or names another account keeps nothing and says it is unverified",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 day");
+        const withToken = (idToken: string, overrides: Record<string, WireBoundaryInput> = {}) =>
+          Effect.map(ask(saveSignIn(owner, { idToken, ...overrides })), keysOf);
+
+        const refused = [
+          yield* withToken(signedJwt(ID_CLAIMS, FORGED_KEY)),
+          yield* withToken(signedJwt({ ...ID_CLAIMS, aud: "oaiapp_another_client" }, OPENAI_KEY)),
+          yield* withToken(signedJwt({ ...ID_CLAIMS, iss: "https://issuer.test" }, OPENAI_KEY)),
+          yield* withToken(signedJwt({ ...ID_CLAIMS, exp: 60 }, OPENAI_KEY)),
+          yield* withToken(signedJwt(ID_CLAIMS, OPENAI_KEY), { accountId: "another-subject" }),
+          yield* withToken(signedJwt(ID_CLAIMS, { ...OPENAI_KEY, kid: "unpublished" })),
+          yield* withToken("not-a-jwt-000000000000000000000000000"),
+        ];
+
+        assert.deepEqual(
+          refused.map((answered) => [answered.rejected, answered.subscriptions]),
+          refused.map(() => [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN, undefined]),
+        );
+        // An audience listing the issued client among others is the issued client's.
+        const listed = yield* withToken(
+          signedJwt({ ...ID_CLAIMS, aud: ["oaiapp_another_client", ISSUED_CLIENT] }, OPENAI_KEY),
+        );
+        assert.equal(listed.rejected, undefined);
+      }),
+  );
+
+  it.effect(
+    "a sign-in is checked against OpenAI's keys as they are published now, and one whose keys cannot be read keeps nothing and may be tried again",
+    () =>
+      Effect.gen(function* () {
+        let published = [OPENAI_KEY];
+        let reachable = true;
+        const { owner, ask } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: (incoming) =>
+            reachable
+              ? openAiAuth(published)(incoming)
+              : jsonResponse({}, HTTP_STATUS.SERVER_ERROR),
+        });
+
+        assert.equal(keysOf(yield* ask(saveSignIn(owner))).rejected, undefined);
+        // OpenAI rotates its key: a token signed by the new one is checked against the keys read anew.
+        published = [ROTATED_KEY];
+        const rotated = keysOf(
+          yield* ask(saveSignIn(owner, { idToken: signedJwt(ID_CLAIMS, ROTATED_KEY) })),
+        );
+        assert.equal(rotated.rejected, undefined);
+
+        reachable = false;
+        const unreachable = keysOf(
+          yield* ask(
+            saveSignIn(owner, { idToken: signedJwt(ID_CLAIMS, { ...OPENAI_KEY, kid: "next" }) }),
+          ),
+        );
+        assert.equal(unreachable.rejected, PROVIDER_KEY_REJECTION.UNREACHABLE);
+      }),
+  );
+
+  it.effect(
+    "a sign-in whose access token names another client, audience or issuer, or is no JWT, keeps nothing and says it is unverified, though its claims are read unsigned",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        const withAccess = (overrides: Record<string, WireBoundaryInput>) =>
+          Effect.map(ask(saveSignIn(owner, overrides)), keysOf);
+
+        const refused = [
+          // An access token another client's, for another audience, from another issuer, or no JWT, is no part of this sign-in.
+          yield* withAccess({
+            accessToken: unsignedJwt({ ...ACCESS_CLAIMS, client_id: "oaiapp_another_client" }),
+          }),
+          yield* withAccess({
+            accessToken: unsignedJwt({ ...ACCESS_CLAIMS, aud: "https://elsewhere.test/v1" }),
+          }),
+          yield* withAccess({
+            accessToken: unsignedJwt({ ...ACCESS_CLAIMS, iss: "https://issuer.test" }),
+          }),
+          yield* withAccess({
+            accessToken: "opaque-access-token-00000000000000000000",
+          }),
+        ];
+
+        assert.deepEqual(
+          refused.map((answered) => [answered.rejected, answered.subscriptions]),
+          refused.map(() => [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN, undefined]),
+        );
+        // An audience listing OpenAI's API among others is OpenAI's API's.
+        const listed = yield* withAccess({
+          accessToken: unsignedJwt({ ...ACCESS_CLAIMS, aud: ["https://api.openai.com/v1", "x"] }),
+        });
+        assert.equal(listed.rejected, undefined);
       }),
   );
 });

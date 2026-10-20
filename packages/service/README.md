@@ -476,6 +476,19 @@ the hint, and the status; it is replaced whole by a save, deleted by a
 removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
+A ChatGPT sign-in (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
+is a row of the same table, saved by the desktop on
+`PUT /api/account/chatgpt/credentials` after it signs in under the account's
+host id (`GET /api/account/chatgpt/host`, minted once into
+`account_chatgpt_host` and kept across sign-outs). Its seal holds the access,
+refresh and ID tokens, the issued client and the account's subject, bound to
+the kind; `access_expires_at` beside it says when a renewal is due. A
+renewal runs under the row's lock across OpenAI's token endpoint, so
+renewals of one sign-in are serialized as OpenAI asks, and replaces the
+tokens, the expiry and the scopes together. Removing it revokes its refresh
+token at OpenAI first and answers `revocationUnconfirmed` where OpenAI did
+not confirm.
+
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
 `HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
 bytes>` entries, the version new saves wrap under first. Production and
@@ -1985,8 +1998,8 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: Luke's brain, its worker, the coding agent, and its worker.
 What each is offered is derived from it: the brain's hosted resolver
 offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
-(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` and
-its worker's are held to their roles by `coder-agent.test.ts`; each role's
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` are held to its set by
+`coder-tool-files.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
 every module may import it. eve's own injected tools (`task_wait`,
@@ -2229,35 +2242,30 @@ and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
-`check.sh` needs no service; the `postgres` CI job runs the same migrations,
-then `test:store`, against a Postgres container. Every one of those is
-Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
-embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
-any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
-dialect an opening of the test database is a database of that opening's own:
-a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
-names, made with `create database ... template ...` on the cluster's
-`postgres` maintenance database and dropped when the file closes it
-(`@luke/database/testing`). Nothing writes to the named
-database itself after `db:migrate`, so a statement a test forgets to scope by
-account or conversation reaches its own file's rows and no other file's.
-Which files `test:store` runs is read from the files, not kept
-in a list: `apps/web/scripts/store-tests.ts` selects every `apps/web/tests/**/*.test.ts` whose
-source imports the one door, `@luke/database/testing` (whose
-`openHostedStoreTestDatabase()` is the hosted store's and `getTestDB()` the
-bare one), because
-`LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
-door cannot meet a Postgres whatever it does. A new store test is therefore
-in the set the moment it imports its harness, and `package.json` is not
-edited. The runner then reads vitest's JSON report back and fails, naming
-each file, when the files vitest ran are not exactly the files selected. A reproduction against a real
-Postgres needs an 18 of your own whose role may `create database`, migrated
-by `db:migrate` alone, because that is the runner which records what it
-applied and the tests copy what it recorded, so run it first:
+`check.sh` and CI's test jobs need no service. The `postgres` CI job
+("Postgres migrations and store") proves only what PGlite cannot: it runs
+`db:migrate` against a fresh Postgres container and then
+`apps/web/tests/storage-schema.test.ts` and `drizzle-schema.test.ts` against
+what that migrated, so a
+statement PGlite accepts and Postgres refuses, or migrations that do not end
+at the declared schema, fail there. Every one of those is Postgres 18, the
+major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
+18.3, and the CI image is `postgres:18`, so a local `check.sh` is a
+reproduction on 18 already. On either dialect an opening of the test
+database is a database of that opening's own: a fresh PGlite, or a clone of
+the database `LUKE_STORE_TEST_DATABASE_URL` names, made with
+`create database ... template ...` on the cluster's `postgres` maintenance
+database and dropped when the file closes it (`@luke/database/testing`, the
+one door that reads the variable). Nothing writes to the named database
+itself after `db:migrate`, so a statement a test forgets to scope by account
+or conversation reaches its own file's rows and no other file's. To run a
+store test against a real Postgres by hand, use an 18 of your own whose role
+may `create database`, migrated by `db:migrate` alone, because that is the
+runner which records what it applied and the tests copy what it recorded:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
-LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
+LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
 ## Hosted voice service

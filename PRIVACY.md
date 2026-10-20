@@ -370,6 +370,31 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
+**Your own GitHub token.** If you save a GitHub personal access token (classic)
+in Settings › Profile, your Mac sends it once, over HTTPS, to our service,
+which asks GitHub whose it is with one request and keeps it only if GitHub
+accepts it, it carries the `repo` scope, and it belongs to the GitHub account
+linked to yours; a fine-grained token is refused without being sent to GitHub.
+It is stored under your account encrypted with AES-256-GCM, under the same
+keys as your own API keys, so a copy of our database alone cannot read it.
+Beside it we keep your GitHub login and account number, a hint (the `ghp_`
+prefix and the last four characters), its expiry where GitHub gives one, when
+you saved it, and whether GitHub has since refused it. You are shown the hint,
+the login, and the expiry, never the token. Our service uses it only to call
+GitHub for you: to list the repositories it can push to, and to read, check
+out, commit to, and open pull requests on the repository of a task or coding
+agent you start on it, where no GitHub App installation connected to the
+workspace reaches that repository. Once a minute it reads the reviews, comments, and
+checks on the open pull requests of your coding agents that run on it, to wake
+those agents. It also asks GitHub whether your token can read the repository
+of a teammate's task or coding agent that runs on their own token, to decide
+whether you see it, and keeps that answer for up to an hour. In a coding agent's sandbox it is set at
+the network firewall on that one repository's paths alone, and never enters
+the sandbox, a command, or its output. After you save it, neither your Mac nor
+any answer from our service holds the token again, and we never log it or send
+it to our analytics, crash reports, or screen recordings. Removing it in
+Settings, or deleting your account, deletes it.
+
 **A task's whiteboard.** You and Luke can both draw on a
 task's whiteboard. Our service stores it with the task, as drawn and readable
 by our own operators: every shape, arrow, line, stroke, and piece of text and
@@ -981,6 +1006,30 @@ word does. The pages keep their own cookies and storage on your
 Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
 launches. Every permission a page asks for, such as the camera, microphone, or
 location, is refused, and downloads are cancelled.
+
+A Browser tab can also be a cloud browser, which an agent drives and you
+watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
+your Mac, so it reaches that sandbox's own `localhost` and holds none of your
+Mac's cookies or signed-in sites. What the agent does with it reaches the model:
+each page's address and title, a screenshot, and a text snapshot of the page. A
+screenshot goes to the model alone and is left out of the agent's stored
+transcript, as a picture Luke looks at is; the rest is kept in the transcript,
+under its terms. Our service keeps the task's list of cloud tabs, each one's
+address and title, with the agent whose browser holds it, until the task's
+conversation is removed. The page, its live-view frames, and a tab's
+screenshots and text are not kept by us: the frames pass through our service
+to the panel of each member who opens the task, and every such member can
+watch the tab and take it over by clicking and typing in it, and the agent's
+actions on it wait while you do. Nothing of it reaches a trace, a counted event,
+a fixture, or the voice window, and the screen recording masks the live view.
+The browser's profile, with the cookies and logins you type into it, lives on
+the sandbox's disk, so it stays in that sandbox while it runs and in the
+snapshot Vercel keeps when the sandbox stops, until thirty days after the
+snapshot's last use, as the checkout does under "How Luke reads your
+repository"; the pages open at a stop are not kept, and the browser reopens
+each tab at its last address on resume. No other agent reaches that profile;
+an agent's workers share its sandbox, so they share it. Deleting the task, or
+your account, deletes the sandbox and its snapshot as described there.
 
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording

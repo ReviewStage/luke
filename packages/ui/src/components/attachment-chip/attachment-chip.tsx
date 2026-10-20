@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { RemoveIcon } from "../../face/glyphs.js";
+import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
 
 /**
  * attachment-chip.tsx -- a file coming along with a message or a note, as a chip: its thumbnail, or its type's glyph, its name, and its size.
  *
  * A picture is its thumbnail alone; any other file is the glyph its caller
- * draws for its type, its name cut short at the chip's end, and what more
+ * draws for its type, its name fading out at the chip's end, and what more
  * the caller says of it (its size). The chip's face is the press that opens
  * the file where `onOpen` is given, named "Open <name>"; a file with nothing
  * to open is drawn the same, pressing nothing. Where `onRemove` is given the
@@ -59,7 +60,16 @@ function ChipFace({
   return (
     <>
       {icon}
-      {words === undefined ? null : <span className="luke-attachment-chip-name">{words}</span>}
+      {words === undefined ? null : (
+        <ClippedLine
+          className="luke-attachment-chip-name"
+          as={ONE_LINE_ELEMENT.SPAN}
+          end={ONE_LINE_END.FADE}
+          words={words}
+        >
+          {words}
+        </ClippedLine>
+      )}
       {detail === undefined ? null : <span className="luke-attachment-chip-detail">{detail}</span>}
     </>
   );

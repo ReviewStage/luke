@@ -21,6 +21,7 @@ import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -70,6 +71,7 @@ const accountWithAnthropicKey = (userId: string, fastAccess: FastAccess | null) 
     yield* saveProviderKey(
       userId,
       PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      PROVIDER_KEY_KIND.API_KEY,
       sealed,
       "sk-ant-…test",
       fastAccess,

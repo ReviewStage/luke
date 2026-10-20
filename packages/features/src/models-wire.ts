@@ -55,7 +55,7 @@ const choiceText = EffectSchema.Trim.check(
  * as a multiple of the standard price, input and output each, where the
  * catalog prices it.
  */
-export const contextWindowsSchema = EffectSchema.Struct({
+const contextWindowsSchema = EffectSchema.Struct({
   standardTokens: countedNumber,
   longTokens: countedNumber,
   longInputPriceFactor: EffectSchema.optionalKey(countedNumber),
@@ -99,15 +99,6 @@ export const modelChoiceSchema = EffectSchema.Struct({
 });
 
 export type ModelChoice = typeof modelChoiceSchema.Type;
-
-/**
- * The preferences snapshot read for its coding-agent part alone (GET): the
- * settings preferences beside it are the settings client's to read, so the
- * reader drops them rather than naming them here.
- */
-export const codingAgentDefaultAnswerSchema = EffectSchema.Struct({
-  codingAgent: modelChoiceSchema,
-});
 
 /** The coding-agent part written on its own (PUT): the body carries nothing else, so the settings preferences stand as they were. */
 export const codingAgentDefaultWriteSchema = EffectSchema.Struct({

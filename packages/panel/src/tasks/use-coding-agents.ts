@@ -67,7 +67,11 @@ import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
 import type { ServersWriter } from "./use-agent-servers.js";
-import type { TranscriptReader } from "./use-agent-transcript.js";
+import {
+  type TranscriptFollower,
+  type TranscriptReader,
+  windowTranscriptFollower,
+} from "./use-agent-transcript.js";
 import type {
   InboxAnswerer,
   InboxImageReader,
@@ -300,8 +304,10 @@ export interface CodingAgentsControl {
   onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
   onTitle: (agentId: string, title: string | null) => void;
-  /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
+  /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
+  /** How a shown tab follows its transcript and hears its pages pushed. */
+  transcripts: TranscriptFollower;
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
   readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
@@ -489,10 +495,26 @@ function listRead(
     return {
       agents: [automationId === null ? agent : { ...agent, automationId }],
       workspaceId: answer.agent.workspaceId,
-      repository: answer.agent.repository,
+      ...(answer.agent.repository === null ? undefined : { repository: answer.agent.repository }),
       ...(origin === undefined ? undefined : { origin }),
     };
   });
+}
+
+/**
+ * One agent read by its id as its own page reads it, wherever it stands,
+ * on a task or on none; nothing where it could not be read. A surface that
+ * holds no list of its own, such as the sidebar's row of an agent with no
+ * task, reads it so before it archives it unasked.
+ */
+export function readAgentById(
+  act: ActHandle["act"],
+  agentId: string,
+): Promise<CodingAgentSummary | undefined> {
+  return listRead(act, undefined, agentId).then(
+    (answer) => ("failure" in answer ? undefined : answer.agents[0]),
+    () => undefined,
+  );
 }
 
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
@@ -1121,8 +1143,19 @@ export function useCodingAgents(input: {
       if (taskId === undefined && agentId === undefined) return undefined;
       const answer = await listRead(act, taskId, agentId).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return undefined;
+      // Note that the page's workspace, repository, and run come with the read, as the list's own read takes them.
       setList((was) =>
-        ours(was) ? { taskId, agentId: listOf, agents: answer.agents, failed: false } : was,
+        ours(was)
+          ? {
+              taskId,
+              agentId: listOf,
+              agents: answer.agents,
+              failed: false,
+              workspaceId: answer.workspaceId,
+              repository: answer.repository,
+              origin: answer.origin,
+            }
+          : was,
       );
       return answer.agents.find((agent) => agent.id === named);
     },
@@ -1141,10 +1174,14 @@ export function useCodingAgents(input: {
     );
   }, []);
 
+  // Every transcript page says where its agent stands, mostly as it stood:
+  // the list is kept as it was then, so the window is not drawn again for it.
   const onStatus = useCallback((agentId: string, run: AgentRun) => {
-    setList((was) =>
-      was.agents === undefined ? was : { ...was, agents: withAgentRun(was.agents, agentId, run) },
-    );
+    setList((was) => {
+      if (was.agents === undefined) return was;
+      const agents = withAgentRun(was.agents, agentId, run);
+      return agents === was.agents ? was : { ...was, agents };
+    });
   }, []);
 
   const readTranscript = useCallback<TranscriptReader>(
@@ -1357,6 +1394,7 @@ export function useCodingAgents(input: {
     onStatus,
     onTitle,
     readTranscript,
+    transcripts: windowTranscriptFollower,
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
     numberedPullRequests,

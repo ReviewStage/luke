@@ -13,10 +13,11 @@ import {
 import { describeWire } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import {
+  type CheckedOutSandbox,
   checkedOutSandbox,
   REPOSITORY_REFUSAL,
-  REPOSITORY_SANDBOX_CONTRACT,
   type RepositoryCall,
   type RepositoryRefusal,
   type RepositoryShellServices,
@@ -39,20 +40,24 @@ import {
 } from "./shown-file.js";
 
 /**
- * show-code.ts -- the brain's `show_code` tool: code of the task's repository put on the developer's screen as Luke talks about it.
+ * show-code.ts -- `show_code`, every agent's tool for code: lines of its repository put on the developer's screen as it talks about them.
  *
- * The call reads the lines itself: from the brain session's sandbox, on
- * the same checkout of the task's repository `run_in_repository` reads
- * (`repository-shell.ts`), a window of the file around the lines pointed at,
- * cut to `SHOWN_CODE_BOUNDS`. The model writes a note beside them, a
- * sentence or two on what the lines do for the task and what to notice, so
- * the Code tab reads as a walkthrough rather than bare code. The lines and
- * the note are the call's answer, so the store journals them with the
- * call, the voice's follow reads them off the journal mid-turn
- * (`projectTurnEvents`), and the voice service holds them until Luke next
- * starts to speak, then sends them to the developer's Mac, which draws
- * them. Nothing on the Mac reads a file. A read that fails answers
- * `rejected` and says why, so nothing unread is ever described as shown.
+ * The call reads the lines itself, from the checkout its caller hands it
+ * (`CodeCheckout`): the brain's, made by `run_in_repository`'s shell
+ * (`repository-shell.ts`), or a coding agent's own, which its sandbox
+ * checked out as it opened. It reads a window of the file around the lines
+ * pointed at, cut to `SHOWN_CODE_BOUNDS`. The model writes a note beside
+ * them, a sentence or two on what the lines do for the task and what to
+ * notice, so the Code tab reads as a walkthrough rather than bare code. The
+ * lines and the note are the call's answer, so the store journals them with
+ * the call on the conversation's record, whoever made it. On a call, the
+ * voice's follow reads them off the turn's journal mid-turn
+ * (`projectTurnEvents`), and the voice service holds them until the agent
+ * next starts to speak, then sends them to the developer's Mac, which draws
+ * them; off a call they stand on the record, where the Code tab reads every
+ * answered call of a conversation (`task-work-store.ts`'s `shownCodeIn`).
+ * Nothing on the Mac reads a file. A read that fails answers `rejected` and
+ * says why, so nothing unread is ever described as shown.
  */
 
 /** Why a call showed nothing, in words the model can act on. */
@@ -184,15 +189,15 @@ const SHOW_CODE_ANSWER = Schema.Struct({
 // Note that a journaled call's output is the stored row's, which the AI SDK types as unknown.
 const readShownCode = Schema.decodeUnknownResult(SHOW_CODE_ANSWER);
 
-/** The tool as the brain is offered it: its name, its words, and its input schema. */
+/** The tool as an agent is offered it: its name, its words, and its input schema. */
 export const SHOW_CODE_TOOL = {
   name: AGENT_TOOL.SHOW_CODE,
   description:
-    "Put lines of a file in the task's repository on the developer's screen, lit, as Luke starts " +
-    "saying your next words. Call it just before the queue_question or the return that talks " +
-    "about those lines, with the lines you found through run_in_repository. Point at the few " +
-    "lines that matter, at most 200, and say in the note why you are showing them. Answers " +
-    "`accepted` with the lines as shown, or `rejected` and why nothing was shown.",
+    "Put lines of a file in your repository's checkout on the developer's screen, lit, in the " +
+    "task's Code tab: on a call, as your next words start to be said, so call it just before the " +
+    "words that talk about those lines; otherwise at once. Point at the few lines that matter, " +
+    "at most 200, from a file you have read, and say in the note why you are showing them. " +
+    "Answers `accepted` with the lines as shown, or `rejected` and why nothing was shown.",
   inputSchema: SHOW_CODE_INPUT,
   storedInputSchema: SHOW_CODE_ROW_INPUT,
 } as const;
@@ -212,16 +217,24 @@ export function shownCodeOf(part: StoredToolPart): ShownCode | undefined {
   return code === undefined || isSecretFile(code.ref.path) ? undefined : code;
 }
 
-function rejected(reason: string): WireRecord {
+/**
+ * Where a call's lines are read: the sandbox with the repository checked
+ * out in it, as the caller reaches it, or the refusal saying it could not
+ * be, which the call answers as nothing shown.
+ */
+export type CodeCheckout<R> = Effect.Effect<CheckedOutSandbox, RepositoryRefusal, R>;
+
+/** A call that showed nothing, and why. */
+export function showCodeRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
 /** The lines read from the checkout for `ref`, or the refusal that stopped the read. */
-const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
-  call: RepositoryCall,
+const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* <R>(
+  checkout: CodeCheckout<R>,
   ref: CodeRef,
-): Effect.fn.Return<ShownCode, RepositoryRefusal | ShowCodeRefusal, RepositoryShellServices> {
-  const { sandbox, repository } = yield* checkedOutSandbox(call);
+): Effect.fn.Return<ShownCode, RepositoryRefusal | ShowCodeRefusal, R> {
+  const { sandbox, repository } = yield* checkout;
   const probed = yield* runInSandbox(
     sandbox,
     {
@@ -267,30 +280,41 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
 });
 
 /**
- * One call of `show_code`: the lines read from the task's checkout and
+ * One call of `show_code`: the lines read from the checkout given and
  * answered as shown with the model's note, or `rejected` and why. A reason
  * the checkout could not be reached is the repository's own, worded as
- * nothing shown.
+ * nothing shown. Note that the checkout is reached only once the call reads
+ * as one, so a call refused for its input opens no sandbox.
  */
+export function showCodeIn<R>(
+  checkout: CodeCheckout<R>,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, R> {
+  const shown = Effect.gen(function* () {
+    const read = readShownRef(input);
+    if (Result.isFailure(read)) return showCodeRejected(SHOW_CODE_REFUSAL.UNREADABLE);
+    const ref = read.success;
+    if (isSecretFile(ref.path)) return showCodeRejected(SHOW_CODE_REFUSAL.SECRET);
+    // Note that a note of blanks alone is no note, because the card would draw it empty.
+    const note = Result.getOrUndefined(readNote(input))?.note.trim();
+    if (note === undefined || note === "") return showCodeRejected(SHOW_CODE_REFUSAL.NO_NOTE);
+    const code = yield* readLines(checkout, ref);
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, code: { ...code, note } } satisfies WireRecord;
+  });
+  return shown.pipe(
+    Effect.catchTag("ShowCodeRefusal", (refusal) =>
+      Effect.succeed(showCodeRejected(refusal.reason)),
+    ),
+    Effect.catchTag("RepositoryRefusal", (refusal) =>
+      Effect.succeed(showCodeRejected(`${NOT_SHOWN}${refusal.reason}`)),
+    ),
+  );
+}
+
+/** One brain call of `show_code`, on the task's checkout, made first where none stands (`checkedOutSandbox`). */
 export function runShowCode(
   call: RepositoryCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, RepositoryShellServices> {
-  const shown = Effect.gen(function* () {
-    const read = readShownRef(input);
-    if (Result.isFailure(read)) return rejected(SHOW_CODE_REFUSAL.UNREADABLE);
-    const ref = read.success;
-    if (isSecretFile(ref.path)) return rejected(SHOW_CODE_REFUSAL.SECRET);
-    // Note that a note of blanks alone is no note, because the card would draw it empty.
-    const note = Result.getOrUndefined(readNote(input))?.note.trim();
-    if (note === undefined || note === "") return rejected(SHOW_CODE_REFUSAL.NO_NOTE);
-    const code = yield* readLines(call, ref);
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, code: { ...code, note } } satisfies WireRecord;
-  });
-  return shown.pipe(
-    Effect.catchTag("ShowCodeRefusal", (refusal) => Effect.succeed(rejected(refusal.reason))),
-    Effect.catchTag("RepositoryRefusal", (refusal) =>
-      Effect.succeed(rejected(`${NOT_SHOWN}${refusal.reason}`)),
-    ),
-  );
+  return showCodeIn(checkedOutSandbox(call), input);
 }

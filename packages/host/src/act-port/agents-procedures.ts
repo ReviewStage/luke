@@ -44,10 +44,13 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentTranscriptChanged,
+  type CodingAgentTranscriptKey,
   type CodingAgentWorkspaceListParams,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { Effect } from "effect";
+import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
@@ -67,6 +70,10 @@ export interface AgentProceduresDependencies {
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+    /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
+    transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
     codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
@@ -133,8 +140,98 @@ function noted<Answer>(
   return Effect.tap(answer, (value) => Effect.sync(() => note(value)));
 }
 
+/** A transcript as a key that equals another naming the same one. */
+class TranscriptStreamKey extends Data.Class<{
+  readonly kind: CodingAgentTranscriptKey["kind"];
+  readonly owner: string;
+  readonly callId: string | undefined;
+}> {}
+
+function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStreamKey {
+  const owner = transcript.kind === TRANSCRIPT_KIND.AGENT ? transcript.agentId : transcript.taskId;
+  return new TranscriptStreamKey({ kind: transcript.kind, owner, callId: transcript.callId });
+}
+
+/**
+ * An async iterable as the iterator oRPC streams. Note that its end is
+ * handed straight to the iterable's own, rather than through an async
+ * generator, which would queue the end behind a read still waiting for the
+ * next page and so never close the stream.
+ */
+function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefined, unknown> {
+  const iterator = iterable[Symbol.asyncIterator]();
+  const ended = async (): Promise<IteratorReturnResult<undefined>> => {
+    await iterator.return?.();
+    return { done: true, value: undefined };
+  };
+  const self: AsyncIteratorObject<A, undefined, unknown> = {
+    next: async () => {
+      const read = await iterator.next();
+      return read.done === true ? { done: true, value: undefined } : read;
+    },
+    return: ended,
+    [Symbol.asyncIterator]: () => self,
+    [Symbol.asyncDispose]: async () => {
+      await ended();
+    },
+  };
+  return self;
+}
+
+/**
+ * A transcript's pages for one stream a window holds open: the host follows
+ * it from its start as the stream opens, so the window hears it whole, and
+ * lets it go once the last stream of it closes. Every page the host tells of
+ * it reaches every stream of it, which joins a page heard again by id.
+ */
+function transcriptPages(
+  host: AgentProceduresDependencies["host"],
+  open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
+  transcript: CodingAgentTranscriptKey,
+): Stream.Stream<CodingAgentMessagesAnswerView> {
+  const key = transcriptKeyOf(transcript);
+  return Stream.callback<CodingAgentMessagesAnswerView>((queue) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          host.onTranscriptChanged((changed) => {
+            if (Equal.equals(transcriptKeyOf(changed.transcript), key)) {
+              Queue.offerUnsafe(queue, changed.page);
+            }
+          }),
+        ),
+        (stop) => Effect.sync(stop),
+      );
+      yield* Effect.acquireRelease(
+        Effect.andThen(
+          Effect.sync(() =>
+            MutableHashMap.set(
+              open,
+              key,
+              Option.getOrElse(MutableHashMap.get(open, key), () => 0) + 1,
+            ),
+          ),
+          host.transcriptFollow(transcript),
+        ),
+        () =>
+          Effect.suspend(() => {
+            const left = Option.getOrElse(MutableHashMap.get(open, key), () => 1) - 1;
+            if (left > 0) {
+              MutableHashMap.set(open, key, left);
+              return Effect.void;
+            }
+            MutableHashMap.remove(open, key);
+            return host.transcriptUnfollow(transcript);
+          }),
+      );
+    }),
+  );
+}
+
 export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const { host, notices } = dependencies;
+  /** How many streams stand open of each transcript, so the host lets one go only with the last. */
+  const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
   // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
   const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
     Effect.tap(
@@ -201,6 +298,23 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         });
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const pages = transcriptPages(host, openTranscripts, input).pipe(
+        Stream.tap((page) =>
+          Effect.sync(() => {
+            // A worker's page says where the worker stands, which is no word on the agent.
+            if (!("status" in page)) return;
+            if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
+            notices.observeTitle(input.agentId, page.title);
+            notices.observeStatus(input.agentId, page.status);
+          }),
+        ),
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(pages));
+    }),
     [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MESSAGE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

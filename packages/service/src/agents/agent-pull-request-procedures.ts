@@ -32,7 +32,11 @@
  * changes.
  */
 
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  type WithRepository,
+} from "@luke/database/models/coding-agent-store";
 import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
@@ -136,7 +140,7 @@ const askedOfAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
 type OverviewRead<A, R> = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
   /** The member reading, whose own reads mark what is theirs. */
   userId: string,
@@ -145,8 +149,8 @@ type OverviewRead<A, R> = (
 /**
  * One part of the agent's pull request's overview: the pull request asked
  * about, read from GitHub afresh on a token minted for the agent's
- * repository; none where it names no pull request yet. Each part is a
- * procedure of its own, so each lands on its own.
+ * repository; none where it names no pull request yet, or the agent works in
+ * no repository. Each part is a procedure of its own, so each lands on its own.
  */
 const overviewPart = <A, R>(
   agent: CodingAgent,
@@ -155,7 +159,7 @@ const overviewPart = <A, R>(
   read: OverviewRead<A, R>,
 ) =>
   Effect.gen(function* () {
-    if (pullRequest === null) return { pullRequest };
+    if (pullRequest === null || !hasRepository(agent)) return { pullRequest: null };
     const part = yield* Effect.gen(function* () {
       const { token } = yield* agentPullRequestReach(userId, agent);
       return yield* read(token, agent, pullRequest, userId);
@@ -206,7 +210,7 @@ const mergingOrNone = (token: Redacted.Redacted, repository: string, number: num
  */
 const overviewPullRequestRead = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
 ) =>
   Effect.gen(function* () {
@@ -230,7 +234,7 @@ const overviewPullRequestRead = (
  */
 const overviewChecksRead = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
 ) =>
   Effect.map(
@@ -264,7 +268,7 @@ const memberPendingReview = (userId: string, repository: string, number: number)
  */
 const overviewConversationRead = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
   userId: string,
 ) =>
@@ -429,7 +433,9 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
         input.params.id,
         input.query?.number,
       );
-      if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (pullRequest === null || !hasRepository(agent)) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      }
       const written = yield* memberPullRequestWrite(
         context.userId,
         agent,
@@ -451,7 +457,7 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
         input.id,
         input.number,
       );
-      if (pullRequest === null) {
+      if (pullRequest === null || !hasRepository(agent)) {
         const none: PullRequestViewedAnswer = {
           outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
           files: [],

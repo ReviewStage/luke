@@ -72,6 +72,14 @@ test("a header wider than 520px keeps the pill, the title, and the controls in o
   assert.equal(style.titleFullWidth, false);
 }, 30_000);
 
+test("the pill and the controls stand level with the title's first line, not centred on a title wrapped to two", () => {
+  for (const width of [400, 900]) {
+    titleRowAt(width);
+    const row = document.querySelector(".pull-request-title-row") ?? assert.fail("the row stands");
+    assert.equal(getComputedStyle(row).alignItems, "flex-start", `at ${width}px`);
+  }
+}, 30_000);
+
 /** How a header folded as its view scrolled is drawn in the room given, on a phone's touch screen. */
 function foldedAt(room: "narrow" | "wide") {
   laid?.remove();
@@ -134,3 +142,38 @@ test("a touch screen shows the title's pencil at rest, where a tap would otherwi
   assert.equal(pencilAtRest(true), true);
   assert.equal(pencilAtRest(false), false);
 }, 60_000);
+
+test("in a side panel of any width the header and its row of tabs span the panel at the strip's inset, never the reading measure the views under them keep", () => {
+  for (const width of [900, 1400]) {
+    laid?.remove();
+    laid = layContainersAt({ "pull-request-header": width, "pull-request-tab": width });
+    document.body.innerHTML = [
+      '<div class="side-panel-content"><div class="file-view pull-request-tab">',
+      '<header class="pull-request-header"></header><div class="pull-request-tabs"></div>',
+      "</div></div>",
+    ].join("");
+    for (const selector of [".pull-request-header", ".pull-request-tabs"]) {
+      const style = getComputedStyle(document.querySelector(selector) ?? assert.fail(selector));
+      for (const side of [style.paddingLeft, style.paddingRight, style.paddingInline]) {
+        assert.doesNotMatch(side, /reading-room/u, `${selector} at ${width}px`);
+      }
+    }
+  }
+}, 30_000);
+
+test("a branch chip too narrow even for its name's kept end gives that end way from its start, so its last characters stand", () => {
+  laid?.remove();
+  laid = layContainersAt({ "pull-request-header": 312 });
+  document.body.innerHTML = [
+    '<span class="luke-chip-name" data-mono="true" data-cut="middle">',
+    '<span class="luke-chip-name-start">luke/pull-request-header-menu-</span>',
+    '<span class="luke-chip-name-end">and-pill</span></span>',
+  ].join("");
+  const end = getComputedStyle(
+    document.querySelector(".luke-chip-name-end") ?? assert.fail("the kept end stands"),
+  );
+  assert.deepEqual(
+    { overflow: end.overflow, justify: end.justifyContent, max: end.maxWidth },
+    { overflow: "hidden", justify: "flex-end", max: "100%" },
+  );
+}, 30_000);

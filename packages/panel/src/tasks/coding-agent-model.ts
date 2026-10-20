@@ -329,7 +329,7 @@ export function endLineReason(
     : FAILURE_REASON.OTHER;
 }
 
-/** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
+/** The statuses an agent may still write under, which is when it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
@@ -353,15 +353,6 @@ export function agentGlyphState(status: CodingAgentStatus): GlyphState {
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: CodingAgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
-}
-
-/**
- * Whether an agent's transcript is read on the held long-poll now: only
- * while its tab is on screen and the agent may still write. A tab hidden,
- * a task left, and an agent that ended each stop the reads.
- */
-export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
-  return input.shown && agentStillWriting(input.status);
 }
 
 /** What the Start button says while it cannot start: the task names no repository yet. */
@@ -547,10 +538,12 @@ function callFailure(text: string): Failure {
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
  * Settings; the repository given to Luke on GitHub; another repository
- * chosen; or the task moved to the workspace whose GitHub reaches it. A
- * service that said nothing more says the bare sentence, which Retry
- * answers, and so does an agent with no task wherever the remedy is pressed
- * on the task: only giving the repository to Luke on GitHub is not.
+ * chosen; the task moved to the workspace whose GitHub reaches it; or the
+ * member's own token replaced in Settings › Profile, or authorized on
+ * GitHub for the organization's SAML SSO. A service that said nothing more
+ * says the bare sentence, which Retry answers, and so does an agent with no
+ * task wherever the remedy is pressed on the task: only giving the
+ * repository to Luke on GitHub, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -562,6 +555,19 @@ function unreachedFailure(
       text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
+    };
+  }
+  // A token's remedy is the member's own, in Settings or on GitHub, so it needs no task.
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_INVALID) {
+    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "Your GitHub token was refused." };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_SSO) {
+    const [organization = unreached.repository] = unreached.repository.split("/");
+    return {
+      reason: FAILURE_REASON.AUTHORIZE_TOKEN,
+      text: `Your GitHub token isn't authorized for ${organization}'s SAML SSO.`,
+      organization,
+      authorizeUrl: unreached.authorizeUrl,
     };
   }
   if (unreached === undefined || taskId === null) {
@@ -605,8 +611,6 @@ function unreachedFailure(
       };
     case REPOSITORY_UNREACHED.NO_TOKEN:
       return callFailure("No GitHub token saved.");
-    case REPOSITORY_UNREACHED.TOKEN_INVALID:
-      return callFailure("Your GitHub token was refused.");
     case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
       return callFailure(`Your GitHub token can't access ${repository}.`);
     case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
@@ -1066,16 +1070,24 @@ export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
  * The agents with one agent's run read from its own transcript page or an
  * answer about it, where that knows better than the list: its status, and
  * the start a working line counts from, which moves with each turn and is
- * none while a message awaits one.
+ * none while a message awaits one. Where the agent already stands so, the
+ * agents are answered as they were, so a page that moved nothing redraws
+ * nothing that reads them.
  */
 export function withAgentRun(
   agents: readonly CodingAgentSummary[],
   agentId: string,
   run: AgentRun,
 ): readonly CodingAgentSummary[] {
+  const standing = agents.find((agent) => agent.id === agentId);
+  if (
+    standing === undefined ||
+    (standing.status === run.status && standing.runStartedAt === run.runStartedAt)
+  ) {
+    return agents;
+  }
   return agents.map((agent) => {
     if (agent.id !== agentId) return agent;
-    if (agent.status === run.status && agent.runStartedAt === run.runStartedAt) return agent;
     const { runStartedAt: _was, ...held } = agent;
     return run.runStartedAt === undefined
       ? { ...held, status: run.status }
@@ -1172,8 +1184,19 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
 
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
-  return message.parts.map(agentPart);
+  const read = partsRead.get(message);
+  if (read !== undefined) return read;
+  const parts = message.parts.map(agentPart);
+  partsRead.set(message, parts);
+  return parts;
 }
+
+/**
+ * Each message's parts as last read, by the message: a message is never
+ * changed in place (a page that rewrites one hands a new one), and a
+ * running agent's transcript reads every message's parts on every page.
+ */
+const partsRead = new WeakMap<CodingAgentMessage, readonly AgentPart[]>();
 
 /** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
 export function settledPlanEdits(messages: readonly CodingAgentMessage[]): number {
@@ -1774,7 +1797,7 @@ export function githubPath(name: string): string {
 /** Where the chip opens on GitHub: the pull request, or the branch compared against the repository's default where there is no pull request yet. */
 export function publishedUrl(published: CodingAgentPullRequestAnswer): string | undefined {
   if (published.pullRequest !== null) return published.pullRequest.url;
-  if (published.branch === null) return undefined;
+  if (published.branch === null || published.repository === null) return undefined;
   return `https://github.com/${published.repository}/compare/${githubPath(published.branch)}?expand=1`;
 }
 

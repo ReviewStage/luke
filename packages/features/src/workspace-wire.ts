@@ -1,5 +1,6 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { sniffImageType } from "./image-signature.js";
 import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
 import { countedNumber } from "./service-wire.js";
@@ -188,14 +189,14 @@ const workspacePhotoUrlSchema = EffectSchema.String.check(
 );
 
 /** The GitHub account a workspace's connected installation is on: its login, and whether the installation is active. */
-export const workspaceGithubSchema = EffectSchema.Struct({
+const workspaceGithubSchema = EffectSchema.Struct({
   login: EffectSchema.String,
   /** False where the installation was suspended or removed on GitHub: the workspace's repository work is refused there. */
   active: EffectSchema.Boolean,
 });
 
 /** One installation connected to a workspace: GitHub's id for it, the login of the account it is on, and whether it is active. */
-export const workspaceGithubInstallationSchema = EffectSchema.Struct({
+const workspaceGithubInstallationSchema = EffectSchema.Struct({
   installationId: EffectSchema.Number,
   login: EffectSchema.String,
   /** False where the installation was suspended or removed on GitHub: its repositories are out of reach. */
@@ -205,7 +206,7 @@ export const workspaceGithubInstallationSchema = EffectSchema.Struct({
 export type WorkspaceGithubInstallation = typeof workspaceGithubInstallationSchema.Type;
 
 /** A workspace's Linear connection: whether Connect still holds a grant for it; false once Linear refused it, which an owner or admin mends by connecting again. */
-export const workspaceLinearSchema = EffectSchema.Struct({
+const workspaceLinearSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
@@ -395,6 +396,13 @@ export const workspaceTransferSchema = EffectSchema.Struct({
 
 /** Leaving a workspace (POST), answered with the workspace left. */
 export const workspaceLeaveRequestSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+/** A repository added to a workspace on the caller's own GitHub token, or removed from it (`github-repositories-wire.ts`). */
+export const workspaceTokenRepositoryRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+  added: EffectSchema.Boolean,
+});
 
 /** The workspace the account left. */
 export const workspaceLeaveAnswerSchema = workspaceLeaveRequestSchema;

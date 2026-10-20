@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -15,6 +15,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
+import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -26,6 +27,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { AgentTranscriptLiveAnswer, TranscriptNowAnswer } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -42,11 +44,19 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
-import type { WireRecord } from "@luke/wire";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayEventKind,
+  type GatewayMethod,
+} from "@luke/gateway";
+import type { WireRecord, WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+import type { LiveClient } from "./live-follow.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -175,6 +185,7 @@ const OVERVIEW = {
 
 /** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
+const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
 
 /** What the service answers of a kept key: never the key. */
 const KEPT: ProviderKeySummary = {
@@ -219,10 +230,22 @@ const WAITING: AccountInboxEntry = {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
+/** A page with something on it, as the service answers a transcript read unless a test scripts another. */
+const SAID = {
+  messages: [
+    { id: "m-1", role: "assistant" as const, parts: [{ type: "text" as const, text: "Hi" }] },
+  ],
+  status: CODING_AGENT_STATUS.RUNNING,
+  title: null,
+};
+
 /** The service as a script, writing down every ask in the order it was made. */
 function fakeService() {
   const asked: string[] = [];
   let cursor = CODING_AGENT_CURSOR_START;
+  let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
+  // Each page read at once, in turn; the last stands once the others are read.
+  let pagesNow: readonly TranscriptNowAnswer[] = [];
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -254,20 +277,24 @@ function fakeService() {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
-    messages: (agentId, after, callId) =>
+    messagesNow: (agentId, after, callId) =>
       Effect.sync(() => {
         asked.push(
           callId === undefined
-            ? `messages:${agentId}:${after}`
-            : `worker:${agentId}:${callId}:${after}`,
+            ? `messages-now:${agentId}:${after}`
+            : `worker-now:${agentId}:${callId}:${after}`,
         );
+        const [page, ...rest] = pagesNow;
+        if (rest.length > 0) pagesNow = rest;
         cursor = "2:1";
-        return {
-          messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-          cursor,
-          status: CODING_AGENT_STATUS.RUNNING,
-          title: null,
-        };
+        return page ?? { ...SAID, cursor, holds: false };
+      }),
+    agentTranscriptLive: (agentId, callId, poll) =>
+      Effect.sync(() => {
+        asked.push(
+          `${poll === true ? "transcript-poll" : "transcript-live"}:${agentId}${callId === undefined ? "" : `:${callId}`}`,
+        );
+        return transcript ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     message: (agentId, request) =>
       Effect.sync(() => {
@@ -395,6 +422,21 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
+      }),
+    readGitHubToken: () =>
+      Effect.sync(() => {
+        asked.push("token");
+        return { token: null };
+      }),
+    saveGitHubToken: (save) =>
+      Effect.sync(() => {
+        asked.push(`save-token:${save.token === GITHUB_TOKEN ? "the token" : "another"}`);
+        return { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE };
+      }),
+    removeGitHubToken: () =>
+      Effect.sync(() => {
+        asked.push("remove-token");
+        return { token: null };
       }),
     readPlanTemplate: () =>
       Effect.sync(() => {
@@ -533,29 +575,117 @@ function fakeService() {
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
   };
-  return { client, asked };
+  return {
+    client,
+    asked,
+    /** What the service seals for following a transcript, or that the account reaches no such agent; none answers unanswered. */
+    sealTranscript: (
+      next: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined,
+    ) => {
+      transcript = next;
+    },
+    /** The pages the service answers read at once, in turn. */
+    pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
+      pagesNow = pages;
+    },
+  };
+}
+
+/** The host's clock, which an answer read live is stamped with. */
+const NOW = 1_800_000_100_000;
+
+/** A sealed statement as the service answers one, named by the part it follows. */
+function sealed(part: string, expiresAt = NOW + 60_000) {
+  return { capability: `capability-${part}`, queryFingerprint: `fingerprint-${part}`, expiresAt };
+}
+
+/**
+ * Realtime as a script: the address each client was opened at, each part's
+ * subscription by its capability, the seals each was renewed with, and a
+ * way to deliver rows to one or stop it for good.
+ */
+function fakeRealtime() {
+  const opened: string[] = [];
+  const closed: string[] = [];
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const renewed: string[] = [];
+  const open = (url: string): LiveClient => {
+    opened.push(url);
+    return {
+      subscribe: (query) => ({
+        onChange: (listener) => {
+          listeners.set(query.capability, listener);
+          return () => listeners.delete(query.capability);
+        },
+        renew: (next) => {
+          renewed.push(next.capability);
+          return Promise.resolve();
+        },
+        unsubscribe: () => void listeners.delete(query.capability),
+      }),
+      close: () => void closed.push(url),
+    };
+  };
+  return {
+    open,
+    opened,
+    closed,
+    renewed,
+    /** Rows delivered to the part's subscription, as Realtime's snapshot carries them. */
+    deliver: (part: string, data: readonly unknown[]) => {
+      const listener = listeners.get(`capability-${part}`);
+      assert.ok(listener, `no subscription to ${part}`);
+      listener({ status: "live", data });
+    },
+    fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
+    subscribed: () => [...listeners.keys()].toSorted(),
+  };
 }
 
 function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
   return Effect.gen(function* () {
     const service = fakeService();
+    const realtime = fakeRealtime();
+    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const composer = yield* composeCodingAgents({
-      kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
+      kernel: {
+        runMode: { sendsNetwork: options.sendsNetwork ?? true },
+        emit: (kind, payload) => void events.push({ kind, payload }),
+        now: () => NOW,
+      },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
+      openLive: realtime.open,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked };
+    /** Every followed transcript's page the host told, in order. */
+    const pages = () =>
+      events.flatMap((event) =>
+        event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.payload] : [],
+      );
+    return {
+      call,
+      pages,
+      asked: service.asked,
+      sealTranscript: service.sealTranscript,
+      pageNow: service.pageNow,
+      realtime,
+      reset: composer.reset,
+    };
   });
 }
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
-    const { call, asked } = yield* subject();
+    const { call, asked, sealTranscript } = yield* subject();
+    sealTranscript(SEALED_TRANSCRIPT);
 
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MODELS), { models: MODELS });
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ), {
@@ -859,8 +989,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
       `start:${TASK_ID}:press-1:default`,
-      `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
-      `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+      `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
@@ -950,5 +1080,160 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a GitHub token passes through to the service once and is never answered back, and a save the schema refuses is refused in words that hold no token",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+
+      const read = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_READ);
+      const saved = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: GITHUB_TOKEN });
+      const removed = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE);
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: `${GITHUB_TOKEN} spaced` }),
+      );
+
+      assert.deepEqual(read, { token: null });
+      assert.deepEqual(saved, { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE });
+      assert.deepEqual(removed, { token: null });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
+      assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
+    }),
+);
+
+/** Every step the follower has to take, taken: it runs on a fiber of its own. */
+const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
+
+const SEALED_TRANSCRIPT: AgentTranscriptLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    messages: sealed("messages"),
+    turns: sealed("turns"),
+    conversation: sealed("conversation"),
+    agent: sealed("agent"),
+    workers: sealed("workers"),
+  },
+};
+
+/** The transcript's statements as they stand: `seq` its newest message, `turns` how many it has opened. */
+function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, turns = 1) {
+  realtime.deliver("messages", [{ rows: seq, seq }]);
+  realtime.deliver("turns", [
+    { status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 },
+  ]);
+  realtime.deliver("conversation", [{ id: "conversation-1", title: null, revision: seq }]);
+  realtime.deliver("agent", [{ id: AGENT_ID, title: "Invites" }]);
+  realtime.deliver("workers", []);
+}
+
+/** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
+function pageNow(
+  cursor: string,
+  options: { holds: boolean; text?: string; status?: typeof CODING_AGENT_STATUS.RUNNING },
+): TranscriptNowAnswer {
+  return {
+    messages:
+      options.text === undefined
+        ? []
+        : [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text: options.text }] }],
+    cursor,
+    status: options.status ?? CODING_AGENT_STATUS.RUNNING,
+    title: "Invites",
+    holds: options.holds,
+  };
+}
+
+/** A page as the window is answered it: the service's word on whether it would have held left in the host. */
+function windowPage(page: TranscriptNowAnswer) {
+  const { holds: _holds, ...rest } = page;
+  return rest;
+}
+
+const FOLLOWED = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID } as const;
+
+it.effect(
+  "a followed transcript is told page by page from the start, the next at once after one that said something, then again only as its statements move or at the edge the service names; letting it go ends the telling",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, pages, sealTranscript, pageNow: script, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      const said = pageNow("1:0", { holds: false, text: "Reading the invites." });
+      const caught = { ...pageNow("1:0", { holds: true }), wakeIn: 3_000 };
+      script(said, caught);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
+      yield* settled;
+      assert.deepEqual(pages(), [
+        { transcript: FOLLOWED, page: windowPage(said) },
+        { transcript: FOLLOWED, page: windowPage(caught) },
+      ]);
+
+      // Rows landing read the page again; the edge the service named reads it once more.
+      transcriptRows(realtime, 1);
+      yield* settled;
+      assert.equal(pages().length, 3);
+      yield* TestClock.adjust("3 seconds");
+      yield* settled;
+      assert.equal(pages().length, 4);
+
+      const moved = pageNow("2:0", { holds: false, text: "Writing the expiry." });
+      const ended = pageNow("2:0", { holds: false });
+      script(moved, ended);
+      transcriptRows(realtime, 2);
+      yield* settled;
+      // Note that each part landing may move the statements, so the page past the last may be read more than once.
+      assert.deepEqual(pages()[4], { transcript: FOLLOWED, page: windowPage(moved) });
+      assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(ended) });
+      assert.deepEqual(asked.slice(0, 3), [
+        `transcript-live:${AGENT_ID}`,
+        `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+        `messages-now:${AGENT_ID}:1:0`,
+      ]);
+      assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:2:0`);
+      assert.ok(!JSON.stringify(pages()).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      const toldBefore = pages().length;
+      transcriptRows(realtime, 3);
+      yield* settled;
+      assert.equal(pages().length, toldBefore);
+    }),
+);
+
+it.effect(
+  "a followed transcript the account does not reach is told not found once; behind a closed gate it is told unanswered; and a sign-out lets every followed transcript go",
+  () =>
+    Effect.gen(function* () {
+      const worker = { ...FOLLOWED, callId: "call-7" };
+      const refused = yield* subject();
+      refused.sealTranscript({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, worker);
+      yield* settled;
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(refused.pages(), [
+        { transcript: worker, page: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const signedOut = yield* subject({ signedIn: false });
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(signedOut.pages(), [
+        { transcript: FOLLOWED, page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(signedOut.asked, []);
+
+      const followed = yield* subject();
+      followed.sealTranscript(SEALED_TRANSCRIPT);
+      followed.pageNow(pageNow("1:0", { holds: true }));
+      yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* followed.reset;
+      yield* settled;
+      assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
+      assert.equal(followed.pages().length, 1);
     }),
 );

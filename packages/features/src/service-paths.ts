@@ -14,11 +14,24 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
+   * Whether the signed-in account is an admin (GET), so a client can offer
+   * the admin dashboard; `account-wire.ts` declares the answer.
+   */
+  ACCOUNT_ACCESS: "/api/account/access",
+  /**
    * The account's own Anthropic and OpenAI API keys: read what they are
    * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
+  /**
+   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
+   * its kind. The answer is the provider keys' and never carries a token.
+   */
+  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
    * The Markdown the account's new tasks start from: read it (GET), or keep
    * one verbatim or go back to the default (PUT).
@@ -71,6 +84,10 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
+  /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
+  LIVE_TASK_BOARD: "/api/live/task-board",
+  /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
+  LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
@@ -204,6 +221,13 @@ export const HOSTED_SERVICE_PATH = {
    * `github-token-wire.ts` declares every body.
    */
   GITHUB_TOKEN: "/api/github/token",
+  /**
+   * The repositories members added to a workspace on their own GitHub
+   * tokens: read them for the workspace the query names (GET), or add or
+   * remove one (PUT), answered with them all as they then stand.
+   * `github-repositories-wire.ts` declares the answer.
+   */
+  GITHUB_TOKEN_REPOSITORIES: "/api/github/token-repositories",
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**

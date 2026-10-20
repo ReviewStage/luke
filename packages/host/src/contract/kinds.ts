@@ -30,6 +30,16 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /**
+   * Settings › Integrations › GitHub: the member's own classic GitHub
+   * personal access token read as its login, hint, and status, saved, and
+   * removed. The save's payload carries the token from the renderer once,
+   * on its way to the service; no answer carries one back, and nothing on
+   * the way keeps it.
+   */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
+  /**
    * Settings › Plan template: the Markdown the account's new tasks start
    * from, read as the page opens, and kept as the developer pauses or reset
    * to the default with null. Each answers the template as the service then
@@ -86,6 +96,12 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   CODING_AGENTS_START: "codingAgents.start",
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, a worker's, or a task's planning worker's,
+   * followed while the window holds the stream open: its pages, the first
+   * from the start and each later one what moved past the last.
+   */
+  CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
@@ -266,6 +282,8 @@ export const TASKS_ACT_KIND = {
   WEB_OPEN: "web.open",
   /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
   GITHUB_CONNECT: "github.connect",
+  /** The admin dashboard, opened in the default browser on the service's own origin, an address the host names and never one a window hands in. The service's gate decides who reads it. */
+  ADMIN_OPEN: "admin.open",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
   /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
@@ -421,6 +439,8 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_LEAVE: "workspace.leave",
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
+  WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
+  WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
 } as const;
 
 /**

@@ -3,8 +3,7 @@
 `@luke/panel` is the panel every client mounts: the desktop's panel window
 mounts `App` from here, and the web will mount the same. It may draw with the
 DOM (`packages/AGENTS.md`), and it reaches no shell: no Electron, no
-`window.luke`, and no alias of the desktop's, which `repository-checks.sh`
-refuses here. What only a shell can do, its root installs before anything is
+`window.luke`, and no alias of the desktop's. What only a shell can do, its root installs before anything is
 drawn: the bridge to the host (`app-bridge.ts`), what its platform answers
 (`app-platform.ts`), and the bundles only it can reach (`shell-bundles.ts`;
 the Factory's scene through `SideBundlesContext`). The panel reads each through
@@ -18,11 +17,13 @@ importing a package for one string constant resolves its whole export graph,
 ## One state channel in, one act channel out
 
 State arrives on `app:state` alone, read through `use-app-state.ts` and never
-subscribed to twice. Read it with `useAppState`, or `appStateNow` for a callback
-that cannot wait a render — never the registry directly, so a hook and a callback
-cannot disagree. The channels beside it carry events rather than state: a one-shot
-to a named receiver a late subscriber must not receive, or a reading that expires
-before the next version could carry it.
+subscribed to twice. Read it with `useAppSlice` and the narrowest slice a surface
+draws from (`APP_SLICE`, or an atom over one), so a patch to one slice draws only
+its readers; `useAppState` only where the whole document is handed on; or
+`appStateNow` for a callback that cannot wait a render — never the registry
+directly, so a hook and a callback cannot disagree. The channels beside it carry
+events rather than state: a one-shot to a named receiver a late subscriber must
+not receive, or a reading that expires before the next version could carry it.
 
 The runtime beside that registry is **the bundle's one Effect edge**. Work that is
 a fiber of its own runs under the services it was built over, read through
@@ -63,7 +64,9 @@ it (the window under it is the shell's: `apps/desktop/src/renderer/AGENTS.md`):
 
 ## Confirms
 
-Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. In the
+Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. The one
+exception is merging a pull request from its merge control, which acts on the press,
+as GitHub-style review tools do; removing one from a merge queue still asks. In the
 desktop window it asks through `<ConfirmDialog>`, a modal over the window held by
 `useConfirmDialog`: title, what goes, Cancel focused and the act in red.
 Settings asks the same way, from a row's button or its ⋯ menu. A question does not
@@ -74,9 +77,9 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 
 ## Brand artwork
 
-`repository-checks.sh` runs `packages/brand/scripts/generate-brand-assets.mjs --check` and fails
-on drift, so the generated outputs cannot be hand-edited. What the check does not
-say is why the app draws the face rather than loading the SVGs: it needs
+The generated outputs are regenerated from `packages/brand`'s sources
+(`generate-brand-assets.mjs`, whose `--check` reports drift when run by hand),
+never hand-edited. The app draws the face rather than loading the SVGs because it needs
 `currentColor` and CSS animation, and `@luke/ui`'s `--luke-face-motion` is what holds every loop
 still for a capture run and for reduced motion. SMIL answers to neither.
 

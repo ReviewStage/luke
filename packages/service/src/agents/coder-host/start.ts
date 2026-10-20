@@ -10,7 +10,12 @@ import {
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
-import { beginTaskWork, readTask, readTaskWorkspace } from "@luke/database/models/task-store";
+import {
+  assignUnassignedTask,
+  beginTaskWork,
+  readTask,
+  readTaskWorkspace,
+} from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
@@ -75,9 +80,9 @@ import {
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
-  type EveSessions,
   type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
 import { fenceable } from "../fenced-text.js";
@@ -129,7 +134,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * first (`issueLinksBrief`). Once eve has taken an agent on a task, the
  * task moves into progress from the backlog or to do and never back
  * (`beginTaskWork`), a move that fails logged rather than the Start's
- * failure. An agent
+ * failure; a Start by hand on a task no one is assigned to assigns it to
+ * its starter (`assignUnassignedTask`), as that fails logged too. An agent
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
@@ -428,13 +434,19 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** Where a Start through this path puts its agent: handed the plan or a prompt, never started blank. */
+type HandedPlace = Exclude<
+  CodingAgentPlace,
+  { readonly planSnapshot: null; readonly prompt: null }
+>;
+
 /** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string;
   readonly task: Task | undefined;
   readonly mover: string | undefined;
-  readonly place: CodingAgentPlace;
+  readonly place: HandedPlace;
   /** What the new agent keeps of the agent it was started from; none for one started afresh. */
   readonly startedFrom: StoredStartedFrom | undefined;
 }
@@ -700,7 +712,7 @@ function continuedTitle(source: string | null): string | undefined {
  * not be stopped is logged, since the new agent stands either way.
  */
 const stoppedSource = (
-  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   source: CodingAgent,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
@@ -711,7 +723,7 @@ const stoppedSource = (
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
-  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
@@ -855,6 +867,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       Effect.asVoid,
       Effect.catch(logStoreFailure),
     );
+    // Its starter is on a task no one was, where they started it by hand; an automation's run assigns no one.
+    if (ask.automationOrigin === undefined) {
+      yield* assignUnassignedTask(userId, landing.task.id).pipe(
+        Effect.asVoid,
+        Effect.catch(logStoreFailure),
+      );
+    }
   }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(
@@ -899,7 +918,7 @@ export interface RequestedStart {
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   taskId: string,
   request: CodingAgentStartRequest,

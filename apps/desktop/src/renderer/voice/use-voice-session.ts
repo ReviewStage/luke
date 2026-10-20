@@ -5,13 +5,18 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { rendererRegistry, rendererServicesNow } from "@luke/panel/renderer-runtime";
-import { appSettingsNow, appStateNow, useAppState } from "@luke/panel/use-app-state";
+import {
+  APP_SETTINGS_VIEW,
+  APP_SLICE,
+  appSettingsNow,
+  appStateNow,
+  useAppSlice,
+} from "@luke/panel/use-app-state";
 import { createBrowserSilence } from "@luke/panel/voice/live-peer";
 import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
 import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
-import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_STATUS } from "@luke/voice/avatar";
+import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { hostedVoiceUnavailableNote } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,
@@ -46,6 +51,12 @@ const remoteStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<Media
 );
 const localStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<MediaStream | undefined>(
   undefined,
+);
+
+/** The avatar's status as the panel reported it, which redraws the session only as it moves, not as the words do. */
+const avatarStatusAtom: Atom.Atom<AvatarStatus> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.avatar.status ?? AVATAR_STATUS.OFF,
 );
 
 /** One of the two atoms as the slot a call shows its stream in and reads back before clearing it. */
@@ -195,21 +206,21 @@ export function useVoiceSession(
    * microphone's grant — on the one channel main holds it on, handed over
    * whole whenever it moves.
    */
-  const state = useAppState();
+  const settings = useAppSlice(APP_SETTINGS_VIEW);
+  const audio = useAppSlice(APP_SLICE.AUDIO);
   useEffect(() => {
-    const settings = state?.settings ? appSettingsView(state.settings) : undefined;
     const surroundings: LiveVoiceSurroundings = {
       voiceAvailable: settings?.voiceAvailable,
       captionsEnabled: settings?.voiceCaptions === true,
-      outputSilent: outputSilent(state?.audio.outputAudio),
-      microphoneGranted: state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED,
+      outputSilent: outputSilent(audio?.outputAudio),
+      microphoneGranted: audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
     };
     orchestrator.surround(surroundings);
-  }, [orchestrator, state]);
+  }, [orchestrator, settings, audio]);
 
   // The avatar's status as the panel reported it, for the call to hand
   // Luke's voice over to it, or take it back.
-  const avatarStatus = state?.voice.avatar.status ?? AVATAR_STATUS.OFF;
+  const avatarStatus = useAppSlice(avatarStatusAtom);
   useEffect(() => {
     callRef.current?.reportAvatarStatus(avatarStatus);
   }, [avatarStatus]);

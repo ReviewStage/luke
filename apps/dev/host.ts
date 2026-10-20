@@ -2,11 +2,14 @@ import { hostTurnId } from "@luke/database/models/ids";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import { environment } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
+import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
+  type BoardTool,
   type ChatCall,
   type CoderHost,
   type CoderSessionPromptRecord,
@@ -28,8 +31,12 @@ import {
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
+  type RepositoryTool,
+  repositoryToolsOf,
+  type SpokenTurnTool,
   type TaskTool,
   taskToolsOf,
+  turnToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
@@ -38,10 +45,12 @@ import {
   RUN_ON_MAC_TOOL,
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
+import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { hostedEnvironment } from "@luke/service/environment";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
+import { showCodeRejected } from "@luke/service/tasks/show-code";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -53,7 +62,7 @@ import {
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { defineTool } from "eve/tools";
+import { defineTool, type ToolContext } from "eve/tools";
 import { runAgent } from "./runtime.js";
 
 /**
@@ -75,7 +84,7 @@ export const seams: CoderHostSeams = Effect.runSync(
 
 export const host: CoderHost = coderHost(seams);
 
-/** What a model resolver reads of eve's `step.started`, which eve hands it unparsed: eve's id for the turn the step is of. */
+/** What a resolver reads of eve's `step.started` or `turn.started`, which eve hands it unparsed: eve's id for the turn the step is of, or the turn opening. */
 const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.String }) });
 
 /**
@@ -86,7 +95,7 @@ const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.S
  */
 export const readStepStarted = Schema.decodeUnknownSync(StepStartedSchema);
 
-/** The store's id for the turn a `step.started` opens a step of in the session. */
+/** The store's id for the turn a `step.started` opens a step of in the session, or a `turn.started` opens. */
 export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.Type): string {
   return hostTurnId(sessionId, started.data.turnId);
 }
@@ -164,11 +173,11 @@ export function relayChildEvent(
 }
 
 /**
- * The plan's tools the session is offered for the turn it opens, for those
+ * The task's tools the session is offered for the turn it opens, for those
  * tools' own files (`taskToolsOf`): none for a session the host does not
  * admit or whose conversation is no agent's.
  */
-export function offeredPlanTools(
+export function offeredTaskTools(
   auth: SessionAuth,
   sessionId: string,
 ): Promise<ReadonlySet<TaskTool>> {
@@ -179,6 +188,55 @@ export function offeredPlanTools(
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<TaskTool>();
       return taskToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The call's own tools the session is offered for the kind of turn it opens,
+ * for those tools' own files (`turnToolsOf`): all three on a spoken turn,
+ * none on a typed one. Note that it is read off the request alone, with no
+ * admission, because the tools reach nothing when they run: the journal
+ * carries their calls to the voice, and a session the host does not admit
+ * runs no model step to call them from.
+ */
+export function offeredTurnTools(auth: SessionAuth): ReadonlySet<SpokenTurnTool> {
+  return turnToolsOf(host.turnKind(auth));
+}
+
+/**
+ * The repository's tools the session is offered for the turn it opens, for
+ * those tools' own files (`repositoryToolsOf`): none for a session the host
+ * does not admit, whose conversation is no agent's, or whose agent works in
+ * no repository.
+ */
+export function offeredRepositoryTools(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<ReadonlySet<RepositoryTool>> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return new Set<RepositoryTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<RepositoryTool>();
+      return repositoryToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The conversation so far, for the session's own `instructions/seed.ts` as
+ * it starts: the words already said over a conversation whose last session
+ * retired (`CoderHost.seed`), or nothing for a session the host does not
+ * admit or a conversation with nothing else said.
+ */
+export function sessionSeed(auth: SessionAuth, sessionId: string): Promise<string | undefined> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admitStarting(auth, sessionId);
+      if (Result.isFailure(admitted)) return undefined;
+      return yield* host.seed(admitted.success);
     }),
   );
 }
@@ -327,6 +385,68 @@ export function runShowPageTool(
       if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
       return yield* host.showPage(admitted.success, input, sandbox);
     }),
+  );
+}
+
+/** One `show_code` call run under the agent's session, its lines read from the checkout through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+export function runShowCodeTool(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+  sandbox: () => Promise<RepositorySandbox>,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return showCodeRejected(admitted.failure);
+      return yield* host.showCode(admitted.success, input, sandbox);
+    }),
+  );
+}
+
+/** One call of the whiteboard's tools run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
+export function runBoardTool(
+  auth: SessionAuth,
+  sessionId: string,
+  tool: BoardTool,
+  input: UnparsedWireValue,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
+      }
+      return yield* host.board(admitted.success, tool, input);
+    }),
+  );
+}
+
+/**
+ * The session's checkout deepened before a call that writes runs
+ * (`packages/service/src/agents/coder-host/deepen.ts`), for the tools that
+ * write: the write token set at the sandbox's firewall, in the shape
+ * `credentialPolicy` gives it, and the rest of the history fetched through
+ * it, where no deepen finished in the sandbox yet; nothing where one did. A
+ * deepen that fails fails the call that asked for it, in the host's words,
+ * and the next write runs it again.
+ */
+export async function deepenCheckout(ctx: ToolContext): Promise<void> {
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
+  await runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+      if (Result.isFailure(admitted)) {
+        return yield* Effect.fail(new CheckoutRefused({ reason: admitted.failure }));
+      }
+      yield* host.deepen(admitted.success, sandbox);
+    }).pipe(
+      // A store failure by its kind alone, since its message may name a statement.
+      Effect.mapError(
+        (failure) => new Error(failure._tag === "CheckoutRefused" ? failure.reason : failure._tag),
+      ),
+    ),
   );
 }
 

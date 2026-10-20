@@ -14,57 +14,73 @@ import {
   type PullRequestAction,
 } from "@luke/features/pull-request-write-wire";
 import {
-  AnchoredPopover,
+  BADGE_TONE,
+  Badge,
+  type BadgeTone,
   BUTTON_VARIANT,
   Button,
   type ButtonVariant,
-  CHOICE_LOOK,
-  ChoiceList,
-  type ChoiceOption,
   ConfirmDialog,
   DIALOG_TONE,
-  POPOVER_ALIGN,
+  type DialogQuestion,
+  SPINNER_SIZE,
+  SpinnerRing,
+  SplitButton,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
-import { ChevronDownIcon, GitMergeIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  CircleDotIcon,
+  CircleXIcon,
+  ClockIcon,
+  GitMergeIcon,
+  TriangleAlertIcon,
+  UserRoundIcon,
+} from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { readKept, writeKept } from "../desktop/folded-groups.js";
-import { PopoverPanel } from "../popover-panel.js";
+import { Tooltip } from "../tooltip.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**
- * merge-box.tsx -- the merge control at the end of an open pull request's title row: one button saying what can happen now, coloured by where the merge stands, and the panel it opens, holding GitHub's sentence and the presses stage-cli's merge status offers.
+ * merge-box.tsx -- the merge control at the end of an open pull request's title row, as stage-cli's merge status is: a chip saying what holds the merge up, and beside it the one press that may be made now.
  *
- * The button names the one thing that may be done from where the pull
- * request stands (`mergeActionOf`), or what holds the merge up where nothing
- * may: Merge, Auto-merge, Merge when ready, Queued #N, Auto-merge on,
- * Conflicts, Review required, Checks failing, Changes requested, Draft. A
- * narrow header draws its glyph and a shorter word (`short`), its name
- * still the whole. It opens a panel under it whose title is GitHub's own
- * sentence for the merge, whose body says the mergeability beside it where
- * that differs, and whose foot holds the press, each a change the service
- * makes on GitHub as the member pressing it (`pull-request-writes.tsx`):
+ * The chip is a status badge at the pill's size, in the tone of where the
+ * merge stands, its glyph and its word: Checking, Conflicts, Behind,
+ * Review required, Changes requested, Checks failing, Checks running,
+ * Blocked, Ready, Auto-merge on. Its hint, and a reader, have
+ * GitHub's fuller sentence ("A required review is missing"). It stands only
+ * where it says what the press does not: a pull request ready to merge
+ * shows the press alone, a draft nothing, its pill saying Draft, and one in
+ * the merge queue only Remove from queue, its pill saying Queued and its
+ * place, as stage-cli's does. A narrow header draws the chip's glyph alone,
+ * its word still read.
  *
- * - in the merge queue, Remove from queue;
- * - with auto-merge on, Disable auto-merge;
+ * The press is the one thing that may be done from where the pull request
+ * stands (`mergeActionOf`), each a change the service makes on GitHub as
+ * the member pressing it (`pull-request-writes.tsx`):
+ *
+ * - ready to merge, the method chosen as its words ("Squash and merge"), a
+ *   split button whose chevron chooses among the methods the repository
+ *   allows, merging at once, as stage-cli's does;
  * - on a base merged through a merge queue, Merge when ready, which turns
  *   auto-merge on with no method, so GitHub adds it to the queue once it is
  *   ready, as `gh pr merge --auto` does;
- * - ready to merge, Merge by the method chosen among those the repository
- *   allows, asked first since a merge cannot be undone from here;
  * - with checks still running and auto-merge allowed, Enable auto-merge by
- *   the method chosen.
+ *   the method chosen, its chevron choosing it too;
+ * - with auto-merge on, Disable auto-merge;
+ * - in the merge queue, Remove from queue, asked first, since leaving the
+ *   queue may hold up the pull requests behind it.
  *
- * The method is chosen in the panel, over the press, where the repository
- * allows more than one, and kept per repository across launches, in this
- * window's own storage as the sidebar's folds are (`folded-groups.ts`); the
- * first the repository allows stands until one is chosen. A merge and
- * auto-merge name the head the overview read, so GitHub refuses either
- * against a head pushed since. A press closes the panel; while its change is
- * out the button stands busy, and where GitHub refuses it the tab's write
- * note says why, as it says the pill's.
+ * The method is kept per repository across launches, in this window's own
+ * storage as the sidebar's folds are (`folded-groups.ts`); the first the
+ * repository allows stands until one is chosen. A merge and auto-merge name
+ * the head the overview read, so GitHub refuses either against a head
+ * pushed since. While a change is out the press stands busy, and where
+ * GitHub refuses it the tab's write note says why, in GitHub's words.
  */
 
 /** What the control offers from where the pull request stands. */
@@ -78,7 +94,14 @@ const MERGE_ACTION = {
 
 type MergeAction = (typeof MERGE_ACTION)[keyof typeof MERGE_ACTION];
 
-/** Each method's press, as GitHub words it. */
+/** Each method as the press says it, as GitHub's own merge button does. */
+const PRESS_WORDS = {
+  [MERGE_METHOD.MERGE]: "Merge pull request",
+  [MERGE_METHOD.SQUASH]: "Squash and merge",
+  [MERGE_METHOD.REBASE]: "Rebase and merge",
+} as const satisfies Record<MergeMethod, string>;
+
+/** Each method as the chevron's menu offers it, as GitHub's own does. */
 const METHOD_WORDS = {
   [MERGE_METHOD.MERGE]: "Create a merge commit",
   [MERGE_METHOD.SQUASH]: "Squash and merge",
@@ -92,20 +115,19 @@ const METHOD_NOUNS = {
   [MERGE_METHOD.REBASE]: "rebase",
 } as const satisfies Record<MergeMethod, string>;
 
-/** The panel's own words. */
+/** The control's own words. */
 const BOX_WORDS = {
   MERGE_WHEN_READY: "Merge when ready",
   ENABLE_AUTO_MERGE: "Enable auto-merge",
   DISABLE_AUTO_MERGE: "Disable auto-merge",
   DEQUEUE: "Remove from queue",
   CHOOSE_METHOD: "Choose how to merge",
-  CLOSE: "Close",
   queued: (position: number) => `#${position} in the merge queue`,
   autoMerge: (method: MergeMethod | null) =>
     method === null ? "Auto-merge is on" : `Auto-merge is on (${METHOD_NOUNS[method]})`,
 } as const;
 
-/** What the button says while a change it sent is out. */
+/** What the press says while a change it sent is out. */
 const BUSY_WORDS = {
   [PULL_REQUEST_ACTION.MERGE]: "Merging",
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Turning on auto-merge",
@@ -165,81 +187,24 @@ function mergeWords(merge: MergeState, base: string): string {
   }
 }
 
-/** The control's face: its words, the shorter ones a narrow header draws, and its look. */
-interface ControlFace {
-  readonly label: string;
-  readonly short: string;
-  readonly variant: ButtonVariant;
-}
-
-function face(label: string, short: string, variant: ButtonVariant): ControlFace {
-  return { label, short, variant };
-}
-
-/** What holds a merge up where nothing may be pressed, quiet: what GitHub says it is blocked on, else where it stands. */
-function heldFace(merge: MergeState, merging: PullRequestMerging | undefined): ControlFace {
-  const quiet = BUTTON_VARIANT.OUTLINE;
-  if (merge === MERGE_STATE.BLOCKED) {
-    if (merging?.review === REVIEW_DECISION.CHANGES_REQUESTED) {
-      return face("Changes requested", "Changes", quiet);
-    }
-    if (merging?.review === REVIEW_DECISION.REVIEW_REQUIRED) {
-      return face("Review required", "Review", quiet);
-    }
-    if (merging?.checks === CHECK_SUMMARY.FAILING) return face("Checks failing", "Failing", quiet);
-    if (merging?.checks === CHECK_SUMMARY.PENDING) return face("Checks running", "Running", quiet);
-    return face("Blocked", "Blocked", quiet);
-  }
-  if (merge === MERGE_STATE.BEHIND) return face("Out of date", "Behind", quiet);
-  if (merge === MERGE_STATE.UNKNOWN) return face("Checking", "Checking", quiet);
-  return face("Ready", "Ready", quiet);
-}
-
-/** The control's face for where the pull request stands and what it offers. */
-function faceOf(pullRequest: CodingAgentOverviewPullRequest, action: MergeAction | undefined) {
-  const { merge, merging } = pullRequest;
-  const queued = merging?.queued ?? null;
-  if (queued !== null) {
-    return face(`Queued #${queued.position}`, `#${queued.position}`, BUTTON_VARIANT.WORKING_TINT);
-  }
-  if ((merging?.autoMerge ?? null) !== null) {
-    return face("Auto-merge on", "Auto-merge", BUTTON_VARIANT.WORKING_TINT);
-  }
-  if (pullRequest.state === PULL_REQUEST_STATE.DRAFT || merge === MERGE_STATE.DRAFT) {
-    return face("Draft", "Draft", BUTTON_VARIANT.OUTLINE);
-  }
-  if (merge === MERGE_STATE.CONFLICTS)
-    return face("Conflicts", "Conflicts", BUTTON_VARIANT.DANGER_TINT);
-  if (action === MERGE_ACTION.MERGE) return face("Merge", "Merge", BUTTON_VARIANT.PRIMARY);
-  if (action === MERGE_ACTION.MERGE_WHEN_READY) {
-    return face(BOX_WORDS.MERGE_WHEN_READY, "When ready", BUTTON_VARIANT.PRIMARY);
-  }
-  if (action === MERGE_ACTION.ENABLE_AUTO_MERGE) {
-    return face("Auto-merge", "Auto", BUTTON_VARIANT.OUTLINE);
-  }
-  return heldFace(merge, merging);
-}
-
-/** GitHub's sentence for the merge, the panel's title, and the mergeability under it where that says something else. */
-interface MergeSentence {
-  readonly title: string;
-  readonly words: string | undefined;
-}
-
-/** The sentence for where the pull request stands. */
-function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): MergeSentence {
+/**
+ * GitHub's whole sentence for the merge, as the chip's hint and a reader
+ * have it: what it waits on, or where the queue or auto-merge has it,
+ * then the mergeability beside it where that says something else.
+ */
+function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): string {
   const { merge, merging } = pullRequest;
   const line = mergeWords(merge, pullRequest.base);
   const standing = (merge === MERGE_STATE.BLOCKED ? blockedWords(merging) : undefined) ?? line;
   const queued = merging?.queued ?? null;
   const autoMerge = merging?.autoMerge ?? null;
-  const title =
+  const lead =
     queued !== null
       ? BOX_WORDS.queued(queued.position)
       : autoMerge !== null
         ? BOX_WORDS.autoMerge(autoMerge.method)
-        : standing;
-  return { title, words: title === standing ? undefined : standing };
+        : undefined;
+  return lead === undefined ? standing : `${lead}. ${standing}`;
 }
 
 /** Where the method chosen is kept, by repository. */
@@ -266,94 +231,191 @@ function useMergeMethod(
   return [method, choose];
 }
 
-/** The press the panel's foot offers for the action, by the method chosen where it takes one. */
-interface PanelPress {
+/** The chip's face: its word, its tone, and its glyph. */
+interface ChipFace {
   readonly label: string;
-  readonly variant: ButtonVariant;
-  readonly onPress: () => void;
+  readonly tone: BadgeTone;
+  readonly icon: ReactNode;
+}
+
+/** Each chip's glyph, saying its state again beside its word. */
+const CHIP_GLYPHS = {
+  CHECKING: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
+  HELD: <CircleXIcon aria-hidden="true" />,
+  BEHIND: <TriangleAlertIcon aria-hidden="true" />,
+  REVIEW: <UserRoundIcon aria-hidden="true" />,
+  RUNNING: <CircleDotIcon aria-hidden="true" />,
+  WAITING: <ClockIcon aria-hidden="true" />,
+  READY: <GitMergeIcon aria-hidden="true" />,
+} as const;
+
+function chip(label: string, tone: BadgeTone, icon: ReactNode): ChipFace {
+  return { label, tone, icon };
+}
+
+/** What a merge GitHub says is blocked is held up by, as the chip says it. */
+function blockedChip(merging: PullRequestMerging | undefined): ChipFace {
+  if (merging?.review === REVIEW_DECISION.CHANGES_REQUESTED) {
+    return chip("Changes requested", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+  }
+  if (merging?.review === REVIEW_DECISION.REVIEW_REQUIRED) {
+    return chip("Review required", BADGE_TONE.ATTENTION, CHIP_GLYPHS.REVIEW);
+  }
+  if (merging?.checks === CHECK_SUMMARY.FAILING) {
+    return chip("Checks failing", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+  }
+  if (merging?.checks === CHECK_SUMMARY.PENDING) {
+    return chip("Checks running", BADGE_TONE.WORKING, CHIP_GLYPHS.RUNNING);
+  }
+  return chip("Blocked", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
 }
 
 /**
- * The panel the control opens: GitHub's sentence as its title, the
- * mergeability beside it where that differs, the methods to choose among
- * where the press merges by one and the repository allows more than one,
- * and the press. Escape or its × closes it, and so does focus leaving it.
+ * The chip for where the pull request stands and what the press offers, or
+ * none where it would only say what the press or the pill already does: a
+ * merge ready and offered, a draft, or one in the merge queue.
  */
-function MergePanel({
-  id,
-  pullRequest,
-  methods,
-  method,
-  press,
-  busy,
-  onChoose,
-  onClose,
-  onLeave,
-}: {
-  id: string;
-  pullRequest: CodingAgentOverviewPullRequest;
-  /** The methods the press may merge by; none where it merges by none. */
-  methods: readonly MergeMethod[];
-  method: MergeMethod | undefined;
-  press: PanelPress | undefined;
-  busy: boolean;
-  onChoose: (method: MergeMethod) => void;
-  onClose: () => void;
-  onLeave: (left: EventTarget | null) => void;
-}): React.JSX.Element {
-  const pressRef = useRef<HTMLButtonElement>(null);
-  const { title, words } = sentenceOf(pullRequest);
-  const options: ChoiceOption<MergeMethod>[] = methods.map((each) => ({
-    value: each,
-    label: METHOD_WORDS[each],
-  }));
+function chipOf(
+  pullRequest: CodingAgentOverviewPullRequest,
+  action: MergeAction | undefined,
+): ChipFace | undefined {
+  const { merge, merging } = pullRequest;
+  if ((merging?.queued ?? null) !== null) return undefined;
+  if ((merging?.autoMerge ?? null) !== null) {
+    return chip("Auto-merge on", BADGE_TONE.WORKING, CHIP_GLYPHS.WAITING);
+  }
+  if (pullRequest.state === PULL_REQUEST_STATE.DRAFT || merge === MERGE_STATE.DRAFT) {
+    return undefined;
+  }
+  switch (merge) {
+    case MERGE_STATE.UNKNOWN:
+      return chip("Checking", BADGE_TONE.NEUTRAL, CHIP_GLYPHS.CHECKING);
+    case MERGE_STATE.CONFLICTS:
+      return chip("Conflicts", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+    case MERGE_STATE.BEHIND:
+      return chip("Behind", BADGE_TONE.ATTENTION, CHIP_GLYPHS.BEHIND);
+    case MERGE_STATE.BLOCKED:
+      return blockedChip(merging);
+    default:
+      return action === MERGE_ACTION.MERGE || action === MERGE_ACTION.MERGE_WHEN_READY
+        ? undefined
+        : chip("Ready", BADGE_TONE.COMPLETE, CHIP_GLYPHS.READY);
+  }
+}
+
+/** The chip: its glyph and word in its tone, GitHub's sentence in its hint and for a reader. */
+function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): React.JSX.Element {
   return (
-    <PopoverPanel
-      id={id}
-      title={title}
-      closeLabel={BOX_WORDS.CLOSE}
-      initialFocus={press === undefined ? undefined : pressRef}
-      onDismiss={onClose}
-      onLeave={onLeave}
-    >
-      {words === undefined ? null : <p className="merge-panel-words">{words}</p>}
-      {options.length < 2 || method === undefined ? null : (
-        <ChoiceList<MergeMethod>
-          legend={BOX_WORDS.CHOOSE_METHOD}
-          look={CHOICE_LOOK.MARKED}
-          options={options}
-          value={[method]}
-          disabled={busy}
-          onChange={([next]) => {
-            if (next !== undefined) onChoose(next);
-          }}
-        />
-      )}
-      {press === undefined ? null : (
-        <div className="merge-panel-foot">
-          <Button
-            ref={pressRef}
-            variant={press.variant}
-            icon={
-              press.variant === BUTTON_VARIANT.PRIMARY ? (
-                <GitMergeIcon aria-hidden="true" />
-              ) : undefined
-            }
-            disabled={busy}
-            onClick={press.onPress}
-          >
-            {press.label}
-          </Button>
-        </div>
-      )}
-    </PopoverPanel>
+    <Tooltip label={sentence}>
+      <span className="merge-chip">
+        <Badge tone={face.tone} icon={face.icon}>
+          {face.label}
+        </Badge>
+        <span className="visually-hidden">{`: ${sentence}`}</span>
+      </span>
+    </Tooltip>
   );
 }
 
+/** The chevron's menu of the methods the repository allows, the one chosen checked. */
+function methodItems(
+  methods: readonly MergeMethod[],
+  method: MergeMethod | undefined,
+  busy: boolean,
+  choose: (method: MergeMethod) => void,
+): readonly MenuAction[] {
+  return methods.map((each) => ({
+    label: METHOD_WORDS[each],
+    checked: each === method,
+    disabled: busy,
+    onSelect: () => choose(each),
+  }));
+}
+
+/** A press as `Button` takes it busy: the ring and what it is doing, while its own change is out. */
+function busyProps(busyLabel: string | undefined) {
+  return busyLabel === undefined ? {} : { busy: true, busyLabel };
+}
+
+/**
+ * A press by the method chosen: a split button whose chevron opens the
+ * methods the repository allows, the chosen one checked, where it allows
+ * more than one; else the press alone.
+ */
+function MethodPress({
+  variant,
+  words,
+  methods,
+  method,
+  busy,
+  busyLabel,
+  onChoose,
+  onPress,
+}: {
+  variant: ButtonVariant;
+  words: string;
+  methods: readonly MergeMethod[];
+  method: MergeMethod | undefined;
+  /** Whether any change to the pull request is out. */
+  busy: boolean;
+  /** What the press says while its own change is out. */
+  busyLabel: string | undefined;
+  onChoose: (method: MergeMethod) => void;
+  onPress: () => void;
+}): React.JSX.Element {
+  const menu = useMenu(methods.length > 1);
+  const icon = variant === BUTTON_VARIANT.PRIMARY ? <GitMergeIcon aria-hidden="true" /> : undefined;
+  if (methods.length < 2) {
+    return (
+      <Button
+        variant={variant}
+        icon={icon}
+        disabled={busy && busyLabel === undefined}
+        onClick={onPress}
+        {...busyProps(busyLabel)}
+      >
+        {words}
+      </Button>
+    );
+  }
+  return (
+    <>
+      <SplitButton
+        variant={variant}
+        icon={icon}
+        disabled={busy && busyLabel === undefined}
+        busy={busyLabel}
+        onClick={onPress}
+        menu={{ label: BOX_WORDS.CHOOSE_METHOD, ...menu.trigger() }}
+      >
+        {words}
+      </SplitButton>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={BOX_WORDS.CHOOSE_METHOD}
+          menu={menu.drawn}
+          groups={[methodItems(methods, method, busy, onChoose)]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** The question Remove from queue asks first, as stage-cli's does. */
+const DEQUEUE_QUESTION: DialogQuestion = {
+  title: "Remove from the merge queue?",
+  body: "Removing this pull request from the queue could impact other pull requests in the queue.",
+  verb: BOX_WORDS.DEQUEUE,
+  running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
+  tone: DIALOG_TONE.DANGER,
+};
+
 /**
  * The merge control for an open pull request or a draft, as its overview
- * read it: the button and the panel it opens, and the question a merge asks
- * first. Nothing for one merged or closed.
+ * read it: the chip, the press, and the question leaving the queue asks
+ * first. Nothing for one merged or closed, or where neither a
+ * chip nor a press has anything to say.
  */
 export function MergeControl({
   pullRequest,
@@ -364,38 +426,28 @@ export function MergeControl({
   pullRequest: CodingAgentOverviewPullRequest;
   /** The agent's repository, which the method chosen is kept by. */
   repository: string | null;
-  /** Whether the panel the control stands in is on screen; a merge asked about goes with it. */
+  /** Whether the panel the control stands in is on screen; a question asked goes with it. */
   shown: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element | null {
   const { merging } = pullRequest;
-  const [method, choose] = useMergeMethod(repository, merging?.methods ?? []);
-  const [open, setOpen] = useState(false);
-  const panelId = useId();
-  const root = useRef<HTMLSpanElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  // The merge asked about, as it stood when Merge was pressed: a read landing under the question never changes what it merges.
-  const [asked, setAsked] = useState<{ method: MergeMethod; headSha: string } | undefined>();
-  const confirm = useConfirmDialog(
-    { subject: asked !== undefined, surfaceOpen: shown },
-    async () => {
-      if (asked !== undefined) await writes.write({ action: PULL_REQUEST_ACTION.MERGE, ...asked });
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    },
+  const methods = merging?.methods ?? [];
+  const [method, choose] = useMergeMethod(repository, methods);
+  // Whether Remove from queue is being asked about; the question goes once a read finds it out of the queue, so it never asks to dequeue what no longer stands in it.
+  const [asked, setAsked] = useState(false);
+  const inQueue = (merging?.queued ?? null) !== null;
+  const confirm = useConfirmDialog({ subject: asked && inQueue, surfaceOpen: shown }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.DEQUEUE })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
-  if (!shown && asked !== undefined && !confirm.busy) setAsked(undefined);
-  if (!shown && open) setOpen(false);
-
-  // Note that a press outside closes the panel too, as a menu's does, because a press on words nothing can focus moves no focus that would say it was left.
-  useEffect(() => {
-    if (!open) return undefined;
-    const pressed = (event: PointerEvent) => {
-      if (!(event.target instanceof Node && root.current?.contains(event.target))) setOpen(false);
-    };
-    document.addEventListener("pointerdown", pressed, true);
-    return () => document.removeEventListener("pointerdown", pressed, true);
-  }, [open]);
+  if ((!shown || !inQueue) && asked && !confirm.busy) setAsked(false);
 
   const live =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
@@ -404,113 +456,88 @@ export function MergeControl({
     merging === undefined || pullRequest.state !== PULL_REQUEST_STATE.OPEN
       ? undefined
       : mergeActionOf(pullRequest.merge, merging);
-  const look = faceOf(pullRequest, action);
+  const face = chipOf(pullRequest, action);
   const pending = isMergeWrite(writes.pending) ? writes.pending : undefined;
   const busy = writes.pending !== undefined;
   const headSha = merging?.headSha ?? "";
-
-  // Note that we hand focus back to the button, as a menu returns it to its trigger, because closing takes the focused press away with it.
-  const close = () => {
-    trigger.current?.focus();
-    setOpen(false);
+  const askDequeue = () => {
+    setAsked(true);
+    confirm.ask();
   };
-  const send = (request: Parameters<PullRequestWrites["write"]>[0]) => {
-    close();
-    void writes.write(request);
-  };
-  const pressOf = (): PanelPress | undefined => {
+  const busyAs = (write: MergeWrite) => (pending === write ? BUSY_WORDS[write] : undefined);
+  const plain = (variant: ButtonVariant, words: string, write: MergeWrite, onPress: () => void) => (
+    <Button
+      variant={variant}
+      disabled={busy && busyAs(write) === undefined}
+      onClick={onPress}
+      {...busyProps(busyAs(write))}
+    >
+      {words}
+    </Button>
+  );
+  const press = (): React.JSX.Element | null => {
     switch (action) {
-      case MERGE_ACTION.DEQUEUE:
-        return {
-          label: BOX_WORDS.DEQUEUE,
-          variant: BUTTON_VARIANT.OUTLINE,
-          onPress: () => send({ action: PULL_REQUEST_ACTION.DEQUEUE }),
-        };
-      case MERGE_ACTION.DISABLE_AUTO_MERGE:
-        return {
-          label: BOX_WORDS.DISABLE_AUTO_MERGE,
-          variant: BUTTON_VARIANT.OUTLINE,
-          onPress: () => send({ action: PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE }),
-        };
-      case MERGE_ACTION.MERGE_WHEN_READY:
-        return {
-          label: BOX_WORDS.MERGE_WHEN_READY,
-          variant: BUTTON_VARIANT.PRIMARY,
-          onPress: () => send({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, headSha }),
-        };
       case MERGE_ACTION.MERGE:
-        if (method === undefined) return undefined;
-        return {
-          label: METHOD_WORDS[method],
-          variant: BUTTON_VARIANT.PRIMARY,
-          onPress: () => {
-            close();
-            setAsked({ method, headSha });
-            confirm.ask();
-          },
-        };
+        if (method === undefined) return null;
+        return (
+          <MethodPress
+            variant={BUTTON_VARIANT.PRIMARY}
+            words={PRESS_WORDS[method]}
+            methods={methods}
+            method={method}
+            busy={busy}
+            busyLabel={busyAs(PULL_REQUEST_ACTION.MERGE)}
+            onChoose={choose}
+            onPress={() =>
+              void writes.write({ action: PULL_REQUEST_ACTION.MERGE, method, headSha })
+            }
+          />
+        );
       case MERGE_ACTION.ENABLE_AUTO_MERGE:
-        if (method === undefined) return undefined;
-        return {
-          label: BOX_WORDS.ENABLE_AUTO_MERGE,
-          variant: BUTTON_VARIANT.PRIMARY,
-          onPress: () => send({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, method, headSha }),
-        };
+        if (method === undefined) return null;
+        return (
+          <MethodPress
+            variant={BUTTON_VARIANT.OUTLINE}
+            words={BOX_WORDS.ENABLE_AUTO_MERGE}
+            methods={methods}
+            method={method}
+            busy={busy}
+            busyLabel={busyAs(PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE)}
+            onChoose={choose}
+            onPress={() =>
+              void writes.write({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, method, headSha })
+            }
+          />
+        );
+      case MERGE_ACTION.MERGE_WHEN_READY:
+        return plain(
+          BUTTON_VARIANT.PRIMARY,
+          BOX_WORDS.MERGE_WHEN_READY,
+          PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE,
+          () => void writes.write({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, headSha }),
+        );
+      case MERGE_ACTION.DISABLE_AUTO_MERGE:
+        return plain(
+          BUTTON_VARIANT.OUTLINE,
+          BOX_WORDS.DISABLE_AUTO_MERGE,
+          PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE,
+          () => void writes.write({ action: PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE }),
+        );
+      case MERGE_ACTION.DEQUEUE:
+        return plain(BUTTON_VARIANT.OUTLINE, BOX_WORDS.DEQUEUE, PULL_REQUEST_ACTION.DEQUEUE, () =>
+          askDequeue(),
+        );
       default:
-        return undefined;
+        return null;
     }
   };
-  const byMethod = action === MERGE_ACTION.MERGE || action === MERGE_ACTION.ENABLE_AUTO_MERGE;
-  const busyProps = pending === undefined ? {} : { busy: true, busyLabel: BUSY_WORDS[pending] };
+  const drawn = press();
+  if (face === undefined && drawn === null && !asked) return null;
   return (
-    <span className="merge-control" ref={root}>
-      <Button
-        ref={trigger}
-        variant={look.variant}
-        icon={<GitMergeIcon aria-hidden="true" />}
-        label={look.label}
-        aria-description={sentenceOf(pullRequest).title}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen(!open)}
-        {...busyProps}
-      >
-        <span className="merge-control-words">{look.label}</span>
-        <span className="merge-control-short" aria-hidden="true">
-          {look.short}
-        </span>
-        <ChevronDownIcon aria-hidden="true" className="merge-control-chevron" />
-      </Button>
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <MergePanel
-            id={panelId}
-            pullRequest={pullRequest}
-            methods={byMethod ? (merging?.methods ?? []) : []}
-            method={method}
-            press={pressOf()}
-            busy={busy}
-            onChoose={choose}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
-      ) : null}
-      {asked === undefined ? null : (
-        <ConfirmDialog
-          confirm={confirm}
-          question={{
-            title: `Merge pull request #${pullRequest.number}?`,
-            body: `GitHub merges it into ${pullRequest.base} as you, at commit ${asked.headSha.slice(0, 7)}. A merge can't be undone from here.`,
-            verb: METHOD_WORDS[asked.method],
-            running: "Merging",
-            tone: DIALOG_TONE.PRIMARY,
-          }}
-        />
-      )}
+    <span className="merge-control">
+      {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
+      {drawn}
+      {asked ? <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} /> : null}
     </span>
   );
 }

@@ -103,28 +103,38 @@ const CodeLine = memo(function CodeLine({
   );
 });
 
-/** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's, which draws its notes before the lines they begin on. */
+/** A run of a file's lines lit beside the ones pointed at, from its first line to its last. */
+interface LitLines {
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+/** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit and those `lit` names with them: a card's, and a File tab's, which draws its notes after the lines they end on. */
 export function CodeLineRows({
   firstLine,
   lines,
   pointed,
-  before,
+  lit,
+  after,
 }: {
   firstLine: number;
   lines: CodeLines;
   pointed: CodeRef;
-  /** What stands before a line, by its number; nothing where absent. */
-  before?: ((line: number) => ReactNode) | undefined;
+  /** Lines lit beside those pointed at, a note's while the pointer rests on it; none lights no more. */
+  lit?: LitLines | undefined;
+  /** What stands after a line, by its number; nothing where absent. */
+  after?: ((line: number) => ReactNode) | undefined;
 }): React.JSX.Element {
   return (
     <>
       {lines.map((tokens, index) => {
         const line = firstLine + index;
+        const shone = lit !== undefined && line >= lit.startLine && line <= lit.endLine;
         return (
           // Note that a line's place in the file is its identity: the lines never reorder.
           <Fragment key={line}>
-            {before?.(line)}
-            <CodeLine line={line} tokens={tokens} pointed={isPointed(pointed, line)} />
+            <CodeLine line={line} tokens={tokens} pointed={shone || isPointed(pointed, line)} />
+            {after?.(line)}
           </Fragment>
         );
       })}
@@ -186,7 +196,8 @@ export function CodeLinesView({
   firstLine,
   lines,
   pointed,
-  before,
+  lit,
+  after,
   above,
   below,
   fade = SCROLL_FADE.NONE,
@@ -197,8 +208,10 @@ export function CodeLinesView({
   firstLine: number;
   lines: CodeLines;
   pointed: CodeRef;
-  /** What stands before a line, by its number; nothing where absent. */
-  before?: ((line: number) => ReactNode) | undefined;
+  /** Lines lit beside those pointed at; none lights no more. */
+  lit?: LitLines | undefined;
+  /** What stands after a line, by its number; nothing where absent. */
+  after?: ((line: number) => ReactNode) | undefined;
   /** What stands over the first line, in the scroll; nothing where absent. */
   above?: ReactNode;
   /** What stands under the last line, in the scroll; nothing where absent. */
@@ -229,7 +242,13 @@ export function CodeLinesView({
           data-wrap={String(look.wrap)}
         >
           {above}
-          <CodeLineRows firstLine={firstLine} lines={lines} pointed={pointed} before={before} />
+          <CodeLineRows
+            firstLine={firstLine}
+            lines={lines}
+            pointed={pointed}
+            lit={lit}
+            after={after}
+          />
           {below}
         </div>
       </div>

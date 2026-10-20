@@ -19,6 +19,7 @@ import {
   githubRepositoryIssueAnswerSchema,
   githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
+  workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
@@ -53,6 +54,7 @@ import {
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
+  taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
   taskFileRequestSchema,
@@ -87,6 +89,7 @@ import {
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
@@ -567,16 +570,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, or both. */
-function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
-  return params.status !== undefined || params.priority !== undefined;
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
+function namesAStanding(params: {
+  status?: unknown;
+  priority?: unknown;
+  assigneeId?: unknown;
+}): boolean {
+  return (
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
+  );
 }
 
-/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
@@ -1148,6 +1158,27 @@ export const tasksWorkspacePhotoAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspacePhotoAnswer = typeof tasksWorkspacePhotoAnswerSchema.Type;
+
+/** A workspace's token repositories, as Settings › Workspace asks for them: the workspace. */
+export const tasksWorkspaceTokenRepositoriesParamsSchema = workspaceLeaveRequestSchema;
+
+export type TasksWorkspaceTokenRepositoriesParams =
+  typeof tasksWorkspaceTokenRepositoriesParamsSchema.Type;
+
+/** A repository added to a workspace on the account's own token, or removed from it, as Settings › Workspace asks it. */
+export const tasksWorkspaceTokenRepositorySetParamsSchema = workspaceTokenRepositoryRequestSchema;
+
+export type TasksWorkspaceTokenRepositorySetParams =
+  typeof tasksWorkspaceTokenRepositorySetParamsSchema.Type;
+
+/** A workspace's token repositories, as the window hears them after a read, an add, or a removal: as they then stand, or why there are none. */
+export const tasksWorkspaceTokenRepositoriesAnswerSchema = EffectSchema.Union([
+  workspaceTokenRepositoriesAnswerSchema,
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceTokenRepositoriesAnswer =
+  typeof tasksWorkspaceTokenRepositoriesAnswerSchema.Type;
 
 /** Leaving a workspace, as the window asks it: the workspace. */
 export const tasksWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;

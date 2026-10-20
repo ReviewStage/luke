@@ -30,9 +30,9 @@ import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
+  type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
 import { MESSAGE_ROLE } from "../core.js";
@@ -41,6 +41,7 @@ import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { delegated, heard, sessionStarted } from "../testing/live-events.js";
 import { settled } from "../testing/settle.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import { hostedLiveExchange } from "./live-exchange.js";
 
 /**
@@ -111,7 +112,7 @@ function mintEveSession(): string {
   return `wrun_${randomUUID()}`;
 }
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly opened: EveMessage[];
   /** Every exploring a fresh session asked for, which eve declines unless `explores` is set. */
   readonly explored: EveMessage[];
@@ -240,6 +241,7 @@ async function stand(
         accountId: target.userId,
         liveSessionId,
         conversation: { userId: target.userId, conversationId: target.conversationId },
+        backend: CALL_BACKEND.TASK,
         writer,
         eve,
         createId: () => randomUUID(),

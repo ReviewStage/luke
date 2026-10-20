@@ -14,6 +14,7 @@ import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-a
 import type {
   EditorSpan,
   MentionDrawer,
+  PlacedWords,
   PlanEditorHandle,
   PlanEditorPictures,
   PlanEditorPlacement,
@@ -213,7 +214,101 @@ function caretSection(editor: Editor): number {
   return sectionStarts(editor.state.doc).filter((start) => start <= index).length - 1;
 }
 
-/** Where the caret goes as the editor opens. */
+/** The top-level blocks a section holds, by index: from its first to the next section's first. */
+function sectionBlocks(doc: PmNode, section: number): { first: number; next: number } | undefined {
+  const starts = sectionStarts(doc);
+  const first = starts[section];
+  return first === undefined ? undefined : { first, next: starts[section + 1] ?? doc.childCount };
+}
+
+/** Whether a text node stands in a code block. */
+function inCode(text: Node): boolean {
+  return text.parentElement?.closest("pre") != null;
+}
+
+/**
+ * Where the words a click landed on stand in the editor: in the same
+ * section, the node of the same words as many such nodes in, at the same
+ * offset; none where the section holds no such node.
+ */
+function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
+  const { view } = editor;
+  const blocks = sectionBlocks(view.state.doc, words.section);
+  if (blocks === undefined) return undefined;
+  let seen = 0;
+  let found: number | undefined;
+  view.state.doc.forEach((_node: PmNode, offset: number, index: number) => {
+    const dom = view.nodeDOM(offset);
+    if (found !== undefined || index < blocks.first || index >= blocks.next || dom === null) return;
+    const walker = document.createTreeWalker(dom, NodeFilter.SHOW_TEXT);
+    for (
+      let text = walker.nextNode();
+      text !== null && found === undefined;
+      text = walker.nextNode()
+    ) {
+      if (text.textContent !== words.text || inCode(text) !== words.code) continue;
+      if (seen === words.occurrence)
+        found = view.posAtDOM(text, Math.min(words.offset, words.text.length));
+      seen += 1;
+    }
+  });
+  return found;
+}
+
+/** The text node and offset the caret stands at, where it stands in one; none where it stands between blocks. */
+function caretText(editor: Editor): { text: Text; offset: number } | undefined {
+  const { node, offset } = editor.view.domAtPos(editor.state.selection.head);
+  if (node instanceof Text) return { text: node, offset };
+  const after = node.childNodes[offset];
+  if (after instanceof Text) return { text: after, offset: 0 };
+  const before = node.childNodes[offset - 1];
+  return before instanceof Text ? { text: before, offset: before.data.length } : undefined;
+}
+
+/**
+ * The words the caret stands in, counted as `wordsAt` finds them, so the
+ * drawn text finds them again, and where their line stands in the window;
+ * none off any words, or where nothing is laid out to measure.
+ */
+function caretWords(editor: Editor): PlacedWords | undefined {
+  const { view } = editor;
+  const at = caretText(editor);
+  const section = caretSection(editor);
+  const blocks = sectionBlocks(view.state.doc, section);
+  if (at === undefined || blocks === undefined) return undefined;
+  const code = inCode(at.text);
+  let occurrence = 0;
+  let found = false;
+  view.state.doc.forEach((_node: PmNode, offset: number, index: number) => {
+    const dom = view.nodeDOM(offset);
+    if (found || index < blocks.first || index >= blocks.next || dom === null) return;
+    const walker = document.createTreeWalker(dom, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null && !found; text = walker.nextNode()) {
+      if (text === at.text) found = true;
+      else if (text.textContent === at.text.data && inCode(text) === code) occurrence += 1;
+    }
+  });
+  if (!found) return undefined;
+  try {
+    const { top } = view.coordsAtPos(view.state.selection.head);
+    return { section, text: at.text.data, occurrence, offset: at.offset, code, top };
+  } catch {
+    // Note that a view with no layout, as a test's page is, measures nothing.
+    return undefined;
+  }
+}
+
+/** Where the caret goes as the editor opens on the words a click landed on, where it finds them; none where it does not. */
+function placedOnWords(
+  editor: Editor,
+  placement: PlanEditorPlacement | undefined,
+): Selection | undefined {
+  const words = placement !== undefined && "words" in placement ? placement.words : undefined;
+  const at = words === undefined ? undefined : wordsAt(editor, words);
+  return at === undefined ? undefined : TextSelection.near(editor.state.doc.resolve(at));
+}
+
+/** Where the caret goes as the editor opens, the words a click landed on aside. */
 function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Selection {
   const { doc } = editor.state;
   if (placement === undefined) return Selection.atStart(doc);
@@ -328,7 +423,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   held = sourcesOf(editor.state.doc, opened);
-  editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
+  const onWords = placedOnWords(editor, placement);
+  editor.view.dispatch(editor.state.tr.setSelection(onWords ?? placed(editor, placement)));
+  // The text and caret as the editor opened on the words a click landed on,
+  // which stand for those words only until either changes: a merged answer
+  // laid in, a word typed, or the caret moved.
+  let onWordsAs = onWords === undefined ? undefined : editor.state;
   if (focus) editor.view.focus();
   return {
     take: (sent, merged) => {
@@ -339,9 +439,24 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     chooseMention: (mention) => picking?.choose(editor, mention),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
     focusAt: (placement) => {
-      editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
+      onWordsAs = undefined;
+      const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
+      editor.view.dispatch(editor.state.tr.setSelection(selection));
       editor.view.focus();
     },
+    wordsTop: () => {
+      const { doc, selection } = editor.state;
+      if (onWordsAs === undefined || doc !== onWordsAs.doc || !selection.eq(onWordsAs.selection)) {
+        return undefined;
+      }
+      try {
+        return editor.view.coordsAtPos(editor.state.selection.head).top;
+      } catch {
+        // Note that a view with no layout, as a test's page is, measures nothing.
+        return undefined;
+      }
+    },
+    caretWords: () => caretWords(editor),
     insertPictures: (files) => {
       if (pictures !== undefined) laidInPictures(editor.view, files, pictures);
     },

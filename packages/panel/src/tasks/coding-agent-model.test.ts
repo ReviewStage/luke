@@ -6,6 +6,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
+  type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
@@ -26,7 +27,6 @@ import {
   choiceOn,
   delegates,
   effortFor,
-  followsAgent,
   knownDeveloperRows,
   messageFailureNote,
   messageFailureWords,
@@ -42,20 +42,8 @@ import {
   sidebarCallIds,
   startedAgentOf,
   unreadSentLines,
+  withAgentRun,
 } from "./coding-agent-model.js";
-
-test("the transcript is followed only while the tab shows and the agent may still write", () => {
-  assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.RUNNING }), true);
-  assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.STARTING }), true);
-  assert.equal(followsAgent({ shown: false, status: CODING_AGENT_STATUS.RUNNING }), false);
-  for (const ended of [
-    CODING_AGENT_STATUS.COMPLETED,
-    CODING_AGENT_STATUS.FAILED,
-    CODING_AGENT_STATUS.CANCELLED,
-  ]) {
-    assert.equal(followsAgent({ shown: true, status: ended }), false, ended);
-  }
-});
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [
@@ -584,4 +572,35 @@ test("a message refused for a repository out of reach names the plan's remedy on
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
+});
+
+test("a page that reads an agent as the list already holds it answers the list as it was, and one that moves it moves only that agent", () => {
+  const agent = (id: string): CodingAgentSummary => ({
+    id,
+    planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: id,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
+    runStartedAt: 5,
+  });
+  const agents = [agent("a"), agent("b")];
+  assert.equal(
+    withAgentRun(agents, "a", { status: CODING_AGENT_STATUS.RUNNING, runStartedAt: 5 }),
+    agents,
+  );
+  assert.equal(
+    withAgentRun(agents, "unknown", {
+      status: CODING_AGENT_STATUS.COMPLETED,
+    }),
+    agents,
+  );
+  const ended = withAgentRun(agents, "a", {
+    status: CODING_AGENT_STATUS.COMPLETED,
+  });
+  assert.equal(ended[0]?.status, CODING_AGENT_STATUS.COMPLETED);
+  assert.equal(ended[0]?.runStartedAt, undefined);
+  assert.equal(ended[1], agents[1]);
 });

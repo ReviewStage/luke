@@ -10,7 +10,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * for one that destroys, `danger-outline` for a destructive act that is
  * not the place's own, and `ink` for one that ends what the place holds, a
  * solid fill in the text's own colour apart from the quiet ones beside it,
- * as a call's End call is. Two tinted looks carry news on a wash of their
+ * as a call's End call is. `subtle` is a quiet one in the muted ink, for a
+ * press that stands among quiet words rather than controls, and must not
+ * outweigh them (a pull request header's “+ Label”), lighting as a
+ * quiet one does. Two tinted looks carry news on a wash of their
  * colour rather than a fill: `working-tint` for an act something under way
  * offers (Restart, once a release is downloaded), and `danger-tint` for the
  * one a failure offers (Download, once installing it failed). Each is one control's height, corner, and glyph
@@ -40,6 +43,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * holds still on `--luke-loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
+ *
+ * A labelled Button may be a record of a press rather than an offer of
+ * one: `readOnly`, it takes no press and no Tab stop, as an unavailable one
+ * does, yet stands at full strength, so it reads as a press given rather
+ * than one waiting; `pressed` draws the one that was given as a toggle
+ * standing on.
  *
  * A ButtonLink is a Button's look on a link, for an act that is going
  * somewhere: a download, another site, an app's own scheme. The browser
@@ -77,6 +86,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
 /** What a press does, which is what a button looks like. */
 export const BUTTON_VARIANT = {
   QUIET: "quiet",
+  SUBTLE: "subtle",
   OUTLINE: "outline",
   PRIMARY: "primary",
   DANGER: "danger",
@@ -223,6 +233,8 @@ export function Button({
   icon,
   label,
   size,
+  pressed,
+  readOnly = false,
   children,
   ...props
 }: ButtonBase & {
@@ -231,13 +243,19 @@ export function Button({
   /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
   label?: string | undefined;
   size?: ButtonSize | undefined;
+  /** Whether a toggle stands on, or a press recorded was the one given, which it is drawn and announced as. */
+  pressed?: boolean | undefined;
+  /** Whether it records a press rather than offering one: it takes none, at full strength. */
+  readOnly?: boolean | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <button
       className="luke-button"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
-      {...stateProps(props, label)}
+      data-read-only={readOnly || undefined}
+      aria-pressed={pressed}
+      {...stateProps(readOnly ? { ...props, disabled: true } : props, label)}
     >
       <span className="luke-button-face">
         {icon}
