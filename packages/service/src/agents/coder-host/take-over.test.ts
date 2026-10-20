@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { createAutomation, readAutomation } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask } from "@luke/database/models/task-store";
@@ -54,7 +55,9 @@ import { TAKEN_OVER_REASON, takeOverCodingAgent } from "./take-over.js";
  * source's open item is the new agent's and the member's, answered there,
  * while an answered one stays with the source, and an automation that sent
  * its runs to the source sends them to the new agent. A retry under the
- * same key answers the same agent; no member takes over their own agent; an
+ * same key answers the same agent; of two members racing, one takes the
+ * work and the other's agent is archived and refused; a key spent on
+ * another Start hands nothing on; no member takes over their own agent; an
  * account of another workspace reaches none, and moves nothing; and an
  * agent archived by anything else is taken over by nobody. eve is a fake at
  * the client's boundary, GitHub a script, the catalog fixed, and the store
@@ -96,7 +99,7 @@ function fakeEve() {
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
     stream: () => Stream.empty,
   };
-  return { opened, eve: Effect.succeed(sessions) };
+  return { opened, sessions, eve: Effect.succeed(sessions) };
 }
 
 /** What a Start reaches beside the store: GitHub reaching the repository, and the catalog. */
@@ -289,6 +292,80 @@ it.layer(getTestDB())("a teammate's agent taken over", (it) => {
 
       const automation = Option.getOrThrow(yield* readAutomation(owner, automationId));
       assert.equal(automation.targetAgentId, taken.agent.id);
+    }),
+  );
+
+  it.effect(
+    "of two members taking over at once, the one who archives the source first takes its items, and the other's agent is stopped, archived, and refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, workspaceId } = yield* openTeam;
+        const second = yield* openGithubUser();
+        yield* joinWorkspace(workspaceId, second);
+        const source = yield* ownersAgent(owner, workspaceId);
+        const posted = yield* postInboxItem(
+          { userId: owner, taskId: null, agentId: source.id },
+          PROTECT,
+        );
+        assert.ok(Result.isSuccess(posted));
+        const first = fakeEve();
+        const store = yield* Effect.context<DatabaseServices>();
+        let winner: string | undefined;
+        // The teammate's take-over lands whole while the second member's agent is being opened.
+        const racing: EveSessions = {
+          ...first.sessions,
+          open: (message) =>
+            Effect.gen(function* () {
+              const won = yield* takeOverCodingAgent(
+                first.eve,
+                teammate,
+                source.id,
+                randomUUID(),
+              ).pipe(Effect.provide(services), Effect.provide(store), Effect.orDie);
+              winner = won.agent.id;
+              return {
+                outcome: EVE_SEND_OUTCOME.ACCEPTED,
+                sessionId: `wrun_${message.conversationId}`,
+              };
+            }),
+        };
+
+        const lost = yield* Effect.result(
+          takeOverCodingAgent(Effect.succeed(racing), second, source.id, randomUUID()).pipe(
+            Effect.provide(services),
+          ),
+        );
+
+        assert.ok(Result.isFailure(lost));
+        assert.equal(lost.failure, HOSTED_REFUSAL.AGENT_RETIRED);
+        assert.ok(winner !== undefined);
+        const theirs = yield* agentInboxItems({ userId: teammate, agentId: winner });
+        assert.deepEqual(
+          theirs.map((item) => item.id),
+          [posted.success.id],
+        );
+        const archived = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        assert.equal(archived.archivedBy?.userId, teammate);
+      }),
+  );
+
+  it.effect("a key already spent on another Start hands the source's work to nothing", () =>
+    Effect.gen(function* () {
+      const { owner, teammate, workspaceId } = yield* openTeam;
+      const source = yield* ownersAgent(owner, workspaceId);
+      const spent = workspaceAsk(workspaceId);
+      yield* startCodingAgent(fakeEve().eve, teammate, spent).pipe(Effect.provide(services));
+
+      const refused = yield* Effect.result(
+        takeOverCodingAgent(fakeEve().eve, teammate, source.id, spent.idempotencyKey).pipe(
+          Effect.provide(services),
+        ),
+      );
+
+      assert.ok(Result.isFailure(refused));
+      assert.equal(refused.failure, HOSTED_REFUSAL.INVALID_REQUEST);
+      const standing = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+      assert.equal(standing.archivedAt, null);
     }),
   );
 
