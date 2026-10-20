@@ -1,10 +1,3 @@
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
-import { runWithdrawQuestion, WITHDRAW_QUESTION_TOOL } from "@luke/service/tasks/queue-question";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import { defineDynamic, defineTool } from "eve/tools";
-import { offeredTurnTools } from "../host.js";
-
 /**
  * withdraw_question.ts -- on a call, the agent takes back a question an answer made moot, before the voice asks it.
  *
@@ -13,6 +6,14 @@ import { offeredTurnTools } from "../host.js";
  * its journaled call as `queue_question` is, and offered on a spoken turn
  * alone (`offeredTurnTools`).
  */
+
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import { runWithdrawQuestion, WITHDRAW_QUESTION_TOOL } from "@luke/service/tasks/queue-question";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
+import { defineDynamic, defineTool } from "eve/tools";
+import { offeredTurnTools } from "../host.js";
+
 export default defineDynamic({
   events: {
     "turn.started": (_event, ctx) =>

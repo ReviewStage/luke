@@ -6,7 +6,6 @@ import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
   hasRepository,
-  readCodingAgentContext,
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
@@ -15,11 +14,16 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
-import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
+import {
+  listRecentMessages,
+  type StoredMessageRecord,
+  turnsBefore,
+} from "@luke/database/models/message-reads";
 import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
+import { listRevisions } from "@luke/database/models/plan-revisions";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask } from "@luke/database/models/task-store";
-import type { StoreWriter } from "@luke/database/models/writer";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
@@ -417,10 +421,10 @@ export interface CoderHost extends HostAdmission {
   turnKind(auth: SessionAuth): BrainHostTurn | undefined;
   /**
    * What a turn of the kind given opens with as its own instruction, beside
-   * the session's prompt (`turn-context.ts`): on a spoken turn, the call's
-   * words and the task as it stands; on a typed one, the task as it stands
-   * only where someone other than the agent saved the plan since its last
-   * step; and on either, what the agent has not read in its workspace's
+   * the session's prompt (`turn-context.ts`), the turn named by its store
+   * id: on a spoken turn, the call's words and the task as it stands; on a
+   * typed one, the task as it stands only where someone other than the
+   * agent saved the plan since its previous turn started; and on either, what the agent has not read in its workspace's
    * chat (`chat.ts`), where its starter turned Chat on. Nothing where none
    * of it stands or the conversation is no agent's. A read that fails is
    * logged and leaves its part out, so the turn still opens.
@@ -428,6 +432,7 @@ export interface CoderHost extends HostAdmission {
   turnInstructions(
     admitted: AdmittedConversation,
     turn: BrainHostTurn | undefined,
+    turnId: string | undefined,
   ): Effect.Effect<string | undefined, never, DatabaseServices>;
   /**
    * Runs one of the agent's public reads, the brain's own
@@ -596,6 +601,9 @@ const EVE_UNREACHED: AgentSessions = {
   stream: () => Stream.empty,
 };
 
+/** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
+const PREVIOUS_TURN_READ = 2;
+
 /** No chat in the task as it stands: the agent's own digest of the chat follows it (`chatDigest`). */
 const NO_CHAT: ChatSince = { messages: [], more: false };
 
@@ -763,27 +771,43 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     );
 
   /**
+   * When the agent's turn before the one opening started, or nothing for its
+   * first turn: the newest of the conversation's turns but the one named,
+   * which the relay may have queued already as this one opens.
+   */
+  const previousTurnStart = (target: ConversationTarget, turnId: string | undefined) =>
+    Effect.map(
+      turnsBefore(target.userId, target.conversationId, PREVIOUS_TURN_READ, undefined),
+      (page) => {
+        const previous = page.turns.findLast((turn) => turn.id !== turnId);
+        return previous === undefined
+          ? undefined
+          : (previous.startedAt ?? previous.queuedAt).getTime();
+      },
+    );
+
+  /**
    * The agent's task, read as the member whose turn this is, where the turn
-   * is handed it: a spoken turn always; a typed one only where someone other
-   * than the agent saved the plan since the end of the agent's last step,
-   * and never before its first, whose first message the plan, or the prompt
-   * beside it, already is.
+   * is handed it: a spoken turn always; a typed one only where a revision of
+   * the plan another writer made was saved after the agent's previous turn
+   * started, so a save made while that turn ran, which none of its steps may
+   * have read, is handed too; and never on the agent's first turn, whose
+   * first message the plan, or the prompt beside it, already is.
    */
   const handedTask = (
     admitted: AdmittedConversation,
     agent: CodingAgent,
     taskId: string,
-    spoken: boolean,
+    turn: { readonly spoken: boolean; readonly turnId: string | undefined },
   ) =>
     Effect.gen(function* () {
-      if (spoken) return Option.getOrUndefined(yield* readTask(admitted.caller, taskId));
-      const context = yield* readCodingAgentContext(admitted.target.userId, agent.id);
-      const since = Option.getOrUndefined(context)?.lastStep?.at;
-      if (since === undefined) return undefined;
-      const stored = yield* readTask(admitted.caller, taskId);
-      return Option.isSome(stored) && savedByAnotherSince(stored.value, since, agent.id)
-        ? stored.value
-        : undefined;
+      if (!turn.spoken) {
+        const since = yield* previousTurnStart(admitted.target, turn.turnId);
+        if (since === undefined) return undefined;
+        const history = yield* listRevisions(admitted.caller, taskId);
+        if (!savedByAnotherSince(history.revisions, since, agent.id)) return undefined;
+      }
+      return Option.getOrUndefined(yield* readTask(admitted.caller, taskId));
     });
 
   /**
@@ -793,14 +817,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    * or one whose task is gone. The chat is left out of it, since the agent's
    * own digest of it follows (`digestOf`).
    */
-  const standingOf = (admitted: AdmittedConversation, agent: CodingAgent, spoken: boolean) =>
+  const standingOf = (
+    admitted: AdmittedConversation,
+    agent: CodingAgent,
+    spoken: boolean,
+    turnId: string | undefined,
+  ) =>
     Effect.gen(function* () {
       const turn = spoken ? BRAIN_HOST_TURN.SPOKEN : BRAIN_HOST_TURN.TYPED;
       const clock = { now: seams.now(), timeZone: admitted.timeZone };
       const stored =
         agent.taskId === null
           ? undefined
-          : yield* handedTask(admitted, agent, agent.taskId, spoken);
+          : yield* handedTask(admitted, agent, agent.taskId, { spoken, turnId });
       if (stored === undefined) {
         return spoken
           ? standingWithLead(turn, standingContext(undefined, EMPTY_BOARD, NO_CHAT, clock))
@@ -1196,7 +1225,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     turnKind: (auth) => turnKindOf(auth.current),
 
-    turnInstructions: (admitted, turn) =>
+    turnInstructions: (admitted, turn, turnId) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted).pipe(
           Effect.tapError(logStoreFailure),
@@ -1206,7 +1235,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const agent = found.success;
         const spoken = turn === BRAIN_HOST_TURN.SPOKEN;
         const [standing, digest] = yield* Effect.all(
-          [standingOf(admitted, agent, spoken), digestOf(admitted, agent)],
+          [standingOf(admitted, agent, spoken, turnId), digestOf(admitted, agent)],
           { concurrency: "unbounded" },
         );
         const parts = [

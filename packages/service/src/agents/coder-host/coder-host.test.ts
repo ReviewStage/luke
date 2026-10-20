@@ -18,7 +18,6 @@ import {
   hasRepository,
   latestTurnsOf,
   readCodingAgent,
-  recordCodingAgentStep,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
@@ -196,15 +195,6 @@ function spokenSeat(target: ConversationTarget): SessionAuth {
   };
   return { current: seat, initiator: seat };
 }
-
-/** What a model step's end counts, as the agent's row keeps it, but for when it ended. */
-const STEP_COUNTS = {
-  inputTokens: 1_000,
-  outputTokens: 100,
-  systemPromptTokens: 100,
-  toolDefinitionTokens: 100,
-  briefTokens: 10,
-} as const;
 
 let minted = 0;
 function mintSession(): string {
@@ -1623,9 +1613,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });
-        assert.equal(yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED), undefined);
+        assert.equal(
+          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
+          undefined,
+        );
         yield* chatOn(userId);
-        const digest = (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED)) ?? "";
+        const digest =
+          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined)) ?? "";
         assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), digest);
         assert.ok(digest.endsWith("The invite table is mine."), digest);
       }),
@@ -1638,7 +1632,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
 
-        const spoken = (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN)) ?? "";
+        const spoken =
+          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN, undefined)) ?? "";
         for (const told of [
           "## This turn is spoken",
           `\`${CODER_TOOL.QUEUE_QUESTION}\``,
@@ -1654,7 +1649,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           [CODER_TOOL.QUEUE_QUESTION, CODER_TOOL.WITHDRAW_QUESTION, CODER_TOOL.END_CALL],
         );
 
-        assert.equal(yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED), undefined);
+        assert.equal(
+          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
+          undefined,
+        );
         assert.deepEqual(
           [
             ...turnToolsOf(
@@ -1667,27 +1665,32 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "a typed turn is handed the task as it stands only once someone other than the agent saved the plan since the agent's last step, and never for the agent's own notes",
+    "a typed turn is handed the task as it stands only once someone other than the agent saved the plan after the agent's previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
-        const { userId, agent, admitted } = yield* openAgent(host);
+        const { userId, agent, auth, sessionId, admitted } = yield* openAgent(host);
         assert.ok(agent.taskId !== null);
         const binding = { userId, taskId: agent.taskId };
-        const typed = host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED);
-        const stepEndsNow = Effect.flatMap(Clock.currentTimeMillis, (at) =>
-          recordCodingAgentStep(userId, agent.id, { ...STEP_COUNTS, at }),
-        );
+        const typedAt = (eveTurnId: string) =>
+          host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, hostTurnId(sessionId, eveTurnId));
+        const lukeNotes = (at: number, notes: Parameters<typeof saveNotes>[1]) =>
+          Effect.andThen(TestClock.setTime(at), saveNotes(binding, notes));
 
-        // Luke's notes taken before the agent's last step: the agent read the plan as it stood after them.
-        yield* TestClock.adjust("1 minute");
-        yield* saveNotes(binding, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
-        yield* TestClock.adjust("1 minute");
-        yield* stepEndsNow;
-        assert.equal(yield* typed, undefined);
+        // Luke's notes before the agent's first turn: that turn opens on the plan as its first message.
+        yield* lukeNotes(NOW - 120_000, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
+        assert.equal(yield* typedAt("turn_0"), undefined);
+        // The first turn runs, started at the relay's clock.
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const state = memoryRelayState();
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+        assert.equal(yield* typedAt("turn_1"), undefined);
 
-        // The agent's own notes after its last step: it wrote them, so there is nothing new to read.
-        yield* TestClock.adjust("1 minute");
+        // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
+        yield* TestClock.setTime(NOW + 60_000);
         const own = yield* host.editPlan(
           admitted,
           unparsedWire({ notes: [added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")] }),
@@ -1695,22 +1698,25 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           noSandbox,
         );
         assert.equal(own.status, ACTION_RESULT_STATUS.ACCEPTED);
-        assert.equal(yield* typed, undefined);
+        assert.equal(yield* typedAt("turn_1"), undefined);
 
-        // Luke's notes after the agent's last step: the next typed turn opens with the plan as it stands.
-        yield* TestClock.adjust("1 minute");
-        yield* saveNotes(binding, [
-          added(PLAN_HEADING.HARD_PARTS, "- A withdrawn invite never grants access."),
+        // Luke's notes while that turn ran, and the agent's after them in the same section, which
+        // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
+        yield* lukeNotes(NOW + 120_000, [
+          added(PLAN_HEADING.APPROACH, "- A withdrawn invite never grants access."),
         ]);
-        const handed = (yield* typed) ?? "";
+        yield* TestClock.setTime(NOW + 180_000);
+        const over = yield* host.editPlan(
+          admitted,
+          unparsedWire({ notes: [added(PLAN_HEADING.APPROACH, "- Resending renews the link.")] }),
+          0,
+          noSandbox,
+        );
+        assert.equal(over.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const handed = (yield* typedAt("turn_1")) ?? "";
         assert.ok(handed.includes("saved since your last turn by someone other than you"), handed);
         assert.ok(handed.includes("A withdrawn invite never grants access."), handed);
         assert.ok(!handed.includes("## This turn is spoken"), handed);
-
-        // Once the agent's next step has read it, the plan is nothing new again.
-        yield* TestClock.adjust("1 minute");
-        yield* stepEndsNow;
-        assert.equal(yield* typed, undefined);
       }),
   );
 

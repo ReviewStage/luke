@@ -79,7 +79,7 @@ export const seams: CoderHostSeams = Effect.runSync(
 
 export const host: CoderHost = coderHost(seams);
 
-/** What a model resolver reads of eve's `step.started`, which eve hands it unparsed: eve's id for the turn the step is of. */
+/** What a resolver reads of eve's `step.started` or `turn.started`, which eve hands it unparsed: eve's id for the turn the step is of, or the turn opening. */
 const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.String }) });
 
 /**
@@ -90,7 +90,7 @@ const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.S
  */
 export const readStepStarted = Schema.decodeUnknownSync(StepStartedSchema);
 
-/** The store's id for the turn a `step.started` opens a step of in the session. */
+/** The store's id for the turn a `step.started` opens a step of in the session, or a `turn.started` opens. */
 export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.Type): string {
   return hostTurnId(sessionId, started.data.turnId);
 }

@@ -1,10 +1,3 @@
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
-import { END_CALL_TOOL, runEndCall } from "@luke/service/tasks/end-call";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import { defineDynamic, defineTool } from "eve/tools";
-import { offeredTurnTools } from "../host.js";
-
 /**
  * end_call.ts -- on a call, the agent hangs up once the developer is done.
  *
@@ -14,6 +7,14 @@ import { offeredTurnTools } from "../host.js";
  * (`endsTurn`), since the voice is already saying goodbye. It is offered on
  * a spoken turn alone (`offeredTurnTools`).
  */
+
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import { END_CALL_TOOL, runEndCall } from "@luke/service/tasks/end-call";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
+import { defineDynamic, defineTool } from "eve/tools";
+import { offeredTurnTools } from "../host.js";
+
 export default defineDynamic({
   events: {
     "turn.started": (_event, ctx) =>

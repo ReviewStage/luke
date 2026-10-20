@@ -1,13 +1,3 @@
-import type { StoredTask } from "@luke/database/models/task-store";
-import {
-  PLAN_FIELD_BAR,
-  PLAN_FIELD_HEADING,
-  PLAN_FIELD_PURPOSE,
-} from "@luke/features/plan-template";
-import { PLAN_FIELD } from "@luke/features/task-wire";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
-import { CODER_TOOL } from "./tool-set.js";
-
 /**
  * turn-context.ts -- what a coding agent's turn opens with beside its session's prompt: the call's words and the task as it stands.
  *
@@ -23,9 +13,18 @@ import { CODER_TOOL } from "./tool-set.js";
  * call the agent is who the developer plans with. Then the task as it
  * stands (`../agent-runtime/standing-context.ts`), on every spoken turn,
  * and on a typed one only where someone other than the agent saved the
- * plan since the agent's last step, so a typed turn reads no more than it
- * did before unless there is something new to read.
+ * plan since the agent's previous turn started, so a typed turn reads no
+ * more than it did before unless there is something new to read.
  */
+
+import {
+  PLAN_FIELD_BAR,
+  PLAN_FIELD_HEADING,
+  PLAN_FIELD_PURPOSE,
+} from "@luke/features/plan-template";
+import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 /** Each section of the default template as the developer reads it, what it holds, and when it is done. */
 const DOCUMENT_SECTIONS = Object.values(PLAN_FIELD)
@@ -92,18 +91,22 @@ export function spokenTurnWords(onTask: boolean): string {
 }
 
 /**
- * Whether anyone but the agent saved the plan after the instant given, the
- * end of the agent's last step: a section a member, Luke, or another agent
- * last wrote since, or the plan's latest save. Note that a save of the
- * agent's own is left out, because it wrote what it saved, and that a save
- * another made and the agent then wrote over in the same section reads as
- * the agent's, which it then has read.
+ * Whether a revision of the plan someone other than the agent wrote was
+ * saved after the instant given, the start of the agent's previous turn:
+ * a member's, Luke's, or another agent's. Note that each revision is read,
+ * not who last wrote each section, because the agent writing over a
+ * section another just changed leaves the agent its last writer though it
+ * never read the change; and that a revision of the agent's own is left
+ * out, because it wrote what it saved. The history is read newest first, a
+ * page of it, which holds every revision since a turn began unless more than
+ * a page of them were saved during it.
  */
-export function savedByAnotherSince(stored: StoredTask, since: number, agentId: string): boolean {
-  const lastEdit = stored.task.lastEdit;
-  const saves =
-    lastEdit === undefined ? stored.sectionWriters : [...stored.sectionWriters, lastEdit];
-  return saves.some((save) => save.at > since && save.agentId !== agentId);
+export function savedByAnotherSince(
+  revisions: readonly PlanRevisionLine[],
+  since: number,
+  agentId: string,
+): boolean {
+  return revisions.some((revision) => revision.lastEdit.at > since && revision.agentId !== agentId);
 }
 
 /** The task as it stands, behind the line saying why this turn is handed it. */

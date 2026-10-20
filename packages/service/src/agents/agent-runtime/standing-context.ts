@@ -1,15 +1,3 @@
-import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-store";
-import { boardText } from "@luke/features/board-text";
-import type { Board } from "@luke/features/board-wire";
-import { dateLabel } from "@luke/features/date-mention";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
-import { NOTE_KIND, type PlanAgentEdit } from "@luke/features/plan-template";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { DateTime, Option } from "effect";
-import { openThreadsText } from "../../tasks/comment-tools.js";
-import type { ChatSince } from "../brain-host/chat.js";
-
 /**
  * standing-context.ts -- the task as it stands, handed to an agent's turn beside its instructions.
  *
@@ -22,6 +10,18 @@ import type { ChatSince } from "../brain-host/chat.js";
  * turn opens and remembered by none, so a turn reads what was saved and
  * drawn since the last one rather than a stale copy.
  */
+
+import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-store";
+import { boardText } from "@luke/features/board-text";
+import type { Board } from "@luke/features/board-wire";
+import { dateLabel } from "@luke/features/date-mention";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
+import { NOTE_KIND, type PlanAgentEdit } from "@luke/features/plan-template";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
+import { DateTime, Option } from "effect";
+import { openThreadsText } from "../../tasks/comment-tools.js";
+import type { ChatSince } from "../brain-host/chat.js";
 
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const TASK_MARKER = "[task]";

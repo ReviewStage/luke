@@ -1,7 +1,7 @@
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
-import { host } from "../host.js";
+import { host, readStepStarted, stepTurnId } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
@@ -45,13 +45,14 @@ export default defineDynamic({
         }),
       );
     },
-    "turn.started": (_event, ctx) =>
+    "turn.started": (event, ctx) =>
       runAgent(
         Effect.gen(function* () {
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return null;
           const turn = host.turnKind(ctx.session.auth);
-          const content = yield* host.turnInstructions(admitted.success, turn);
+          const turnId = stepTurnId(ctx.session.id, readStepStarted(event));
+          const content = yield* host.turnInstructions(admitted.success, turn, turnId);
           return content === undefined ? null : defineInstructions({ content });
         }),
       ),

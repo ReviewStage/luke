@@ -1,10 +1,3 @@
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
-import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "@luke/service/tasks/queue-question";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import { defineDynamic, defineTool } from "eve/tools";
-import { offeredTurnTools } from "../host.js";
-
 /**
  * queue_question.ts -- on a call, the agent hands the voice one question for the developer the moment it is ready.
  *
@@ -15,6 +8,14 @@ import { offeredTurnTools } from "../host.js";
  * It is offered at each turn's start on a spoken turn alone
  * (`offeredTurnTools`); on a typed one a question goes to the inbox.
  */
+
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "@luke/service/tasks/queue-question";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
+import { defineDynamic, defineTool } from "eve/tools";
+import { offeredTurnTools } from "../host.js";
+
 export default defineDynamic({
   events: {
     "turn.started": (_event, ctx) =>
