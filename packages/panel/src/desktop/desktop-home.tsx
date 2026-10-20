@@ -32,6 +32,7 @@ import {
   needsReader,
   waitsOnReader,
 } from "../tasks/inbox-model.js";
+import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -45,8 +46,10 @@ import { useRowKeys } from "./use-row-keys.js";
  *
  * It is one page (`DetailPage`), as a chat app's empty page is: a greeting
  * standing still over the scroll, and at the top of the scroll New task's
- * composer card (`new-task-composer.tsx`) in place of a New task button, so
- * the page opens on a prompt box the way Codex's and ChatGPT's do; then
+ * composer card (`new-task-composer.tsx`) in place of a New task button,
+ * drawn as the dialog draws it, its title, repository chip, and Issue chip
+ * in the head row over the box, so the page opens on a prompt box the way
+ * Codex's and ChatGPT's do; then
  * Inbox, every open Inbox item of the workspace listed, a teammate's
  * agent's among them, as the Inbox's own row draws it, the task it is about
  * after its title, a press opening the Inbox on it; then Recent, the tasks
@@ -281,7 +284,9 @@ function HomeRecent({
  * nothing while signed out, where nothing could start. Note that the press
  * that opens the dialog chooses its repository for the dialog alone, so
  * this card starts on none of it. Escape with nothing in the card to close
- * lets go of the words, so ↑ and ↓ reach the rows again.
+ * lets go of the words, so ↑ and ↓ reach the rows again. An `@` or `/` list
+ * opens under the caret's line, because one risen over it from the page's
+ * top is cut off under the page's head.
  */
 function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
   if (!tasks.signedIn) return null;
@@ -290,6 +295,7 @@ function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | n
       newTask={{ ...tasks.newTask, preset: undefined }}
       workspaceId={tasks.newTask.workspaceId}
       onLeave={letGoOfFocus}
+      listSide={MENTION_MENU_SIDE.BELOW}
     />
   );
 }

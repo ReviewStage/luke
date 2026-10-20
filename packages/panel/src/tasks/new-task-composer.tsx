@@ -27,13 +27,14 @@ import {
   IconButton,
   PencilIcon,
   TaskStatusMark,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -47,7 +48,7 @@ import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
-import { MENTION_MENU_SIDE } from "./mention-picker.js";
+import type { MentionMenuSide } from "./mention-picker.js";
 import {
   choiceOf,
   linkedElsewhere,
@@ -74,13 +75,11 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * pencil alone where the card is too narrow for its word, as on a phone,
  * where File for later draws the backlog's mark alone too and the model
  * chip's words are cut short, so Start stays at the row's end in the card.
- * New task's own chips stand in a head row over the card where the owner
- * hands a title, as
- * the dialog does (`heading`): the title, then the repository the task is
- * about (`repository-chip.tsx`), and at the row's right end the Issue
+ * New task's own chips stand in a head row over the card, the same in the
+ * dialog and on Home: the title, "New task", then the repository the task
+ * is about (`repository-chip.tsx`), and at the row's right end the Issue
  * chip, where the workspace has GitHub or Linear connected
- * (`issue-picker-chip.tsx`, ⌘L from the card). With no title, as on Home, both stand in the foot after
- * the "+" instead. The repository chip starts on the one the press chose
+ * (`issue-picker-chip.tsx`, ⌘L from the card). The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
  *
@@ -168,6 +167,9 @@ const MODE_MAX_CHARS = {
 
 /** The field's name in either mode; note that it is one name, because the editor mounts afresh on a new one. */
 const FIELD_LABEL = "Task prompt";
+
+/** The head row's title, before the repository's chip. */
+const NEW_TASK_HEADING = "New task";
 
 /** What the card says in each mode. */
 const MODE_WORDS = {
@@ -285,7 +287,8 @@ export function NewTaskComposer({
   onStarting,
   onLeave,
   focusedByOwner = false,
-  heading,
+  titleId,
+  listSide,
 }: {
   newTask: TasksControl["newTask"];
   /** The workspace the task starts in, the owner's to choose; none before the workspaces are read. */
@@ -296,8 +299,10 @@ export function NewTaskComposer({
   onLeave: () => void;
   /** Whether the owner hands the words focus as the card first draws, as the dialog does; the words take it themselves otherwise. */
   focusedByOwner?: boolean;
-  /** The owner's title, drawn in a head row over the card with the repository chip after it and the Issue chip at its right end; with none, as on Home, both chips stand in the card's foot. */
-  heading?: ReactNode;
+  /** The id the head row's title stands under, which names the dialog's card. */
+  titleId?: string | undefined;
+  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on Home, whose card stands at the page's top, where a list risen over it is cut off under the page's head. */
+  listSide: MentionMenuSide;
 }): React.JSX.Element {
   const [mode, setMode] = useNewTaskMode();
   const draft = useDraft(newTaskPlace(workspaceId));
@@ -529,16 +534,10 @@ export function NewTaskComposer({
       full={full}
       disabled={starting}
       openRequest={issueAsks}
-      align={heading === undefined ? PICKER_ALIGN.START : PICKER_ALIGN.END}
+      align={PICKER_ALIGN.END}
       onChoose={chooseIssue}
       onChooseGitHub={chooseGitHub}
     />
-  );
-  const chips = (
-    <>
-      {repositoryChip}
-      {issueChip}
-    </>
   );
 
   const composer: AgentComposerControl = {
@@ -561,15 +560,15 @@ export function NewTaskComposer({
   const card = (
     // biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the field first, which are what take the keys.
     <div className="new-task-composer" data-mode={mode} onKeyDown={onCardKey}>
-      {heading === undefined ? null : (
-        <div className="new-task-head">
-          <div className="new-task-title">
-            {heading}
-            {repositoryChip}
-          </div>
-          {issueChip}
+      <div className="new-task-head">
+        <div className="new-task-title">
+          <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+            {NEW_TASK_HEADING}
+          </Text>
+          {repositoryChip}
         </div>
-      )}
+        {issueChip}
+      </div>
       <AgentComposer
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
@@ -590,14 +589,12 @@ export function NewTaskComposer({
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
-        // Note that Home's card stands at the top of its page, where a list risen over it is cut off under the page's head.
-        listSide={heading === undefined ? MENTION_MENU_SIDE.BELOW : MENTION_MENU_SIDE.ABOVE}
+        listSide={listSide}
         above={
           links.length === 0 ? undefined : (
             <NewTaskLinks links={links} disabled={starting} onChange={setLinks} />
           )
         }
-        tools={heading === undefined ? chips : undefined}
         beforeSend={(narrow) =>
           // Note that a card too narrow for the words draws the backlog's mark in their place, still named, so Start keeps its room.
           narrow ? (

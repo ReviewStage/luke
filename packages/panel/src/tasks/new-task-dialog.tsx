@@ -1,5 +1,6 @@
-import { DIALOG_SIZE, Dialog, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { DIALOG_SIZE, Dialog } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
+import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
@@ -8,9 +9,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds New task's composer
- * (`new-task-composer.tsx`), which takes focus, with the title handed to it
- * for its head row: "New task", the repository chip after it, and the
- * Issue chip at the row's right end. The task starts in the workspace the
+ * (`new-task-composer.tsx`), which takes focus, the card named by the
+ * composer's own head row: "New task", the repository chip after it, and
+ * the Issue chip at the row's right end, as Home draws it too. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
  * workspace's repositories and its Linear issues.
  *
@@ -25,9 +26,6 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
  */
-
-/** The card's title, before the repository's chip. */
-const NEW_TASK_HEADING = "New task";
 
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
 const FIELD_SELECTOR = '[role="textbox"]';
@@ -76,11 +74,9 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           onStarting={setStarting}
           onLeave={close}
           focusedByOwner
-          heading={
-            <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {NEW_TASK_HEADING}
-            </Text>
-          }
+          titleId={titleId}
+          // Note that the dialog's card is not at a page's top, so a list rises over the line as an agent's box's does.
+          listSide={MENTION_MENU_SIDE.ABOVE}
         />
       </div>
     </Dialog>
