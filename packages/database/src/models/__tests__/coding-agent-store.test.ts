@@ -1660,7 +1660,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const workspace = yield* openWorkspace(starter);
         const agent = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.CLAUDE_PLAN,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
 
         const fresh = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
@@ -1678,14 +1678,14 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           nativeSession: null,
           runnerTokenHash: null,
-          payer: CODING_AGENT_PAYER.CLAUDE_PLAN,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         assert.deepEqual([recordedSession, recordedToken], [true, true]);
         assert.deepEqual(recorded, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           nativeSession: "session-1",
           runnerTokenHash: "digest-1",
-          payer: CODING_AGENT_PAYER.CLAUDE_PLAN,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         assert.equal(retired.runnerTokenHash, null);
         assert.equal(retired.nativeSession, "session-1");
@@ -1728,7 +1728,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         yield* openWorkspace(outsider);
         const agent = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: CODING_AGENT_PAYER.CHATGPT_PLAN,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
         yield* recordCodingAgentNativeSession(starter, agent.id, "thread-1");
         yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
@@ -1743,7 +1743,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runtime: CONVERSATION_RUNTIME.CODEX,
           nativeSession: "thread-1",
           runnerTokenHash: "digest-1",
-          payer: CODING_AGENT_PAYER.CHATGPT_PLAN,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
       }),
   );

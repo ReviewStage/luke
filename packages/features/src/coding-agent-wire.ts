@@ -151,8 +151,9 @@ export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING
  * another payer.
  */
 export const CODING_AGENT_PAYER = {
-  CLAUDE_PLAN: "claude_plan",
-  CHATGPT_PLAN: "chatgpt_plan",
+  // Note that the stored spelling says "plan", the subscription's own word, not a task's document.
+  CLAUDE_SUBSCRIPTION: "claude_plan",
+  CHATGPT_SUBSCRIPTION: "chatgpt_plan",
   API_KEY: "api_key",
   LUKE: "luke",
 } as const;
