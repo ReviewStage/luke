@@ -225,14 +225,15 @@ html.call-window[data-pointer-stale="true"]
 }
 
 /* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
-   the top of the call's Call tab, at the 16:9 the avatar is rendered in, on
-   the card's ground, border, and corner, so the tile reads as the call card
-   grown into a picture. It keeps its height as the transcript under it
-   scrolls. However wide the tab is, the tile keeps to the transcript's
-   column, centred over it, and no taller than about two fifths of the
-   stage (as wide as seven tenths of the stage's height, at 16:9), so a
-   wide, short tab still leaves the transcript room; 240px is as narrow as
-   its still frame stays readable.
+   the top of the call's Call tab, a 16:9 picture on the card's ground,
+   border, and corner, so the tile reads as the call card grown into a
+   picture. It keeps its height as the transcript under it scrolls. It
+   follows the tab's width as the window resizes, centred over the
+   transcript, up to 560px (off-scale: about the stock avatars' own
+   resolution, past which a wider tile only draws a softer face), and no
+   taller than about a third of the stage (as wide as three fifths of the
+   stage's height, at 16:9), so a wide, short tab still leaves the
+   transcript room; 240px is as narrow as its still frame stays readable.
    The strip shares the width, so the toggle stays put when video goes off. */
 .call-video-tile,
 .call-video-strip {
@@ -240,17 +241,22 @@ html.call-window[data-pointer-stale="true"]
     100% -
     2 *
     var(--luke-space-16),
-    var(--luke-page-measure),
-    max(240px, calc(var(--luke-stage-height) * 0.7))
+    560px,
+    max(240px, calc(var(--luke-stage-height) * 0.6))
   );
   margin: var(--luke-space-4) auto var(--luke-space-8);
 }
 
+/* Note that the tile's least height is zero rather than its content's,
+   which a box with a ratio takes by default unless it scrolls: the stock
+   avatars stream a square picture, which at the tile's width would
+   stretch the tile square. */
 .call-video-tile {
   position: relative;
   flex: none;
   overflow: clip;
   box-sizing: border-box;
+  min-height: 0;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-14);
@@ -260,11 +266,15 @@ html.call-window[data-pointer-stale="true"]
   line-height: var(--luke-type-label-leading);
 }
 
+/* The square picture cut to the tile's 16:9, held a little above its
+   middle, where the stock avatars frame their faces, so the cut takes
+   the crown of the head and the shoulders rather than the chin. */
 .call-video-frame {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 50% 35%;
 }
 
 /* Luke's face where there is no video to draw: the still frame a fixture
