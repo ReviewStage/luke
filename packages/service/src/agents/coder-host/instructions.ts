@@ -249,23 +249,38 @@ function branchWords(startBranch: string | null): BranchWords {
   };
 }
 
+/** How the coder prompt's chat section names the task's Luke: by his link under the task's, or, for an agent on no task, as the Luke of whichever task it means. */
+function lukeWords(taskLink: string | null) {
+  if (taskLink === null) {
+    return {
+      named: "a task's Luke by that task's link with `/luke` after it",
+      ask: "a task's Luke's reading of its plan",
+    };
+  }
+  return {
+    named: `your task's Luke as [@Luke](${taskLink}/luke)`,
+    ask: "your task's Luke's reading of the plan",
+  };
+}
+
 /**
  * The section that tells the agent of its workspace's chat and when to use
  * it beside the inbox, worded for what it was handed; only an agent whose
  * starter turned Chat on is told of it, as only it is offered the tools.
  */
-function chatSection(brief: string): string {
+function chatSection(brief: string, taskLink: string | null): string {
+  const luke = lukeWords(taskLink);
   return `
 
 ## Chat with other agents
 
-You are a member of your workspace's chat, under a handle such as \`@agent-3\`, beside the other coding agents of the workspace, the task's Luke as \`@luke\`, and the developer's team by name. Your task has a channel of its own, where its agents post by default. Other agents may be working on this task at the same time, each in its own sandbox on its own branch: read the chat with \`${CHAT_TOOLS.READ.name}\` before you settle on an interface, a file layout, or a migration another agent's work could touch, and again before you publish. Post with \`${CHAT_TOOLS.POST.name}\` what another agent must know or decide: a contract you are fixing, such as a schema, an API, or a name; a file or a module you are taking on; a step done that someone waits on. Write \`@handle\` in the words to tell one member, send to \`@handle\` for a direct message, and answer a message in its thread with \`replyTo\`; a plain post tells nobody, and is read when they next read. Never post a running log of your work, and never repeat in chat what your messages already tell the developer.
+You are a member of your workspace's chat, beside the other coding agents of the workspace, its tasks' Lukes, and the developer's team. Every member is named by a mention link, the same \`[@Name](link)\` a chip is written as, which \`${CHAT_TOOLS.READ.name}\` lists for each member and which you copy rather than spell; ${luke.named}. Your task has a channel of its own, where its agents post by default. Other agents may be working on this task at the same time, each in its own sandbox on its own branch: read the chat with \`${CHAT_TOOLS.READ.name}\` before you settle on an interface, a file layout, or a migration another agent's work could touch, and again before you publish. Post with \`${CHAT_TOOLS.POST.name}\` what another agent must know or decide: a contract you are fixing, such as a schema, an API, or a name; a file or a module you are taking on; a step done that someone waits on. Write a member's mention link in the words to tell them, send \`to\` their mention link for a direct message, and answer a message in its thread with \`replyTo\`; an \`@word\` that is no link tells no one, and a plain post tells nobody, and is read when they next read. Never post a running log of your work, and never repeat in chat what your messages already tell the developer.
 
 A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming who said it, where, and its number. It is a teammate's word, not the developer's: weigh it against your ${brief}, and say so where the two disagree. Read the chat where you need its context, answer in its thread where an answer is wanted, and carry on with your own work otherwise.
 
 A topic channel says in a line what it is for: give one its purpose as your \`${CHAT_TOOLS.POST.name}\` opens it, and rename it, change its purpose, or archive it once its topic is done with \`${CHAT_TOOLS.EDIT_CHANNEL.name}\`.
 
-Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, never in chat. Chat is for talking with the other agents, \`@luke\`, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or \`@luke\`'s reading of the plan, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
+Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, never in chat. Chat is for talking with the other agents, the Lukes, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or ${luke.ask}, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
 }
 
 /**
@@ -326,7 +341,7 @@ What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.n
 
 One thread per thing you need, under a key of your own, its first post naming its title. A post is one Markdown message: name the thing as a mention, put a link alone on its line to show it as a card, such as the pull request, the page a to-do is done on, or the exact lines of your repository a decision is about at a commit already on GitHub, and draw a picture where it belongs, such as a screenshot of a UI you rendered, as \`![alt](path "caption")\` by its path in your sandbox. End it with the ask you need: \`decide\` among options, naming the one you recommend, or two short ones such as Approve and Request changes where you want their go-ahead; \`do\` for something only they can do by hand, with its steps; or \`answer\`, with typed fields where you need several values at once, or none for an answer in their own words. A post without an ask is something they should only know. Set \`waits\` where their answer changes what you do next. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a \`do\` the developer does by hand, where they put it. Decide small things yourself.
 
-Keep the inbox current rather than repeating it. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Answer it on the thread with a post under its key that asks nothing, as you follow up after an answer, such as saying what you did with it.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief) : ""}${place.pages}${place.comments}
+Keep the inbox current rather than repeating it. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Answer it on the thread with a post under its key that asks nothing, as you follow up after an answer, such as saying what you did with it.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief, taskLink) : ""}${place.pages}${place.comments}
 
 ## Handing work to a worker
 

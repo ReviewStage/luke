@@ -519,7 +519,6 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           authorMemberId: person.id,
           to: { channelId: channel.id },
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.ANSWERED }],
-          mentions: [],
           clientKey: randomUUID(),
         });
         const standing = yield* admitted(host, session);
@@ -545,7 +544,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "asked to post, Luke posts in the plan's channel as @luke, and each turn opens with what was said there since Luke last read, until a turn handed it completes",
+    "asked to post, Luke posts in the plan's channel as its Luke, and each turn opens with what was said there since Luke last read, until a turn handed it completes",
     () =>
       Effect.gen(function* () {
         const { host, userId, taskId, conversationId } = yield* savedTaskWithConversation();
@@ -566,7 +565,6 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           (member) => member.kind === MEMBER_KIND.LUKE && member.taskId === taskId,
         );
         assert.ok(luke);
-        assert.equal(luke.handle, "luke");
         assert.deepEqual(
           said.map((message) => [message.authorMemberId, message.blocks]),
           [[luke.id, [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.POSTED }]]],
@@ -577,16 +575,19 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           authorMemberId: person.id,
           to: { channelId: channel.id },
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.ANSWERED }],
-          mentions: [],
           clientKey: randomUUID(),
         });
         assert.ok(Result.isSuccess(answered));
-        const line = `[chat since the last call]\n- m ${answered.success.message.seq} in #teammate-invitations, @${person.handle}: ${JSON.stringify(CHAT.ANSWERED)}`;
+        // Who said it is named by their mention link, under the workspace as Luke's account reads it.
+        const line = new RegExp(
+          `\\[chat since the last call\\]\\n- m ${answered.success.message.seq} in #teammate-invitations, \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${userId}\\): ${JSON.stringify(CHAT.ANSWERED).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`,
+          "u",
+        );
         // A turn that fails took nothing in, so the turn after it is handed the same line.
         const failed = yield* failedTurn(host, session, "turn_1", CORRECTION);
-        assert.ok(failed.includes(line), failed);
+        assert.match(failed, line);
         const retried = yield* failedTurn(host, session, "turn_2", CORRECTION);
-        assert.ok(retried.includes(line), retried);
+        assert.match(retried, line);
         // A turn that completes took it in, so the turn after is handed nothing of it.
         yield* brainTurn(host, session, "turn_3", CORRECTION);
         const after = (yield* host.standingContext(yield* admitted(host, session))).text;

@@ -3,6 +3,7 @@ import {
   ASK_STATUS,
   CHANNEL_KIND,
   CHAT_BOUNDS,
+  CHAT_MEMBER_LABEL,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
@@ -87,15 +88,6 @@ export interface ChatAskAnswer {
   readonly revision: number;
   readonly reply: ChatReply;
 }
-
-/** What Luke is called wherever a task's Luke speaks. */
-const LUKE_NAME = "Luke";
-
-/** What a member is called whose account, or whose agent, is gone, so nothing names them any more. */
-const FORMER_NAME = {
-  PERSON: "Former member",
-  AGENT: "Former agent",
-} as const;
 
 /** The order the rail lists channels in, by kind: `#general`, the plans', then the topics. */
 const CHANNEL_ORDER = {
@@ -235,12 +227,12 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
   const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
     member?.kind === MEMBER_KIND.LUKE
-      ? LUKE_NAME
+      ? CHAT_MEMBER_LABEL.LUKE
       : member?.kind === MEMBER_KIND.AGENT
-        ? (agent?.title ?? member.name ?? FORMER_NAME.AGENT)
+        ? (agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
         : memberId === chat.self && names.selfName !== undefined
           ? names.selfName
-          : (member?.name ?? FORMER_NAME.PERSON);
+          : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
   return { member, name, agent, taskName };
 }
 

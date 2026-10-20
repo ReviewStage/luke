@@ -1,8 +1,10 @@
 import type { GitHubRepository } from "@luke/features";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  Badge,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -39,7 +41,8 @@ import { Spinner } from "../spinner.js";
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
  * repositories the account's tasks were about lately first and the rest as
- * GitHub last saw them change, each under its owner's picture. Nothing the
+ * GitHub last saw them change, each under its owner's picture, one the
+ * developer's own GitHub token reaches marked Token. Nothing the
  * workspace's GitHub does not reach is offered, so a task never starts on
  * a repository its workspace cannot work in; a pick the read finds out of
  * reach is handed back, and with nothing to offer the chip reads No
@@ -104,6 +107,9 @@ const CHOOSE_LABEL = "Choose repository";
 /** The chip's words where the workspace's GitHub reaches nothing to pick. */
 const NONE_LABEL = "No repository";
 
+/** The mark beside a repository the developer's own GitHub token reaches rather than the App. */
+const TOKEN_LABEL = "Token";
+
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
@@ -143,6 +149,22 @@ function ownerApart(fullName: string): Pick<MenuRow, "label" | "detail"> {
   return { label: fullName.slice(slash + 1), detail: fullName.slice(0, slash) };
 }
 
+/** A row's words with the Token mark after its owner, where the developer's own token reaches it. */
+function tokenMarked(
+  words: Pick<MenuRow, "label" | "detail">,
+  token: boolean,
+): Pick<MenuRow, "label" | "detail"> {
+  if (!token) return words;
+  return {
+    label: words.label,
+    detail: (
+      <>
+        {words.detail} <Badge>{TOKEN_LABEL}</Badge>
+      </>
+    ),
+  };
+}
+
 /** Whether the read's repositories hold one, as GitHub spells it or not. */
 function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
   const wanted = repository.toLowerCase();
@@ -169,9 +191,14 @@ function repositoryRows(
   for (const each of reached ?? []) {
     if (!names.includes(each.fullName)) names.push(each.fullName);
   }
+  const onToken = new Set(
+    (reached ?? [])
+      .filter((each) => each.access === GITHUB_ACCESS.TOKEN)
+      .map((each) => each.fullName),
+  );
   return names.map((fullName) => ({
     id: fullName,
-    ...ownerApart(fullName),
+    ...tokenMarked(ownerApart(fullName), onToken.has(fullName)),
     terms: [fullName],
     icon: (
       <RepositoryPicture
@@ -278,7 +305,7 @@ export function RepositoryChip(props: {
   const note =
     failure !== undefined ? (
       <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
-    ) : listed !== undefined && !listed.installed ? (
+    ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>
         {unconnectedNotes(chooser).map((words) => (

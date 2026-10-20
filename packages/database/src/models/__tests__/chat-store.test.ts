@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -11,6 +12,7 @@ import {
   CHAT_REPLY,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
@@ -27,6 +29,7 @@ import {
   CHAT_REFUSAL,
   type ChatImageWrite,
   type ChatMemberRow,
+  type ChatMemberSubject,
   type ChatPost,
   channelNamed,
   channelOf,
@@ -42,7 +45,7 @@ import {
   history,
   leave,
   markNoticed,
-  memberNamed,
+  memberOfSubject,
   messageAt,
   moveTaskChat,
   openAsksOf,
@@ -519,6 +522,29 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
 /** A post's words as one Markdown block. */
 const words = (text: string) => [{ type: CHAT_BLOCK.MARKDOWN, text }] as const;
 
+/** Where the test's links are written: a workspace's step, which no link is read by. */
+const PLACE = { workspace: "acme", repository: null } as const;
+
+/** An agent member's mention link, as a post's words write it. */
+const agentLink = (member: ChatMemberRow) =>
+  `[@Agent](${encodeMention({ kind: MENTION_KIND.AGENT, agentId: member.agentId ?? "" }, PLACE)})`;
+
+/** A task's Luke's mention link, as a post's words write it. */
+const lukeLink = (taskId: string) =>
+  `[@Luke](${encodeMention({ kind: MENTION_KIND.LUKE, taskId }, PLACE)})`;
+
+/** The members a post's words name by their mention links, as the service reads them for the store. */
+const subjectsIn = (text: string) =>
+  chatMentionsIn(text).members.map(({ mention, label }) => {
+    const subject: ChatMemberSubject =
+      mention.kind === MENTION_KIND.PERSON
+        ? { kind: MEMBER_KIND.HUMAN, userId: mention.userId }
+        : mention.kind === MENTION_KIND.AGENT
+          ? { kind: MEMBER_KIND.AGENT, agentId: mention.agentId }
+          : { kind: MEMBER_KIND.LUKE, taskId: mention.taskId };
+    return { subject, label };
+  });
+
 /**
  * A workspace with its owner, a teammate, a plan with two agents, and their
  * members, each minted as the chat mints them, and the plan's channel.
@@ -547,7 +573,7 @@ const openRoom = Effect.gen(function* () {
       authorMemberId: author.id,
       to,
       blocks: words(text),
-      mentions: [...text.matchAll(/@([a-z][a-z0-9-]*)/gu)].map((match) => match[1] ?? ""),
+      subjects: subjectsIn(text),
       clientKey: randomUUID(),
     });
   const posted = (...args: Parameters<typeof post>) =>
@@ -593,7 +619,6 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
           authorMemberId: room.first.id,
           to: { channelId: room.channel.id },
           blocks: words("Taking the invite table."),
-          mentions: [],
           clientKey: "call-1",
         };
         const sent = Result.getOrThrow(yield* postMessage(room.owner, room.workspace, once));
@@ -747,21 +772,25 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
-    "mentions resolve to members as a post lands, @luke to the task's Luke, and a handle naming no one is answered",
+    "mention links resolve to members as a post lands, each once, a task's Luke minted by his link, and an @word outside a link names no one",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
+        const second = agentLink(room.second);
         const sent = Result.getOrThrow(
           yield* room.post(
             room.first,
-            "@agent-2 and @luke: the table is mine. cc @nobody @agent-2",
+            `${second} and ${lukeLink(room.plan)}: the table is mine. cc @nobody @agent-2 ${second}`,
           ),
         );
         const luke = Option.getOrThrow(
-          yield* memberNamed(room.owner, room.workspace, "luke", room.plan),
+          yield* memberOfSubject(room.owner, room.workspace, {
+            kind: MEMBER_KIND.LUKE,
+            taskId: room.plan,
+          }),
         );
         assert.deepEqual(sent.message.mentions, [room.second.id, luke.id]);
-        assert.deepEqual(sent.unresolved, ["nobody"]);
+        assert.deepEqual(sent.unresolved, []);
         assert.equal(luke.kind, MEMBER_KIND.LUKE);
         assert.equal(
           Option.getOrThrow(
@@ -783,7 +812,6 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
             authorMemberId: room.ada.id,
             to: { channelId: room.channel.id },
             blocks: words("Over to you."),
-            mentions: [],
             subjects: [
               {
                 subject: { kind: MEMBER_KIND.HUMAN, userId: room.teammate },
@@ -800,7 +828,10 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
           }),
         );
         const luke = Option.getOrThrow(
-          yield* memberNamed(room.owner, room.workspace, "luke", room.plan),
+          yield* memberOfSubject(room.owner, room.workspace, {
+            kind: MEMBER_KIND.LUKE,
+            taskId: room.plan,
+          }),
         );
         assert.deepEqual(sent.message.mentions, [room.grace.id, room.second.id, luke.id]);
         assert.deepEqual(sent.unresolved, ["@Unminted"]);
@@ -851,13 +882,13 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         const room = yield* openRoom;
         const notice = (seq: number) =>
           markNoticed(room.owner, room.workspace, room.second.id, room.channel.id, seq);
-        const told = yield* room.posted(room.first, "@agent-2 ping.");
+        const told = yield* room.posted(room.first, `${agentLink(room.second)} ping.`);
         assert.equal(yield* notice(told.seq), true);
-        const again = yield* room.posted(room.first, "@agent-2 ping again.");
+        const again = yield* room.posted(room.first, `${agentLink(room.second)} ping again.`);
         assert.equal(yield* notice(again.seq), false);
         yield* unreadFor(room.owner, room.workspace, room.second.id);
         assert.equal(
-          yield* notice((yield* room.posted(room.first, "@agent-2 and now?")).seq),
+          yield* notice((yield* room.posted(room.first, `${agentLink(room.second)} and now?`)).seq),
           true,
         );
 
@@ -944,7 +975,13 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
           yield* markNoticed(stranger, room.workspace, room.second.id, room.channel.id, 1),
           false,
         );
-        assert.deepEqual(yield* memberNamed(stranger, room.workspace, "agent-1"), Option.none());
+        assert.deepEqual(
+          yield* memberOfSubject(stranger, room.workspace, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: room.first.agentId ?? "",
+          }),
+          Option.none(),
+        );
       }),
   );
 
@@ -957,7 +994,6 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
           authorMemberId: room.first.id,
           to: { channelId: room.channel.id },
           blocks: words("Taking the table."),
-          mentions: [],
           clientKey: "call-7",
         };
         const [a, b] = yield* Effect.all(
@@ -1018,20 +1054,18 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
       }),
   );
 
-  it.effect(
-    "an agent that works no task names no Luke: its @luke outside a task's channel answers to no one",
-    () =>
-      Effect.gen(function* () {
-        const room = yield* openRoom;
-        const db = yield* Database;
-        const agentId = room.first.agentId ?? "";
-        yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agentId));
-        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
-        const sent = Result.getOrThrow(
-          yield* room.post(room.first, "@luke, anyone?", { channelId: general.id }),
-        );
-        assert.deepEqual([sent.message.mentions, sent.unresolved], [[], ["luke"]]);
-      }),
+  it.effect("a handle typed as a word names no one, Luke's among them, and mints no Luke", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+      const sent = Result.getOrThrow(
+        yield* room.post(room.first, "@luke, anyone? @agent-2?", { channelId: general.id }),
+      );
+      assert.deepEqual([sent.message.mentions, sent.unresolved], [[], []]);
+      assert.ok(
+        (yield* roster(room.owner, room.workspace)).every((row) => row.kind !== MEMBER_KIND.LUKE),
+      );
+    }),
   );
 
   it.effect(
@@ -1111,7 +1145,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         authorMemberId: author.id,
         to: { channelId },
         blocks: words(text),
-        mentions: [],
         clientKey: randomUUID(),
         key,
         ask: EXPIRY,
@@ -1395,7 +1428,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
             authorMemberId: room.first.id,
             to: { channelId: general.id },
             blocks: words("Moved?"),
-            mentions: [],
             clientKey: randomUUID(),
             key: "invite-expiry",
             ask: EXPIRY,
@@ -1407,7 +1439,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
           authorMemberId: room.first.id,
           to: { channelId: room.channel.id },
           blocks: words("Plain."),
-          mentions: [],
           clientKey: "request-1",
         });
         assert.deepEqual(
@@ -1415,7 +1446,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
             authorMemberId: room.first.id,
             to: { channelId: room.channel.id },
             blocks: words("Asked under a plain message's key."),
-            mentions: [],
             clientKey: "request-1",
             key: "another",
             ask: EXPIRY,
@@ -1437,7 +1467,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
           authorMemberId: room.first.id,
           to: { channelId: room.channel.id },
           blocks: words("Fill these in."),
-          mentions: [],
           clientKey: randomUUID(),
           key: "the-form",
           ask: { response: { type: CHAT_ASK.FORM, fields } },
@@ -1477,7 +1506,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
             authorMemberId: room.first.id,
             to: { channelId: room.channel.id },
             blocks: words("Fill these in."),
-            mentions: [],
             clientKey: randomUUID(),
             key: "long-form",
             ask: { response: { type: CHAT_ASK.FORM, fields } },
@@ -1532,7 +1560,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
           authorMemberId: room.ada.id,
           to: { channelId: room.channel.id },
           blocks: words("Unrelated."),
-          mentions: [],
           clientKey: "shared-key",
         });
         assert.deepEqual(
@@ -1601,7 +1628,6 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
           attachmentId,
           alt: "The rendered invite.",
         })),
-        mentions: [],
         clientKey: randomUUID(),
       }),
       (posted) => Result.getOrThrow(posted).message,
@@ -1829,14 +1855,16 @@ it.layer(getTestDB())("a plan's chat moving with the plan", (it) => {
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
-        const root = yield* room.posted(room.first, "@agent-2 who owns the invite table?");
+        const root = yield* room.posted(
+          room.first,
+          `${agentLink(room.second)} who owns the invite table?`,
+        );
         const reply = yield* room.posted(room.ada, "agent-2 does.", { replyTo: root.seq });
         const asked = Result.getOrThrow(
           yield* postAsk(room.owner, room.workspace, {
             authorMemberId: room.first.id,
             to: { channelId: room.channel.id },
             blocks: words("Which expiry?"),
-            mentions: [],
             clientKey: randomUUID(),
             key: "expiry",
             ask: EXPIRY,
@@ -2058,24 +2086,26 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
         const notice = (channelId: string, seq: number) =>
           markNoticed(room.owner, room.workspace, room.second.id, channelId, seq);
-        const told = yield* room.posted(room.first, "@agent-2 ping.");
+        const told = yield* room.posted(room.first, `${agentLink(room.second)} ping.`);
         assert.equal(yield* notice(room.channel.id, told.seq), true);
         yield* room.posted(room.first, "Elsewhere.", { channelId: general.id });
         yield* unreadFor(room.owner, room.workspace, room.second.id, { channelId: general.id });
-        const held = yield* room.posted(room.first, "@agent-2 again.", { channelId: general.id });
+        const held = yield* room.posted(room.first, `${agentLink(room.second)} again.`, {
+          channelId: general.id,
+        });
         assert.equal(yield* notice(general.id, held.seq), false);
 
         yield* unreadFor(room.owner, room.workspace, room.second.id, {
           channelId: room.channel.id,
         });
-        const freed = yield* room.posted(room.first, "@agent-2 and now?", {
+        const freed = yield* room.posted(room.first, `${agentLink(room.second)} and now?`, {
           channelId: general.id,
         });
         assert.equal(yield* notice(general.id, freed.seq), true);
         // A notice of a channel read past it already is no notice.
         yield* unreadFor(room.owner, room.workspace, room.second.id);
         assert.equal(yield* notice(general.id, freed.seq), false);
-        const again = yield* room.posted(room.first, "@agent-2 once more.");
+        const again = yield* room.posted(room.first, `${agentLink(room.second)} once more.`);
         assert.equal(yield* notice(room.channel.id, again.seq), true);
       }),
   );

@@ -25,8 +25,11 @@
  * `workspaceId` query, or to the account's first workspace where none is
  * named, most recently updated first, to a member of it, and whether one is
  * connected at all; a workspace the account is not in is not found. A
- * workspace with nothing connected has no repositories. A GitHub or a store
- * the service could not reach is unavailable.
+ * workspace with nothing connected has no repositories. A member who saved
+ * their own GitHub token is listed, beside them, the repositories it may
+ * push to that no installation lists, each entry marked with which of the
+ * two reaches it. A GitHub or a store the service could not
+ * reach is unavailable.
  *
  * Beside it, one repository of the workspace's installation is read by the
  * workspace and its name, for a place no plan names, such as an agent an
@@ -76,9 +79,10 @@ import {
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import type { GitHubIssueSummary, GitHubPullRequestSummary } from "@luke/features";
 import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
-import type {
-  GitHubRepositoryIssuesAnswer,
-  RepositoryIssuesAsk,
+import {
+  GITHUB_ACCESS,
+  type GitHubRepositoryIssuesAnswer,
+  type RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
@@ -123,21 +127,39 @@ export interface GitHubProcedureSeams {
 /** What the procedures may require of the function that stands them. */
 type GitHubRepositoriesServices = DatabaseServices | GitHubApp | HttpClient.HttpClient;
 
-/** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository. */
+/** A repository as a read with no plan names it: the workspace whose installation reaches it, the repository, and the member asking, whose own token reaches it where no installation does. */
 interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
+  readonly member: string;
 }
 
 /** The place the query names, where the account is a member of its workspace; one not a member of is not found. */
 const memberPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  place: RepositoryPlace,
+  place: Omit<RepositoryPlace, "member">,
 ): Effect.fn.Return<RepositoryPlace, HostedRefusal, DatabaseServices> {
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.workspaceId));
   if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { workspaceId: place.workspaceId, repository: place.repository };
+  return { workspaceId: place.workspaceId, repository: place.repository, member: userId };
 });
+
+/**
+ * The picker's repositories: the installation's, each marked the App's,
+ * and the member's own token's that no installation lists, each marked the
+ * token's, as one list most recently updated first.
+ */
+function pickedRepositories(
+  throughApp: readonly GitHubRepository[],
+  onToken: readonly GitHubRepository[],
+): GitHubRepository[] {
+  const listed = new Set(throughApp.map((one) => one.fullName.toLowerCase()));
+  const tokenOnly = onToken.filter((one) => !listed.has(one.fullName.toLowerCase()));
+  return [
+    ...throughApp.map((one) => ({ ...one, access: GITHUB_ACCESS.APP })),
+    ...tokenOnly.map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN })),
+  ].sort((left, right) => right.updatedAt - left.updatedAt);
+}
 
 /**
  * The workspace the listing is for: the one named, where the account is a
@@ -170,7 +192,11 @@ const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   GitHubRepositoriesServices
 > {
   const app = yield* GitHubApp;
-  const reached = yield* app.repositoryPullRequestToken(place.workspaceId, place.repository);
+  const reached = yield* app.repositoryPullRequestToken(
+    place.workspaceId,
+    place.repository,
+    place.member,
+  );
   if (Option.isNone(reached)) return null;
   const found = yield* pullRequestByNumber(reached.value.token, place.repository, number);
   if (Option.isNone(found)) return null;
@@ -207,7 +233,11 @@ const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   GitHubRepositoriesServices
 > {
   const app = yield* GitHubApp;
-  const reached = yield* app.repositoryIssueToken(place.workspaceId, place.repository);
+  const reached = yield* app.repositoryIssueToken(
+    place.workspaceId,
+    place.repository,
+    place.member,
+  );
   if (Option.isNone(reached)) return null;
   const found = yield* issueByNumber(reached.value.token, place.repository, number);
   return Option.getOrNull(found);
@@ -223,7 +253,11 @@ const issuesOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   GitHubRepositoriesServices
 > {
   const app = yield* GitHubApp;
-  const access = yield* app.repositoryIssueAccess(place.workspaceId, place.repository);
+  const access = yield* app.repositoryIssueAccess(
+    place.workspaceId,
+    place.repository,
+    place.member,
+  );
   if (access.kind === ISSUE_ACCESS.UNGRANTED) {
     return { ungranted: { settingsUrl: access.settingsUrl } };
   }
@@ -308,31 +342,35 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
     repositories: signedIn.repositories.effect(function* ({ context, input }) {
       const workspace = yield* listedWorkspace(context.userId, input.workspaceId);
       const app = yield* GitHubApp;
-      const [listed, installationUrl] = yield* githubReadOrRefusal(
+      const [listed, installationUrl, own] = yield* githubReadOrRefusal(
         Effect.all([
           Option.match(workspace, {
             onNone: () => Effect.succeed(Option.none<readonly GitHubRepository[]>()),
             onSome: app.workspaceRepositories,
           }),
           app.installUrl,
+          app.memberRepositories(context.userId),
         ]),
       );
       return {
         installed: Option.isSome(listed),
-        repositories: Option.getOrElse(listed, () => []),
+        repositories: pickedRepositories(
+          Option.getOrElse(listed, () => []),
+          Option.getOrElse(own, () => []),
+        ),
         installationUrl,
       };
     }),
     repositoryTree: signedIn.repositoryTree.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
-      return yield* readRepositoryTree(place.workspaceId, place.repository, {
+      return yield* readRepositoryTree(place.workspaceId, place.repository, place.member, {
         path: input.path ?? "",
         ...(input.recursive === undefined ? undefined : { recursive: true }),
       });
     }),
     repositorySkills: signedIn.repositorySkills.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
-      return yield* readWorkspaceSkills(place.workspaceId, place.repository);
+      return yield* readWorkspaceSkills(place.workspaceId, place.repository, place.member);
     }),
     repositoryPullRequest: signedIn.repositoryPullRequest.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);

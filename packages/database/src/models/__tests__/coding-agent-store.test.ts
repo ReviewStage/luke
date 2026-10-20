@@ -9,6 +9,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_AUTHOR,
@@ -1324,6 +1325,88 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           continues.slice(0, 20),
         );
         assert.deepEqual(read.get(quiet), [{ agentId: latest, title: null }]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => {
+  it.effect(
+    "the access a repository was reached through is kept on the task that named it and the agent a Start made, and one that names none is the App's",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const onToken = yield* createTask(starter, {
+          organizationId: workspace,
+          repository: "octo-member/side",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const onApp = yield* createTask(starter, {
+          organizationId: workspace,
+          repository: "acme/api",
+        });
+        const start = (taskId: string, githubAccess?: typeof GITHUB_ACCESS.TOKEN) =>
+          createCodingAgent(starter, {
+            taskId,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "octo-member/side",
+            ...(githubAccess === undefined ? undefined : { githubAccess }),
+          });
+        const tokenAgent = Option.getOrThrow(yield* start(onToken.id, GITHUB_ACCESS.TOKEN)).agent;
+        const appAgent = Option.getOrThrow(yield* start(onApp.id)).agent;
+        const accessOf = (taskId: string) =>
+          Effect.map(
+            db.select({ access: task.githubAccess }).from(task).where(eq(task.id, taskId)),
+            (rows) => rows[0]?.access,
+          );
+
+        assert.equal(yield* accessOf(onToken.id), GITHUB_ACCESS.TOKEN);
+        assert.equal(yield* accessOf(onApp.id), GITHUB_ACCESS.APP);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, tokenAgent.id)).githubAccess,
+          GITHUB_ACCESS.TOKEN,
+        );
+        assert.equal(appAgent.githubAccess, GITHUB_ACCESS.APP);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's GitHub access", (it) => {
+  it.effect(
+    "an agent keeps how its repository was reached as it started, read back by its starter, and one started with none named reads as the App's",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const startOn = (githubAccess?: GitHubAccess) =>
+          Effect.map(
+            createCodingAgent(starter, {
+              taskId: task.id,
+              planSnapshot: "# Billing",
+              prompt: null,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/api",
+              ...(githubAccess === undefined ? undefined : { githubAccess }),
+            }),
+            (started) => Option.getOrThrow(started).agent,
+          );
+
+        const onToken = yield* startOn(GITHUB_ACCESS.TOKEN);
+        const unnamed = yield* startOn();
+
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, onToken.id)).githubAccess,
+          GITHUB_ACCESS.TOKEN,
+        );
+        assert.equal(unnamed.githubAccess, GITHUB_ACCESS.APP);
       }),
   );
 });

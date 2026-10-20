@@ -281,6 +281,30 @@ it("a panel reads a task's inbox, answers, closes, and messages on an item, and 
   ]);
 });
 
+it("a panel's reply that answers the open ask reaches the host with the answer, words or none; an answer naming no message is refused in the kind's own words, and the host is not asked", async () => {
+  const { call, asked } = windowPort(PANEL, {
+    answers: { codingAgentInboxMessage: () => Effect.succeed({ item: ITEM }) },
+  });
+  const answers = {
+    ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
+    reply: INBOX_REPLY.CHOSE,
+    choices: ["Ship it"],
+  };
+  const answering = { itemId: ITEM.id, text: "", clientKey: "answer-1", answers };
+
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, answering), {
+    answer: { item: ITEM },
+  });
+  assert.deepEqual(
+    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+      ...answering,
+      answers: { ...answers, ask: "the deploy question" },
+    }),
+    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE] },
+  );
+  assert.deepEqual(asked, [["codingAgentInboxMessage", answering]]);
+});
+
 it("a panel marks an inbox item read or unread, or its whole Inbox read in one workspace or all, and hears the read state", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {

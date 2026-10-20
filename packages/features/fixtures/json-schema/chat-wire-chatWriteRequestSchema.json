@@ -142,7 +142,7 @@
         },
         "to": {
           "type": "string",
-          "maxLength": 81
+          "maxLength": 512
         },
         "channelId": {
           "type": "string",
