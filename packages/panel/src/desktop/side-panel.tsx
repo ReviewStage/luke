@@ -53,6 +53,7 @@ import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import {
   Fragment,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -71,8 +72,6 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { SpinnerRegion } from "../spinner.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph.js";
-import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab.js";
-import { AgentPullRequestTab, pullRequestOfTab } from "../tasks/agent-pull-request-tab.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -84,6 +83,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
+import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
@@ -93,7 +93,7 @@ import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
 import { PageCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
-import { ofPullRequestTab } from "../tasks/pull-request-number.js";
+import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
@@ -141,6 +141,7 @@ import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import type { MenuAction } from "./action-menu.js";
 import { useFileTreeWidth } from "./folded-groups.js";
+import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
 import {
   type AddEntry,
@@ -1507,17 +1508,20 @@ function TabContent({
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
       <PullRequestsOnGitHub key={tabKey(tab)}>
-        <AgentPullRequestTab
-          agentId={tab.changes}
-          number={tab.number}
-          control={agents}
-          shown={shown}
-          repository={repository}
-          tree={fileTree}
-          view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
-          onView={(view) => onPullRequestView(tab, view)}
-          onActions={(actions) => onTabActions(tab, actions)}
-        />
+        {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
+        <Suspense fallback={<SpinnerRegion label="Loading pull request" />}>
+          <PULL_REQUEST_TAB.Route
+            agentId={tab.changes}
+            number={tab.number}
+            control={agents}
+            shown={shown}
+            repository={repository}
+            tree={fileTree}
+            view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
+            onView={(view) => onPullRequestView(tab, view)}
+            onActions={(actions) => onTabActions(tab, actions)}
+          />
+        </Suspense>
       </PullRequestsOnGitHub>
     );
   }
