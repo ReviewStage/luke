@@ -550,8 +550,8 @@ function standing(tab: HTMLElement): string | undefined {
 }
 
 /** The merge control at the title row's end, where one stands. */
-function mergeControl(tab: HTMLElement): HTMLButtonElement | null {
-  return tab.querySelector<HTMLButtonElement>(".pull-request-title-row .merge-control > button");
+function mergeControl(tab: HTMLElement): HTMLElement | null {
+  return tab.querySelector<HTMLElement>(".pull-request-title-row .merge-control");
 }
 
 /** What the toolbar's ⋯ offers for the tab, each item's words and whether it applies now. */
@@ -595,10 +595,10 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
   const merge = mergeControl(tab) ?? assert.fail("an open pull request has a merge control");
-  assert.equal(merge.getAttribute("aria-label"), "Conflicts");
+  assert.equal(merge.querySelector(".luke-badge")?.textContent, "Conflicts");
   assert.equal(
-    merge.getAttribute("aria-description"),
-    "Conflicts with main",
+    merge.querySelector(".merge-chip .visually-hidden")?.textContent,
+    ": Conflicts with main",
     "an open pull request says whether it would merge",
   );
   const opener =
@@ -2319,44 +2319,51 @@ function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): C
   });
 }
 
-/** The merge control's panel, opened from its button. */
-function openMerge(tab: HTMLElement): HTMLElement {
-  act(() => (mergeControl(tab) ?? assert.fail("an open pull request has a merge control")).click());
-  return (
-    tab.querySelector<HTMLElement>('.merge-control [role="dialog"]') ??
-    assert.fail("the merge control opens its panel")
+/** The merge control's presses, the chevron's left out, in order. */
+function mergePresses(tab: HTMLElement): HTMLButtonElement[] {
+  return [...(mergeControl(tab)?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
+    (each) => each.getAttribute("aria-label") !== "Choose how to merge",
   );
 }
 
-/** What the merge control says, and what its panel holds once opened: GitHub's sentence, the words under it, the methods, and the presses; closed again after. */
+/** What the merge control shows: its chip's word, tone, and GitHub's sentence for a reader; its press, the press's look, and whether a chevron chooses the method. None where it shows nothing. */
 function mergeShown(tab: HTMLElement) {
-  const control = mergeControl(tab) ?? assert.fail("an open pull request has a merge control");
-  const panel = openMerge(tab);
-  const shown = {
-    label: control.getAttribute("aria-label"),
-    short: control.querySelector(".merge-control-short")?.textContent,
-    look: control.getAttribute("data-variant"),
-    title: document.getElementById(panel.getAttribute("aria-labelledby") ?? "")?.textContent,
-    words: panel.querySelector(".merge-panel-words")?.textContent,
-    methods: words(panel, '[aria-label="Choose how to merge"] [role="radio"]'),
-    presses: words(panel, ".merge-panel-foot button"),
+  const control = mergeControl(tab);
+  if (control === null) return undefined;
+  const badge = control.querySelector(".merge-chip .luke-badge");
+  const [press] = mergePresses(tab);
+  return {
+    chip: badge?.textContent,
+    tone: badge?.getAttribute("data-tone"),
+    sentence: control.querySelector(".merge-chip .visually-hidden")?.textContent?.slice(2),
+    press: press?.textContent,
+    look: press?.getAttribute("data-variant"),
+    chevron: control.querySelector('[aria-label="Choose how to merge"]') !== null,
   };
-  act(() => control.click());
-  return shown;
 }
 
-/** The merge panel's press of the words given, pressed. */
+/** The merge control's press of the words given, pressed. */
 async function pressBox(tab: HTMLElement, label: string): Promise<void> {
-  const panel = openMerge(tab);
   const press =
-    [...panel.querySelectorAll<HTMLButtonElement>(".merge-panel-foot button")].find(
-      (each) => each.textContent === label,
-    ) ?? assert.fail(`the merge panel offers ${label}`);
+    mergePresses(tab).find((each) => each.textContent === label) ??
+    assert.fail(`the merge control offers ${label}`);
   act(() => press.click());
   await settle();
 }
 
-test("the merge control says what can happen now, in the look of where the merge stands, and its panel holds GitHub's sentence, the methods where it merges by one, and the press", async () => {
+/** The press of the words given in the question over the window, pressed. */
+async function answerQuestion(label: string): Promise<void> {
+  const press =
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[role="dialog"] button, [role="alertdialog"] button',
+      ),
+    ].find((each) => each.textContent === label) ?? assert.fail(`the question offers ${label}`);
+  act(() => press.click());
+  await settle();
+}
+
+test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does", async () => {
   const draft = controlAnswering(
     {
       pullRequest: () =>
@@ -2371,186 +2378,141 @@ test("the merge control says what can happen now, in the look of where the merge
     },
     PULL_REQUEST_STATE.DRAFT,
   );
-  const both = ["Squash and merge", "Rebase and merge"];
+  const none = { chip: undefined, tone: undefined, sentence: undefined };
+  const held = (chip: string, tone: string, sentence: string) => ({
+    chip,
+    tone,
+    sentence,
+    press: undefined,
+    look: undefined,
+    chevron: false,
+  });
   const cases = [
     [
+      "ready",
       merging(MERGE_STATE.CLEAN),
-      {
-        label: "Merge",
-        short: "Merge",
-        look: "primary",
-        title: "Ready to merge",
-        words: undefined,
-        methods: both,
-        presses: ["Squash and merge"],
-      },
+      { ...none, press: "Squash and merge", look: "primary", chevron: true },
     ],
     [
+      "ready by one method",
+      merging(MERGE_STATE.CLEAN, { methods: [MERGE_METHOD.MERGE] }),
+      { ...none, press: "Merge pull request", look: "primary", chevron: false },
+    ],
+    [
+      "checks running",
       merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.PENDING }),
       {
-        label: "Auto-merge",
-        short: "Auto",
+        chip: "Checks running",
+        tone: "working",
+        sentence: "Waiting on required checks",
+        press: "Enable auto-merge",
         look: "outline",
-        title: "Waiting on required checks",
-        words: undefined,
-        methods: both,
-        presses: ["Enable auto-merge"],
+        chevron: true,
       },
     ],
     [
+      "a merge queue's base",
       merging(MERGE_STATE.CLEAN, { queue: true }),
-      {
-        label: "Merge when ready",
-        short: "When ready",
-        look: "primary",
-        title: "Ready to merge",
-        words: undefined,
-        methods: [],
-        presses: ["Merge when ready"],
-      },
+      { ...none, press: "Merge when ready", look: "primary", chevron: false },
     ],
     [
+      "queued",
       merging(MERGE_STATE.UNKNOWN, {
         queue: true,
         queued: { position: 3 },
         autoMerge: { method: null },
       }),
       {
-        label: "Queued #3",
-        short: "#3",
-        look: "working-tint",
-        title: "#3 in the merge queue",
-        words: "GitHub is still checking whether it merges",
-        methods: [],
-        presses: ["Remove from queue"],
+        chip: "Queued #3",
+        tone: "working",
+        sentence: "#3 in the merge queue. GitHub is still checking whether it merges",
+        press: "Remove from queue",
+        look: "outline",
+        chevron: false,
       },
     ],
     [
+      "auto-merge on",
       merging(MERGE_STATE.BLOCKED, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
       {
-        label: "Auto-merge on",
-        short: "Auto-merge",
-        look: "working-tint",
-        title: "Auto-merge is on (squash)",
-        words: "Merging is blocked by a required review or check",
-        methods: [],
-        presses: ["Disable auto-merge"],
+        chip: "Auto-merge on",
+        tone: "working",
+        sentence: "Auto-merge is on (squash). Merging is blocked by a required review or check",
+        press: "Disable auto-merge",
+        look: "outline",
+        chevron: false,
       },
     ],
     [
+      "conflicts",
       merging(MERGE_STATE.CONFLICTS),
-      {
-        label: "Conflicts",
-        short: "Conflicts",
-        look: "danger-tint",
-        title: "Conflicts with main",
-        words: undefined,
-        methods: [],
-        presses: [],
-      },
+      held("Conflicts", "danger", "Conflicts with main"),
     ],
     [
+      "behind",
+      merging(MERGE_STATE.BEHIND),
+      held("Behind", "attention", "Behind main; it must be brought up to date"),
+    ],
+    [
+      "checking",
+      merging(MERGE_STATE.UNKNOWN),
+      held("Checking", "neutral", "GitHub is still checking whether it merges"),
+    ],
+    [
+      "review required",
       merging(MERGE_STATE.BLOCKED, { review: REVIEW_DECISION.REVIEW_REQUIRED }),
-      {
-        label: "Review required",
-        short: "Review",
-        look: "outline",
-        title: "A required review is missing",
-        words: undefined,
-        methods: [],
-        presses: [],
-      },
+      held("Review required", "attention", "A required review is missing"),
     ],
     [
+      "checks failing",
       merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.FAILING }),
-      {
-        label: "Checks failing",
-        short: "Failing",
-        look: "outline",
-        title: "Required checks are failing",
-        words: undefined,
-        methods: [],
-        presses: [],
-      },
+      held("Checks failing", "danger", "Required checks are failing"),
     ],
     [
+      "changes requested",
       merging(MERGE_STATE.BLOCKED, { review: REVIEW_DECISION.CHANGES_REQUESTED }),
-      {
-        label: "Changes requested",
-        short: "Changes",
-        look: "outline",
-        title: "Changes were requested",
-        words: undefined,
-        methods: [],
-        presses: [],
-      },
+      held("Changes requested", "danger", "Changes were requested"),
     ],
     [
-      draft,
-      {
-        label: "Draft",
-        short: "Draft",
-        look: "outline",
-        title: "A draft; mark it ready for review to merge",
-        words: undefined,
-        methods: [],
-        presses: [],
-      },
+      "blocked",
+      merging(MERGE_STATE.BLOCKED),
+      held("Blocked", "danger", "Merging is blocked by a required review or check"),
     ],
+    ["a draft, which its pill says", draft, undefined],
   ] as const;
-  for (const [control, expected] of cases) {
+  for (const [name, control, expected] of cases) {
     const tab = await draw(control);
-    assert.deepEqual(mergeShown(tab), expected, expected.label);
+    assert.deepEqual(mergeShown(tab), expected, name);
     act(() => root?.unmount());
     root = undefined;
   }
 });
 
-test("the merge panel closes on Escape and on a press outside it, handing the focus back to its button", async () => {
-  const tab = await draw(merging(MERGE_STATE.CLEAN));
-  const panel = openMerge(tab);
-  act(() => panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  assert.equal(tab.querySelector('.merge-control [role="dialog"]'), null, "Escape closes it");
-  assert.equal(document.activeElement, mergeControl(tab));
-  openMerge(tab);
-  act(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-  assert.equal(
-    tab.querySelector('.merge-control [role="dialog"]'),
-    null,
-    "a press outside closes it",
-  );
-});
-
-test("a pull request ready to merge offers Merge by the first method the repository allows, keeps the method chosen for the repository, and asks before merging against the head it read", async () => {
+test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press asks first, in GitHub's words, and merges the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
-  const panel = openMerge(first);
-  assert.deepEqual(words(panel, ".merge-panel-foot button"), ["Squash and merge"]);
-  const rebase =
-    [
-      ...panel.querySelectorAll<HTMLButtonElement>(
-        '[aria-label="Choose how to merge"] [role="radio"]',
-      ),
-    ].find((each) => each.textContent?.startsWith("Rebase and merge")) ??
-    assert.fail("the methods are offered");
-  act(() => rebase.click());
-  assert.deepEqual(words(panel, ".merge-panel-foot button"), ["Rebase and merge"]);
+  const chevron =
+    first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
+    assert.fail("the chevron chooses the method");
+  act(() => chevron.click());
+  assert.deepEqual(menuItems(), [
+    { label: "Squash and merge", checked: "true" },
+    { label: "Rebase and merge", checked: "false" },
+  ]);
+  await pressItem("Rebase and merge");
+  assert.equal(mergeShown(first)?.press, "Rebase and merge");
+  assert.deepEqual(changes, [], "choosing a method merges nothing");
   act(() => root?.unmount());
   root = undefined;
 
   const again = await draw(merging(MERGE_STATE.CLEAN));
-  assert.deepEqual(mergeShown(again).presses, ["Rebase and merge"], "the method chosen is kept");
+  assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept");
   await pressBox(again, "Rebase and merge");
   assert.deepEqual(changes, [], "a merge asks first");
-  assert.equal(again.querySelector('.merge-control [role="dialog"]'), null, "the panel closes");
   const dialog =
     document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ??
     assert.fail("the merge is asked about");
-  const merge =
-    [...dialog.querySelectorAll("button")].find(
-      (each) => each.textContent === "Rebase and merge",
-    ) ?? assert.fail("the dialog offers the merge");
-  act(() => merge.click());
-  await settle();
+  assert.match(dialog.textContent ?? "", /Rebase and merge #42\?/u);
+  await answerQuestion("Confirm rebase and merge");
   assert.deepEqual(changes, [
     [
       AGENT.id,
@@ -2559,11 +2521,17 @@ test("a pull request ready to merge offers Merge by the first method the reposit
   ]);
 });
 
-test("auto-merge is offered while checks run, and turned off once on; a merge queue's base offers Merge when ready, and a queued pull request Remove from queue; each closes the panel and is asked of the service for the agent", async () => {
-  const cases: readonly (readonly [CodingAgentsControl, string, PullRequestActionRequest])[] = [
+test("auto-merge is offered while checks run, and turned off once on; a merge queue's base offers Merge when ready; each is asked of the service for the agent at once, and Remove from queue asks first", async () => {
+  const cases: readonly (readonly [
+    CodingAgentsControl,
+    string,
+    string | undefined,
+    PullRequestActionRequest,
+  ])[] = [
     [
       merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.PENDING }),
       "Enable auto-merge",
+      undefined,
       {
         action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE,
         method: MERGE_METHOD.SQUASH,
@@ -2573,11 +2541,13 @@ test("auto-merge is offered while checks run, and turned off once on; a merge qu
     [
       merging(MERGE_STATE.BLOCKED, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
       "Disable auto-merge",
+      undefined,
       { action: PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE },
     ],
     [
       merging(MERGE_STATE.CLEAN, { queue: true }),
       "Merge when ready",
+      undefined,
       { action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, headSha: "c0ffee1" },
     ],
     [
@@ -2587,21 +2557,29 @@ test("auto-merge is offered while checks run, and turned off once on; a merge qu
         autoMerge: { method: null },
       }),
       "Remove from queue",
+      "Remove from queue",
       { action: PULL_REQUEST_ACTION.DEQUEUE },
     ],
   ];
-  for (const [control, label, request] of cases) {
+  for (const [control, label, answer, request] of cases) {
     changes = [];
     const tab = await draw(control);
     await pressBox(tab, label);
-    assert.deepEqual(changes, [[AGENT.id, request]]);
-    assert.equal(tab.querySelector('.merge-control [role="dialog"]'), null, "the panel closes");
+    if (answer !== undefined) {
+      assert.deepEqual(changes, [], `${label} asks first`);
+      assert.match(
+        document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? "",
+        /could impact other pull requests in the queue/u,
+      );
+      await answerQuestion(answer);
+    }
+    assert.deepEqual(changes, [[AGENT.id, request]], label);
     act(() => root?.unmount());
     root = undefined;
   }
 });
 
-test("while a merge's change is out its control stands busy, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
+test("while a merge's change is out its press stands busy, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
   changeAnswer = {
@@ -2610,9 +2588,9 @@ test("while a merge's change is out its control stands busy, and where GitHub re
   };
   const tab = await draw(merging(MERGE_STATE.CLEAN, { queue: true }));
   await pressBox(tab, "Merge when ready");
-  const control = mergeControl(tab) ?? assert.fail("a merge control");
-  assert.equal(control.getAttribute("aria-busy"), "true");
-  assert.equal(control.getAttribute("aria-label"), "Turning on auto-merge");
+  const [press] = mergePresses(tab);
+  assert.equal(press?.getAttribute("aria-busy"), "true");
+  assert.equal(press?.getAttribute("aria-label"), "Turning on auto-merge");
   resolve();
   await settle();
   assert.equal(
@@ -2686,7 +2664,7 @@ test("a merge asked about merges the head it was asked about, though a read land
       ...document.querySelectorAll<HTMLButtonElement>(
         '[role="dialog"] button, [role="alertdialog"] button',
       ),
-    ].find((each) => each.textContent === "Squash and merge") ??
+    ].find((each) => each.textContent === "Confirm squash and merge") ??
     assert.fail("the dialog still offers the merge");
   act(() => merge.click());
   await settle();
