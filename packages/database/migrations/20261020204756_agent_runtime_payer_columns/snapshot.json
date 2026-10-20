@@ -1,8 +1,12 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "9176d9a4-aec6-48a1-9343-fdce16e0ccbd",
-  "prevIds": ["45b99cda-d287-477b-954d-dc19cf8acb94", "9eac810c-3385-45ab-8eac-e63c88defb11"],
+  "id": "3a783747-d5be-4954-a5cf-cefaa500def7",
+  "prevIds": [
+    "45b99cda-d287-477b-954d-dc19cf8acb94",
+    "64cc9604-448c-4f9c-85c0-9e3cc554989b",
+    "9eac810c-3385-45ab-8eac-e63c88defb11"
+  ],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -452,6 +456,19 @@
       "generated": null,
       "identity": null,
       "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'api_key'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -9490,6 +9507,41 @@
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "provider",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "kind",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "account_provider_key_user_provider_kind_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "account_provider_key"
     },
     {
       "nameExplicit": true,
