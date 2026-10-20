@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useLayoutEffect, useState } from "react";
-import { coarsePointerNow } from "./coarse-pointer.js";
+import { COARSE_POINTER, coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 
@@ -75,7 +75,14 @@ export function useStageRoom(): StageRoom {
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    return () => observer.disconnect();
+    // A tablet's main pointer changes as a keyboard and trackpad come and go,
+    // which no resize reports, and a short stage's room turns on it.
+    const pointer = window.matchMedia(COARSE_POINTER);
+    pointer.addEventListener("change", measure);
+    return () => {
+      observer.disconnect();
+      pointer.removeEventListener("change", measure);
+    };
   }, []);
   const room = lines.narrow ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE;
   useLayoutEffect(() => {

@@ -4,9 +4,9 @@
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, Luke's chat composer, and a task's call bar, whichever stand. */
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, a chat's composer (never a thread's reply box, which scrolls with the messages), and a task's call bar, whichever stand. */
 const DOCKED =
-  ".agent-todos-dock, .agent-published-dock, .agent-composer, .chat-composer, .desktop-call-bar";
+  '.agent-todos-dock, .agent-published-dock, .agent-composer, .chat-composer[data-compact="false"], .desktop-call-bar';
 
 /** The length the dock's height is written in. */
 const COLUMN_DOCK = "--column-dock";
@@ -49,7 +49,9 @@ export function useColumnDock(
     const root = host.ownerDocument.documentElement;
     // Found afresh on every change under the shell, because a task still
     // loading draws its column only once its document lands.
-    const columnSelector = panelFull ? ".side-panel" : ".desktop-task-main, .agent-page";
+    const columnSelector = panelFull
+      ? ".side-panel"
+      : ".desktop-task-main, .agent-page, .chat-view";
     let column = host.querySelector(columnSelector);
     const sized = new ResizeObserver(() => write());
     function write(): void {

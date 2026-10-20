@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 
 /** The media query a finger answers: the device's main pointer is coarse. */
-const COARSE_POINTER = "(pointer: coarse)";
+export const COARSE_POINTER = "(pointer: coarse)";
 
 /** Whether the device's main pointer is a finger, now. */
 export function coarsePointerNow(): boolean {

@@ -114,3 +114,28 @@ test("a short stage under a finger is wide again only at 532 tall, and narrow ag
   assert.equal(resizeTo(750, 510)?.room, "wide", "a stage shrunk within the band stays wide");
   assert.equal(resizeTo(750, 499)?.room, "narrow");
 });
+
+test("a short stage turns narrow when its main pointer becomes a finger, with no resize", () => {
+  let coarse = false;
+  const heard = new Set<() => void>();
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    // SAFETY: the room reads `matches` and listens for its change, which this answers.
+    (query) =>
+      ({
+        get matches() {
+          return coarse && query === "(pointer: coarse)";
+        },
+        media: query,
+        addEventListener: (_: string, listener: () => void) => heard.add(listener),
+        removeEventListener: (_: string, listener: () => void) => heard.delete(listener),
+      }) as unknown as MediaQueryList,
+  );
+  mount(LANDSCAPE_PHONE.width, LANDSCAPE_PHONE.height);
+  assert.equal(reading?.room, "wide");
+
+  coarse = true;
+  act(() => {
+    for (const listener of heard) listener();
+  });
+  assert.equal(reading?.room, "narrow");
+});

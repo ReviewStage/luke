@@ -2604,11 +2604,14 @@ ul.actor-stack {
 
 /* On a phone they float just above whatever docks at the column's foot, a
    composer first of all (`column-dock.ts`), rather than over it, and span the
-   screen less a step at each side. However tall the dock grows, they never
-   rise past the middle of what is seen. The stage already keeps off the
+   screen less a step at each side. However tall the dock grows, they keep
+   three controls' height of what is seen above it to stand in. The stage already keeps off the
    notch and the home indicator. */
 .desktop-shell[data-room="narrow"] > .voice-caption {
-  bottom: calc(min(var(--column-dock, 0px), var(--luke-stage-height) / 2) + var(--luke-space-12));
+  bottom: calc(
+    min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height)) +
+    var(--luke-space-12)
+  );
   left: 50%;
   width: calc(100% - 2 * var(--luke-space-16));
 }
@@ -7801,7 +7804,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* On a phone the stack stands just above whatever docks at the column's
    foot, a composer first of all (`column-dock.ts`), rather than over it,
-   never past the middle of what is seen, and keeps off the notch and the
+   leaving itself at least three controls' height of what is seen above,
+   and keeps off the notch and the
    home indicator, since it is fixed to the page rather than the stage. The
    room is the document root's, because the stack is portalled out of the
    shell (`stage-room.ts`). */
@@ -7809,7 +7813,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   right: calc(var(--luke-space-8) + env(safe-area-inset-right, 0px));
   bottom: calc(
     max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
-    min(var(--column-dock, 0px), var(--luke-stage-height) / 2) +
+    min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height)) +
     var(--luke-space-8)
   );
   width: min(
