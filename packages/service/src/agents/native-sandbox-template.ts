@@ -108,7 +108,7 @@ export const TEMPLATE_STATE = {
   FAILED: "failed",
 } as const;
 
-export type TemplateState =
+type TemplateState =
   | { readonly state: typeof TEMPLATE_STATE.READY; readonly snapshotId: string }
   | { readonly state: typeof TEMPLATE_STATE.PREPARING }
   | { readonly state: typeof TEMPLATE_STATE.FAILED };
@@ -126,7 +126,7 @@ export interface ImageBuild {
 }
 
 /** `prepareImage` threw while it was being recorded, which a recording that answers every command as passed never makes it do. */
-export class ImageBuildUnrecorded extends Data.TaggedError("ImageBuildUnrecorded") {}
+class ImageBuildUnrecorded extends Data.TaggedError("ImageBuildUnrecorded") {}
 
 /** The template's state where it is ready, preparing, or failed, or Vercel could not be asked. */
 type TemplateRead = Effect.Effect<TemplateState, SandboxUnavailable>;
