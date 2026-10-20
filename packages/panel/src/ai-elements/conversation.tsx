@@ -94,6 +94,12 @@ export function Conversation({
   const following = useRef(true);
   const [isAtBottom, setAtBottom] = useState(true);
   const opened = useRef(subject);
+  // Where the log last stood, its own writes among it, so a scroll is read as the reader's up or down from there.
+  const lastTop = useRef(0);
+  const toEnd = useCallback((element: HTMLDivElement) => {
+    element.scrollTop = element.scrollHeight;
+    lastTop.current = element.scrollTop;
+  }, []);
   // What the last render left observed: the scroll box, and how many lines
   // stood in it ending in which, so a render that changed none of them
   // touches no layout.
@@ -111,7 +117,7 @@ export function Conversation({
         const element = list.current;
         if (element === null) return;
         if (following.current) {
-          element.scrollTop = element.scrollHeight;
+          toEnd(element);
           return;
         }
         if (!followsNewest(element)) return;
@@ -129,8 +135,8 @@ export function Conversation({
     following.current = true;
     setAtBottom(true);
     const element = list.current;
-    if (element !== null) element.scrollTop = element.scrollHeight;
-  }, [subject, list]);
+    if (element !== null) toEnd(element);
+  }, [subject, list, toEnd]);
   // Note that this runs after every render but reads no layout unless the
   // lines changed, because a re-render with the same lines (any app-state
   // patch) has nothing new to scroll to, and a line that grew is the
@@ -145,7 +151,7 @@ export function Conversation({
     const held = observed.current;
     if (held?.box === element && held.count === count && held.last === last) return;
     observed.current = { box: element, count, last };
-    if (following.current) element.scrollTop = element.scrollHeight;
+    if (following.current) toEnd(element);
     resized.observe(element);
     if (lines !== null) resized.observe(lines);
   });
@@ -153,10 +159,18 @@ export function Conversation({
     following.current = true;
     setAtBottom(true);
     const element = list.current;
-    if (element !== null) element.scrollTop = element.scrollHeight;
-  }, [list]);
+    if (element !== null) toEnd(element);
+  }, [list, toEnd]);
+  // Note that a scroll down short of the end, or one that moved nothing,
+  // leaves a following log following, because only the reader scrolling up
+  // takes it off its newest line: the browser shifts a log down of its own accord to hold its place
+  // as lines above grow (scroll anchoring), a message's words drawn late
+  // among them, and the observer then takes it the rest of the way down.
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    following.current = followsNewest(event.currentTarget);
+    const element = event.currentTarget;
+    const down = element.scrollTop >= lastTop.current;
+    lastTop.current = element.scrollTop;
+    following.current = followsNewest(element) || (following.current && down);
     setAtBottom(following.current);
   }, []);
   const scroll = useMemo<ConversationScroll>(
