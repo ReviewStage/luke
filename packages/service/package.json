@@ -69,6 +69,7 @@
     "./agents/coder-host/channel": "./src/agents/coder-host/channel.js",
     "./agents/coder-host/checkout": "./src/agents/coder-host/checkout.js",
     "./agents/coder-host/claude-code-sessions": "./src/agents/coder-host/claude-code-sessions.js",
+    "./agents/coder-host/codex-sessions": "./src/agents/coder-host/codex-sessions.js",
     "./agents/coder-host/runner-bundle": "./src/agents/coder-host/runner-bundle.js",
     "./agents/coder-host/context": "./src/agents/coder-host/context.js",
     "./agents/coder-host/context-estimate": "./src/agents/coder-host/context-estimate.js",
