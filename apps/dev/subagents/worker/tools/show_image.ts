@@ -7,7 +7,7 @@ import { runDelegatedShowImageTool } from "../../../host.js";
 /**
  * show_image.ts -- a worker shows the developer pictures from the agent's sandbox in its own transcript, as one set.
  *
- * The agent's own tool (`../../../tools/developer.ts`), kept beside the
+ * The agent's own tool (`../../../tools/show_image.ts`), kept beside the
  * worker's transcript, the child of the delegation that started it, so the
  * worker's tab draws them; the files are read from the checkout the worker
  * shares with the agent.

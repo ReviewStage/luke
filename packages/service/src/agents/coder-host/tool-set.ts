@@ -15,8 +15,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
  *
- * The coding agent runs eve's own tools, authored under `apps/dev/tools/`,
- * a file each or a few to a map, so the set is exactly this list and eve adds nothing
+ * The coding agent runs eve's own tools, authored one file each under
+ * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, the hosted public search and page read the brain has
  * too (`../public-research.ts`), the delegation of a slice of its
