@@ -109,7 +109,9 @@ function tasksTab(
     patch((held) => ({ ...held, inbox: { ...held.inbox, ...next } }));
   const chat = (next: Partial<Standing["chat"]>) =>
     patch((held) => ({ ...held, chat: { ...held.chat, ...next } }));
-  const shut = () => panel({ open: false, tab: at.panel.tab });
+  // As the real one does, opening or shutting the panel leaves the tab where it stands.
+  const setOpen = (open: boolean) => patch((held) => ({ ...held, panel: { ...held.panel, open } }));
+  const shut = () => setOpen(false);
   // A narrow room holds the panel full screen alone, so leaving full screen there shuts it.
   const narrow = room === SHELL_ROOM.NARROW;
   return tasksControl({
@@ -126,9 +128,12 @@ function tasksTab(
       fullScreenOnly: at.panel.open && narrow,
       tab: at.panel.tab,
       onShow: (_taskId, tab) => panel({ open: true, tab }),
-      onSetOpen: (open) => panel({ open, tab: at.panel.tab }),
+      onSetOpen: setOpen,
       onToggle: () => panel({ open: !at.panel.open, tab: at.panel.tab }),
       onToggleFullScreen: () => (narrow ? shut() : undefined),
+      // The task's one tab, which closing empties the strip of and so shuts the panel, as the real one does.
+      strip: at.panel.tab === undefined ? [] : [at.panel.tab],
+      onClose: () => panel({ open: false, tab: undefined }),
     },
     // As the real one does, a panel filling the window is the nearer layer than the task.
     back: () => {
@@ -343,6 +348,20 @@ test("on a narrow stage each of the side panel's ways out steps back to the plan
     }
     unmountAll();
   }
+});
+
+test("on a narrow stage closing the side panel's last tab shuts it by a step back to the plan, so Back does not open it again and Forward opens the tab again", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  for (let round = 0; round < 2; round += 1) {
+    window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+    window.press(() => window.shown().sidePanel.onClose(PAGE_TAB));
+    assert.deepEqual(window.at().panel, { open: false, tab: undefined }, "the tab closes");
+    assert.deepEqual(window.addresses(), [TASK_PATH, `${TASK_PATH}/page/page-1`], "adding no step");
+    assert.equal(window.standingAddress(), TASK_PATH);
+    assert.equal(window.history().canGoBack, false, "Back has no panel to open");
+  }
+  act(() => window.history().onForward());
+  assert.deepEqual(window.at().panel, { open: true, tab: PAGE_TAB }, "Forward opens the tab again");
 });
 
 test("on a narrow stage a side panel the window opened with, as a link loaded on it opens it, shuts in its own step, leaving none behind or ahead", () => {

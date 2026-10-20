@@ -414,15 +414,22 @@ export interface WindowHistoryLists extends WindowHistory {
  * The Tasks tab with its screens' ways back to their lists through the
  * history, as the shell draws them. A side panel standing only full screen,
  * a narrow room's, is shut the same way by each of its ways out: its
- * toggle, which reads Close, leaving full screen, and the window's Escape.
+ * toggle, which reads Close panel, leaving full screen, the window's Escape,
+ * and closing the last tab its strip draws, which closes the tab as ever and
+ * then shuts the panel through the history rather than as a step of its own.
  */
 export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksControl {
   const { sidePanel } = tasks;
   const shutsWhole = sidePanel.fullScreenOnly;
+  const onClose = (tab: SidePanelTab) => {
+    const last = sidePanel.strip.length === 1 && sidePanel.strip.some((one) => sameTab(one, tab));
+    sidePanel.onClose(tab);
+    if (last) lists.panel();
+  };
   return {
     ...tasks,
     sidePanel: shutsWhole
-      ? { ...sidePanel, onToggle: lists.panel, onToggleFullScreen: lists.panel }
+      ? { ...sidePanel, onToggle: lists.panel, onToggleFullScreen: lists.panel, onClose }
       : sidePanel,
     back: () => {
       if (!shutsWhole || tasks.page !== TASKS_PAGE.DOCUMENT) return tasks.back();
