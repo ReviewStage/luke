@@ -1,39 +1,30 @@
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import {
-  askHosted,
-  askLive,
-  HOSTED_DEADLINE,
-  type HostedClient,
-  hostedClient,
-} from "./hosted-link.js";
+import { askHosted, askLive, type HostedClient, hostedClient } from "./hosted-link.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY, type MacCommandsLiveAnswer } from "./live-wire.js";
 import {
   type MacBrowserResult,
   type MacCommand,
   type MacCommandKind,
-  type MacCommandRead,
   type MacCommandSettleResult,
   macCommandKindsQuery,
 } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * mac-command-client.ts -- the Mac's side of the commands the account's agents queue for it: the held read that takes them, and each result posted back.
+ * mac-command-client.ts -- the Mac's side of the commands the account's agents queue for it: the unclaimed ones of its kinds followed live, each claimed by its id, that the Mac listens, and each result posted back.
  *
- * Both are procedures of the hosted contract (`contract/mac-commands.ts`)
- * over the one account call, so the bearer is read fresh per attempt and a
- * 401 is renewed and retried once. The read is held by the service while
- * nothing waits, so it is asked under the held deadline, which outlasts the
- * hold. Neither call fails: a read the service did not answer is nothing,
- * which the caller rests after, and a result it did not take is false,
- * since its call has already given up on it. A browser command's result,
- * which may carry an image, is posted to its own route. A Mac that follows
- * its commands live asks for the unclaimed ones of its kinds sealed (or,
- * polling, inline), claims each it hears of by its id, and says it listens;
- * a seal the service did not answer is a failure the caller asks again, a
- * claim not granted is nothing, and a presence not taken is false.
+ * Each is a procedure of the hosted contract (`contract/live.ts`,
+ * `contract/mac-commands.ts`) over the one account call, so the bearer is
+ * read fresh per attempt and a 401 is renewed and retried once. The Mac
+ * asks for the unclaimed commands of its kinds sealed (or, polling, inline
+ * and held until they move) for the account it started for, claims each it
+ * hears of by its id, and says it listens. No call fails: a read refused as
+ * signed out is `LIVE_SIGNED_OUT` and any other unanswered a failure the
+ * caller asks again, a claim not granted is nothing, and a presence or a
+ * result not taken is false, its call having given up on it. A browser
+ * command's result, which may carry an image, is posted to its own route.
  */
 
 export interface HostedMacCommandClientOptions {
@@ -51,20 +42,6 @@ export class HostedMacCommandClient {
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
     });
-  }
-
-  /**
-   * The commands of the kinds named claimed for this Mac, once one waits or
-   * the service's hold ends; nothing where the read was not answered.
-   */
-  waiting(
-    kinds: readonly MacCommandKind[],
-  ): Effect.Effect<readonly MacCommandRead[] | undefined, never, HttpClient.HttpClient> {
-    const input = { kinds: macCommandKindsQuery(kinds) };
-    return askHosted(this.#hosted.macCommands.waiting, input, HOSTED_DEADLINE.HELD).pipe(
-      Effect.map((answer): readonly MacCommandRead[] | undefined => answer.commands),
-      Effect.orElseSucceed(() => undefined),
-    );
   }
 
   /** One command's result posted back; whether the service took it. */
