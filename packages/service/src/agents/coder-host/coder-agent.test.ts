@@ -277,9 +277,9 @@ test("every agent on a task is told to keep its task's status with update_task, 
       section.includes(CODER_TOOL.UPDATE_TASK),
       section.includes("Mark it done"),
       section.includes(
-        "started on a task of its own, apart from the task of whoever started it, keeps that task's status itself",
+        "Where another agent started you on its task, leave the status to that agent",
       ),
-      section.includes("leave the status to that agent, whatever agents you start on it yourself"),
+      section.includes("one started on a task of its own keeps that status itself"),
     ];
   };
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
