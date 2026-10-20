@@ -316,15 +316,18 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
 }
 
 /**
- * What separates one region from the next. A heading carries its own margins,
- * so the region under it needs none; a masthead keeps the clearance the real
- * pages give it; and words that draw themselves bring whatever spacing they
- * were written with.
+ * What separates one region from the next. The first opens where the page's
+ * content does, under the toolbar, as the loaded page's first region does; a
+ * heading carries its own margins, so the region under it needs none; a
+ * masthead keeps the clearance the real pages give it; and words that draw
+ * themselves bring whatever spacing they were written with, before them and
+ * after.
  */
 function shapeSpacing(
   shape: SkeletonShape,
   previous: SkeletonShape | undefined,
 ): string | undefined {
+  if (previous === undefined) return undefined;
   switch (shape.kind) {
     case SKELETON_SHAPE.HEADING:
     case SKELETON_SHAPE.STATIC:
@@ -332,7 +335,9 @@ function shapeSpacing(
     case SKELETON_SHAPE.MASTHEAD:
       return "mt-6";
     default:
-      return previous?.kind === SKELETON_SHAPE.HEADING ? undefined : "mt-3";
+      return previous.kind === SKELETON_SHAPE.HEADING || previous.kind === SKELETON_SHAPE.STATIC
+        ? undefined
+        : "mt-3";
   }
 }
 

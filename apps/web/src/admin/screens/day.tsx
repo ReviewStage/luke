@@ -11,11 +11,10 @@ import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { AccountCell } from "../accounts-table/accounts-table";
 import { SectionHeading, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
-import { BackLink } from "../chrome/back-link";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
-import { AdminPage, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { dayReadQuery } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
@@ -29,9 +28,6 @@ const readDayDetail =
   async (signal) =>
     // SAFETY: the admin day procedure answers an AdminDayDetail (`@luke/service/admin/admin-day`), which the contract cannot name.
     (await browserClient.admin.day(query, { signal })) as AdminDayDetail;
-
-/** What the day's page says it is, under the heading the address already names. */
-const DAY_DESCRIPTION = "One UTC day of hosted-tier calls";
 
 /** One day's own sections. */
 const DAY_SHAPES: readonly SkeletonShape[] = [
@@ -114,15 +110,16 @@ export function DayScreen({
     { keeps: (shown) => shown.day === day },
   );
   const signOut = () => void withdraw(onSignOut);
+  const back: AdminWayBack = { tab: "dashboard", onBack };
+  const controls = <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />;
 
   switch (state.status) {
     case "loading":
       return frame(
         <PageSkeleton
           title={formatDayHeading(day)}
-          description={DAY_DESCRIPTION}
-          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-          back={{ tab: "dashboard", label: "Overview", onBack }}
+          back={back}
+          controls={controls}
           shapes={DAY_SHAPES}
         />,
       );
@@ -133,11 +130,13 @@ export function DayScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, DAY_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title={formatDayHeading(day)} back={back} controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, DAY_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready": {
       const detail = state.value;
@@ -145,14 +144,8 @@ export function DayScreen({
       const soFar = stillFilling ? "so far today" : undefined;
 
       return frame(
-        <AdminPage
-          title={formatDayHeading(detail.day)}
-          description={`${DAY_DESCRIPTION}${stillFilling ? " — still filling" : ""}`}
-          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-        >
+        <AdminPage title={formatDayHeading(detail.day)} back={back} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <BackLink tab="dashboard" label="Overview" onBack={onBack} />
-
             <SectionHeading>Hosted tier · this day</SectionHeading>
             {/* Note that each card shares the row from nothing up but never
             shrinks below its own figure, so the pair stacks once a figure

@@ -19,6 +19,7 @@
     "./desktop/luke-identity": "./src/desktop/luke-identity.js",
     "./keyboard-modality": "./src/keyboard-modality.js",
     "./navigation-history": "./src/navigation-history.js",
+    "./not-found": "./src/not-found.js",
     "./renderer-runtime": "./src/renderer-runtime.js",
     "./session-recorder/contract": "./src/session-recorder/contract.js",
     "./session-replay": "./src/session-replay.js",

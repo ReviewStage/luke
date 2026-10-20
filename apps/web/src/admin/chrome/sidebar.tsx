@@ -30,7 +30,6 @@ import {
   NavItem,
   NavItemLink,
   riseAbove,
-  ScrollArea,
   SidebarIcon,
   TEXT_TONE,
   Text,
@@ -39,18 +38,11 @@ import {
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import {
-  ActivityIcon,
-  CircleDollarSignIcon,
-  LayersIcon,
-  LayoutDashboardIcon,
-  LogOutIcon,
-  SmileIcon,
-  UsersIcon,
-} from "lucide-react";
+import { LogOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type AdminTab, plainLeftClick, tabHref } from "../routing";
 import { AccountAvatar, type ViewerAccount } from "./page-header";
+import { ADMIN_PLACES } from "./places";
 
 /** What the toggle names for a reader: the sidebar's way back, or its way away. */
 const SIDEBAR_TOGGLE_LABEL = {
@@ -72,16 +64,6 @@ type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
 
 /** What the Log out dialog says where signing out failed, in the app's words. */
 const LOG_OUT_REFUSED = "Luke could not log out. Try again.";
-
-/** The sidebar's places, in the order it lists them: the measures, then the face's reference last. */
-const ADMIN_PLACES: readonly { tab: AdminTab; label: string; icon: React.ReactNode }[] = [
-  { tab: "dashboard", label: "Overview", icon: <LayoutDashboardIcon /> },
-  { tab: "cost", label: "Cost", icon: <CircleDollarSignIcon /> },
-  { tab: "reliability", label: "Reliability", icon: <ActivityIcon /> },
-  { tab: "workspaces", label: "Workspaces", icon: <LayersIcon /> },
-  { tab: "users", label: "Users", icon: <UsersIcon /> },
-  { tab: "animations", label: "Animations", icon: <SmileIcon /> },
-];
 
 /**
  * The foot's account: the signed-in account's face and name, raising its
@@ -247,8 +229,8 @@ function useDrawerDismiss(
 /**
  * Every view past the gate stands in this shell: the sidebar marking
  * `active`, the view beside it, and the toggle over the sidebar's top-left.
- * Hidden or in a narrow room, the view leads with the title bar's row, so
- * the toggle standing over it covers none of the page.
+ * Hidden or in a narrow room, the toggle stands over the start of the view's
+ * toolbar, which starts its title past it, so it covers none of the page.
  */
 export function AdminShell({
   active,
@@ -298,9 +280,12 @@ export function AdminShell({
 
   return (
     <div ref={stage.ref} className="relative h-dvh">
+      {/* The admin's title bar holds the sidebar's toggle alone, where the
+          app's holds New task beside it, so a folded sidebar's page starts
+          its toolbar past the one button. */}
       <div
         ref={shell}
-        className="desktop-shell"
+        className="desktop-shell [--sidebar-toggle-clearance:calc(var(--title-bar-left)_+_var(--luke-control-height)_+_var(--luke-control-gap))]"
         data-room={stage.room}
         data-sidebar-collapsed={String(collapsed)}
         data-sidebar-overlay={overlay}
@@ -313,15 +298,12 @@ export function AdminShell({
           onNavigate={navigate}
           onLogOut={onLogOut}
         />
-        {/* The content region is a div because the `main` landmark is the
-            page's own; a page owns its scroll, so the region only fills. */}
-        <div
-          className={`flex min-h-0 min-w-0 flex-col ${collapsed ? "pt-(--desktop-bar-height)" : ""}`}
-          inert={drawerOpen}
-        >
-          <ScrollArea>
-            <div className="flex h-full flex-col">{children}</div>
-          </ScrollArea>
+        {/* The content region is the app's work column, a div because the
+            `main` landmark is the page's own. The page owns its scroll under
+            its toolbar, so the region only fills; a folded sidebar's toggle
+            stands over the toolbar's start, which leaves it room (`shell.css`). */}
+        <div className="desktop-main" inert={drawerOpen}>
+          {children}
         </div>
         <div className="title-bar-controls">
           <IconButton

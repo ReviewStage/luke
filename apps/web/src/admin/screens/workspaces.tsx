@@ -34,7 +34,7 @@ import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { AccountCell } from "../accounts-table/accounts-table";
 import { STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
 import { WORKSPACES_SHARED_ONLY } from "../prefs";
@@ -327,7 +327,7 @@ export function WorkspacesScreen({
   const page = (
     content: Pick<
       React.ComponentProps<typeof AdminCollectionPage>,
-      "filters" | "state" | "empty" | "children"
+      "filters" | "state" | "empty" | "error" | "children"
     >,
   ) =>
     frame(
@@ -364,13 +364,17 @@ export function WorkspacesScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
     case "error":
-      return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, WORKSPACES_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
-      );
+      return page({
+        filters: search,
+        state: COLLECTION_STATE.ERROR,
+        error: (
+          <AdminErrorState
+            detail={adminReadFailure(state, WORKSPACES_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        ),
+      });
     case "ready": {
       const list = state.value;
       const needle = query.trim().toLowerCase();

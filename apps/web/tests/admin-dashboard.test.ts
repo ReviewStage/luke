@@ -341,15 +341,17 @@ test("a refresh that failed says so over the answer still shown, and Retry reads
   expect(heard).toEqual(["reload"]);
 });
 
-test("a first read that failed says why in place of the page, and Retry reads again", () => {
+test("a first read that failed says why under the page's toolbar, its controls still at hand, and Retry reads again", () => {
   const heard: string[] = [];
   const page = render({ status: "error", detail: "The metrics endpoint did not answer." }, heard);
 
+  expect(page.querySelector("header h1")?.textContent).toBe("Overview");
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
     "The metrics endpoint did not answer.",
   );
+  act(() => button(page, "90d").click());
   act(() => button(page, "Retry").click());
-  expect(heard).toEqual(["reload"]);
+  expect(heard).toEqual(["window 90", "reload"]);
 });
 
 test("the window is one of three radios, and the hide-admins box hands its choice up", () => {
