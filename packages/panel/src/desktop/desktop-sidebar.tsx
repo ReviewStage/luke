@@ -83,6 +83,7 @@ import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -178,6 +179,9 @@ export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React
   return <div className="sidebar-resize" {...edge} />;
 }
 
+/** The display a browser tab answers, as against an installed web app's own window, which draws no Back of its own. */
+const BROWSER_DISPLAY = "(display-mode: browser)";
+
 /**
  * Back and forward, at the right of the left column's title-bar row, level
  * with the traffic lights, the way Cursor and Codex keep them: in the
@@ -185,9 +189,19 @@ export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React
  * it when it folds, after the column's drag strip so they claim their
  * presses back from the window frame. A way with nothing along it is dimmed
  * rather than gone, so neither button moves. The chords are the shell's to
- * offer, since they answer while the column is folded too.
+ * offer, since they answer while the column is folded too. A phone's
+ * browser tab draws none, since its own Back and Forward walk the same
+ * history (`navigation-history.ts`) and the drawer's head is short of room;
+ * a phone's installed web app keeps them, having no browser around it.
  */
-export function HistoryButtons({ history }: { history: NavigationHistory }): React.JSX.Element {
+export function HistoryButtons({
+  history,
+  room,
+}: {
+  history: NavigationHistory;
+  room: ShellRoom;
+}): React.JSX.Element | null {
+  if (room === SHELL_ROOM.NARROW && window.matchMedia(BROWSER_DISPLAY).matches) return null;
   return (
     <div className="title-bar-controls" data-edge="column">
       <Tooltip label="Back" command={APP_COMMAND.BACK}>
@@ -1325,6 +1339,7 @@ function SidebarColumn({
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
   const narrow = room === SHELL_ROOM.NARROW;
+  const coarse = useCoarsePointer();
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
@@ -1609,7 +1624,12 @@ function SidebarColumn({
 
   // The pages' rows, then the rule under them. Beside the work they stand
   // put over the tasks' scroller; in a phone's drawer they scroll away with
-  // the tasks, so the tasks are not left a strip under them.
+  // the tasks, so the tasks are not left a strip under them. Note that they
+  // are drawn again where the room flips, since they move between parents:
+  // no CSS gives them one place without the desktop's sidebar or the
+  // drawer's scroller changing, and only a browser window dragged across
+  // the line flips the room, a phone standing narrow either way up
+  // (`shell-room.ts`). They hold nothing that a fresh draw loses.
   const places = (
     <>
       <div className="sidebar-places">
@@ -1673,7 +1693,7 @@ function SidebarColumn({
       onKeyDown={overlay.onKeyDown}
     >
       <div className="desktop-drag-strip" />
-      <HistoryButtons history={history} />
+      <HistoryButtons history={history} room={room} />
       {/* The workspace heads the sidebar once one is read, as everything under it is that
           workspace's; Luke's own head stands until then. */}
       {tasks.signedIn && tasks.workspace !== undefined ? (
@@ -1691,9 +1711,9 @@ function SidebarColumn({
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <div className="sidebar-section-body">
             {narrow ? places : null}
-            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, beside the work: a phone, which drags no row, draws it only once it holds one. */}
+            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
             {tasks.signedIn &&
-            (pinnedSection.length > 0 || (sectionsShown && !narrow)) &&
+            (pinnedSection.length > 0 || (sectionsShown && !coarse)) &&
             !archive.shown ? (
               <PinnedSection
                 rows={pinnedSection}

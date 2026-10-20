@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BUTTON_SIZE, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, IconButton, INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
@@ -248,5 +248,128 @@ test("with a mouse no small target or resize edge takes a press past what it dra
   layFor(false, { "data-luke-profile": "desktop" });
   for (const [name, target] of [...smallTargets(), ...closes(), ...resizeEdges()]) {
     assert.equal(hitArea(target), undefined, `${name} draws no hit area`);
+  }
+});
+
+/** iOS zooms the page into a field whose words are smaller than this, in pixels, the moment it is focused. */
+const NO_ZOOM = 16;
+
+/** The fields a finger renames or types in, each drawn over 14px words as the panel's rows are, by what the developer calls it. */
+function fields(): ReadonlyMap<string, HTMLInputElement | HTMLTextAreaElement> {
+  const inline = (look: (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_LOOK]) => {
+    const container = drawn(
+      createElement(InlineEdit, {
+        value: "Plan",
+        label: "Rename",
+        editing: true,
+        look,
+        onEnd: () => undefined,
+      }),
+    );
+    container.style.fontSize = "14px";
+    return container.querySelector("input") ?? assert.fail("the field is drawn");
+  };
+  const address = drawn(createElement("input", { type: "url" }), "browser-view-address");
+  const comment = drawn(createElement("textarea", { className: "comment-text" }), "comment-card");
+  return new Map<string, HTMLInputElement | HTMLTextAreaElement>([
+    ["a tab's rename", inline(INLINE_EDIT_LOOK.WELL)],
+    ["a workspace's or an integration's rename", inline(INLINE_EDIT_LOOK.INPUT)],
+    ["a list row's rename", inline(INLINE_EDIT_LOOK.FIELD)],
+    [
+      "a Browser tab's address",
+      address.querySelector("input") ?? assert.fail("the address is drawn"),
+    ],
+    [
+      "a comment's field",
+      comment.querySelector("textarea") ?? assert.fail("the comment's field is drawn"),
+    ],
+  ]);
+}
+
+test("on a touch screen every field takes at least 16px words, so focusing it never zooms the page", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, field] of fields()) {
+    const size = leastPixels(getComputedStyle(field).fontSize) ?? 0;
+    assert.ok(size >= NO_ZOOM, `${name} is ${size}px`);
+  }
+});
+
+test("with a mouse a field keeps the size it had: the type it stands in, or its own role's", () => {
+  layFor(false, { "data-luke-profile": "desktop" });
+  const before = new Map([
+    ["a tab's rename", "14px"],
+    ["a workspace's or an integration's rename", "14px"],
+    ["a list row's rename", role("--luke-type-body-size")],
+    ["a Browser tab's address", role("--luke-type-caption-size")],
+    ["a comment's field", "13px"],
+  ]);
+  for (const [name, field] of fields()) {
+    assert.equal(
+      resolved(getComputedStyle(field).fontSize),
+      before.get(name),
+      `${name} keeps its size`,
+    );
+  }
+});
+
+/** Builds `markup` into the body, answering the element `selector` names in it. */
+function built(markup: string, selector: string): HTMLElement {
+  const holder = document.body.appendChild(document.createElement("div"));
+  holder.innerHTML = markup;
+  return holder.querySelector<HTMLElement>(selector) ?? assert.fail(`${selector} is built`);
+}
+
+/** The presses drawn only under the pointer on a desktop, each by what the developer calls it. */
+function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
+  return new Map([
+    [
+      "an archived agent's Unarchive",
+      built(
+        '<ul><li class="task-summary-archived-agent"><span class="task-summary-row"></span><span class="task-summary-marks"><button>Unarchive</button></span></li></ul>',
+        ".task-summary-marks",
+      ),
+    ],
+    [
+      "a fold's chevron",
+      built(
+        '<button class="luke-nav-item" aria-expanded="false"><span class="luke-nav-item-glyph"><span class="luke-nav-item-icon"></span><span class="luke-nav-item-chevron"></span></span></button>',
+        ".luke-nav-item-chevron",
+      ),
+    ],
+    [
+      "a list row's chevron",
+      built(
+        '<div class="luke-list-row"><span class="luke-list-row-chevron"></span></div>',
+        ".luke-list-row-chevron",
+      ),
+    ],
+    [
+      "the pinned summary's chevron",
+      built(
+        '<div class="task-summary" data-mode="column"><span class="task-summary-chevron"><button>Collapse</button></span></div>',
+        ".task-summary-chevron",
+      ),
+    ],
+    [
+      "the summary card's chevron",
+      built(
+        '<div class="task-summary-card"><span class="task-summary-collapse"><button>Collapse</button></span></div>',
+        ".task-summary-collapse",
+      ),
+    ],
+  ]);
+}
+
+test("on a touch screen nothing a finger can press stands invisible: an archived agent's Unarchive and every chevron show at rest", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, press] of pointerOnlyPresses()) {
+    assert.equal(getComputedStyle(press).opacity, "1", `${name} shows`);
+  }
+});
+
+test("with a mouse those presses still wait for the pointer", () => {
+  layFor(false, { "data-luke-profile": "desktop" });
+  for (const [name, press] of pointerOnlyPresses()) {
+    assert.equal(getComputedStyle(press).opacity, "0", `${name} waits`);
   }
 });

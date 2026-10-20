@@ -132,6 +132,19 @@
     opacity: 1;
   }
 
+  /* A screen with no hover draws a fold's chevron at rest in its glyph's
+     place, since no pointer rests on the head to bring it, and a fold
+     should say it folds. */
+  @media (hover: none) {
+    .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
+      opacity: 0;
+    }
+
+    .luke-nav-item-chevron {
+      opacity: 1;
+    }
+  }
+
   .luke-nav-item-name {
     min-width: 0;
     flex: 0 1 auto;

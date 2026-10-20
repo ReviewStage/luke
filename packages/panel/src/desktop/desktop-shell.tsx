@@ -456,6 +456,7 @@ export function DesktopShell({
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
+    room === SHELL_ROOM.NARROW,
     `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
@@ -593,6 +594,11 @@ export function DesktopShell({
   const captionStrip = (
     <CaptionStrip {...captions} speechHidden={taskDrawn && transcriptStreaming(tasks)} />
   );
+  // A phone's drawer is modal, as a phone's own drawers are: while it stands
+  // over the work, the work is inert, so neither a screen reader nor a
+  // keyboard reaches what the drawer covers, and a press there only puts it
+  // away. Its toggle stays, the way to close it.
+  const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   return (
     <div
       ref={shell}
@@ -616,7 +622,7 @@ export function DesktopShell({
         onPressWithin={keepOverlay}
         room={room}
       />
-      <main className="desktop-main">
+      <main className="desktop-main" inert={drawerOver}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
@@ -704,7 +710,7 @@ export function DesktopShell({
         {sidebar.collapsed ? <OfflineMark /> : null}
       </div>
       {panelToggle ? (
-        <div className="title-bar-controls" data-edge="end">
+        <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
             disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}

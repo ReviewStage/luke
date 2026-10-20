@@ -1,7 +1,8 @@
 /**
  * shell-room.ts -- whether the panel's stage is wide enough for panes side by side, or so narrow, a phone's, that the panel stands as a single pane.
  *
- * The room is read off the stage's width (`stage-room.ts`), measured once at
+ * The room is read off the stage's width, and on a finger's device the
+ * screen's size too (`stage-room.ts`), measured once at
  * the shell's root and handed down from there, so every layout that answers
  * it answers the same room. A narrow room floats the sidebar as a drawer and
  * holds the side panel only full screen (`desktop-shell.tsx`,
@@ -9,7 +10,7 @@
  * one at a time (`hiddenColumns`); the stylesheet reads it off the shell's
  * `data-room`.
  * The desktop's window is never narrower than its least width, wider than
- * either line here, so the desktop is always wide.
+ * either line here, and is worked by a mouse, so the desktop is always wide.
  */
 
 /** How much room the stage gives the panel. */
@@ -34,9 +35,32 @@ const SHELL_ROOM_NARROW = {
   LEAVE: 672,
 } as const;
 
-/** Whether a stage this wide is narrow, given whether it was, so the line it crosses depends on the way it is crossed. */
-export function narrowStage(width: number, was: boolean): boolean {
-  return width < (was ? SHELL_ROOM_NARROW.LEAVE : SHELL_ROOM_NARROW.ENTER);
+/**
+ * The least side of a screen, in CSS pixels, under which a device worked by
+ * a finger is a phone, narrow however it is turned: a phone on its side is
+ * as wide as a small laptop's tab but leaves panes side by side a strip too
+ * short to read. The screen is read rather than the stage, because the
+ * stage shortens as the on-screen keyboard comes up, by an inset on iOS and
+ * by the window itself on Android, and a tablet's stage must not turn a
+ * phone's on every focus, taking the focused field with it. A mouse's
+ * device is never a phone, so a short browser window on a laptop keeps its
+ * panes side by side.
+ */
+const PHONE_SCREEN_SIDE = 500;
+
+/** What the room is read off: the stage's width, the screen's least side, and whether a finger works it. */
+export interface StageBox {
+  readonly width: number;
+  /** The screen's shorter side, which neither turning it nor a keyboard changes; 0 where none is known. */
+  readonly screenSide: number;
+  /** Whether the device's main pointer is coarse (`coarse-pointer.ts`). */
+  readonly coarse: boolean;
+}
+
+/** Whether a stage this size is narrow, given whether it was, so the width's line it crosses depends on the way it is crossed. */
+export function narrowStage(stage: StageBox, was: boolean): boolean {
+  if (stage.width < (was ? SHELL_ROOM_NARROW.LEAVE : SHELL_ROOM_NARROW.ENTER)) return true;
+  return stage.coarse && stage.screenSide > 0 && stage.screenSide < PHONE_SCREEN_SIDE;
 }
 
 /** Which of a list-and-item screen's two columns are hidden. */

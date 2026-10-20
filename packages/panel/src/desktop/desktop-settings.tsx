@@ -291,7 +291,7 @@ export function DesktopSettings({
     <div ref={screen} className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} />
+        <HistoryButtons history={history} room={room} />
         <NavItem
           icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}

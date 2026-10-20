@@ -139,9 +139,10 @@ export function ReplyToSelection({
     const element = scope.current;
     if (element === null) return undefined;
     const offer = () => setPicked(pickedIn(element));
-    // Note that a mouse's selection waits for its pointerup as ever, so only a finger's is offered on resting.
+    // Note that a mouse's selection waits for its pointerup as ever, so only a finger's is offered on resting,
+    // and a mouse's drag is never measured as it goes.
     const changed = () => {
-      if (pickedIn(element) !== undefined && coarsePointerNow()) settle({ offer });
+      if (coarsePointerNow() && pickedIn(element) !== undefined) settle({ offer });
     };
     element.addEventListener("pointerup", offer);
     element.addEventListener("keyup", offer);

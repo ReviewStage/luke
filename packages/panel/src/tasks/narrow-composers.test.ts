@@ -68,6 +68,7 @@ afterEach(() => {
   document.head.innerHTML = "";
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-luke-profile");
+  document.documentElement.removeAttribute("data-luke-room");
 });
 
 /** Draws `node` into the body, under a shell in the room given where one is. */
@@ -173,6 +174,7 @@ async function openNewTask(): Promise<Element> {
 
 test("on a phone with the keyboard up, New task's dialog, drawn outside the shell, caps its field at the same share of what is seen", async () => {
   document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-luke-room", "narrow");
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM, composer: PHONE.CARD }, { touch: true });
   stageAt(PHONE.STAGE_WITH_KEYBOARD);
   const field = await openNewTask();
@@ -180,6 +182,7 @@ test("on a phone with the keyboard up, New task's dialog, drawn outside the shel
 });
 
 test("on a desktop, New task's dialog lets its field grow to its eight lines whatever the window's height", async () => {
+  document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM, composer: DESKTOP.CARD });
   stageAt(DESKTOP.STAGE);
   const field = await openNewTask();
@@ -226,6 +229,7 @@ function composerDialog(): HTMLElement {
 
 test("on a phone, New task's dialog stands 12px from the screen's edges at a card's snug inset", () => {
   document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-luke-room", "narrow");
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
   const dialog = composerDialog();
   const style = getComputedStyle(dialog);
@@ -237,6 +241,7 @@ test("on a phone, New task's dialog stands 12px from the screen's edges at a car
 });
 
 test("on a desktop, New task's dialog keeps the dimmed window's margins", () => {
+  document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM });
   const dialog = composerDialog();
   const style = getComputedStyle(dialog);
@@ -287,4 +292,18 @@ test("on a touch screen the @ list names no keys at its foot, and with a mouse i
 
   layContainersAt({});
   assert.equal(shown(mentionFoot()), true);
+});
+
+test("a phone on its side, its room narrow though its dimmed window is wide, stands New task's dialog as a phone's", () => {
+  document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-luke-room", "narrow");
+  layContainersAt({ "luke-dialog-room": 702 }, { touch: true });
+  const dialog = composerDialog();
+  assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
+});
+
+test("a page that says no room of its own is answered by its dimmed window's width", () => {
+  layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
+  const dialog = composerDialog();
+  assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
 });

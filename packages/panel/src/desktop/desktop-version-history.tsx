@@ -741,7 +741,7 @@ export function DesktopVersionHistory({
     <div ref={screen} className="desktop-version-history">
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} />
+        <HistoryButtons history={history} room={room} />
         <NavItem
           icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}

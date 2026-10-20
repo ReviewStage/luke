@@ -87,6 +87,8 @@ export function useHoverPane(
   const own = useRef<HTMLElement | null>(null);
   const ref = look.ref ?? own;
   const handBack = useRef<HTMLElement | null>(null);
+  /** Whether Escape put the pane away, which gives the keyboard back once it is drawn away. */
+  const returning = useRef(false);
   const { state, onState } = float;
   const was = useRef(state);
   const floating = state !== PANE_FLOAT.CLOSED;
@@ -109,6 +111,14 @@ export function useHoverPane(
     was.current = state;
     const fromToggle = toggled.current;
     toggled.current = false;
+    // Escape gives the keyboard back once the pane is put away and drawn so,
+    // since the work under a modal drawer is inert until then and takes no focus.
+    if (state === PANE_FLOAT.CLOSED && returning.current) {
+      returning.current = false;
+      handBack.current?.focus();
+      handBack.current = null;
+      return;
+    }
     const held = ref.current;
     if (state !== PANE_FLOAT.OPEN || held === null) return;
     if (from !== PANE_FLOAT.CLOSED && !(from === PANE_FLOAT.PEEK && fromToggle)) return;
@@ -193,9 +203,8 @@ export function useHoverPane(
       if (event.key !== "Escape" || event.defaultPrevented || !floating) return;
       // Note that the window's layered Escape stands down for a key already taken.
       event.preventDefault();
+      returning.current = true;
       close();
-      handBack.current?.focus();
-      handBack.current = null;
     },
   };
 }
