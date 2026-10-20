@@ -1667,29 +1667,23 @@ export const INBOX_GROUPING = {
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
 /**
- * Which items an Inbox lists, as the tabs under its title choose: what needs
- * the reader (`needsReader`), anything unread, anyone's, every open item, or
- * everything, open and settled; and, on the window's Inbox alone, the items
- * of the archived tasks, which no other tab lists (`desktop-inbox.tsx`).
+ * Which items an Inbox lists, as its view's menu chooses: To do, the
+ * reader's own items not done with (`toDo`), or All, every item, open and
+ * settled; and, on the window's Inbox alone, Archived, the items of the
+ * archived tasks, which neither of the others lists (`desktop-inbox.tsx`).
  */
 export const INBOX_SHOW = {
-  NEEDS_YOU: "needs-you",
-  UNREAD: "unread",
-  OPEN: "open",
+  TO_DO: "to-do",
   ALL: "all",
   ARCHIVED: "archived",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
 
-/**
- * How the window's Inbox orders its items: the latest changed first, or
- * the open items first, the one waiting longest first, as a triage reads
- * them, the settled ones after them the latest changed first.
- */
+/** How the window's Inbox orders its items: the latest changed first, or the oldest changed first. */
 export const INBOX_SORT = {
   LATEST: "latest",
-  WAITING: "waiting",
+  OLDEST: "oldest",
 } as const;
 
 export type InboxSort = (typeof INBOX_SORT)[keyof typeof INBOX_SORT];
@@ -1729,11 +1723,9 @@ const STATUS_KEY = {
   [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
-/** How many items each tab lists, filtered out by the tab shown or not; Archived only on an Inbox that offers it. */
+/** How many items each scope lists, filtered out by the scope shown or not; Archived only on an Inbox that offers it. */
 export interface InboxCounts {
-  readonly [INBOX_SHOW.NEEDS_YOU]: number;
-  readonly [INBOX_SHOW.UNREAD]: number;
-  readonly [INBOX_SHOW.OPEN]: number;
+  readonly [INBOX_SHOW.TO_DO]: number;
   readonly [INBOX_SHOW.ALL]: number;
   readonly [INBOX_SHOW.ARCHIVED]?: number;
 }
@@ -1838,6 +1830,31 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
   return needsReader(listed.item, readerId) && !archivedHolder(listed.holder);
 }
 
+/**
+ * Whether a listed item is one the reader is not done with, as To do lists
+ * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
+ * still unread, such as a settled thread its agent wrote on again; never
+ * on a task put away in the archive, as `needsYou` reads it.
+ */
+function toDo(listed: InboxListed, readerId: string | undefined): boolean {
+  if (archivedHolder(listed.holder)) return false;
+  return (
+    needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
+  );
+}
+
+/**
+ * Every open item of a holder not put away in the archive, whoever's, the
+ * latest changed first, as Home, Factory, and a person's page list what
+ * waits (`use-waiting-items.ts`).
+ */
+export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
+  return groups
+    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .filter((listed) => needsYou(listed, undefined))
+    .toSorted((a, b) => newestFirst(a.item, b.item));
+}
+
 /** What a person's group is folded by: their account's id, or one key for the reader's own. */
 const PERSON_KEY = { PREFIX: "person:", YOU: "person:you" } as const;
 
@@ -1872,18 +1889,15 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
   return b.updatedAt - a.updatedAt;
 }
 
-/** The open items first, the one posted longest ago first, then the settled ones the latest changed first. */
-function waitingLongest(a: InboxItem, b: InboxItem): number {
-  const aOpen = a.status === INBOX_STATUS.OPEN;
-  const bOpen = b.status === INBOX_STATUS.OPEN;
-  if (aOpen !== bOpen) return aOpen ? -1 : 1;
-  return aOpen ? a.postedAt - b.postedAt : newestFirst(a, b);
+/** The oldest change first. */
+function oldestFirst(a: InboxItem, b: InboxItem): number {
+  return a.updatedAt - b.updatedAt;
 }
 
 /** The order a sort lists items in. */
 const SORT_ORDER = {
   [INBOX_SORT.LATEST]: newestFirst,
-  [INBOX_SORT.WAITING]: waitingLongest,
+  [INBOX_SORT.OLDEST]: oldestFirst,
 } as const satisfies Record<InboxSort, (a: InboxItem, b: InboxItem) => number>;
 
 /** Where an item stands for the reader, as a list grouped by status heads it. */
@@ -1917,10 +1931,10 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
 
 /**
  * The list from every task's items: each item in the sort's order, the
- * latest changed first or the one waiting longest first, under its plan,
+ * latest changed first or the oldest changed first, under its plan,
  * under the person whose agent asks it, under where it stands, or in one
  * run, the tasks and the people in the order their first item stands and
- * the statuses in theirs. The tab shown lists only the items it takes
+ * the statuses in theirs. The scope shown lists only the items it takes
  * (`showsItem`) of the people Whose names, and the item chosen where one is given. Note that the rows a list draws are given none,
  * so a settled item leaves a list filtered to exclude it, while the steps
  * through the list are given the item the pane shows, which keeps its place
@@ -1979,24 +1993,19 @@ export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
 }
 
-/** Whether a tab lists the item: Needs you the reader's own open items, Unread anyone's unread, All open every open one, and Everything and Archived all of them. */
+/** Whether a scope lists the item: To do the reader's own not done with (`toDo`), and All and Archived all of them. */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
-  const { item } = listed;
   switch (show) {
-    case INBOX_SHOW.NEEDS_YOU:
-      return needsYou(listed, readerId);
-    case INBOX_SHOW.UNREAD:
-      return isUnread(item);
-    case INBOX_SHOW.OPEN:
-      return item.status === INBOX_STATUS.OPEN;
-    // Note that the Archived tab is handed the archived tasks' groups alone, every item of which it lists.
+    case INBOX_SHOW.TO_DO:
+      return toDo(listed, readerId);
+    // Note that Archived is handed the archived tasks' groups alone, every item of which it lists.
     case INBOX_SHOW.ALL:
     case INBOX_SHOW.ARCHIVED:
       return true;
   }
 }
 
-/** How many of every task's items each tab lists, of the people Whose names. */
+/** How many of every task's items each scope lists, of the people Whose names. */
 export function inboxCounts(
   tasks: readonly InboxGroup[],
   readerId: string | undefined,
@@ -2008,9 +2017,7 @@ export function inboxCounts(
   const count = (show: InboxShow) =>
     items.filter((listed) => showsItem(show, listed, readerId)).length;
   return {
-    [INBOX_SHOW.NEEDS_YOU]: count(INBOX_SHOW.NEEDS_YOU),
-    [INBOX_SHOW.UNREAD]: count(INBOX_SHOW.UNREAD),
-    [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
+    [INBOX_SHOW.TO_DO]: count(INBOX_SHOW.TO_DO),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
   };
 }
@@ -2083,9 +2090,10 @@ export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTI
 
 /**
  * The nearest row past the chosen one, the way the reader is moving, whose
- * item needs the reader, a folded group's left out; none where nothing else
- * does. Down it reads the rows below and wraps round to the list's top; up,
- * the rows above, nearest first, and wraps round from the list's foot.
+ * item the reader is not done with (`toDo`), a folded group's left out;
+ * none where nothing else is. Down it reads the rows below and wraps round
+ * to the list's top; up, the rows above, nearest first, and wraps round
+ * from the list's foot.
  */
 export function nextNeedingYou(
   view: InboxListView,
@@ -2101,13 +2109,13 @@ export function nextNeedingYou(
     direction === INBOX_DIRECTION.UP
       ? [...above.reverse(), ...below.reverse()]
       : [...below, ...above];
-  return ahead.find((listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen);
+  return ahead.find((listed) => toDo(listed, view.readerId) && listed.item.id !== chosen);
 }
 
-/** The item that stands chosen where none is: the first listed that needs the reader, else the first listed. */
+/** The item that stands chosen where none is: the first listed the reader is not done with (`toDo`), else the first listed. */
 export function firstChoice(view: InboxListView): InboxListed | undefined {
   const listed = listedItems(view);
-  return listed.find((each) => needsYou(each, view.readerId)) ?? listed[0];
+  return listed.find((each) => toDo(each, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

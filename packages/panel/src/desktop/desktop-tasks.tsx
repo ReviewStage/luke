@@ -40,7 +40,13 @@ import type { AgentFork } from "../tasks/fork-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
+import {
+  INBOX_SCOPES,
+  InboxList,
+  InboxListSkeleton,
+  ItemMark,
+  ShowEmpty,
+} from "../tasks/inbox-list.js";
 import {
   firstChoice,
   INBOX_GROUPING,
@@ -198,13 +204,13 @@ const NO_FOLDS = () => false;
 
 /**
  * The plan's own Inbox tab, in the side panel: its items newest first in the window's Inbox's
- * list, under the window's head with its tabs alone, which keep a
- * choice of their own (`folded-groups.ts`), and no groups since they are one
+ * list, under the window's head, whose view's menu offers To do and All
+ * alone, kept as a choice of their own (`folded-groups.ts`), and no groups since they are one
  * plan's, and the chosen item read beside them in the same pane, on the
  * plan's own held read. With nothing chosen, the first item listed that
- * waits stands chosen, else the newest; a plan whose read holds nothing
- * says so under the Inbox's glyph, and one whose items its tab leaves out
- * says so in its list and offers the tab beside it, the item chosen still shown
+ * the reader is not done with stands chosen, else the newest; a plan whose read holds nothing
+ * says so under the Inbox's glyph, and one whose items its scope leaves out
+ * says so in its list and offers All, the item chosen still shown
  * beside it. The pane's plan crumb chooses the plan's tab and its agent crumb
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
@@ -259,7 +265,7 @@ function TaskInboxTab({
   // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
   if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
   const filteredOut = show.show !== INBOX_SHOW.ALL && listed.length === 0 && items.length > 0;
-  // Note that the way back counts every item, filtered out or not, since the list holds the tabs.
+  // Note that the way back counts every item, filtered out or not, since the list holds the view's menu.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
   // Note that the tab stands in the side panel, so it is on screen while the panel is.
   const shown = tasks.shown && tasks.sidePanel.open;
@@ -313,7 +319,7 @@ function TaskInboxTab({
         head={{
           shown,
           show,
-          counts,
+          scopes: INBOX_SCOPES.TASK,
           view: undefined,
         }}
         models={tasks.agents.models}

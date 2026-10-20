@@ -2984,29 +2984,7 @@ ul.actor-stack {
   display: none;
 }
 
-/* The band the list's tabs stand in under its title, whose hairline is the
-   band's rather than the tabs'. */
-.inbox-show-tabs {
-  flex: none;
-  min-width: 0;
-  padding-block: var(--luke-space-6);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* Under a finger each tab is a finger's height. A row of them wider than
-   the list scrolls sideways (the fill bar's own), and a swipe that reaches
-   its end stops there rather than going on to the browser's Back. */
-@media (pointer: coarse) {
-  .inbox-show-tabs .luke-choice-bar[data-look="fill"][data-size="compact"] .luke-choice-bar-option {
-    height: var(--luke-touch-target);
-  }
-
-  .inbox-show-tabs .luke-choice-bar[data-look="fill"] {
-    overscroll-behavior-x: contain;
-  }
-}
-
-/* The chip saying whose items the list holds, under its tabs and over its
+/* The chip saying whose items the list holds, under its head and over its
    rows, on the rows' inset. */
 .inbox-tasks-chips {
   display: flex;

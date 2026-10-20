@@ -408,17 +408,24 @@ async function narrowTaskInbox(
         : "",
     ],
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
-    /** The list's head as a reader meets it: its name, and the tab it shows. */
-    head: () => [
-      tab.querySelector(".inbox-tasks header h1")?.textContent,
-      tab.querySelector('.inbox-tasks [role="tab"][aria-selected="true"] .luke-choice-bar-label')
-        ?.textContent,
-    ],
-    pressTab: (name: string) => act(() => taskInboxTab(tab, name)?.click()),
-    pressNeedsYou: () => act(() => taskInboxTab(tab, "Needs you")?.click()),
+    /** The list's head as a reader meets it: its name, then each scope its view's menu offers, the one shown in brackets; the menu is closed again on the scope shown. */
+    head: async () => {
+      const offered = await taskInboxScopes(tab);
+      const shown = offered.find((each) => each.getAttribute("aria-checked") === "true");
+      const words = offered.map((each) =>
+        each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
+      );
+      act(() => shown?.click());
+      return [tab.querySelector(".inbox-tasks header h1")?.textContent, ...words];
+    },
+    /** Shows the scope named `name` from the view's menu. */
+    pressScope: async (name: string) => {
+      const offered = await taskInboxScopes(tab);
+      act(() => offered.find((each) => each.textContent === name)?.click());
+    },
     rows: () =>
       [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
-    /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+    /** The list's empty state as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
     filteredOut: () => {
       const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
       if (empty === null) return null;
@@ -456,18 +463,23 @@ async function narrowTaskInbox(
   };
 }
 
-/** The tab under a task's Inbox's title named `name`. */
-function taskInboxTab(tab: HTMLElement, name: string): HTMLButtonElement | undefined {
-  return [...tab.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].find(
-    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
-  );
+/** The scopes a task's Inbox's view's menu offers, the menu opened from its head's View options and let settle, as a menu just closed hands the keyboard back first. */
+async function taskInboxScopes(tab: HTMLElement): Promise<HTMLElement[]> {
+  const options = tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(options, "the head offers the view's menu");
+  await act(async () => {
+    options.click();
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
+  return [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])];
 }
 
-/** Where a task's own Inbox keeps the tab it shows, apart from the window's, and where its Needs you kept its press before the tabs. */
+/** Where a task's own Inbox keeps the scope it shows, apart from the window's, and where its Needs you kept its press before the tabs that stood before its scopes. */
 const TASK_SHOW_KEY = "luke.taskInboxShow";
 const TASK_EARLIER_SHOW_KEY = "luke.taskInboxWaitingOnly";
 
-/** Opens every task's own Inbox on Everything, as a test of what it pages through over settled items asks. */
+/** Opens every task's own Inbox on All, as a test of what it pages through over settled items asks. */
 function showEverything(): void {
   window.localStorage.setItem(TASK_SHOW_KEY, JSON.stringify("all"));
 }
@@ -491,48 +503,57 @@ function approvedItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-test("a task's Inbox heads its list with the Inbox's name and its tabs, opening on All open; Needs you lists only what needs you, and the tab pressed is kept across a relaunch apart from the window's", async () => {
+test("a task's Inbox heads its list with the Inbox's name and a view's menu offering To do and All alone, opening on To do with no tab bar; All lists everything, the head naming it, and the scope chosen is kept across a relaunch apart from the window's", async () => {
   window.localStorage.clear();
-  window.localStorage.setItem("luke.inboxShow", JSON.stringify("unread"));
+  window.localStorage.setItem("luke.inboxShow", JSON.stringify("all"));
   const items = [
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
   let inbox = await narrowTaskInbox(items, 1_200);
-  assert.deepEqual(inbox.head(), ["Inbox", "All open"]);
+  assert.equal(document.querySelector('.inbox-tasks [role="tab"]'), null, "no tab bar stands");
+  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
-  inbox.pressTab("Everything");
+  await inbox.pressScope("All");
+  assert.deepEqual(await inbox.head(), ["Inbox · All", "To do", "[All]"]);
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-
-  inbox.pressNeedsYou();
-  assert.deepEqual(inbox.head(), ["Inbox", "Needs you"]);
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.unmount();
 
   inbox = await narrowTaskInbox(items, 1_200);
-  assert.deepEqual(inbox.head(), ["Inbox", "Needs you"], "the tab outlives a relaunch");
+  assert.deepEqual(
+    await inbox.head(),
+    ["Inbox · All", "To do", "[All]"],
+    "the scope outlives a relaunch",
+  );
+  await inbox.pressScope("To do");
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.unmount();
   window.localStorage.clear();
 });
 
-test("a task's Inbox whose Needs you was pressed before the tabs opens on the Needs you tab, and one left off on Everything", async () => {
+test("a task's Inbox whose Needs you was pressed before the tabs opens on To do, and one left off on All; a tab kept before the scopes opens on the scope that lists what it did", async () => {
   const items = [
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
   ];
-  for (const [pressed, shown] of [
-    [true, "Needs you"],
-    [false, "Everything"],
+  for (const [key, kept, shown] of [
+    [TASK_EARLIER_SHOW_KEY, true, "[To do]"],
+    [TASK_EARLIER_SHOW_KEY, false, "[All]"],
+    [TASK_SHOW_KEY, "unread", "[To do]"],
+    [TASK_SHOW_KEY, "open", "[All]"],
   ] as const) {
     window.localStorage.clear();
-    window.localStorage.setItem(TASK_EARLIER_SHOW_KEY, JSON.stringify(pressed));
+    window.localStorage.setItem(key, JSON.stringify(kept));
     const inbox = await narrowTaskInbox(items, 1_200);
-    assert.deepEqual(inbox.head(), ["Inbox", shown]);
+    assert.ok(
+      (await inbox.head()).includes(shown),
+      `${key} kept as ${String(kept)} shows ${shown}`,
+    );
     inbox.unmount();
   }
   window.localStorage.clear();
 });
 
-test("one column wide, a task's Inbox filtered to what needs you pages through only those", async () => {
+test("one column wide, a task's Inbox on To do pages through only what it lists", async () => {
   window.localStorage.clear();
   showEverything();
   const inbox = await narrowTaskInbox([
@@ -544,14 +565,14 @@ test("one column wide, a task's Inbox filtered to what needs you pages through o
   assert.equal(inbox.pager(), "1 of 3");
 
   act(() => inbox.back()?.click());
-  inbox.pressNeedsYou();
+  await inbox.pressScope("To do");
   act(() => inbox.row("Alert at 80%?")?.click());
   assert.equal(inbox.pager(), "1 of 2", "the settled item is passed over");
   window.localStorage.clear();
   inbox.unmount();
 });
 
-test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds the tabs", async () => {
+test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds the view's menu", async () => {
   window.localStorage.clear();
   showEverything();
   const inbox = await narrowTaskInbox([
@@ -559,11 +580,11 @@ test("one column wide, a task's Inbox filtered down to one item still offers its
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ]);
   act(() => inbox.back()?.click());
-  inbox.pressNeedsYou();
+  await inbox.pressScope("To do");
   act(() => inbox.row("Expire after 7 days?")?.click());
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
   act(() => inbox.back()?.click());
-  assert.deepEqual(inbox.head(), ["Inbox", "Needs you"]);
+  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
   window.localStorage.clear();
   inbox.unmount();
 });
@@ -611,22 +632,22 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   inbox.unmount();
 });
 
-test("with Needs you on, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says nothing needs you", async () => {
+test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says there is nothing to do", async () => {
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
   const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
-  inbox.pressNeedsYou();
+  await inbox.pressScope("To do");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
   assert.deepEqual(inbox.rows(), []);
-  assert.equal(inbox.filteredOut()?.[1], "Nothing needs you");
+  assert.equal(inbox.filteredOut()?.[1], "Nothing to do");
   assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
   window.localStorage.clear();
   inbox.unmount();
 });
 
-test("a task's Inbox holding only settled items, on the Needs you tab, lists no row and says nothing needs you with Show everything, wide or one column wide, whose press shows Everything", async () => {
+test("a task's Inbox holding only settled items, read, on To do lists no row and says there is nothing to do with Show all, wide or one column wide, whose press shows All", async () => {
   window.localStorage.clear();
   showEverything();
   const items = [
@@ -635,45 +656,45 @@ test("a task's Inbox holding only settled items, on the Needs you tab, lists no 
   ];
   const wide = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  wide.pressNeedsYou();
-  assert.deepEqual(wide.head(), ["Inbox", "Needs you"]);
+  await wide.pressScope("To do");
+  assert.deepEqual(await wide.head(), ["Inbox", "[To do]", "All"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(wide.filteredOut(), [undefined, "Nothing needs you", "Show everything"]);
+  assert.deepEqual(wide.filteredOut(), [undefined, "Nothing to do", "Show all"]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
-  assert.deepEqual(wide.head(), ["Inbox", "Everything"]);
+  assert.deepEqual(await wide.head(), ["Inbox · All", "To do", "[All]"]);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  wide.pressNeedsYou();
+  await wide.pressScope("To do");
   wide.unmount();
 
-  // Opened again one column wide, the Needs you tab kept, nothing stands chosen, so the list stands alone and says so.
+  // Opened again one column wide, To do kept, nothing stands chosen, so the list stands alone and says so.
   const narrow = await narrowTaskInbox(items);
   assert.deepEqual(narrow.standing(), ["list", ""]);
-  assert.equal(narrow.filteredOut()?.[2], "Show everything");
+  assert.equal(narrow.filteredOut()?.[2], "Show all");
   narrow.showAll();
   assert.deepEqual(
     narrow.standing(),
     ["list", ""],
-    "Show everything leaves the rows it brings back standing",
+    "Show all leaves the rows it brings back standing",
   );
-  assert.deepEqual(narrow.head(), ["Inbox", "Everything"]);
+  assert.deepEqual(await narrow.head(), ["Inbox · All", "To do", "[All]"]);
   assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   window.localStorage.clear();
   narrow.unmount();
 });
 
-test("a task's Inbox whose read failed offers Retry though Needs you lists nothing it still holds", async () => {
+test("a task's Inbox whose read failed offers Retry though To do lists nothing it still holds", async () => {
   window.localStorage.clear();
   const settled = [
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
   const first = await narrowTaskInbox(settled, 1_200);
-  first.pressNeedsYou();
+  await first.pressScope("To do");
   first.unmount();
 
   const read = heldAnswer();
   const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
-  assert.deepEqual(inbox.rows(), [], "Needs you, kept from before, lists nothing");
+  assert.deepEqual(inbox.rows(), [], "To do, kept from before, lists nothing");
   await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.failure(), [true, true]);
   window.localStorage.clear();
@@ -997,6 +1018,9 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
 });
 
 test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
+  // Note that the Inbox opens on All, since To do leaves the teammate's notice out.
+  window.localStorage.clear();
+  showEverything();
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
@@ -1031,6 +1055,7 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   await act(async () => inbox.row("The migration ran")?.click());
   assert.equal(inbox.title(), "The migration ran");
   assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
+  window.localStorage.clear();
   inbox.unmount();
 });
 
