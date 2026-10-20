@@ -477,6 +477,12 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
+  /**
+   * A workspace's people, followed while the window holds the stream open:
+   * its members and who its work names but left as they first stand, then
+   * each time they move, or why there are none.
+   */
+  WORKSPACE_PEOPLE: "workspace.people",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",

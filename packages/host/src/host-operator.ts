@@ -298,6 +298,9 @@ import {
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
+  type WorkspacePeopleFollow,
+  type WorkspacePeopleFollowed,
+  workspacePeopleFollowedSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -569,6 +572,12 @@ export interface HostOperator {
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
+  /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
+  workspacePeopleFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's people let go: nothing more is heard of them until they are followed again. */
+  workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's people as they now stand, each time they move while followed. */
+  onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
   /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
@@ -1622,6 +1631,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
         workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
+      ),
+    workspacePeopleFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, scope)),
+    workspacePeopleUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, scope)),
+    onWorkspacePeopleChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(workspacePeopleFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     workspacePhoto: (params) =>
       Effect.map(

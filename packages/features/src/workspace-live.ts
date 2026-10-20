@@ -141,6 +141,8 @@ export const workspaceMembersLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
+export type WorkspaceMembersLiveAnswer = typeof workspaceMembersLiveAnswerSchema.Type;
+
 /** A workspace's people as their rows deliver them: each sign-in picture as the account holds it, null for none. */
 export const workspaceMembersLiveRowsSchema = EffectSchema.Struct({
   members: EffectSchema.Array(

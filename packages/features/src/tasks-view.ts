@@ -1167,6 +1167,23 @@ export const tasksWorkspaceMembersAnswerSchema = EffectSchema.Union([
 
 export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSchema.Type;
 
+/** A workspace's people, followed by a window while it draws them. */
+export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
+
+/**
+ * A followed workspace's people as they now stand, told by the host each
+ * time they move: its members and who its work names but left, or why there
+ * are none.
+ */
+export const workspacePeopleFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceMembersAnswerSchema,
+});
+
+export type WorkspacePeopleFollowed = typeof workspacePeopleFollowedSchema.Type;
+
 /** A workspace's photo, as a window's tile asks for it: the workspace. */
 export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
 

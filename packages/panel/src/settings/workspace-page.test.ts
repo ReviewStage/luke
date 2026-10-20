@@ -14,6 +14,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
+import type { TasksWorkspaceMembersAnswer } from "@luke/features/tasks-view";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -27,6 +28,7 @@ import {
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import {
+  type ActPortClient,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -423,6 +425,48 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }
 
+/** What the act port answers a workspace's people's stream with. */
+type PeopleStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_PEOPLE]>>;
+
+/** A stream the test pushes words into, as the host streams a followed workspace's people. */
+function pushableStream<A>() {
+  const held: A[] = [];
+  const waiting: ((read: IteratorResult<A, undefined>) => void)[] = [];
+  let ended = false;
+  const iterator: AsyncIteratorObject<A, undefined, unknown> = {
+    next: () => {
+      const value = held.shift();
+      if (value !== undefined) return Promise.resolve({ done: false, value });
+      if (ended) return Promise.resolve({ done: true, value: undefined });
+      return new Promise((resolve) => waiting.push(resolve));
+    },
+    return: () => {
+      ended = true;
+      for (const resolve of waiting.splice(0)) resolve({ done: true, value: undefined });
+      return Promise.resolve({ done: true, value: undefined });
+    },
+    [Symbol.asyncIterator]: () => iterator,
+    [Symbol.asyncDispose]: () => Promise.resolve(),
+  };
+  const push = (value: A) => {
+    const resolve = waiting.shift();
+    if (resolve === undefined) held.push(value);
+    else resolve({ done: false, value });
+  };
+  return { iterator, push };
+}
+
+/** Each workspace's people's streams the page holds open, newest last, which a test pushes a word to. */
+let peopleStreams: {
+  readonly workspaceId: string;
+  push: (view: TasksWorkspaceMembersAnswer) => void;
+}[] = [];
+
+/** A word of a workspace's people, pushed to every stream of it the page holds open. */
+const pushPeople = (workspaceId: string, view: TasksWorkspaceMembersAnswer) => {
+  for (const stream of peopleStreams) if (stream.workspaceId === workspaceId) stream.push(view);
+};
+
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
@@ -455,8 +499,16 @@ beforeEach(() => {
   tokenReadHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
+  peopleStreams = [];
   fakeActPort({
     ...workspacePort(),
+    [ACT_KIND.WORKSPACE_PEOPLE]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_PEOPLE, payload: input });
+      const stream = pushableStream<TasksWorkspaceMembersAnswer>();
+      peopleStreams.push({ workspaceId: input.workspaceId, push: stream.push });
+      // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
+      return Promise.resolve(stream.iterator as PeopleStream);
+    },
     [ACT_KIND.AUTOMATIONS_LIST]: () =>
       automations === undefined
         ? Promise.reject(new Error("Not in this test."))
@@ -876,7 +928,11 @@ test("the chosen team workspace's members are listed with their email and role, 
 
   assert.deepEqual(
     sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
-    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACT_KIND.WORKSPACE_MEMBERS_READ],
+    [
+      ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ,
+      ACT_KIND.WORKSPACE_PEOPLE,
+      ACT_KIND.WORKSPACE_MEMBERS_READ,
+    ],
   );
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
@@ -1246,23 +1302,22 @@ test("an automation made after the page opened is named when the leave is next a
   assert.equal(after.includes("An automation you created stops running: Morning sweep."), true);
 });
 
-test("the members are read again when the window's list counts another, so an admin who joined meanwhile may be handed the workspace, and Transfer ownership reads them again as it opens", async () => {
-  const { page, restand } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 2 });
+test("the members the host streams are drawn with nothing read again, so an admin who joined meanwhile may be handed the workspace", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 2 });
   const offeredBefore = buttons(
     leaveGroup(page) ?? assert.fail("no leave"),
     "Transfer ownership",
   ).length;
-  stored = [OWNER, ADMIN_OLA, MEMBER];
-  await restand({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 3 });
-  const reads = () =>
-    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ).length;
-  const readsBeforePress = reads();
+  act(() => pushPeople(ACME.id, { members: [OWNER, ADMIN_OLA, MEMBER] }));
+  await settle();
   act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
   await settle();
 
   assert.equal(offeredBefore, 0);
-  assert.equal(readsBeforePress, 2);
-  assert.equal(reads(), 3);
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ).length,
+    1,
+  );
   assert.equal(
     dialog().querySelector('button[aria-label^="New owner"]')?.getAttribute("aria-label"),
     "New owner: Ola",
@@ -1768,6 +1823,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
       .filter(
         (request) =>
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
           !MAC_GROUP_READS.has(request.kind),
       )

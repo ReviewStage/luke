@@ -315,6 +315,15 @@ const WORKSPACES_SEALED: WorkspacesLiveAnswer = {
   },
 };
 
+/** A workspace's people sealed for following, each part named by its capability, as `fakeRealtime` addresses it. */
+const PEOPLE_SEALED = {
+  url: WORKSPACES_URL,
+  queries: {
+    members: { capability: "capability-members", queryFingerprint: "m", expiresAt: 1e15 },
+    former: { capability: "capability-former", queryFingerprint: "f", expiresAt: 1e15 },
+  },
+};
+
 /** The workspaces as the live statements' rows carry them, the account's own first one being Ada's. */
 function workspacesLiveRows(workspaces: readonly Workspace[]) {
   return {
@@ -580,6 +589,14 @@ function fakeService(tasks: Task[]): FakeService {
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      // A workspace's people are sealed for a member alone, as the service seals them.
+      peopleLive: (workspaceId, _userId) =>
+        Effect.sync(() => {
+          service.reads.push(`people-live:${workspaceId}`);
+          return service.members[workspaceId] === undefined
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
+            : ({ ok: true, answer: PEOPLE_SEALED } as const);
+        }),
       // A poll answers each part's rows inline, as the service answers one while Realtime fails it.
       live: (_userId, poll) =>
         Effect.sync(() => {
@@ -1386,6 +1403,8 @@ function subject(
     /** Every event the composer emitted besides the view, by its kind. */
     const pushed: [GatewayEventKind, WireValue][] = [];
     const told: TasksView[] = [];
+    /** Every other event the host emitted, in order. */
+    const events: { readonly kind: string; readonly payload: WireValue }[] = [];
     const reported: string[] = [];
     let broken = false;
     const waiters: {
@@ -1405,6 +1424,7 @@ function subject(
           if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
             pushed.push([kind, payload]);
+            events.push({ kind, payload });
             return;
           }
           const read = readEither(tasksViewSchema)(payload);
@@ -1475,6 +1495,7 @@ function subject(
       told,
       pages,
       pushed,
+      events,
       reported,
       last,
       viewWhere,
@@ -4501,4 +4522,72 @@ it.effect(
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
     }),
+);
+
+it.effect(
+  "a workspace's people are followed over Realtime while a window follows them, each change told in the held read's order, and let go on unfollow or a sign-out",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [ADA];
+      const { call, events, tasks, settled } = yield* subject(service);
+      const people = () =>
+        events
+          .filter((event) => event.kind === GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED)
+          .map((event) => event.payload);
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
+      const row = (member: typeof ADA) => ({
+        userId: member.userId,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        image: null,
+      });
+      service.realtime.deliver("members", [row(GRACE), row(ADA)]);
+      service.realtime.deliver("former", []);
+      yield* settled;
+      service.realtime.deliver("former", [{ userId: "user-lee", name: "Lee Park", image: null }]);
+      yield* settled;
+
+      assert.deepEqual(people(), [
+        { workspaceId: ACME.id, view: { members: [ADA, GRACE] } },
+        {
+          workspaceId: ACME.id,
+          view: { members: [ADA, GRACE], former: [{ userId: "user-lee", name: "Lee Park" }] },
+        },
+      ]);
+      assert.ok(!JSON.stringify(people()).includes("capability"), "no sealed statement is told");
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, { workspaceId: ACME.id });
+      assert.ok(!service.realtime.subscribed().includes("capability-members"));
+      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      assert.ok(service.realtime.subscribed().includes("capability-members"));
+      yield* tasks.reset;
+      assert.ok(!service.realtime.subscribed().includes("capability-members"));
+    }),
+);
+
+it.effect("a workspace the account is not in is told not found once, and not asked again", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call, events, settled } = yield* subject(service);
+
+    yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+    yield* settled;
+    yield* TestClock.adjust(Duration.minutes(1));
+    yield* settled;
+
+    assert.deepEqual(events, [
+      {
+        kind: GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED,
+        payload: { workspaceId: ACME.id, view: { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } },
+      },
+    ]);
+    assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
+  }),
 );

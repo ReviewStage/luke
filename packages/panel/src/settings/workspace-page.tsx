@@ -69,6 +69,7 @@ import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { encodeImage } from "../feedback-images.js";
 import { useOpenPerson } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
+import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { wholeWordsHint } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
@@ -313,44 +314,29 @@ function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): bool
 }
 
 /**
- * The workspace's members, read afresh whenever the workspace changes or
- * the window's list says it holds another count of them, as someone
- * joining or leaving elsewhere makes it; a write's answer stands in once it
- * lands. Retry reads again from nothing; a refresh reads again keeping the
- * list it has on screen until the new one lands, and a refresh that fails
- * keeps it. Note that only the newest thing asked is shown, a read or a
- * write's answer, because a read sent before a write can land after it and
- * would put back what the write changed.
+ * The workspace's members, read once and followed while the page stands
+ * (`useWorkspaceMembersRead`): whatever moves them, here or elsewhere, is
+ * pushed. A write's answer stands in once it lands, until the next push.
+ * Retry reads and follows again from nothing.
  */
-function useMembersRead(workspaceId: string, memberCount: number | undefined) {
-  const { act } = useAct();
-  const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
-  const [attempt, setAttempt] = useState({ count: 0, keep: false });
-  const latest = useRef(0);
-  useEffect(() => {
-    const asked = ++latest.current;
-    if (!attempt.keep) setRead(undefined);
-    act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
-      (items) => {
-        if (asked === latest.current) setRead({ items });
-      },
-      () => {
-        if (asked === latest.current && !attempt.keep) setRead({ failed: READ_FAILED.MEMBERS });
-      },
-    );
-    return () => {
-      // A read the workspace or a newer ask replaced is passed over when it lands.
-      if (asked === latest.current) latest.current += 1;
-    };
-  }, [act, workspaceId, memberCount, attempt]);
+function useMembersRead(workspace: Workspace) {
+  const followed = useWorkspaceMembersRead(workspace);
+  const [answered, setAnswered] = useState<{
+    readonly over: readonly WorkspaceMember[] | undefined;
+    readonly items: readonly WorkspaceMember[];
+  }>();
+  const read: ListRead<WorkspaceMember> =
+    answered !== undefined && answered.over === followed.members
+      ? { items: answered.items }
+      : followed.members !== undefined
+        ? { items: followed.members }
+        : followed.refused
+          ? { failed: READ_FAILED.MEMBERS }
+          : undefined;
   return {
     read,
-    retry: () => setAttempt((was) => ({ count: was.count + 1, keep: false })),
-    refresh: () => setAttempt((was) => ({ count: was.count + 1, keep: true })),
-    changed: (items: readonly WorkspaceMember[]) => {
-      latest.current += 1;
-      setRead({ items });
-    },
+    retry: followed.retry,
+    changed: (items: readonly WorkspaceMember[]) => setAnswered({ over: followed.members, items }),
   };
 }
 
@@ -659,20 +645,18 @@ function HeirChip({
  * the confirm dialog with the admin to make the owner as its field, the
  * first admin unless another is chosen; with none it says to make one
  * first. The members the service answers after the handover stand in at
- * once, and the reader's own new role arrives with the workspaces the host
- * reads again after it, which turns this row into a member's leave.
+ * once, and the reader's own new role arrives with the followed workspaces,
+ * which turns this row into a member's leave.
  */
 function OwnerLeave({
   workspace,
   members,
   onChanged,
-  onRefresh,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
   onChanged: (members: readonly WorkspaceMember[]) => void;
   /** Reads the members again keeping the list on screen, so the admins offered are the workspace's now. */
-  onRefresh: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const admins =
@@ -703,10 +687,7 @@ function OwnerLeave({
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               disabled={transfer.busy}
-              onClick={() => {
-                onRefresh();
-                transfer.ask();
-              }}
+              onClick={() => transfer.ask()}
             >
               {TRANSFER_WORDS.VERB}
             </Button>
@@ -751,7 +732,6 @@ function LeaveGroup({
   ownName,
   onLeft,
   onChanged,
-  onRefresh,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
@@ -759,19 +739,13 @@ function LeaveGroup({
   ownName: string | undefined;
   onLeft: () => void;
   onChanged: (members: readonly WorkspaceMember[]) => void;
-  onRefresh: () => void;
 }): React.JSX.Element | null {
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
     <SettingsSection anchor={SETTINGS_SECTION.LEAVE}>
       {owner ? (
-        <OwnerLeave
-          workspace={workspace}
-          members={members}
-          onChanged={onChanged}
-          onRefresh={onRefresh}
-        />
+        <OwnerLeave workspace={workspace} members={members} onChanged={onChanged} />
       ) : (
         <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
       )}
@@ -1587,7 +1561,7 @@ function ShownWorkspace({
   workspace: Workspace;
   readerId: string | undefined;
 }): React.JSX.Element {
-  const members = useMembersRead(workspace.id, workspace.memberCount);
+  const members = useMembersRead(workspace);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
   const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   return (
@@ -1620,7 +1594,6 @@ function ShownWorkspace({
         ownName={ownName}
         onLeft={() => control.onLeft(workspace.id)}
         onChanged={members.changed}
-        onRefresh={members.refresh}
       />
     </>
   );
