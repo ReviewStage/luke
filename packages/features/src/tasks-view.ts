@@ -54,6 +54,7 @@ import {
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
+  taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
   taskFileRequestSchema,
@@ -569,16 +570,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, or both. */
-function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
-  return params.status !== undefined || params.priority !== undefined;
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
+function namesAStanding(params: {
+  status?: unknown;
+  priority?: unknown;
+  assigneeId?: unknown;
+}): boolean {
+  return (
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
+  );
 }
 
-/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
