@@ -172,8 +172,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * is not the agent's developer.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An agent started is minted as a member
- * of its workspace's chat, `@agent-N` in the order agents were started,
- * so it answers to its handle before it ever posts; a mint that fails is
+ * of its workspace's chat in the order agents were started, so it answers
+ * to its mention link before it ever posts; a mint that fails is
  * logged and left to the agent's first post or read. A choice an ask names
  * runs that one agent and is never kept as the account's default, which only
  * Settings writes. Who reaches eve is the caller's: the route holds the developer's

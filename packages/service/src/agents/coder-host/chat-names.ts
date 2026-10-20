@@ -1,5 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { agentMembersOf, type ChatMemberRow } from "@luke/database/models/chat-store";
+import {
+  agentMembersOf,
+  type ChatAgentMember,
+  type ChatMemberRow,
+} from "@luke/database/models/chat-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import { CHAT_MEMBER_LABEL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -30,18 +34,20 @@ export interface ChatNames {
   readonly name: (member: ChatMemberRow) => string;
 }
 
-/**
- * How the account names the members given in the workspace: the step its
- * links are written under, each agent's name and task, and each person's
- * account's name, read once for every member a reader or a notice names.
- */
-export function chatNamesOf(
+/** What names a member: each agent member's name and task, by its agent's id, each person's account's name, by their account, and the name read off them. */
+interface MemberNaming {
+  readonly agents: ReadonlyMap<string, ChatAgentMember>;
+  readonly name: (member: ChatMemberRow) => string;
+  readonly people: ReadonlyMap<string, string>;
+}
+
+/** What the members given are called in the workspace, as the account reads them: each agent's name and task, and each person's account's name. */
+function namingOf(
   userId: string,
   organizationId: string,
   members: Iterable<ChatMemberRow>,
-): Effect.Effect<ChatNames, StoreFailure, DatabaseServices> {
+): Effect.Effect<MemberNaming, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const step = yield* workspaceStepOf(userId, organizationId);
     const agents = yield* agentMembersOf(userId, organizationId);
     const people = yield* readAccountNames(
       [...members].flatMap((member) => (member.userId === null ? [] : [member.userId])),
@@ -61,6 +67,36 @@ export function chatNamesOf(
           );
       }
     };
+    return { agents, people, name };
+  });
+}
+
+/**
+ * What the members given are called, as the account reads the workspace,
+ * with no link written: what a notice's row and the account's waiting read
+ * name a poster by.
+ */
+export function chatMemberNamesOf(
+  userId: string,
+  organizationId: string,
+  members: Iterable<ChatMemberRow>,
+): Effect.Effect<(member: ChatMemberRow) => string, StoreFailure, DatabaseServices> {
+  return Effect.map(namingOf(userId, organizationId, members), (naming) => naming.name);
+}
+
+/**
+ * How the account names the members given in the workspace: the step its
+ * links are written under, and what each member is called, read once for
+ * every member a reader or a notice names.
+ */
+export function chatNamesOf(
+  userId: string,
+  organizationId: string,
+  members: Iterable<ChatMemberRow>,
+): Effect.Effect<ChatNames, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const step = yield* workspaceStepOf(userId, organizationId);
+    const { agents, people, name } = yield* namingOf(userId, organizationId, members);
     const mention = (member: ChatMemberRow): string => {
       switch (member.kind) {
         case MEMBER_KIND.LUKE:

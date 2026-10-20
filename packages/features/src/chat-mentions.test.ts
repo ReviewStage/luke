@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { chatMentionsIn, chatTargetMember } from "./chat-mentions.js";
+import { chatMentionsIn, chatTargetMember, withoutMemberLinks } from "./chat-mentions.js";
 import { encodeMention, MENTION_KIND } from "./mention-link.js";
 
 /**
@@ -46,5 +46,12 @@ test("a member named after many references is still read, however many reference
   assert.deepEqual(
     read.members.map(({ mention }) => mention.kind),
     [MENTION_KIND.PERSON],
+  );
+});
+
+test("a member's link is written as its label alone, and a link to anything else stays as written", () => {
+  assert.equal(
+    withoutMemberLinks(`${person}, ${agent} and ${luke}: see ${task}`),
+    `@Ada Lovelace, @Invite emails and @Luke: see ${task}`,
   );
 });

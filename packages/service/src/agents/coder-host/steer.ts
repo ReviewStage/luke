@@ -20,6 +20,7 @@ import {
   type StoreWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result } from "effect";
@@ -230,15 +231,17 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
   // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention;
-  // nor does a chat notice, whose links name who said it and whom it addresses, each a member the agent reads the chat by, never one the developer pointed at.
+  // and a chat notice's links to people, agents, and Lukes name who said it and whom it addresses, members the agent reads the chat by,
+  // so only what else it mentions is noted.
   const reviewers = line.sender.kind === MESSAGE_SENDER.GITHUB;
-  const unpointed = reviewers || line.metadata?.channel === MESSAGE_CHANNEL.CHAT;
-  const reads = unpointed
+  const pointed =
+    line.metadata?.channel === MESSAGE_CHANNEL.CHAT ? withoutMemberLinks(line.text) : line.text;
+  const reads = reviewers
     ? NO_MENTIONED_READS
     : yield* hostedStoreOrUnavailable(
-        readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
+        readMentioned(userId, pointed, { task: task?.task, workspaceId: agent.organizationId }),
       );
-  const mentioned = unpointed ? undefined : mentionedContext(line.text, task?.task, reads);
+  const mentioned = reviewers ? undefined : mentionedContext(pointed, task?.task, reads);
   // Read before eve is asked, so a refusal settles the turn the session was running and never one begun since.
   const running = yield* runningTurnOf(agent);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.

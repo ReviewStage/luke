@@ -317,7 +317,7 @@ interface PostPlace {
   readonly named:
     | { readonly in: string }
     | { readonly thread: number }
-    | { readonly with: ChatMemberRow };
+    | { readonly with: ChatMemberRow; readonly to: string };
 }
 
 /** What the store's refusal of a topic channel reads as to the model. */
@@ -610,7 +610,10 @@ function placeOf(
     );
   }
   return Effect.map(dmWith(agent, seat, to), (found) =>
-    Result.map(found, (dm) => ({ to: { channelId: dm.channel.id }, named: { with: dm.with } })),
+    Result.map(found, (dm) => ({
+      to: { channelId: dm.channel.id },
+      named: { with: dm.with, to },
+    })),
   );
 }
 
@@ -677,12 +680,15 @@ function postedLine(
   return Effect.gen(function* () {
     const { message, unresolved } = posted;
     const telling = { ...agent.telling, userId: agent.userId, organizationId: seat.organizationId };
-    // A DM is named as a read names it, by the other member's mention link, however the post's `to` wrote it.
+    // A DM is named as a read names it, by the other member's mention link, however the post's `to` wrote it;
+    // a name that could not be read leaves the `to` as written, since the post stands either way and a failure here would be read as none.
     const place =
       "with" in named
         ? {
-            in: (yield* chatNamesOf(agent.userId, seat.organizationId, [named.with])).mention(
-              named.with,
+            in: yield* chatNamesOf(agent.userId, seat.organizationId, [named.with]).pipe(
+              Effect.map((names) => names.mention(named.with)),
+              Effect.tapError(logStoreFailure),
+              Effect.orElseSucceed(() => named.to),
             ),
           }
         : named;

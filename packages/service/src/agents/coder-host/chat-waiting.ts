@@ -14,7 +14,7 @@ import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/accou
 import { ASK_STATUS, CHANNEL_KIND, CHAT_MEMBER_LABEL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { Effect, Option, type Schema } from "effect";
 import type { CursorStamp } from "../../http/held-read.js";
-import { type ChatNames, chatNamesOf } from "./chat-names.js";
+import { chatMemberNamesOf } from "./chat-names.js";
 
 /**
  * chat-waiting.ts -- what waits on a person in their workspaces' chat, as the account's held read carries it beside the inbox: the asks open to them, and the message their member was last told of.
@@ -101,33 +101,32 @@ export function chatWaitingStamps(
   });
 }
 
-/** A workspace's roster, and how the account names its members. */
-interface NamedRosters extends Rosters {
-  readonly names: ChatNames;
+/** One message that waits on the account, before its author is named: the message, why it waits, its channel's plan, and its workspace's roster. */
+interface Waiting {
+  readonly message: ChatMessageRow;
+  readonly reason: AccountChatEntry["reason"];
+  readonly taskId: string | null;
+  readonly rosters: Rosters;
 }
 
-/** One message as an entry carries it, in the workspace of the rosters given, its author by what they are called. */
-function entryOf(
-  message: ChatMessageRow,
-  reason: AccountChatEntry["reason"],
-  taskId: string | null,
-  rosters: NamedRosters,
-): AccountChatEntry {
+/** One message as an entry carries it, its author by what they are called. */
+function entryOf(waiting: Waiting, nameOf: (member: ChatMemberRow) => string): AccountChatEntry {
+  const { message, reason, taskId, rosters } = waiting;
   const author = rosters.members.get(message.authorMemberId);
   return {
     messageId: message.id,
     seq: message.seq,
     workspaceId: rosters.workspaceId,
     reason,
-    from: author === undefined ? CHAT_MEMBER_LABEL.FORMER_PERSON : rosters.names.name(author),
+    from: author === undefined ? CHAT_MEMBER_LABEL.FORMER_PERSON : nameOf(author),
     planId: taskId,
     touchedSeq: message.touchedSeq,
     updatedAt: message.touchedAt.getTime(),
   };
 }
 
-/** The message a member's notice stands at, as an entry: a direct message where its channel is one, else a mention; none where the account no longer sees it. */
-function noticeEntry(userId: string, rosters: NamedRosters) {
+/** The message a member's notice stands at, waiting: a direct message where its channel is one, else a mention; none where the account no longer sees it. */
+function noticeWaiting(userId: string, rosters: Rosters) {
   return Effect.gen(function* () {
     const { own } = rosters;
     if (own === undefined || !noticed(own)) return [];
@@ -137,34 +136,46 @@ function noticeEntry(userId: string, rosters: NamedRosters) {
     const channel = channels.find((each) => each.id === message.value.channelId);
     const reason =
       channel?.kind === CHANNEL_KIND.DM ? ACCOUNT_CHAT_REASON.DIRECT : ACCOUNT_CHAT_REASON.MENTION;
-    return [entryOf(message.value, reason, channel?.taskId ?? null, rosters)];
+    return [{ message: message.value, reason, taskId: channel?.taskId ?? null, rosters }];
   });
 }
 
-/** What waits on the account in chat: the open asks, then each member's notice, the latest changed first. */
+/**
+ * What waits on the account in chat: the open asks, then each member's
+ * notice, the latest changed first. Each author is named once per
+ * workspace, and only in a workspace where something waits.
+ */
 export function chatWaitingEntries(
   userId: string,
 ): Effect.Effect<readonly AccountChatEntry[], ChatWaitingFailure, DatabaseServices> {
   return Effect.gen(function* () {
     if (!(yield* chatEnabledFor(userId))) return [];
-    const rosters = yield* Effect.forEach(
-      yield* rostersOf(userId),
-      (each): Effect.Effect<NamedRosters, ChatWaitingFailure, DatabaseServices> =>
-        Effect.map(chatNamesOf(userId, each.workspaceId, each.members.values()), (names) => ({
-          ...each,
-          names,
-        })),
-    );
+    const rosters = yield* rostersOf(userId);
     const byWorkspace = new Map(rosters.map((each) => [each.workspaceId, each]));
-    const asks = (yield* waitingOn(userId)).flatMap(({ message, taskId }) => {
+    const asks: readonly Waiting[] = (yield* waitingOn(userId)).flatMap(({ message, taskId }) => {
       const of = byWorkspace.get(message.organizationId);
-      return of === undefined ? [] : [entryOf(message, ACCOUNT_CHAT_REASON.ASK, taskId, of)];
+      return of === undefined
+        ? []
+        : [{ message, reason: ACCOUNT_CHAT_REASON.ASK, taskId, rosters: of }];
     });
-    const notices = (yield* Effect.forEach(rosters, (each) => noticeEntry(userId, each))).flat();
+    const notices = (yield* Effect.forEach(rosters, (each) => noticeWaiting(userId, each))).flat();
     // A notice of an ask is the ask already, so it is said once.
-    const asked = new Set(asks.map((entry) => entry.messageId));
-    return [...asks, ...notices.filter((entry) => !asked.has(entry.messageId))].toSorted(
-      (one, other) => other.updatedAt - one.updatedAt,
-    );
+    const asked = new Set(asks.map((each) => each.message.id));
+    const waiting = [...asks, ...notices.filter((each) => !asked.has(each.message.id))];
+    const named = new Map<string, (member: ChatMemberRow) => string>();
+    for (const each of new Set(waiting.map((one) => one.rosters))) {
+      named.set(
+        each.workspaceId,
+        yield* chatMemberNamesOf(userId, each.workspaceId, each.members.values()),
+      );
+    }
+    return waiting
+      .map((each) =>
+        entryOf(
+          each,
+          named.get(each.rosters.workspaceId) ?? (() => CHAT_MEMBER_LABEL.FORMER_PERSON),
+        ),
+      )
+      .toSorted((one, other) => other.updatedAt - one.updatedAt);
   });
 }

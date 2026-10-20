@@ -232,7 +232,7 @@ const dmWith = /* @__PURE__ */ Effect.fnUntraced(function* (writer: Writer, targ
   const other = yield* hostedStoreOrUnavailable(
     memberOfSubject(userId, organizationId, subjectOf(mention)),
   );
-  if (Option.isNone(other) || other.value.id === self.id) return Option.none();
+  if (Option.isNone(other)) return Option.none();
   return yield* hostedStoreOrUnavailable(
     findOrMakeDm(userId, organizationId, self.id, other.value.id),
   );

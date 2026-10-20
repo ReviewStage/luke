@@ -212,6 +212,62 @@ const liveAnswerOf = (userId: string, readAt: number) =>
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
+    "a message that waits names its author by what they are called, a person by their account's name and a task's Luke as Luke, alike in the live read and the held read",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Grace Hopper" }).where(eq(user.id, teammate)),
+        );
+        yield* joinWorkspace(workspaceId, teammate);
+        for (const each of [owner, teammate]) {
+          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, agent.taskId));
+        const grace = Option.getOrThrow(
+          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
+        );
+        const luke = Option.getOrThrow(
+          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.LUKE, taskId: agent.taskId }),
+        );
+        const ask = (authorMemberId: string, key: string) =>
+          Effect.map(
+            postAsk(owner, workspaceId, {
+              authorMemberId,
+              to: { channelId: channel.id },
+              blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
+              clientKey: randomUUID(),
+              key,
+              ask: { response: { type: CHAT_ASK.APPROVAL } },
+            }),
+            Result.getOrThrow,
+          );
+        // A person posts as themselves, so Grace's ask is hers; Luke's is the owner's to post.
+        const fromGrace = Result.getOrThrow(
+          yield* postAsk(teammate, workspaceId, {
+            authorMemberId: grace.id,
+            to: { channelId: channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
+            clientKey: randomUUID(),
+            key: "ship",
+            ask: { response: { type: CHAT_ASK.APPROVAL } },
+          }),
+        );
+        const fromLuke = yield* ask(luke.id, "ship-luke");
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const live = yield* liveAnswerOf(owner, held.readAt);
+        assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
+        assert.deepEqual(
+          [fromOf.get(fromGrace.message.id), fromOf.get(fromLuke.message.id)],
+          ["Grace Hopper", "Luke"],
+        );
+      }),
+  );
+
+  it.effect(
     "the live statements of the account's read deliver the rows its held read answers, under the keys the wire reads them by, to every member it answers and to no one else",
     () =>
       Effect.gen(function* () {

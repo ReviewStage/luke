@@ -63,6 +63,7 @@ import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { conversations, messages } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
@@ -105,6 +106,7 @@ import {
   CHAT_BOUNDS,
   CHAT_FIELD,
   CHAT_IMAGE_TYPE,
+  CHAT_MEMBER_LABEL,
   CHAT_NOTICE_LEAD,
   CHAT_REPLY,
   chatAnswerSchema,
@@ -164,7 +166,7 @@ import {
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
@@ -6387,6 +6389,42 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
+    "a notice's row names its sender within the metadata's bound, cut between two characters, and by their kind's label where the name holds nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(
+            chat.owner,
+            chat.workspace,
+            chat.first.member.id,
+            chat.second.member.id,
+          ),
+        );
+        const titled = (title: string) =>
+          Database.use((db) =>
+            db.update(codingAgent).set({ title }).where(eq(codingAgent.id, chat.first.agent.id)),
+          );
+        const fromOf = Effect.gen(function* () {
+          const rows = yield* chat.rowsOf(chat.second.target);
+          const last = rows.at(-1)?.message;
+          if (last?.role !== MESSAGE_ROLE.USER) return undefined;
+          const { metadata } = last;
+          return metadata !== undefined && "from" in metadata ? metadata.from : undefined;
+        });
+        // Each emoji is two UTF-16 units, so after one letter the bound falls between an emoji's halves.
+        yield* titled(`a${"🙂".repeat(100)}`);
+        yield* chat.post(chat.first.member, "Long name.", { channelId: dm.id });
+        assert.equal(yield* fromOf, `a${"🙂".repeat((CHAT_NOTICE_FROM_CHARS - 2) / 2)}`);
+        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+        yield* titled("   ");
+        yield* chat.post(chat.first.member, "No name.", { channelId: dm.id });
+        assert.equal(yield* fromOf, CHAT_MEMBER_LABEL.FORMER_AGENT);
+      }),
+  );
+
+  it.effect(
     "a notice to an agent a teammate started is minted for that teammate, whose principal its turn runs under, whoever posted",
     () =>
       Effect.gen(function* () {
@@ -6919,6 +6957,88 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.deepEqual(
           [posted.in, posted.told, posted.held, posted.unresolved],
           ["#general", [], [], []],
+        );
+      }),
+  );
+
+  it.effect(
+    "a post to a person's link is a DM with that person, and one to the task's Luke's link mints the Luke and DMs him, each named back by its link",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const workspace = chat.task.workspaceId;
+        const person = yield* memberNaming(
+          Option.getOrThrow(
+            yield* ensureMember(chat.owner, workspace, {
+              kind: MEMBER_KIND.HUMAN,
+              userId: chat.owner,
+            }),
+          ),
+        );
+        const toPerson = yield* chat.post(chat.first, {
+          text: "Can I take the invite file?",
+          to: `[@Someone](https://tryluke.dev/acme/person/${chat.owner})`,
+        });
+        assert.ok("held" in toPerson);
+        assert.deepEqual([toPerson.in, toPerson.held], [person.link, [person.link]]);
+
+        const lukes = Effect.map(roster(chat.owner, workspace), (rows) =>
+          rows.filter((row) => row.kind === MEMBER_KIND.LUKE),
+        );
+        assert.deepEqual(yield* lukes, [], "no Luke is a member before he is named");
+        const toLuke = yield* chat.post(chat.first, {
+          text: "Is the plan settled?",
+          to: `https://tryluke.dev/acme/plan/${chat.task.id}/luke`,
+        });
+        const [luke] = yield* lukes;
+        assert.ok(luke !== undefined && "held" in toLuke);
+        assert.equal(luke.taskId, chat.task.id);
+        const lukeLink = (yield* memberNaming(luke)).link;
+        assert.deepEqual([toLuke.in, toLuke.held], [lukeLink, [lukeLink]]);
+        const read = yield* chat.read(chat.first, { channel: lukeLink });
+        assert.ok("messages" in read);
+        assert.deepEqual(
+          read.messages.map((message) => message.text),
+          ["Is the plan settled?"],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent whose coding agent is gone, and a Luke whose task is gone, are named by a plain label that names no one",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const said = yield* chat.post(chat.second, { text: "Handing the table over." });
+        assert.ok("seq" in said);
+        const other = yield* startTask(chat.owner, { name: "Billing export" });
+        yield* chat.post(chat.first, {
+          text: "Is billing yours?",
+          to: `https://tryluke.dev/acme/plan/${other.id}/luke`,
+        });
+        const db = yield* Database;
+        const secondId = "agentId" in chat.second.self ? chat.second.self.agentId : "";
+        yield* db.delete(codingAgent).where(eq(codingAgent.id, secondId));
+        yield* db.delete(task).where(eq(task.id, other.id));
+
+        const read = yield* chat.read(chat.first, { channel: "#teammate-invitations" });
+        assert.ok("members" in read);
+        assert.deepEqual(
+          read.members.filter((member) => !member.mention.startsWith("[")),
+          [
+            { mention: CHAT_MEMBER_LABEL.FORMER_AGENT, kind: MEMBER_KIND.AGENT },
+            { mention: CHAT_MEMBER_LABEL.LUKE, kind: MEMBER_KIND.LUKE },
+          ],
+        );
+        assert.deepEqual(
+          read.messages
+            .filter((message) => message.seq === said.seq)
+            .map((message) => message.from),
+          [CHAT_MEMBER_LABEL.FORMER_AGENT],
+        );
+        assert.ok(
+          read.channels.some((channel) => channel.name === CHAT_MEMBER_LABEL.LUKE),
+          "the DM with the gone Luke is named by his label",
         );
       }),
   );
@@ -9032,6 +9152,19 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const unknown = yield* chat.wrote({ text: `${ghost}, anyone?`, clientKey: randomUUID() });
         assert.ok("posted" in unknown);
         assert.deepEqual(unknown.receipt.unresolved, ["@Ghost"]);
+
+        // A task the words link to is still noted beside them, while the member they name is not.
+        yield* unreadFor(chat.owner, chat.workspace, chat.agent.id);
+        const plan = mentionMarkdown(
+          { kind: MENTION_KIND.TASK, taskId: chat.channel.taskId ?? "" },
+          "Teammate invitations",
+          { workspace: "acme", repository: null },
+        );
+        yield* chat.wrote({ text: `${named} see ${plan}.`, clientKey: randomUUID() });
+        assert.equal(eve.sent.length, 2);
+        const handed = JSON.stringify(eve.sent[1]?.message.message);
+        assert.ok(handed.includes(MENTIONED_HEADING), "the task is noted");
+        assert.ok(!handed.includes("another coding agent"), "the agent named is not");
       }),
   );
 

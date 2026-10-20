@@ -139,14 +139,18 @@ const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(cohe
  * A chat notice is a line the chat steered into a coding agent's turn on a
  * member's behalf: which kind of member posted the message it tells, the
  * message's place in its workspace's chat sequence, and what the poster is
- * called, their name as a card draws it rather than a link. The words are the notice the chat wrote, never the developer's, so a
+ * called: their display name as a card draws it, within `CHAT_NOTICE_FROM_CHARS`,
+ * never a link or a handle. The words are the notice the chat wrote, never the developer's, so a
  * reader that names the developer's task passes this row by.
  */
+/** The most UTF-16 code units a chat notice names its poster in. */
+export const CHAT_NOTICE_FROM_CHARS = 128;
+
 const CHAT_NOTICE_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literals([MESSAGE_AUTHOR.AGENT, MESSAGE_AUTHOR.LUKE, MESSAGE_AUTHOR.HUMAN]),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.CHAT),
   chat_seq: nonNegativeInteger,
-  from: identifier,
+  from: trimmedText.check(EffectSchema.isMaxLength(CHAT_NOTICE_FROM_CHARS)),
 });
 
 export type ChatNoticeMetadata = EffectSchema.Schema.Type<typeof CHAT_NOTICE_METADATA>;

@@ -32,9 +32,11 @@ import {
   chatNoticeAsksLine,
   chatNoticeReplyLine,
   MEMBER_KIND,
+  type MemberKind,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { mentionLinksIn } from "@luke/features/mention-link";
+import { CHAT_NOTICE_FROM_CHARS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
@@ -269,13 +271,26 @@ function whereSaid(channel: ChatChannelRow, message: ChatMessageRow): string {
 /** What a paragraph break between a notice's parts takes of its bound. */
 const PARAGRAPH_BREAK = "\n\n";
 
-/** The most characters a notice's row names its sender in, the bound of its metadata's `from`. */
-const NOTICE_FROM_CHARS = 128;
+/** What a sender is called where their name holds nothing to call them by, by their kind. */
+const BLANK_NAME = {
+  [MEMBER_KIND.LUKE]: CHAT_MEMBER_LABEL.LUKE,
+  [MEMBER_KIND.AGENT]: CHAT_MEMBER_LABEL.FORMER_AGENT,
+  [MEMBER_KIND.HUMAN]: CHAT_MEMBER_LABEL.FORMER_PERSON,
+} as const satisfies Record<MemberKind, string>;
 
-/** What a notice's row names its sender by: their name, one line within the metadata's bound, or a former member's label where nothing of it is left. */
-function noticeFrom(name: string): string {
-  const kept = name.trim().slice(0, NOTICE_FROM_CHARS).trim();
-  return kept === "" ? CHAT_MEMBER_LABEL.FORMER_PERSON : kept;
+/**
+ * What a notice's row names its sender by: their name within the metadata's
+ * bound, cut between two characters so no emoji is split, or their kind's
+ * plain label where nothing of the name is left.
+ */
+function noticeFrom(name: string, kind: MemberKind): string {
+  let kept = "";
+  for (const character of name.trim()) {
+    if (kept.length + character.length > CHAT_NOTICE_FROM_CHARS) break;
+    kept += character;
+  }
+  const trimmed = kept.trim();
+  return trimmed === "" ? BLANK_NAME[kind] : trimmed;
 }
 
 /**
@@ -378,7 +393,7 @@ function tellAgent(
         author: AUTHOR_OF_KIND[notice.from.kind],
         channel: MESSAGE_CHANNEL.CHAT,
         chat_seq: notice.message.seq,
-        from: noticeFrom(notice.fromName),
+        from: noticeFrom(notice.fromName, notice.from.kind),
       },
     }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
