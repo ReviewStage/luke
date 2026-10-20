@@ -14,6 +14,7 @@ import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -75,8 +76,12 @@ afterEach(() => {
 });
 
 /** The row of `agent`, drawn among the sidebar's tasks, whose archive is heard into `archives`. */
-function mount(agent: TasklessAgent): HTMLElement {
+function mount(
+  agent: TasklessAgent,
+  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+): HTMLElement {
   const agents = codingAgentsControl({
+    pullRequests,
     onArchive: (agentId, archived) => {
       archives.push({ agentId, archived });
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -276,4 +281,25 @@ test("the row's card says the agent last moved when its row does, the end of its
     "#42 · 2m",
     "its pull request, and its run's end rather than its start three days ago",
   );
+});
+
+test("the row's card shows a pull request read since the list was, before the list's own", () => {
+  const read = {
+    number: 43,
+    title: "Remove the stale copy",
+    url: "https://github.com/acme/relay/pull/43",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PENDING,
+    additions: 3,
+    deletions: 9,
+    changedFiles: 2,
+  };
+  const row = mount(RUN, new Map([[AGENT_ID, read]]));
+  const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
+  act(() => {
+    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
+  assert.match(corner?.textContent ?? "", /^#43/u);
 });

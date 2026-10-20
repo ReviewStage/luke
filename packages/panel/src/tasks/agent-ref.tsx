@@ -150,7 +150,8 @@ export function lineSubject(
  * says it: its tab's card (`agentCardReading`), but that it last moved when
  * the list says it did, the end of its newest run included, and that it
  * shows the pull request the list carries for it, as a task's row's card
- * shows its own, since no tab of it holds either.
+ * shows its own, since no tab of it holds either; a read of what it
+ * published that the control holds since stands before the list's.
  */
 export function tasklessRowSubject(
   agent: TasklessAgent,
@@ -164,16 +165,20 @@ export function tasklessRowSubject(
   const base = agentCardReading(summary, name, NOTHING_HELD, false, agents);
   const { archivedAt } = agent;
   const writing = archivedAt === undefined && agentStillWriting(agent.status);
-  const read = (): CardReading => ({
-    ...base(),
-    corner: cardCorner({
-      writing,
-      startedAt: agent.runStartedAt,
-      movedAt: archivedAt ?? agent.activityAt,
-      state: archivedAt === undefined ? agentStateWords(agent.status) : ARCHIVED_WORDS,
-    }),
-    pullRequest,
-  });
+  const read = (): CardReading => {
+    const reading = base();
+    return {
+      ...reading,
+      corner: cardCorner({
+        writing,
+        startedAt: agent.runStartedAt,
+        movedAt: archivedAt ?? agent.activityAt,
+        state: archivedAt === undefined ? agentStateWords(agent.status) : ARCHIVED_WORDS,
+      }),
+      // Note that a read of what it published since, held by the control, is newer than the list's.
+      pullRequest: reading.pullRequest ?? pullRequest,
+    };
+  };
   return { name, tile, agent: summary, read };
 }
 
