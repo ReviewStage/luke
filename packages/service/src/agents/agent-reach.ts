@@ -45,6 +45,15 @@ export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   return account.value;
 });
 
+/** An id a path named, or not found where it is no UUID, since it names no row. */
+export const pathUuid = /* @__PURE__ */ Effect.fnUntraced(function* (
+  id: string,
+): Effect.fn.Return<string, HostedRefusal> {
+  const read = readEither(wireUuidSchema)(unparsedWire(id));
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return read.success;
+});
+
 /** The one id the path put under the query name; two is refused, and one that is no UUID names no row. */
 export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
@@ -55,9 +64,7 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (id === undefined || ids.length !== 1) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
+  return yield* pathUuid(id);
 });
 
 /**
@@ -84,9 +91,7 @@ export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
 ): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, read.success));
+  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, yield* pathUuid(id)));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return {
     userId,

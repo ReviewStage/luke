@@ -98,6 +98,7 @@ import {
   agentPullRequestReach,
   instancePublishedCache,
   type PublishedCache,
+  type PublishedReach,
 } from "./coder-host/published.js";
 import {
   type MemberPullRequest,
@@ -106,7 +107,7 @@ import {
   writeAnswerOf,
 } from "./pull-request-write.js";
 
-export interface AgentPullRequestProcedureSeams {
+export interface AgentPullRequestProcedureSeams extends PublishedReach {
   resolveUserId: UserIdResolver;
 }
 
@@ -401,7 +402,7 @@ function actionWrite(
 
 /** The agent pull request resource: the tab's five reads and its one change, to a signed-in member of the agent's workspace. */
 export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams) {
-  const published = instancePublishedCache();
+  const published = seams.published ?? instancePublishedCache();
   const signedIn = hosted.agentPullRequests.use(accountMiddleware(seams.resolveUserId));
   const changing = signedIn.use(bodyLimit(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES));
   return {

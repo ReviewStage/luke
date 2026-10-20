@@ -337,11 +337,6 @@ export function planAttachmentPath(taskId: string, attachmentId: string): string
   return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
-/** One task's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
-export function taskAgentsPath(taskId: string): string {
-  return `${taskPath(taskId)}/agents`;
-}
-
 /**
  * One task's inbox: every item its coding agents posted for the developer,
  * past a cursor (GET), held open while nothing changed, as an agent's
@@ -397,45 +392,7 @@ export function agentPicturePath(agentId: string, pictureId: string, callId?: st
   return `${owner}/pictures/${encodeURIComponent(pictureId)}`;
 }
 
-/** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
-export function agentPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}`;
-}
-
-/** Stops one agent (POST): its turn is cancelled and its sandbox stopped; anything it pushed stays. */
-export function agentStopPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/stop`;
-}
-
-/** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
-export function agentChangesPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/changes`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
 /** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
 export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
-}
-
-/** What the reviewer and label pickers of an agent's Pull request tab offer: its repository's labels, collaborators, and teams. */
-export function agentReviewOptionsPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/review-options`;
-}
-
-/** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
-export function agentTerminalsPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/terminals`;
-}
-
-/** One of an agent's shells: named anew (PATCH) or ended (DELETE), each answering the shells as they stand after. */
-export function agentTerminalPath(agentId: string, terminalId: string): string {
-  return `${agentTerminalsPath(agentId)}/${encodeURIComponent(terminalId)}`;
-}
-
-/** Resumes one agent's stopped sandbox (POST), on the developer's click and nothing else. */
-export function agentSandboxResumePath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/sandbox/resume`;
 }

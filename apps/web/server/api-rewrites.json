@@ -85,7 +85,7 @@
   },
   {
     "src": "/api/plans/([^/]+)/agents",
-    "dest": "/api/default.js?route=plans/agents&id=$1"
+    "dest": "/api/default.js?route=plans/agents&route-path=plans/$1/agents&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/inbox",
@@ -141,7 +141,7 @@
   },
   {
     "src": "/api/agents/([^/]+)/stop",
-    "dest": "/api/default.js?route=agents/stop&id=$1"
+    "dest": "/api/default.js?route=agents/stop&route-path=agents/$1/stop&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/pull-request",
@@ -157,7 +157,7 @@
   },
   {
     "src": "/api/agents/([^/]+)/changes",
-    "dest": "/api/default.js?route=agents/changes&id=$1"
+    "dest": "/api/default.js?route=agents/changes&route-path=agents/$1/changes&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/overview/pull-request",
@@ -177,7 +177,7 @@
   },
   {
     "src": "/api/agents/([^/]+)/review-options",
-    "dest": "/api/default.js?route=agents/review-options&id=$1"
+    "dest": "/api/default.js?route=agents/review-options&route-path=agents/$1/review-options&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/inbox",
@@ -185,19 +185,19 @@
   },
   {
     "src": "/api/agents/([^/]+)/terminals/([^/]+)",
-    "dest": "/api/default.js?route=agents/terminal&id=$1&terminal=$2"
+    "dest": "/api/default.js?route=agents/terminal&route-path=agents/$1/terminals/$2&id=$1&terminal=$2"
   },
   {
     "src": "/api/agents/([^/]+)/terminals",
-    "dest": "/api/default.js?route=agents/terminals&id=$1"
+    "dest": "/api/default.js?route=agents/terminals&route-path=agents/$1/terminals&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/sandbox/resume",
-    "dest": "/api/default.js?route=agents/sandbox-resume&id=$1"
+    "dest": "/api/default.js?route=agents/sandbox-resume&route-path=agents/$1/sandbox/resume&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)",
-    "dest": "/api/default.js?route=agents/agent&id=$1"
+    "dest": "/api/default.js?route=agents/agent&route-path=agents/$1&id=$1"
   },
   {
     "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
