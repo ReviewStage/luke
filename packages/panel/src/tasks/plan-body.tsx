@@ -889,6 +889,17 @@ export function PlanBody({
     };
   }, []);
 
+  // A scroll lets go of a finger's first tap, so a tap after it reads rather than edits.
+  const disarm = useRef(editing.disarm);
+  disarm.current = editing.disarm;
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null) return;
+    const scrolled = () => disarm.current();
+    element.addEventListener("scroll", scrolled, { passive: true });
+    return () => element.removeEventListener("scroll", scrolled);
+  }, []);
+
   // With nothing focused, the arrows select a block of a document, the first
   // in view going down and the last going up, rather than scroll the page.
   // Note that focus anywhere else keeps its own arrows.

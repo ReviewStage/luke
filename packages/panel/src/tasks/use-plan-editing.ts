@@ -85,6 +85,8 @@ export interface PlanEditing {
    * place within `SECOND_TAP_WINDOW`, the first one arming it.
    */
   readonly tapped: (place: TapPlace, at: number) => boolean;
+  /** Lets go of a finger's first tap, as a scroll or a press on a control does, so the next tap is a first again. */
+  readonly disarm: () => void;
   /** Words typed, and where the editor's comment threads stand in them, where it carries any. */
   readonly typeText: (text: string, anchors?: PlanCommentAnchors) => void;
   /** Ends the edit; `select` is the block the keyboard goes back to once the editor has gone. */
@@ -223,6 +225,9 @@ export function usePlanEditing(
       const second = was?.place === place && at - was.at <= SECOND_TAP_WINDOW;
       armed.current = second ? undefined : { place, at };
       return second;
+    },
+    disarm: () => {
+      armed.current = undefined;
     },
     typeText: (words, anchors) => changed((now) => editorTyped(now, words, anchors)),
     // The save starts with the close, not a render later, since the close may

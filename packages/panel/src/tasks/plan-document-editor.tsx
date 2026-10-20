@@ -298,6 +298,10 @@ export function DocumentBlock({
         prefetchEditorBundle();
         editing.select(host);
       }}
+      // Note that a press on a control is a tap of its own, which lets go of the block's first tap; it is heard on the way down, since a control may keep its click from bubbling.
+      onClickCapture={(event) => {
+        if (event.target instanceof Element && !editsOnClick(event.target)) editing.disarm();
+      }}
       onClick={(event) => {
         // Note that a click on a menu or a card portaled out of the block still
         // bubbles here through React's tree, and opens no editor.
@@ -328,9 +332,21 @@ function caretAtEnd(element: HTMLElement): void {
   window.getSelection()?.addRange(range);
 }
 
+/** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
+function rangeAt(x: number, y: number): Range | null {
+  // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
+  const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
+  if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
+  const position = page.caretPositionFromPoint?.(x, y) ?? null;
+  if (position === null) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  return range;
+}
+
 /** The caret where a tap landed in an element's words, or at their end where the browser cannot say. */
 function caretAt(element: HTMLElement, x: number, y: number): void {
-  const range = "caretRangeFromPoint" in document ? document.caretRangeFromPoint(x, y) : null;
+  const range = rangeAt(x, y);
   if (range === null || !element.contains(range.startContainer)) {
     caretAtEnd(element);
     return;

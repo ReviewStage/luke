@@ -638,3 +638,49 @@ test("on a finger's device the title reads as words a tap does not type in, a se
   act(() => name.blur());
   assert.equal(name.getAttribute("contenteditable"), "false");
 });
+
+test("on a finger's device a scroll or a tap on a control between two taps on a section lets the first go, so the second only reads", async () => {
+  finger = true;
+  fakeAppPlatform({ openWeb: () => undefined });
+  const body = "## Steps\nSend the [invite](https://example.com/invite) first.\n";
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const steps = block(container, "Steps");
+  const link = steps.querySelector("a") ?? assert.fail("the link");
+
+  tapAt(steps, 120, 48);
+  act(() => {
+    scrollerOf(container).dispatchEvent(new Event("scroll"));
+  });
+  tapAt(steps, 120, 48, 200);
+  assert.ok(!editorOpen(container), "the tap after the scroll was a first");
+
+  tapAt(link, 60, 20, 400);
+  tapAt(steps, 120, 48, 600);
+  assert.ok(!editorOpen(container), "the tap after the link was a first");
+
+  tapAt(steps, 120, 48, 800);
+  assert.equal(open().markdown, body, "two taps with nothing between still open the text");
+});
+
+test("on a finger's device a second tap on the title puts the caret where it landed, in a browser that answers the point as Firefox does", () => {
+  finger = true;
+  const { container } = mount();
+  const name = title(container);
+  const words = name.firstChild ?? assert.fail("the title's words");
+  Object.defineProperty(document, "caretPositionFromPoint", {
+    configurable: true,
+    value: () => ({ offsetNode: words, offset: 3 }),
+  });
+  try {
+    tapAt(name, 40, 10);
+    tapAt(name, 40, 10, 300);
+
+    const selection = window.getSelection();
+    assert.equal(selection?.anchorNode, words);
+    assert.equal(selection?.anchorOffset, 3);
+  } finally {
+    Reflect.deleteProperty(document, "caretPositionFromPoint");
+  }
+});
