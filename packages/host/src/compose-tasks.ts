@@ -1145,14 +1145,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function followBoard(taskId: string) {
     const following = () => gate() && view.activeTaskId === taskId;
-    const seal = (poll = false) =>
-      Effect.map(served(client.boardLive(taskId, poll)), (sealed) =>
+    const seal = (poll = false, after?: string) =>
+      Effect.map(served(client.boardLive(taskId, poll, after)), (sealed) =>
         sealed.ok ? sealed.answer : { failure: sealed.failure },
       );
     // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
-    const sealedFor = (poll: boolean) =>
+    const sealedFor = (poll: boolean, after?: string) =>
       following()
-        ? Effect.map(seal(poll), (renewed) =>
+        ? Effect.map(seal(poll, after), (renewed) =>
             "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
               ? { ...renewed, gone: true }
               : renewed,
@@ -1167,7 +1167,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const moves = boardMoves(
         {
           seal: () => sealedFor(false),
-          poll: () => sealedFor(true),
+          poll: (after) => sealedFor(true, after),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
         },

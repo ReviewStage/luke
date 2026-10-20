@@ -9,7 +9,8 @@
  * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
  * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
  * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`, and
- * `updateNetworkPolicy` when it moves), directly rather than through the SDK,
+ * `updateNetworkPolicy` when it moves; `readFile` is Vercel's documented
+ * `fs/read`), directly rather than through the SDK,
  * because
  * the SDK bundled into a function fails it as it loads and carries a dozen
  * Node modules these calls never use.
@@ -30,8 +31,8 @@
 import { gzipSync } from "node:zlib";
 import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Effect, Redacted, Result, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/http";
+import { Data, Effect, Redacted, Result, Schema, Stream } from "effect";
+import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
 /** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Luke opens itself carries it too. */
@@ -169,6 +170,17 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     ask: CommandAsk,
   ) => Effect.Effect<CommandRun, SandboxUnavailable>;
+  /**
+   * One file of the running sandbox session, its path absolute or from the
+   * sandbox's home, read off the wire up to `maxBytes` and one byte past
+   * them, so a caller's own bound still sees a file larger than it; nothing
+   * where there is no such file.
+   */
+  readonly readFile: (
+    sandboxSessionId: string,
+    path: string,
+    maxBytes: number,
+  ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
   /** Mints a connection to the running sandbox session's PTY; a session not running is unavailable, and nothing is resumed. */
   readonly openInteractive: (
     sandboxSessionId: string,
@@ -389,6 +401,34 @@ function callApi(
   );
 }
 
+/** A body's bytes, read off the wire up to the bound given and no further. */
+function boundedBytes(
+  response: HttpClientResponse.HttpClientResponse,
+  bound: number,
+): Effect.Effect<Uint8Array, unknown> {
+  return response.stream.pipe(
+    Stream.mapAccum(
+      () => 0,
+      (seen, chunk: Uint8Array) => {
+        const kept = chunk.subarray(0, Math.max(0, bound - seen));
+        const total = seen + kept.length;
+        return [total, [{ kept, total }]] as const;
+      },
+    ),
+    Stream.takeUntil(({ total }) => total >= bound),
+    Stream.runCollect,
+    Effect.map((pieces) => {
+      const bytes = new Uint8Array(pieces.at(-1)?.total ?? 0);
+      let at = 0;
+      for (const { kept } of pieces) {
+        bytes.set(kept, at);
+        at += kept.length;
+      }
+      return bytes;
+    }),
+  );
+}
+
 /** A body's JSON, or nothing a reader takes where it is none. */
 function jsonOf(text: string): UnparsedWireValue {
   const parsed = Result.try(() => JSON.parse(text));
@@ -541,6 +581,30 @@ export function vercelSandboxApi(
             return yield* new SandboxUnavailable({ status: ran.status });
           }
           return run;
+        }),
+      readFile: (sandboxSessionId, path, maxBytes) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/fs/read`,
+            asked.teamId,
+          );
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ path }),
+          );
+          return yield* client.execute(request).pipe(
+            Effect.flatMap((response) => {
+              if (response.status === NOT_FOUND_STATUS) return Effect.succeed(undefined);
+              if (!succeeded(response.status)) {
+                return Effect.fail(new SandboxUnavailable({ status: response.status }));
+              }
+              return boundedBytes(response, maxBytes + 1);
+            }),
+            Effect.scoped,
+            Effect.mapError((failure) =>
+              failure instanceof SandboxUnavailable ? failure : new SandboxUnavailable({}),
+            ),
+          );
         }),
       openInteractive: (sandboxSessionId) =>
         Effect.gen(function* () {

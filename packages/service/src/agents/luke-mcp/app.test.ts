@@ -2,26 +2,60 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { writeDrawing, writeScene } from "@luke/database/models/board-store";
 import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+import { EXPERIMENT } from "@luke/settings";
+import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Clock, Effect, Layer, Option } from "effect";
+import { Base64 } from "effect/encoding";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
+import type { CommentToolName } from "../../tasks/comment-tools.js";
+import { NO_GITHUB } from "../../testing/github-app-fake.js";
+import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import type { AdmittedConversation } from "../brain-host/conversation.js";
+import {
+  type AgentDoorSeams,
+  type AgentToolCall,
+  runAgentBoard,
+  runAgentChat,
+  runAgentComment,
+  runAgentEditPlan,
+  runAgentLookAtPicture,
+  runAgentOpenPullRequest,
+  runAgentShowCode,
+  runAgentShowImage,
+  runAgentShowPage,
+  runAgentTools,
+} from "../coder-host/agent-doors.js";
 import { postToInbox } from "../coder-host/inbox.js";
+import { runAgentInbox } from "../coder-host/inbox-door.js";
+import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
+import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { LUKE_MCP_PATH, LUKE_MCP_PROTOCOL_VERSIONS, lukeMcpApp } from "./app.js";
-import { runnerTokenDigest } from "./bearer.js";
+import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
+import { lukeMcpDoorSeams } from "./door-seams.js";
+import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
 
 /**
  * Luke's MCP server, answered by its group the way a function answers it,
@@ -39,20 +73,87 @@ import { runnerTokenDigest } from "./bearer.js";
 
 const ORIGIN = "https://luke.test";
 
-/** The server's group over the test's database, as a fetch a client is handed. */
-const standing = Effect.gen(function* () {
-  const services = Layer.mergeAll(
+/** A picture's bytes: a PNG's signature and a few more, which is all the store reads of them. */
+const PICTURE: Picture = {
+  contentType: PICTURE_TYPE.PNG,
+  bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]),
+};
+
+/** A deployment that names nothing of its environment: no eve to reach, no keys. */
+const NO_ENVIRONMENT: HostedEnvironmentValues = {
+  openAiKey: undefined,
+  anthropicKey: undefined,
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
+  eveDeploymentSecret: undefined,
+  agentSandboxSnapshot: undefined,
+};
+
+/** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
+const doorServices = Effect.gen(function* () {
+  return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
     Layer.succeed(Database, yield* Database),
     Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    NO_GITHUB,
+    modelCatalogOf([]),
+    NO_WORKSPACE_LINEAR,
+    Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
   );
-  const web = HttpRouter.toWebHandler(lukeMcpApp().pipe(HttpRouter.provideRequest(services)), {
-    disableLogger: true,
-  });
-  yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
-  return (input: string | URL | Request, init?: RequestInit) =>
-    web.handler(new Request(input, init));
 });
+
+/** A sandbox holding the files given by absolute path, each read as one stream; the paths asked for are kept. */
+function sandboxWith(files: Readonly<Record<string, string>>) {
+  const asked: string[] = [];
+  const door: InboxSandboxDoor = () =>
+    Promise.resolve({
+      readFile: ({ path }: { path: string }) => {
+        asked.push(path);
+        const text = files[path];
+        if (text === undefined) return Promise.resolve(null);
+        return Promise.resolve(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(text));
+              controller.close();
+            },
+          }),
+        );
+      },
+    });
+  return { door, asked };
+}
+
+/** A sandbox no call opens: a tool that reads no file never asks for it. */
+const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
+
+/** A checkout no call opens: a tool that runs no command never asks for it. */
+const NO_CHECKOUT: RepositorySandboxDoor = () =>
+  Promise.reject(new Error("the checkout was opened"));
+
+/** The server's group over the test's database and the sandbox door given, as a fetch a client is handed. */
+const standingOver = (sandbox: InboxSandboxDoor = NO_SANDBOX) =>
+  Effect.gen(function* () {
+    const services = yield* doorServices;
+    const web = HttpRouter.toWebHandler(
+      lukeMcpApp(() => ({ files: sandbox, repository: NO_CHECKOUT })).pipe(
+        HttpRouter.provideRequest(services),
+      ),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
+    return (input: string | URL | Request, init?: RequestInit) =>
+      web.handler(new Request(input, init));
+  });
+
+const standing = standingOver();
 
 /** A Claude Code agent started on a task, with a runner's bearer recorded for its conversation. */
 const agentWithBearer = Effect.gen(function* () {
@@ -113,6 +214,140 @@ function post(
   });
 }
 
+/** The tools a native agent is served: every Luke tool of the eve agent's that its harness has no equal of. */
+const SERVED_TOOLS = [
+  "post_to_inbox",
+  "read_inbox",
+  "withdraw_ask",
+  "open_pull_request",
+  "edit_plan",
+  "look_at_picture",
+  "show_image",
+  "show_page",
+  "read_page",
+  "show_code",
+  "draw_on_board",
+  "look_at_board",
+  "start_agent",
+  "message_agent",
+  "stop_agent",
+  "list_agents",
+  "read_agent",
+  "update_agent",
+  "list_models",
+  "list_tasks",
+  "read_task",
+  "create_task",
+  "update_task",
+  "create_section",
+  "delete_section",
+  "post_chat",
+  "read_chat",
+  "resolve_ask",
+  "edit_channel",
+  "read_comments",
+  "reply_to_comment",
+  "resolve_thread",
+  "reopen_thread",
+  "run_on_mac",
+] as const;
+
+type ServedTool = (typeof SERVED_TOOLS)[number];
+
+/** A call of a door made directly, as eve's tool for it makes one through the coder host. */
+type DirectCall = (
+  admitted: AdmittedConversation,
+  input: UnparsedWireValue,
+  seams: AgentDoorSeams,
+) => Effect.Effect<object, never, LukeMcpServices>;
+
+const agentTool =
+  (tool: AgentToolCall["tool"]): DirectCall =>
+  (admitted, input, seams) =>
+    runAgentTools(seams, admitted, { tool, input, callId: randomUUID() });
+
+const commentTool =
+  (name: CommentToolName): DirectCall =>
+  (admitted, input) =>
+    runAgentComment(admitted, name, input);
+
+/**
+ * Each tool's own door, called as eve's tool calls it: the server's answer to
+ * a tool is to be this one's, so a tool routed to any other door, or to
+ * none, answers otherwise.
+ */
+const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac">, DirectCall>> = {
+  post_to_inbox: (admitted, input) =>
+    runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
+  read_inbox: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
+  withdraw_ask: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
+  open_pull_request: (admitted, input) => runAgentOpenPullRequest(admitted, input),
+  edit_plan: (admitted, input) => runAgentEditPlan(admitted, input, 0, NO_SANDBOX),
+  look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),
+  show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
+  show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
+  read_page: agentTool("read_page"),
+  show_code: (admitted, input) => runAgentShowCode(admitted, input, NO_CHECKOUT),
+  draw_on_board: (admitted, input) => runAgentBoard(admitted, "draw_on_board", input),
+  look_at_board: (admitted, input) => runAgentBoard(admitted, "look_at_board", input),
+  start_agent: agentTool("start_agent"),
+  message_agent: agentTool("message_agent"),
+  stop_agent: agentTool("stop_agent"),
+  list_agents: agentTool("list_agents"),
+  read_agent: agentTool("read_agent"),
+  update_agent: agentTool("update_agent"),
+  list_models: agentTool("list_models"),
+  list_tasks: agentTool("list_tasks"),
+  read_task: agentTool("read_task"),
+  create_task: agentTool("create_task"),
+  update_task: agentTool("update_task"),
+  create_section: agentTool("create_section"),
+  delete_section: agentTool("delete_section"),
+  post_chat: (admitted, input, seams) =>
+    runAgentChat(seams, admitted, {
+      tool: CHAT_TOOL.POST,
+      input,
+      clientKey: randomUUID(),
+      postsInTurn: 0,
+      sandbox: NO_SANDBOX,
+    }),
+  read_chat: (admitted, input, seams) =>
+    runAgentChat(seams, admitted, { tool: CHAT_TOOL.READ, input }),
+  resolve_ask: (admitted, input, seams) =>
+    runAgentChat(seams, admitted, { tool: CHAT_TOOL.RESOLVE, input }),
+  edit_channel: (admitted, input, seams) =>
+    runAgentChat(seams, admitted, { tool: CHAT_TOOL.EDIT_CHANNEL, input }),
+  read_comments: commentTool("read_comments"),
+  reply_to_comment: commentTool("reply_to_comment"),
+  resolve_thread: commentTool("resolve_thread"),
+  reopen_thread: commentTool("reopen_thread"),
+};
+
+/** The eve tools a harness has its own of, which the server never serves. */
+const HARNESS_TOOLS = [
+  "bash",
+  "read_file",
+  "write_file",
+  "glob",
+  "grep",
+  "apply_patch",
+  "write_todos",
+  "sleep",
+  "delegate",
+  "task_wait",
+  "task_cancel",
+  "load_skill",
+  "search_web",
+  "read_web_page",
+] as const;
+
+/** A tool's result as the server answers it, its first block's JSON. */
+function firstJson(called: object) {
+  // SAFETY: every result but a picture's is one text block (`app.ts`'s `toolResult`).
+  const [content] = (called as { content: readonly { type: string; text: string }[] }).content;
+  return JSON.parse(content?.text ?? "null");
+}
+
 const initialize = (protocolVersion: string) => ({
   jsonrpc: "2.0",
   id: 1,
@@ -144,10 +379,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         );
         yield* Effect.promise(() => client.close());
 
-        assert.deepEqual(
-          listed.tools.map((tool) => tool.name),
-          [INBOX_TOOL.READ],
-        );
+        assert.ok(listed.tools.some((tool) => tool.name === INBOX_TOOL.READ));
         assert.equal(called.isError, false);
         // SAFETY: the server answers every tool call with text blocks alone (`app.ts`'s `toolResult`).
         const [content] = called.content as readonly { type: string; text: string }[];
@@ -256,5 +488,158 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         );
         assert.equal(unspokenHeader.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
       }),
+  );
+
+  it.effect(
+    "tools/list names every Luke tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
+
+        const names = listed.tools.map((tool) => tool.name);
+        assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
+        for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
+        for (const tool of listed.tools) {
+          const served = LUKE_MCP_TOOLS.get(tool.name);
+          assert.ok(served !== undefined);
+          assert.equal(tool.description, served.description);
+          assert.deepEqual(tool.inputSchema, served.inputSchema);
+        }
+      }),
+  );
+
+  it.effect("a door's refusal, whatever its status, is a tool error the agent reads", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      const client = yield* connected(fetch, agent.bearer);
+
+      const noMac = yield* Effect.promise(() =>
+        client.callTool({ name: "run_on_mac", arguments: { command: "ls ~/code" } }),
+      );
+      const unreadable = yield* Effect.promise(() =>
+        client.callTool({ name: "withdraw_ask", arguments: {} }),
+      );
+      const noPicture = yield* Effect.promise(() =>
+        client.callTool({
+          name: "look_at_picture",
+          arguments: { address: "https://tryluke.dev/acme/plan/p/files/missing" },
+        }),
+      );
+      yield* Effect.promise(() => client.close());
+
+      assert.deepEqual([noMac.isError, firstJson(noMac).status], [true, "not-run"]);
+      assert.deepEqual([unreadable.isError, firstJson(unreadable).status], [true, "rejected"]);
+      assert.deepEqual([noPicture.isError, firstJson(noPicture).status], [true, "not-looked"]);
+    }),
+  );
+
+  it.effect(
+    "each tool answers as its own door does, called as eve's tool calls it, for the same agent and input",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
+        const seams = yield* lukeMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
+        // Chat is on, so each chat tool reaches its own words rather than the one refusal of Chat off.
+        yield* writeAccountPreferences(agent.userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+        const client = yield* connected(fetch, agent.bearer);
+
+        for (const [name, door] of Object.entries(DOOR_OF)) {
+          // A look at the whiteboard that takes nothing waits on the Mac's image; one that names anything is refused at once.
+          const input = name === "look_at_board" ? { probe: name } : {};
+          const called = yield* Effect.promise(() => client.callTool({ name, arguments: input }));
+          const direct = yield* door(admitted, unparsedWire(input), seams).pipe(
+            Effect.provide(yield* doorServices),
+          );
+          assert.deepEqual(firstJson(called), JSON.parse(JSON.stringify(direct)), name);
+          assert.equal(called.isError, refusedByDoor(direct), name);
+        }
+        yield* Effect.promise(() => client.close());
+      }),
+  );
+
+  it.effect("show_page reads the page the agent names by its path from the agent's sandbox", () =>
+    Effect.gen(function* () {
+      const sandbox = sandboxWith({
+        "/workspace/repository/pages/funnel.html":
+          "<!doctype html><title>Funnel</title><p>Invites</p>",
+      });
+      const fetch = yield* standingOver(sandbox.door);
+      const agent = yield* agentWithBearer;
+      const client = yield* connected(fetch, agent.bearer);
+
+      const called = yield* Effect.promise(() =>
+        client.callTool({
+          name: "show_page",
+          arguments: { title: "Invite funnel", path: "pages/funnel.html" },
+        }),
+      );
+      yield* Effect.promise(() => client.close());
+
+      assert.equal(called.isError, false);
+      assert.equal(firstJson(called).status, "accepted");
+      assert.deepEqual(sandbox.asked, ["/workspace/repository/pages/funnel.html"]);
+    }),
+  );
+
+  it.effect("a picture of the agent's plan comes back as image content, never as text", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, PICTURE);
+      if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the picture was not kept");
+      const address = planAttachmentAddress(
+        { taskId: agent.taskId, attachmentId: kept.id },
+        "acme",
+      );
+      const client = yield* connected(fetch, agent.bearer);
+
+      const called = yield* Effect.promise(() =>
+        client.callTool({ name: "look_at_picture", arguments: { address } }),
+      );
+      yield* Effect.promise(() => client.close());
+
+      assert.equal(called.isError, false);
+      assert.deepEqual(called.content, [
+        { type: "text", text: "The picture you asked to see:" },
+        { type: "image", data: Base64.encode(PICTURE.bytes), mimeType: PICTURE_TYPE.PNG },
+      ]);
+    }),
+  );
+
+  it.effect("a look at the agent's whiteboard comes back as image content, never as text", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      yield* writeDrawing(agent.userId, agent.taskId, [
+        { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" },
+      ]);
+      yield* writeScene(
+        agent.userId,
+        agent.taskId,
+        [{ id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 }],
+        1,
+        "iVBORw0KGgo=",
+      );
+      const client = yield* connected(fetch, agent.bearer);
+
+      const called = yield* Effect.promise(() =>
+        client.callTool({ name: "look_at_board", arguments: {} }),
+      );
+      yield* Effect.promise(() => client.close());
+
+      assert.equal(called.isError, false);
+      assert.deepEqual(called.content, [
+        { type: "text", text: "The task's whiteboard, as the developer sees it:" },
+        { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+      ]);
+    }),
   );
 });

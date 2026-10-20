@@ -2,7 +2,13 @@ import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
 import { askHosted, HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
-import type { MacCommand, MacCommandResult } from "./mac-command-wire.js";
+import {
+  type MacBrowserResult,
+  type MacCommandKind,
+  type MacCommandRead,
+  type MacCommandSettleResult,
+  macCommandKindsQuery,
+} from "./mac-command-wire.js";
 
 /**
  * mac-command-client.ts -- the Mac's side of the commands the account's agents queue for it: the held read that takes them, and each result posted back.
@@ -13,7 +19,8 @@ import type { MacCommand, MacCommandResult } from "./mac-command-wire.js";
  * nothing waits, so it is asked under the held deadline, which outlasts the
  * hold. Neither call fails: a read the service did not answer is nothing,
  * which the caller rests after, and a result it did not take is false,
- * since its call has already given up on it.
+ * since its call has already given up on it. A browser command's result,
+ * which may carry an image, is posted to its own route.
  */
 
 export interface HostedMacCommandClientOptions {
@@ -33,10 +40,16 @@ export class HostedMacCommandClient {
     });
   }
 
-  /** The commands claimed for this Mac, once one waits or the service's hold ends; nothing where the read was not answered. */
-  waiting(): Effect.Effect<readonly MacCommand[] | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macCommands.waiting, undefined, HOSTED_DEADLINE.HELD).pipe(
-      Effect.map((answer): readonly MacCommand[] | undefined => answer.commands),
+  /**
+   * The commands of the kinds named claimed for this Mac, once one waits or
+   * the service's hold ends; nothing where the read was not answered.
+   */
+  waiting(
+    kinds: readonly MacCommandKind[],
+  ): Effect.Effect<readonly MacCommandRead[] | undefined, never, HttpClient.HttpClient> {
+    const input = { kinds: macCommandKindsQuery(kinds) };
+    return askHosted(this.#hosted.macCommands.waiting, input, HOSTED_DEADLINE.HELD).pipe(
+      Effect.map((answer): readonly MacCommandRead[] | undefined => answer.commands),
       Effect.orElseSucceed(() => undefined),
     );
   }
@@ -44,9 +57,20 @@ export class HostedMacCommandClient {
   /** One command's result posted back; whether the service took it. */
   settle(
     id: string,
-    result: MacCommandResult,
+    result: MacCommandSettleResult,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.macCommands.settle, { id, result }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  /** One browser command's result, image and all, posted back; whether the service took it. */
+  settleBrowser(
+    id: string,
+    result: MacBrowserResult,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.macCommands.settleBrowser, { id, result }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

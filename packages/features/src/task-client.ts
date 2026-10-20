@@ -27,13 +27,14 @@ import type {
 } from "./github-repositories-wire.js";
 import {
   askHosted,
+  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
   hostedClient,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
-import { LIVE_POLL, type TaskBoardLiveAnswer } from "./live-wire.js";
+import type { TaskBoardLiveAnswer } from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
 import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
@@ -416,16 +417,14 @@ export class HostedTaskClient {
   boardLive(
     taskId: string,
     poll = false,
+    after?: string,
   ): Effect.Effect<
     TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure>,
     never,
     HttpClient.HttpClient
   > {
     return hostedResult(
-      askHosted(
-        this.#hosted.live.taskBoard,
-        poll ? { id: taskId, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : { id: taskId },
-      ),
+      askLive(this.#hosted.live.taskBoard, { id: taskId }, poll, after),
       NOT_FOUND_REFUSAL,
     );
   }

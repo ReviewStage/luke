@@ -88,6 +88,7 @@ import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
+  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
@@ -107,7 +108,6 @@ import {
 } from "./inbox-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
-  LIVE_POLL,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -652,10 +652,13 @@ export class HostedCodingAgentClient {
     agentId: string,
     callId?: string,
     poll = false,
+    after?: string,
   ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
     const named = callId === undefined ? { id: agentId } : { id: agentId, call: callId };
-    const asked = poll ? { ...named, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : named;
-    return hostedAnswer(askHosted(this.#hosted.live.agentTranscript, asked), ROW_REFUSALS);
+    return hostedAnswer(
+      askLive(this.#hosted.live.agentTranscript, named, poll, after),
+      ROW_REFUSALS,
+    );
   }
 
   /**

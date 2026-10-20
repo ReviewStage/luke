@@ -49,6 +49,14 @@ function layOut(box: HTMLElement, layout: StandInBox): void {
   });
 }
 
+/** Scrolls `box` to `top` as a reader or the browser would, so the log hears it. */
+function scroll(box: HTMLElement, top: number): void {
+  box.scrollTop = top;
+  act(() => {
+    box.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+}
+
 /** Draws a log of `lines` in `root`. */
 function draw(root: Root, lines: readonly string[]): void {
   act(() =>
@@ -99,13 +107,22 @@ test("a line that grows while the log follows is scrolled to when the window rep
 
 test("a reader scrolled up to an earlier line is left there when a new line comes in", () => {
   const { root, box, layout } = mount(["one", "two"]);
-  box.scrollTop = 0;
-  act(() => {
-    box.dispatchEvent(new Event("scroll", { bubbles: true }));
-  });
+  scroll(box, 200);
+  scroll(box, 0);
   layout.writes.splice(0);
   layout.height = 400;
   draw(root, ["one", "two", "three"]);
   act(() => relayout());
   assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
+test("a log the browser shifts down to hold its place, as lines above it grow, still follows its newest line", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  // A line above grows 200px, and the browser's scroll anchoring moves the log down 150px of it.
+  layout.height = 500;
+  scroll(box, 350);
+  layout.writes.splice(0);
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [500], "the log is taken the rest of the way to its end");
 });
