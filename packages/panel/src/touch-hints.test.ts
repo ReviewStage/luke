@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { NavItem, SearchField } from "@luke/ui";
+import { NavItem, SearchField, TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -16,7 +16,9 @@ import { layContainersAt, shown } from "./testing/container-width.js";
  * button's chord, not a sidebar row's, whose count stays in its place, not
  * a search field's summons, and not the command palette's foot of keys;
  * a chord that is a row's whole value still is. A switch's row on a phone
- * keeps its switch beside its words. With a mouse each stands as before.
+ * keeps its switch beside its words, and under a finger the whole row is
+ * its label's press but for a control in its description, which stands
+ * above that press and answers its own. With a mouse each stands as before.
  * jsdom lays nothing out, so the stylesheets are laid for each device and
  * width (`testing/container-width.ts`). Synthetic throughout.
  */
@@ -146,4 +148,30 @@ test("on a phone a switch's row keeps its switch beside its words rather than un
     }),
   );
   assert.notEqual(getComputedStyle(found(page, ".luke-settings-row-line")).flexDirection, "column");
+});
+
+/** Whether `element` stands above an absolutely placed box drawn later in the same row: it is placed itself and stacked higher than the box's auto. */
+function standsAbove(element: Element): boolean {
+  const style = getComputedStyle(element);
+  return style.position !== "static" && Number(style.zIndex) > 0;
+}
+
+test("under a finger a switch row's whole body is its label's press, and a button in its description stands above that press to answer its own", () => {
+  laid = layContainersAt({ "luke-settings-row": PHONE_ROW }, { touch: true });
+  const page = mount(
+    createElement(SwitchRow, {
+      label: "Video calls",
+      detail: createElement(TextButton, {
+        tone: TEXT_BUTTON_TONE.LINK,
+        onClick: ignore,
+        children: "Send feedback",
+      }),
+      checked: false,
+      onChange: ignore,
+    }),
+  );
+  // jsdom resolves no pseudo-element, so the press is read from the body it fills.
+  assert.equal(getComputedStyle(found(page, ".luke-settings-row-body")).position, "relative");
+  assert.equal(standsAbove(found(page, ".luke-settings-row-description button")), true);
+  assert.equal(standsAbove(found(page, ".luke-settings-row-controls")), true);
 });

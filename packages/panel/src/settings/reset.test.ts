@@ -33,8 +33,12 @@ afterEach(() => {
 const settings = settingsView({ theme: THEME.DARK });
 
 /** Which rows a platform offering `capabilities` draws for `shown`, with every voice control and the account standing. */
-function rowsOn(shown: typeof settings, capabilities: readonly HostCapability[]) {
-  return { settings: shown, voiceControlsDrawn: true, accountDrawn: true, capabilities };
+function rowsOn(
+  shown: typeof settings,
+  capabilities: readonly HostCapability[],
+  voiceControlsDrawn = true,
+) {
+  return { settings: shown, voiceControlsDrawn, accountDrawn: true, capabilities };
 }
 
 const writes: SettingsWrites = {
@@ -93,6 +97,29 @@ test("a zoom changed in a browser, which draws no Zoom row, offers no reset on A
       zoomed,
       writes,
       rowsOn(zoomed, DESKTOP_CAPABILITIES),
+    ),
+    undefined,
+  );
+});
+
+test("captions turned on while the Voice page holds only its way in offer no reset there; once its controls are drawn they do", () => {
+  const captioned = settingsView({ voiceCaptions: true });
+
+  assert.equal(
+    pageResetControl(
+      SETTINGS_VIEW.VOICE,
+      captioned,
+      writes,
+      rowsOn(captioned, DESKTOP_CAPABILITIES, false),
+    ),
+    undefined,
+  );
+  assert.notEqual(
+    pageResetControl(
+      SETTINGS_VIEW.VOICE,
+      captioned,
+      writes,
+      rowsOn(captioned, DESKTOP_CAPABILITIES),
     ),
     undefined,
   );
