@@ -1712,24 +1712,16 @@ function useScrollToOwnMessage(
 /** What an ask's box says where its type is one this build does not know. */
 const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
 
-/** What a thread's line says while its ask waits on the reader's answer. */
-const WAITING_ON_YOU = "Waiting on you";
-
 /**
- * Who an open ask waits on, as the list says it: the reader, in the
- * attention ink, where the item is theirs (`readersItem`), or the teammate
- * who started its agent, in the muted ink, as the list's Waiting on others
- * does, though any member may still answer.
+ * Who an open ask waits on where that is a teammate: the one who started
+ * its agent, in the muted ink, as the list's Waiting on others does,
+ * though any member may still answer. Where the item is the reader's
+ * (`readersItem`) it draws nothing: the draft reply under the thread,
+ * holding the ask's controls, already says the answer is theirs.
  */
-function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element {
+function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | null {
   const starter = usePerson(on);
-  if (on === undefined) {
-    return (
-      <span className="inbox-waiting" data-inbox-waiting="">
-        {WAITING_ON_YOU}
-      </span>
-    );
-  }
+  if (on === undefined) return null;
   return (
     <span className="inbox-waiting-on" data-inbox-waiting="">
       Waiting on {actorName(starter, { sentence: true })}
@@ -2114,31 +2106,25 @@ function WithdrawnLine({
 }
 
 /**
- * The small pill that ends the agent's message while what it asks waits:
- * whom it waits on, "Waiting on you", after a dot in the attention ink
- * where it waits on the reader and the muted ink where it waits on a
- * teammate. Its controls stand in the reader's draft reply at the
- * thread's end (`DraftReply`), not here.
+ * The small pill that ends the agent's message while what it asks waits on
+ * a teammate: "Waiting on" them, after a dot in the muted ink. Where it
+ * waits on the reader it draws nothing, the draft reply at the thread's
+ * end (`DraftReply`) holding its controls saying so already.
  */
-function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element {
+function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | null {
   const starter = usePerson(on);
-  const waiting =
-    on === undefined ? WAITING_ON_YOU : `Waiting on ${actorName(starter, { sentence: true })}`;
+  if (on === undefined) return null;
   return (
-    <span
-      className="inbox-ask-marker"
-      data-inbox-marker=""
-      data-inbox-waiting={on === undefined ? "you" : "teammate"}
-    >
-      {waiting}
+    <span className="inbox-ask-marker" data-inbox-marker="">
+      Waiting on {actorName(starter, { sentence: true })}
     </span>
   );
 }
 
 /**
  * The box closing a message that asks: while it waits, a marker alone
- * saying whom it waits on (`AskMarker`), its controls standing in
- * the draft reply; once answered, nothing, the card standing at the head
+ * saying which teammate it waits on (`AskMarker`), or nothing where it
+ * waits on the reader, its controls standing in the draft reply; once answered, nothing, the card standing at the head
  * of the reply that answered it (`AnsweredCard`), or, for an ask of words
  * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
  * a card saying

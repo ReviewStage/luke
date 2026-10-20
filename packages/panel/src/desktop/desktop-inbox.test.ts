@@ -1731,7 +1731,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
     assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.equal(askMarker(pane), null);
 
   act(() => segment(channel(), "Slack").click());
   act(() => segment(severity(), "High").click());
@@ -6212,9 +6212,9 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
   assert.deepEqual(askBoxes(pane), [], "the open ask is no card in the agent's message");
   const [asked] = pane.querySelectorAll(".inbox-thread > li");
   assert.equal(
-    asked?.querySelector("[data-inbox-marker]")?.textContent,
-    "Waiting on you",
-    "the agent's message ends with the ask's marker",
+    asked?.querySelector("[data-inbox-marker]"),
+    null,
+    "the agent's message ends with its words, no marker saying the ask waits on the reader",
   );
   assert.equal(asked?.querySelector('[role="radio"]'), null, "and holds none of its options");
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
@@ -6254,7 +6254,7 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
     [{ itemId: shown.id, text: "Does it matter for SSO teams?", answers: undefined }],
   );
   assert.deepEqual(answers, [], "the old answer path is never taken");
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.equal(askMarker(pane), null);
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
   assert.deepEqual(threadOf(pane.ownerDocument.body).at(-1), [
     "message",
@@ -6565,7 +6565,7 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   await act(async () => refuse[0]?.());
   await settle();
 
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.equal(askMarker(pane), null);
   assert.equal(composerEditor(pane).textContent, "One more detail");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
   assert.equal(quietWords(pane), null, "the picked answer says what is sent");
@@ -6803,7 +6803,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
   const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.equal(askMarker(pane), null);
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
   assert.equal(quietWords(pane), "Replying keeps the ask open");
 
@@ -7036,7 +7036,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
   const pane = await mountThread({ ...shown, status: INBOX_STATUS.OPEN });
 
   assert.deepEqual(askBoxes(pane), []);
-  assert.equal(askMarker(pane), "Waiting on you", "the later ask still waits");
+  assert.equal(askMarker(pane), null, "the later ask waits on the reader, which draws no marker");
   const asked =
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
   assert.equal(asked.querySelector(".inbox-ask"), null, "the agent's message ends with its words");
@@ -7248,11 +7248,23 @@ test("an answered ask of words alone draws no card, its reply just its words and
   );
 });
 
-test("an ask of a type this build does not know reads as a line naming a newer Luke, saying who it waits on while open, and the box still replies", async () => {
+test("an ask of a type this build does not know reads as a line naming a newer Luke, saying which teammate it waits on while open and nothing more where it waits on the reader, and the box still replies", async () => {
   const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
-  const pane = await mountThread(threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }]));
-  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke.Waiting on you"]]);
+  const asking = { ...askingMessage(EXPIRY_ASK), ask: poll };
+  const pane = await mountThread(threadItem([asking]));
+  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke."]]);
+  assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
   assert.equal(sendWords(pane), "Reply");
+});
+
+test("an ask of a type this build does not know, open on a teammate's item, names the teammate it waits on", async () => {
+  const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
+  const pane = await mountThread(
+    threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }], { startedBy: TEAMMATE }),
+  );
+  assert.deepEqual(askBoxes(pane), [
+    ["newer", "Answer this in a newer Luke.Waiting on Charles Pan"],
+  ]);
 });
 
 test("an item from before version 5, its question in its blocks and its thread asking nothing, still draws its question and is answered as before", async () => {
@@ -7275,7 +7287,7 @@ test("an item from before version 5, its question in its blocks and its thread a
     ["message", "person", "Charles Pan", "Is 80% too eager?"],
   ]);
   assert.equal(pane.querySelector(".inbox-ask"), null);
-  assert.equal(askMarker(pane), "Waiting on you");
+  assert.equal(askMarker(pane), null);
   assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
 
   act(() => openOptions(pane)[1]?.click());
@@ -7314,15 +7326,21 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
   assert.equal(quietWords(pane), null, "the picked answer says what is sent");
 });
 
+test("the reader's own open ask draws no waiting marker anywhere in the thread, its draft reply holding the ask's controls", async () => {
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+  assert.equal(askMarker(pane), null);
+  assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+  assert.doesNotMatch(
+    pane.querySelector(".inbox-thread")?.textContent ?? assert.fail("the thread"),
+    /Waiting on/u,
+  );
+  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+});
+
 test("a teammate's open ask says on its marker that it waits on them, rather than on you, and still takes your answer in your draft reply", async () => {
   const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)], { startedBy: TEAMMATE }));
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.equal(askMarker(pane), "Waiting on Charles Pan");
-  assert.equal(
-    pane.querySelector<HTMLElement>("[data-inbox-marker]")?.dataset.inboxWaiting,
-    "teammate",
-    "its dot spends no attention ink",
-  );
   act(() => openOptions(pane)[0]?.click());
   assert.equal(quietWords(pane), null, "the picked answer says what is sent");
 });

@@ -3645,23 +3645,6 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
-/* "Waiting on you" at an open ask's head, in the attention ink after its dot. */
-.inbox-waiting {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-attention);
-}
-
-.inbox-waiting::after {
-  order: -1;
-  width: 6px; /* off-scale: the attention dot */
-  height: 6px; /* off-scale: the attention dot */
-  border-radius: var(--luke-radius-full);
-  background: currentColor;
-  content: "";
-}
-
 /* A teammate's open ask names who it waits on in the line's own muted ink,
    as the list's Waiting on others does. */
 .inbox-waiting-on {
@@ -3810,9 +3793,8 @@ ul.actor-stack {
 }
 
 /* An open ask's marker ending the agent's message (`inbox-pane.tsx`'s
-   AskMarker): a small pill saying whom it waits on, after a
-   dot in the attention ink where it waits on the reader, and the muted ink
-   where it waits on a teammate. */
+   AskMarker): a small pill saying which teammate it waits on, after a dot
+   in the muted ink. An ask waiting on the reader draws none. */
 .inbox-ask-marker {
   display: inline-flex;
   max-width: 100%;
@@ -3829,16 +3811,12 @@ ul.actor-stack {
 }
 
 .inbox-ask-marker::before {
-  width: 6px; /* off-scale: the attention dot */
-  height: 6px; /* off-scale: the attention dot */
+  width: 6px; /* off-scale: the marker's dot */
+  height: 6px; /* off-scale: the marker's dot */
   flex: none;
   border-radius: var(--luke-radius-full);
-  background: var(--luke-color-attention);
-  content: "";
-}
-
-.inbox-ask-marker[data-inbox-waiting="teammate"]::before {
   background: var(--luke-color-text-subtle);
+  content: "";
 }
 
 /* The reader's draft reply, the thread's last comment: the box stands in
