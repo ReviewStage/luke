@@ -87,6 +87,7 @@ import { useSignIn } from "./use-sign-in.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
+import { useWindowReady } from "./window-ready.js";
 import { useWindowZoom } from "./window-zoom.js";
 
 /** No agent ended unseen, as the document reads before main has answered. */
@@ -547,18 +548,9 @@ export function App(): React.JSX.Element {
   // above a phone's keyboard.
   useVisualViewport();
 
-  /**
-   * The report that the window has painted, made once, on the first snapshot
-   * that carries settings, and for a fixture run once its synthetic tasks have
-   * landed, because a capture is taken a moment after this report.
-   */
-  const opened = useRef(false);
-  const { fixtureLanded } = tasks;
-  useEffect(() => {
-    if (opened.current || !state?.settings || !fixtureLanded) return;
-    opened.current = true;
-    appBridge().notifyReady();
-  }, [state, fixtureLanded]);
+  // The window is painted once its settings have arrived and, for a fixture
+  // run, the synthetic tasks it imports on demand have settled.
+  useWindowReady(state?.settings !== undefined && tasks.fixtureSettled);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the

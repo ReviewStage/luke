@@ -253,7 +253,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     board: undefined,
     shownCode: undefined,
     workFailed: false,
-    fixtureLanded: true,
+    fixtureSettled: true,
     onRetryWork: ignore,
     pages: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
