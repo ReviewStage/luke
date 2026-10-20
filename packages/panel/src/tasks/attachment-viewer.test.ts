@@ -10,6 +10,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
+import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { IMAGE_OPENING, type ImageOpening } from "./use-image-zoom.js";
 
@@ -362,4 +363,35 @@ test("the zoom buttons name the bare keys that do the same", () => {
     document.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-keyshortcuts");
   assert.equal(named("Zoom in"), "=");
   assert.equal(named("Zoom out"), "-");
+});
+
+test("a text file opened over the window is drawn as every code is, numbered from its first line, a Windows line break opening no line of its own", async () => {
+  const notes: FileChip = {
+    name: "notes.ts",
+    mediaType: "text/plain",
+    url: `data:text/plain;base64,${btoa("const a = 1;\r\nconst b = 2;\r\n")}`,
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(AttachmentViewer, {
+          files: [notes],
+          at: 0,
+          onAt: () => undefined,
+          onClose: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await wholeFileDrawn(document.body);
+
+  assert.deepEqual(wholeFileLines(document.body), ["1 const a = 1;", "2 const b = 2;"]);
+  assert.ok(
+    document.querySelector(".attachment-viewer-lines .whole-file")?.closest(".ph-no-capture"),
+  );
 });
