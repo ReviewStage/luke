@@ -69,6 +69,9 @@ const EFFECT_MODULE_SCHEMAS = {
     accountInboxLiveAnswerSchema: liveWire.accountInboxLiveAnswerSchema,
     taskBoardLiveAnswerSchema: liveWire.taskBoardLiveAnswerSchema,
     taskBoardLiveRowsSchema: liveWire.taskBoardLiveRowsSchema,
+    agentTranscriptLiveAnswerSchema: liveWire.agentTranscriptLiveAnswerSchema,
+    agentTranscriptLiveRowsSchema: liveWire.agentTranscriptLiveRowsSchema,
+    transcriptNowAnswerSchema: liveWire.transcriptNowAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,

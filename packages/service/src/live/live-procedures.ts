@@ -20,16 +20,28 @@
  * not seal, is answered with each statement's rows inline at the poll
  * address instead (`sealedParts`), so a reader polls it while Realtime
  * fails, behind the same caller and no other route.
+ *
+ * `GET /api/live/agent-transcript?id=` answers what one coding agent's
+ * transcript is read from, or one of its workers' with `&call=` naming the
+ * delegation call (`transcript-live.ts`), after the agent is read as the
+ * account, each statement joined through the caller's membership of the
+ * agent's workspace. A worker's delegation may not be recorded yet, as a
+ * tab opened on its call is read before it is, so its statements name the
+ * conversation the call will open rather than wait for it.
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
+import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
+import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import { LIVE_POLL } from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { reachedAgentById } from "../agents/agent-reach.js";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {
   HOSTED_REFUSAL,
@@ -101,6 +113,15 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   );
 });
 
+/** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
+const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  call: string,
+): Effect.fn.Return<string, HostedRefusal> {
+  const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return read.success;
+});
+
 /** The live reads, each to a signed-in caller. */
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
@@ -124,6 +145,24 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         { board: statement.value },
         input[LIVE_POLL.QUERY] === LIVE_POLL.ON,
       );
+    }),
+    agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
+      const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
+      const { target } = yield* reachedAgentById(context.userId, input.id);
+      const read =
+        callId === undefined
+          ? target
+          : {
+              userId: target.userId,
+              conversationId: childConversationId(target.conversationId, callId),
+            };
+      const statements = transcriptLiveStatements(
+        read,
+        target.conversationId,
+        agentFollowedBy(target.userId, target.conversationId, context.userId),
+      );
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input[LIVE_POLL.QUERY] === LIVE_POLL.ON);
     }),
   };
 }

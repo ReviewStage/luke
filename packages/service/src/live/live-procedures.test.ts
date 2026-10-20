@@ -4,11 +4,14 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
 import { writeDrawing } from "@luke/database/models/board-store";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { childConversationId } from "@luke/database/models/ids";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import {
   accountInboxLiveAnswerSchema,
+  agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
   taskBoardLiveAnswerSchema,
@@ -254,5 +257,122 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         assert.deepEqual(sealed.rows, [], `${part} holds nothing yet`);
       }
     }),
+  );
+});
+
+/** The procedures answering an agent's transcript's live read as `bearer`, the worker's where `call` names one. */
+const askTranscript = (options: {
+  readonly bearer: string;
+  readonly agentId: string;
+  readonly call?: string;
+  readonly sealing: Option.Option<LiveSealer>;
+}) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(LiveSealing, options.sealing),
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+    );
+    const procedures = liveProcedures({
+      resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+    });
+    const url = new URL("/api/live/agent-transcript", ORIGIN);
+    url.searchParams.set("id", options.agentId);
+    if (options.call !== undefined) url.searchParams.set("call", options.call);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
+    );
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
+    return { status: response.status, body };
+  });
+
+it.layer(getTestDB())("an agent transcript's live read", (it) => {
+  it.effect(
+    "an agent's transcript, or a worker's by its call, is sealed as what its pages are read from, for an account that reaches the agent and under the conversation the call opens, and not found otherwise",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        const { agent } = started.value;
+
+        const own = yield* askTranscript({
+          bearer: owner,
+          agentId: agent.id,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(own.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), [
+          "agent",
+          "conversation",
+          "messages",
+          "turns",
+          "workers",
+        ]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the agent's owner");
+        }
+        assert.ok(answer.queries.messages.capability.includes(`"${agent.conversationId}"`));
+
+        const worker = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+          (yield* askTranscript({
+            bearer: owner,
+            agentId: agent.id,
+            call: "call-7",
+            sealing: Option.some(SCRIPTED),
+          })).body,
+        );
+        const child = childConversationId(agent.conversationId, "call-7");
+        assert.ok(worker.queries.messages.capability.includes(`"${child}"`));
+        assert.ok(worker.queries.workers.capability.includes(`"${agent.conversationId}"`));
+
+        for (const call of [undefined, "call-7"]) {
+          const named = call === undefined ? {} : { call };
+          assert.deepEqual(
+            yield* askTranscript({
+              bearer: stranger,
+              agentId: agent.id,
+              ...named,
+              sealing: Option.some(SCRIPTED),
+            }),
+            { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+          );
+          const polled = yield* askTranscript({
+            bearer: owner,
+            agentId: agent.id,
+            ...named,
+            sealing: Option.none(),
+          });
+          // Without Realtime the read is answered polled, its rows inline.
+          assert.equal(
+            Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(polled.body).url,
+            LIVE_POLL_URL,
+          );
+        }
+        assert.deepEqual(
+          yield* askTranscript({
+            bearer: owner,
+            agentId: "not-an-agent",
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
   );
 });
