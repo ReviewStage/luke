@@ -15,13 +15,27 @@
  * same words the Mac's say and no more.
  *
  * Permission is asked for only from Settings' test, on the developer's own
- * press, which is when a browser lets a page ask; a notice posted while it
- * was never granted is dropped, and nothing here asks on load. What the
- * browser last answered is handed on as the status Settings draws, read
- * from the permission without asking.
+ * press and in the press's own handler (`askNotificationsPermission`), which
+ * is when a browser lets a page ask: Safari shows no prompt to an ask made a
+ * turn later. A notice posted while it was never granted is dropped, and
+ * nothing here asks on load. What the browser last answered is handed on as
+ * the status Settings draws, read from the permission without asking, and
+ * again each time the browser says the permission changed, as from its own
+ * settings.
  *
- * The badge is the installed app's own where the browser offers one;
- * elsewhere it is a count before the tab's title, "(2) Inbox — Acme",
+ * A browser may name `Notification` and still refuse to build one: Android's
+ * Chrome, and a Home Screen app on iOS, show a notification only through a
+ * service worker, which this app has none of. The first refusal withdraws
+ * notifications for the rest of the tab's life, as if the browser offered
+ * none, and nothing throws back into the notices that posted it.
+ *
+ * Every tab of the site hears the same notices, so a notification is tagged
+ * by what it says, and the browser shows one for every hidden tab that posts
+ * it rather than one each.
+ *
+ * The badge is the installed app's own where it runs installed; elsewhere,
+ * an uninstalled tab included, where a browser that names the app badge
+ * draws nothing, it is a count before the tab's title, "(2) Inbox — Acme",
  * kept there as the panel names the tab again.
  */
 
@@ -37,14 +51,27 @@ const TEST_NOTICE = {
 /** The picture each notification carries: the site's own icon. */
 const NOTICE_ICON = "/apple-touch-icon.png";
 
+/** What every tag a notification carries begins with, so none meets another page's of the site. */
+const TAG_PREFIX = "luke-notice";
+
+/** The display mode the site runs in once installed (`public/manifest.webmanifest`'s `display`). */
+const INSTALLED_DISPLAY = "(display-mode: standalone)";
+
+/** Each answer the browser gives of the site's permission. */
+const PERMISSION = {
+  GRANTED: "granted",
+  DENIED: "denied",
+  DEFAULT: "default",
+} as const satisfies Record<string, NotificationPermission>;
+
 /** The count the badge writes before the tab's title, which a new count replaces. */
 const TITLE_COUNT = /^\(\d+\) /u;
 
 /** What each answer of the browser's permission says of whether notifications are on. */
 const STATUS_OF_PERMISSION = {
-  granted: NOTIFICATIONS_STATUS.ON,
-  denied: NOTIFICATIONS_STATUS.OFF,
-  default: NOTIFICATIONS_STATUS.UNKNOWN,
+  [PERMISSION.GRANTED]: NOTIFICATIONS_STATUS.ON,
+  [PERMISSION.DENIED]: NOTIFICATIONS_STATUS.OFF,
+  [PERMISSION.DEFAULT]: NOTIFICATIONS_STATUS.UNKNOWN,
 } as const satisfies Record<NotificationPermission, NotificationsStatus>;
 
 /** A badge as the tab draws it: the count set, and taken down. */
@@ -61,19 +88,65 @@ type NoticeToasts = Pick<
 
 /** The tab's doors, with the test Settings posts and the badge's own end. */
 export interface WebNoticeDoors extends AgentNoticeDoorsSurface {
-  /** Asks for permission where it was never answered, then posts the test whether the tab is hidden or not: Settings' press alone calls this. */
+  /** Asks for permission where it was never answered, joining the press's own ask where it still waits, then posts the test whether the tab is hidden or not: Settings' press alone calls this. */
   postTest: () => Promise<void>;
-  /** Takes the badge down and stops keeping the count before the title. */
+  /** Takes the badge down, stops keeping the count before the title, and stops following the permission. */
   close: () => void;
 }
 
-/** Posts one notification whose click brings the tab forward and hands back to the notice. */
-function show(notice: AgentNotice): void {
-  const shown = new Notification(notice.title, { body: notice.body, icon: NOTICE_ICON });
+/** The ask for permission still waiting on the developer, which a second ask joins rather than makes again. */
+let asking: Promise<void> | undefined;
+
+/** The tag a notice's notification carries: its words, the same in every tab that posts it. */
+function tagOf(notice: Pick<AgentNotice, "title" | "body">): string {
+  return `${TAG_PREFIX}:${notice.title}\n${notice.body}`;
+}
+
+/**
+ * Posts one notification whose click brings the tab forward and hands back
+ * to the notice, and answers whether the browser built it: one that refuses
+ * a page's own notification throws here.
+ */
+function show(notice: AgentNotice): boolean {
+  let shown: Notification;
+  try {
+    shown = new Notification(notice.title, {
+      body: notice.body,
+      icon: NOTICE_ICON,
+      tag: tagOf(notice),
+    });
+  } catch {
+    return false;
+  }
   shown.onclick = () => {
     shown.close();
     window.focus();
     notice.onClick();
+  };
+  return true;
+}
+
+/**
+ * Follows the site's permission for notifications where the browser says
+ * when it changes, and `heard` each time it does, until the returned
+ * function is called. A browser that says nothing of it, or refuses the
+ * query, is followed no further than each post and test.
+ */
+function followPermission(heard: () => void): () => void {
+  if (!("permissions" in navigator)) return () => undefined;
+  let stopped = false;
+  let followed: PermissionStatus | undefined;
+  navigator.permissions.query({ name: "notifications" }).then(
+    (status) => {
+      if (stopped) return;
+      followed = status;
+      status.addEventListener("change", heard);
+    },
+    () => undefined,
+  );
+  return () => {
+    stopped = true;
+    followed?.removeEventListener("change", heard);
   };
 }
 
@@ -107,9 +180,14 @@ function titleBadge(): BadgeDoor {
   };
 }
 
-/** The badge: the installed app's own where the browser offers one, else the count before the title. */
+/** Whether the site runs as the installed app, where alone an app badge is drawn. */
+function runsInstalled(): boolean {
+  return "matchMedia" in window && window.matchMedia(INSTALLED_DISPLAY).matches;
+}
+
+/** The badge: the installed app's own where it runs installed and the browser offers one, else the count before the title. */
 function badgeDoor(): BadgeDoor {
-  if ("setAppBadge" in navigator) {
+  if ("setAppBadge" in navigator && runsInstalled()) {
     const set = (count: number) => {
       const asked = count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge();
       // Note that a refusal is dropped, because a badge the browser will not draw says nothing a toast has not.
@@ -123,6 +201,25 @@ function badgeDoor(): BadgeDoor {
 /** Whether this browser posts notifications at all, without which the tab offers none. */
 export function notificationsOffered(): boolean {
   return "Notification" in window;
+}
+
+/**
+ * Asks the browser for the site's permission where it was never answered.
+ * Note that it is called in the press's own handler, before anything waits,
+ * because Safari shows its prompt only to an ask made inside the press; and
+ * that an ask still waiting is joined, so the test that follows the press
+ * shows no second prompt.
+ */
+export function askNotificationsPermission(): Promise<void> {
+  if (asking !== undefined) return asking;
+  if (!notificationsOffered() || Notification.permission !== PERMISSION.DEFAULT) {
+    return Promise.resolve();
+  }
+  const settled = () => {
+    asking = undefined;
+  };
+  asking = Notification.requestPermission().then(settled, settled);
+  return asking;
 }
 
 /** Whether notifications are on for the site, as the permission stands, read without asking. */
@@ -149,33 +246,51 @@ export function onTabShownChanged(listener: (shown: boolean) => void): () => voi
 /**
  * The tab's doors over the toasts handed in. `onAnswered` hears what the
  * browser's permission says each time a notification is posted or asked
- * for, so Settings draws it.
+ * for, and each time the browser says it changed, so Settings draws it;
+ * `onWithdrawn` hears, once, that the browser refused to build a
+ * notification, after which the doors post none and the tab offers none.
  */
 export function webNoticeDoors(dependencies: {
   toasts: NoticeToasts;
   onAnswered: (status: NotificationsStatus) => void;
+  onWithdrawn: () => void;
 }): WebNoticeDoors {
-  const { toasts, onAnswered } = dependencies;
+  const { toasts, onAnswered, onWithdrawn } = dependencies;
   const badge = badgeDoor();
+  let refused = false;
+  const offered = () => notificationsOffered() && !refused;
+  const posted = (notice: AgentNotice) => {
+    if (show(notice)) return;
+    refused = true;
+    onWithdrawn();
+  };
+  const unfollow = offered()
+    ? followPermission(() => {
+        if (offered()) onAnswered(notificationsStatusNow());
+      })
+    : () => undefined;
   return {
     ...toasts,
     post: (notice) => {
-      if (!notificationsOffered()) return;
+      if (!offered()) return;
       // A permission changed in the browser's own settings is heard here as well as on the test.
       onAnswered(notificationsStatusNow());
-      if (Notification.permission === "granted") show(notice);
+      if (Notification.permission === PERMISSION.GRANTED) posted(notice);
     },
     postTest: async () => {
-      if (!notificationsOffered()) {
+      if (!offered()) {
         onAnswered(NOTIFICATIONS_STATUS.OFF);
         return;
       }
-      if (Notification.permission === "default") await Notification.requestPermission();
+      await askNotificationsPermission();
       onAnswered(notificationsStatusNow());
-      if (Notification.permission !== "granted") return;
-      show({ ...TEST_NOTICE, onClick: () => undefined });
+      if (Notification.permission !== PERMISSION.GRANTED) return;
+      posted({ ...TEST_NOTICE, onClick: () => undefined });
     },
     badge: badge.set,
-    close: badge.close,
+    close: () => {
+      unfollow();
+      badge.close();
+    },
   };
 }

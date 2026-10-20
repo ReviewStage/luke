@@ -85,8 +85,13 @@ function fixture() {
   const chatOpened: string[] = [];
   let chatOn = true;
   const badges: number[] = [];
+  /** Whether the notification door throws, as a browser that refuses to build one does. */
+  let refusingPosts = false;
   const doors = Layer.succeed(AgentNoticeDoors, {
-    post: (notice) => posted.push(notice),
+    post: (notice) => {
+      if (refusingPosts) throw new TypeError("Illegal constructor");
+      posted.push(notice);
+    },
     toast: (end) => toasted.push(end),
     toastInbox: (item) => inboxToasted.push(item),
     toastFailedRun: (run) => runsToasted.push(run),
@@ -251,6 +256,10 @@ function fixture() {
     /** The developer's setting for notifications. */
     notify: (on: boolean) => {
       notifying = on;
+    },
+    /** Whether the notification door throws on each post. */
+    refusePosts: (on: boolean) => {
+      refusingPosts = on;
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
@@ -1129,5 +1138,35 @@ it.effect(
         { title: TASK_NAME, body: "Invite emails messaged you" },
         { title: TASK_NAME, body: "Invite emails mentioned you" },
       ]);
+    }),
+);
+it.effect(
+  "a notification door that throws loses that notice alone: the next end is still announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const other = "a1b2c3d4-0000-4000-8000-000000000003";
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.RUNNING),
+        agent(CODING_AGENT_STATUS.RUNNING, { id: other, title: "Second" }),
+      ]);
+
+      f.refusePosts(true);
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.COMPLETED),
+        agent(CODING_AGENT_STATUS.RUNNING, { id: other, title: "Second" }),
+      ]);
+      yield* Effect.yieldNow;
+      f.refusePosts(false);
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.COMPLETED),
+        agent(CODING_AGENT_STATUS.COMPLETED, { id: other, title: "Second" }),
+      ]);
+      yield* Effect.yieldNow;
+
+      assert.equal(f.posted.length, 1);
+      assert.match(f.posted[0]?.body ?? "", /Second/u);
     }),
 );

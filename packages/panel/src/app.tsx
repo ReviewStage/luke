@@ -65,6 +65,7 @@ import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { testNotifications } from "./settings/notifications-press.js";
 import { shownSettingsView } from "./settings/pages.js";
 import { settingsRowsInput } from "./settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
@@ -800,7 +801,7 @@ export function App(): React.JSX.Element {
                                     packaged: state.run.packaged,
                                     onOpenSettings: () =>
                                       tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                                    onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
+                                    onTest: testNotifications,
                                   },
                                   updates,
                                   settings,

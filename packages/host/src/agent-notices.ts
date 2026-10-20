@@ -236,6 +236,38 @@ export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNot
   "@luke/desktop/AgentNoticeDoors",
 ) {}
 
+/**
+ * The doors as the notices call them: one that throws is reported and its
+ * notice dropped. Note that the throw never reaches the caller, because the
+ * doors are called from the loop that announces each end and from the
+ * inbox's answers, and a throw there would end the loop, and every notice
+ * after it, for the rest of the run.
+ */
+function guardedDoors(
+  doors: AgentNoticeDoorsSurface,
+  report: (message: string) => void,
+): AgentNoticeDoorsSurface {
+  const guarded =
+    <Said>(door: string, say: (said: Said) => void) =>
+    (said: Said): void => {
+      try {
+        say(said);
+      } catch (defect) {
+        report(
+          `the notice's ${door} door failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+        );
+      }
+    };
+  return {
+    post: guarded("post", (notice: AgentNotice) => doors.post(notice)),
+    toast: guarded("toast", (end: AgentEndToast) => doors.toast(end)),
+    toastInbox: guarded("inbox toast", (item: InboxItemToast) => doors.toastInbox(item)),
+    toastFailedRun: guarded("failed-run toast", (run: FailedRunToast) => doors.toastFailedRun(run)),
+    toastChat: guarded("chat toast", (message: ChatMessageToast) => doors.toastChat(message)),
+    badge: guarded("badge", (count: number) => doors.badge(count)),
+  };
+}
+
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
   listAgents: (taskId: string) => Effect.Effect<CodingAgentListAnswer>;
@@ -583,7 +615,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
     const { listAgents, readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
-    const doors = yield* AgentNoticeDoors;
+    const doors = guardedDoors(yield* AgentNoticeDoors, report);
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
     const tasklessSubjects = new Map<string, string>();

@@ -27,11 +27,22 @@ interface ShownNotification {
   readonly click: () => void;
 }
 
-/** What the fake browser was asked: each notification shown, and each time permission was asked for. */
+/** What the fake browser was asked: each notification shown, those it still shows, and each time permission was asked for. */
 interface FakeBrowser {
   readonly shown: ShownNotification[];
+  /** The notifications on screen, one per tag: a notification posted under a tag one already shows replaces it, as a browser does. */
+  readonly onScreen: Map<string, ShownNotification>;
   permissionAsks: number;
+  /** Whether each ask for permission was made while a press was still on the stack. */
+  readonly askedInPress: boolean[];
+  /** Answers the asks still waiting, where the fake was told to hold them. */
+  answer: () => void;
+  /** Changes the site's permission from outside the page, as the browser's own settings do. */
+  setPermission: (permission: NotificationPermission) => void;
 }
+
+/** Whether the test is inside a press's own handler, where a browser such as Safari lets a page ask. */
+let pressing = false;
 
 let browser: FakeBrowser;
 let visibility: DocumentVisibilityState;
@@ -40,18 +51,53 @@ let visibility: DocumentVisibilityState;
 function fakeNotifications(options: {
   readonly permission: NotificationPermission;
   readonly answer?: NotificationPermission;
+  /** Holds each ask until `answer`, as a prompt the developer has not answered yet. */
+  readonly holdAsks?: boolean;
+  /** Refuses to build a notification, as Android's Chrome does a page's own. */
+  readonly refuses?: boolean;
 }): FakeBrowser {
-  const seen: FakeBrowser = { shown: [], permissionAsks: 0 };
+  const waiting: (() => void)[] = [];
+  const seen: FakeBrowser = {
+    shown: [],
+    onScreen: new Map(),
+    permissionAsks: 0,
+    askedInPress: [],
+    answer: () => {
+      for (const settle of waiting.splice(0)) settle();
+    },
+    setPermission: (permission) => {
+      FakeNotification.permission = permission;
+    },
+  };
   class FakeNotification {
     static permission: NotificationPermission = options.permission;
     static requestPermission(): Promise<NotificationPermission> {
       seen.permissionAsks += 1;
-      FakeNotification.permission = options.answer ?? FakeNotification.permission;
-      return Promise.resolve(FakeNotification.permission);
+      seen.askedInPress.push(pressing);
+      const settle = () => {
+        FakeNotification.permission = options.answer ?? FakeNotification.permission;
+      };
+      if (options.holdAsks !== true) {
+        settle();
+        return Promise.resolve(FakeNotification.permission);
+      }
+      return new Promise((answered) =>
+        waiting.push(() => {
+          settle();
+          answered(FakeNotification.permission);
+        }),
+      );
     }
     onclick: (() => void) | null = null;
     constructor(title: string, init?: NotificationOptions) {
-      seen.shown.push({ title, body: init?.body, click: () => this.onclick?.() });
+      if (options.refuses === true) {
+        throw new TypeError(
+          "Failed to construct 'Notification': Illegal constructor. Use ServiceWorkerRegistration.showNotification() instead.",
+        );
+      }
+      const shown = { title, body: init?.body, click: () => this.onclick?.() };
+      seen.shown.push(shown);
+      seen.onScreen.set(init?.tag ?? crypto.randomUUID(), shown);
     }
     close(): void {}
   }
@@ -59,15 +105,49 @@ function fakeNotifications(options: {
   return seen;
 }
 
-/** The doors with toasts that go nowhere, and each status the browser answered. */
+/** The doors with toasts that go nowhere, each status the browser answered, and whether notifications were withdrawn. */
 function doorsAnswering() {
   const answered: NotificationsStatus[] = [];
+  const heard = { withdrawn: false };
   const ignore = () => undefined;
   const doors = webNoticeDoors({
     toasts: { toast: ignore, toastInbox: ignore, toastFailedRun: ignore, toastChat: ignore },
     onAnswered: (status) => answered.push(status),
+    onWithdrawn: () => {
+      heard.withdrawn = true;
+    },
   });
-  return { doors, answered };
+  return { doors, answered, heard };
+}
+
+/** Stands the browser's permission query, whose answer for notifications says each change as the returned function is called. */
+function fakePermissionQuery(): () => void {
+  const status = new EventTarget();
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    permissions: { query: () => Promise.resolve(status) },
+  });
+  return () => status.dispatchEvent(new Event("change"));
+}
+
+/** Stands the installed app's badge in the browser, recording each count it is set to, and the display mode the site runs in. */
+function fakeAppBadge(displayMode: "standalone" | "browser"): number[] {
+  const counts: number[] = [];
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    setAppBadge: (count: number) => {
+      counts.push(count);
+      return Promise.resolve();
+    },
+    clearAppBadge: () => {
+      counts.push(0);
+      return Promise.resolve();
+    },
+  });
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === `(display-mode: ${displayMode})`,
+  }));
+  return counts;
 }
 
 /** The host stood up in a scope of its own over the fake given, its acts run on the test's own services. */
@@ -89,6 +169,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  pressing = false;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
@@ -232,3 +313,129 @@ test("a notice posted after the permission was granted in the browser's own sett
   assert.deepEqual(answered, [NOTIFICATIONS_STATUS.ON]);
   assert.equal(browser.shown.length, 1);
 });
+
+test("a browser that refuses to build a notification throws nothing back, and withdraws them for the tab", () => {
+  browser = fakeNotifications({ permission: "granted", refuses: true });
+  const { doors, answered, heard } = doorsAnswering();
+  visibility = "hidden";
+
+  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
+  doors.post({ title: "Billing export", body: "Sonnet finished", onClick: () => undefined });
+
+  assert.ok(heard.withdrawn);
+  assert.deepEqual(browser.shown, []);
+  assert.deepEqual(
+    answered,
+    [NOTIFICATIONS_STATUS.ON],
+    "nothing is said of a permission after the refusal",
+  );
+});
+
+it.effect(
+  "a test the browser refuses to build answers the press, and the tab offers notifications no more",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        browser = fakeNotifications({ permission: "granted", refuses: true });
+        const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+        installActPort(actPort);
+        const loaded = yield* Effect.promise(() => bridge.requestAppState());
+        assert.ok(loaded.run.capabilities.includes(HOST_CAPABILITY.NOTIFICATIONS));
+
+        const outcome = yield* Effect.promise(() => askAct(ACT_KIND.NOTIFICATIONS_TEST));
+        const after = yield* Effect.promise(() => bridge.requestAppState());
+
+        assert.equal(outcome, undefined);
+        assert.ok(!after.run.capabilities.includes(HOST_CAPABILITY.NOTIFICATIONS));
+        assert.equal(after.notifications.status, NOTIFICATIONS_STATUS.OFF);
+      }),
+    ),
+);
+
+test("the same notice posted by every hidden tab of the site shows once", () => {
+  browser = fakeNotifications({ permission: "granted" });
+  const first = doorsAnswering();
+  const second = doorsAnswering();
+  visibility = "hidden";
+  const notice = { title: "Billing export", body: "Opus finished", onClick: () => undefined };
+
+  first.doors.post(notice);
+  second.doors.post(notice);
+  first.doors.post({ ...notice, body: "Sonnet finished" });
+
+  assert.deepEqual(
+    [...browser.onScreen.values()].map(({ body }) => body),
+    ["Opus finished", "Sonnet finished"],
+  );
+});
+
+test("an uninstalled tab counts before its title, though the browser names an app badge", () => {
+  const appBadge = fakeAppBadge("browser");
+  const { doors } = doorsAnswering();
+  document.title = "Luke";
+
+  doors.badge(2);
+
+  assert.equal(document.title, "(2) Luke");
+  assert.deepEqual(appBadge, []);
+  doors.close();
+});
+
+test("the installed app counts on its own badge, and leaves the title alone", () => {
+  const appBadge = fakeAppBadge("standalone");
+  const { doors } = doorsAnswering();
+  document.title = "Luke";
+
+  doors.badge(2);
+  doors.close();
+
+  assert.equal(document.title, "Luke");
+  assert.deepEqual(appBadge, [2, 0]);
+});
+
+it.effect("a permission changed in the browser's own settings reaches Settings as it changes", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      browser = fakeNotifications({ permission: "default" });
+      const changed = fakePermissionQuery();
+      const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
+      const loaded = yield* Effect.promise(() => bridge.requestAppState());
+      assert.equal(loaded.notifications.status, NOTIFICATIONS_STATUS.UNKNOWN);
+
+      browser.setPermission("granted");
+      // The browser's answer to the query lands a turn after the host stands, so the change is said until it is heard.
+      yield* Effect.promise(() =>
+        vi.waitFor(async () => {
+          changed();
+          const after = await bridge.requestAppState();
+          assert.equal(after.notifications.status, NOTIFICATIONS_STATUS.ON);
+        }),
+      );
+    }),
+  ),
+);
+
+it.effect(
+  "the press asks for permission inside its own handler, and the test joins that ask rather than asking again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        browser = fakeNotifications({ permission: "default", answer: "granted", holdAsks: true });
+        const { actPort, platform } = yield* standingHost(fakeService({ signedIn: true }));
+        installActPort(actPort);
+
+        pressing = true;
+        platform.askNotificationsPermission?.();
+        const tested = askAct(ACT_KIND.NOTIFICATIONS_TEST);
+        pressing = false;
+        browser.answer();
+        yield* Effect.promise(() => tested);
+
+        assert.deepEqual(browser.askedInPress, [true]);
+        assert.deepEqual(
+          browser.shown.map(({ title }) => title),
+          ["Luke notifications are on"],
+        );
+      }),
+    ),
+);

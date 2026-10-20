@@ -12,6 +12,7 @@ import { openTargetOf } from "@luke/features/open-address";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
+import { askNotificationsPermission } from "./web-notices";
 
 /**
  * Where the web serves the panel's static files, Excalidraw's fonts and the
@@ -83,8 +84,8 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
  * answer nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
  * tab, as every other event is; notifications are the browser's to grant,
- * for the site; and session replay is the desktop's own masked recording
- * (`web-session-replay.ts`).
+ * for the site, asked for on Settings' press itself; and session replay is
+ * the desktop's own masked recording (`web-session-replay.ts`).
  */
 export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): AppPlatform {
   return {
@@ -101,6 +102,9 @@ export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): 
     applySessionReplay: lazySessionReplay(),
     macAppLink,
     notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
+    askNotificationsPermission: () => {
+      void askNotificationsPermission();
+    },
   };
 }
 

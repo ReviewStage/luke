@@ -71,6 +71,7 @@ import { effectServiceLayer } from "@luke/host/service-layer";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
 import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import packageJson from "../../package.json";
@@ -192,7 +193,9 @@ function seamLayers() {
  * Where an agent's end, an inbox item, a failed run, or a chat message is
  * said: the panel's own toast, through the bridge's events once the bridge
  * stands, or the browser's notification while the tab is hidden, and the
- * badge. What the browser answers is written for Settings. The badge comes
+ * badge. What the browser answers is written for Settings, and a browser
+ * that refuses to build a notification takes the tab's offer of them away,
+ * so Settings offers no Notifications page it cannot keep. The badge comes
  * down with the host's scope.
  */
 const noticeDoors = (
@@ -214,6 +217,18 @@ const noticeDoors = (
           if (state.snapshot().notifications.status !== status) {
             state.update({ notifications: { status } });
           }
+        },
+        onWithdrawn: () => {
+          const { run } = state.snapshot();
+          state.update({
+            run: {
+              ...run,
+              capabilities: run.capabilities.filter(
+                (capability) => capability !== HOST_CAPABILITY.NOTIFICATIONS,
+              ),
+            },
+            notifications: { status: NOTIFICATIONS_STATUS.OFF },
+          });
         },
       }),
     ),
@@ -245,8 +260,8 @@ function platformProcedures(
     ),
     [KIND.WINDOW_FOCUS_PANEL]: port[KIND.WINDOW_FOCUS_PANEL].handler(() => window.focus()),
     [KIND.CONTACT_EMAIL]: port[KIND.CONTACT_EMAIL].handler(() => location.assign(CONTACT_MAILTO)),
-    // Note that this is the one place the tab asks for permission, because a
-    // browser lets a page ask only on a press.
+    // Note that this asks for permission only where the press's own ask
+    // (`askNotificationsPermission`) has not, and joins it where it still waits.
     [KIND.NOTIFICATIONS_TEST]: port[KIND.NOTIFICATIONS_TEST].handler(() => doors.postTest()),
     [KIND.FEEDBACK_SEND]: port[KIND.FEEDBACK_SEND].effect(function* ({ input }) {
       return yield* Effect.provideService(
