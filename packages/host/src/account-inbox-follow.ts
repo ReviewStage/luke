@@ -8,7 +8,13 @@ import {
   nextFailedRunExpiry,
 } from "@luke/features/live-wire";
 import { Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, type LiveSignedOut, liveRows } from "./live-follow.js";
+import {
+  LiveBroken,
+  type LiveClient,
+  type LiveSignedOut,
+  liveRows,
+  logLiveBroken,
+} from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime as Neon's guide says to.
@@ -116,7 +122,9 @@ export function followAccountInbox(
       Effect.sync(() => dependencies.publish(answer)),
     ).pipe(
       Effect.catchTag("LiveSignedOut", () => Effect.never),
-      Effect.catch(() => Effect.sleep(LIVE_RESTART)),
+      Effect.catch((broken) =>
+        Effect.andThen(logLiveBroken("the account inbox", broken), Effect.sleep(LIVE_RESTART)),
+      ),
     );
   });
   return Effect.forever(attempt);

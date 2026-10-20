@@ -22,7 +22,11 @@ const RENEW_EARLY = Duration.seconds(10);
 const RENEW_RETRY = Duration.seconds(1);
 
 /** A subscription that stopped for good: Realtime's client did not load, Realtime said so, a renewal was refused, or a row did not decode. */
-export class LiveBroken extends Data.TaggedError("LiveBroken")<{ readonly reason: string }> {}
+export class LiveBroken extends Data.TaggedError("LiveBroken")<{
+  readonly reason: string;
+  /** Realtime's own code for why a subscription stopped, where it said one; never the sealed statement. */
+  readonly code?: string;
+}> {}
 
 /**
  * A renewal the service refused as signed out: the session is no longer the
@@ -37,6 +41,7 @@ interface LiveSubscription {
     listener: (snapshot: {
       readonly status: string;
       readonly data: readonly unknown[] | undefined;
+      readonly error?: { readonly code: string } | undefined;
     }) => void,
   ): () => void;
   renew(query: SealedLiveQueryWire): Promise<void>;
@@ -169,7 +174,13 @@ export function liveRows<Part extends string>(
               const subscription = client.subscribe(first.queries[part]);
               subscription.onChange((snapshot) => {
                 if (snapshot.status === "error") {
-                  broken(new LiveBroken({ reason: "the subscription stopped" }));
+                  const code = snapshot.error?.code;
+                  broken(
+                    new LiveBroken({
+                      reason: "the subscription stopped",
+                      ...(code === undefined ? undefined : { code }),
+                    }),
+                  );
                   return;
                 }
                 if (snapshot.data === undefined) return;
@@ -217,3 +228,13 @@ export function liveRows<Part extends string>(
       }),
   );
 }
+
+/**
+ * Says in the log why a follow broke, by its reason and Realtime's code,
+ * so a follow that stopped is heard rather than silent. Never the sealed
+ * statement, which is a bearer, nor a row.
+ */
+export const logLiveBroken = (follow: string, broken: LiveBroken): Effect.Effect<void> =>
+  Effect.logWarning(`live-follow: ${follow} broke: ${broken.reason}`).pipe(
+    Effect.annotateLogs(broken.code === undefined ? {} : { code: broken.code }),
+  );

@@ -20,7 +20,7 @@ import {
   SubscriptionRef,
 } from "effect";
 import { Hex } from "effect/encoding";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows, logLiveBroken } from "./live-follow.js";
 
 /**
  * scope-inbox-follow.ts -- a plan's inbox, or one agent's, read by the window as before but answered from a Neon Realtime subscription the host holds while the window reads it.
@@ -144,7 +144,14 @@ export function scopeInboxes(
                 );
               },
             }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: "broken" }))),
+          ).pipe(
+            Effect.catch((failure) =>
+              Effect.andThen(
+                failure._tag === "LiveBroken" ? logLiveBroken(scope, failure) : Effect.void,
+                SubscriptionRef.set(inbox, { kind: "broken" }),
+              ),
+            ),
+          ),
         );
         return { kind: "live", inbox } as const;
       }),

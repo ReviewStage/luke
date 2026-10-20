@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
-import { Cause, Effect, Exit, Fiber, Option, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Logger, Option, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   type LiveClient,
   LiveSignedOut,
   liveRows,
+  logLiveBroken,
   type SealedRead,
   shareLiveClients,
 } from "./live-follow.js";
@@ -27,8 +28,11 @@ function scriptedClients() {
   const opened: string[] = [];
   const closed: string[] = [];
   const subscribed: string[] = [];
-  const listeners: ((snapshot: { readonly status: string; readonly data: undefined }) => void)[] =
-    [];
+  const listeners: ((snapshot: {
+    readonly status: string;
+    readonly data: undefined;
+    readonly error?: { readonly code: string };
+  }) => void)[] = [];
   const open = (url: string): LiveClient => {
     opened.push(url);
     return {
@@ -47,8 +51,9 @@ function scriptedClients() {
     };
   };
   /** Every subscription so far moves to `error`, as a failed connection moves them. */
-  const fail = () => {
-    for (const listener of listeners) listener({ status: "error", data: undefined });
+  const fail = (code = "connection_lost") => {
+    for (const listener of listeners)
+      listener({ status: "error", data: undefined, error: { code } });
   };
   return { open, opened, closed, subscribed, fail };
 }
@@ -164,5 +169,45 @@ it.effect(
       assert.deepEqual(Cause.findErrorOption(ended.cause), Option.some(new LiveSignedOut()));
       yield* TestClock.adjust("1 minute");
       assert.equal(asked, 2, "signed out, it renews no more");
+    }),
+);
+
+it.effect(
+  "a subscription Realtime stopped breaks the read, which says why in the log by Realtime's code and never the sealed statement",
+  () =>
+    Effect.gen(function* () {
+      const logged: string[] = [];
+      const recorder = Logger.map(Logger.formatStructured, (line) => {
+        logged.push(JSON.stringify(line));
+      });
+      const clients = scriptedClients();
+      const first: SealedRead<"items"> = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          items: { capability: "sealed-secret", queryFingerprint: "items", expiresAt: 60_000 },
+        },
+      };
+      const reading = yield* Effect.forkChild(
+        Stream.runDrain(
+          liveRows(
+            {
+              openLive: clients.open,
+              reseal: () => Effect.succeed({ failure: "unanswered" }),
+              now: () => 0,
+            },
+            first,
+          ),
+        ).pipe(
+          Effect.catchTag("LiveBroken", (broken) => logLiveBroken("the account inbox", broken)),
+          Effect.provide(Logger.layer([recorder])),
+        ),
+      );
+      yield* settled;
+      clients.fail("authorization_failed");
+      yield* Fiber.join(reading);
+      assert.equal(logged.length, 1);
+      assert.match(logged[0] ?? "", /the account inbox broke: the subscription stopped/);
+      assert.match(logged[0] ?? "", /"code":"authorization_failed"/);
+      assert.ok(!logged.some((line) => line.includes("sealed-secret")));
     }),
 );
