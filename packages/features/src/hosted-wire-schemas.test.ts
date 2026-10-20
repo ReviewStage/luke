@@ -456,7 +456,9 @@ const EFFECT_MODULE_SCHEMAS = {
     taskSkillsAnswerSchema: taskWire.taskSkillsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof taskWire>,
   "provider-key-wire": {
+    providerKeyKindSchema: providerKeyWire.providerKeyKindSchema,
     providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,
+    subscriptionKeySummarySchema: providerKeyWire.subscriptionKeySummarySchema,
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
