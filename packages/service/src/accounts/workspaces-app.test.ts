@@ -1127,9 +1127,13 @@ it.effect(
         ]);
         yield* pictured(grace, "https://avatars.githubusercontent.com/u/1?v=4");
         yield* Database.use((db) =>
-          db
-            .insert(task)
-            .values({ userId: grace, organizationId: acme, name: "Relay retries", document: "" }),
+          db.insert(task).values({
+            userId: grace,
+            organizationId: acme,
+            name: "Relay retries",
+            number: 1,
+            document: "",
+          }),
         );
         yield* leaving(plugin, grace, acme);
         yield* removing(plugin, ada, acme, alan);

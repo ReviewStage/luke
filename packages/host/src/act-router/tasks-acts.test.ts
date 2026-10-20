@@ -125,6 +125,11 @@ function fixture() {
           asked.push(`rename:${params.taskId}:${params.name}`);
           return true;
         }),
+      tasksSetStanding: (params) =>
+        Effect.sync(() => {
+          asked.push(`standing:${params.taskId}`);
+          return true;
+        }),
       tasksPin: (params) =>
         Effect.sync(() => {
           asked.push(`pin:${params.taskId}:${params.pinned}`);

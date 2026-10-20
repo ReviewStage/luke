@@ -87,6 +87,7 @@ import {
   type TaskListAnswer,
   type TaskRenameRequest,
   type TaskSkillsAnswer,
+  type TaskStanding,
   type TaskStartAnswer,
   type TaskTreeAnswer,
   type TaskTreeRequest,
@@ -724,6 +725,20 @@ export class HostedTaskClient {
     request: TaskRenameRequest,
   ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskRenameRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return orNothing(this.#update(taskId, admitted));
+  }
+
+  /**
+   * Sets where one task stands, how much it matters, or both, answering it as
+   * changed with its document, or nothing where the service did not change
+   * it; a change that names neither never travels.
+   */
+  setStanding(
+    taskId: string,
+    standing: TaskStanding,
+  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(standing));
     if (admitted === undefined) return Effect.succeed(undefined);
     return orNothing(this.#update(taskId, admitted));
   }

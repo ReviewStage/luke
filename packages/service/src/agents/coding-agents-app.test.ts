@@ -159,6 +159,7 @@ import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_LIST_ARCHIVED,
+  TASK_STATUS,
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
@@ -1051,7 +1052,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer",
+    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer, and answers the task in progress",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, ask } = yield* openTask();
@@ -1078,6 +1079,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.notEqual(plan.id, task.id);
         assert.equal(plan.repository, RELAY_FULL_NAME);
         assert.equal(plan.document.body, "");
+        assert.equal(
+          plan.status,
+          TASK_STATUS.IN_PROGRESS,
+          "the task its agent started on is under way",
+        );
         assert.equal(agent.planId, plan.id);
         assert.equal(agent.brief, CODING_AGENT_BRIEF.PROMPT);
         assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);

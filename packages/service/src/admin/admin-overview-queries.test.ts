@@ -70,15 +70,20 @@ const openAccount = (name: string, createdAt: string, role: string = USER_ROLE.U
     return id;
   });
 
+/** The numbers the tasks below take, each its own whatever its workspace. */
+let taskNumbers = 0;
+
 const createTask = (userId: string, organizationId: string, createdAt: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
+    taskNumbers += 1;
     yield* db.insert(task).values({
       id,
       userId,
       organizationId,
       name: "Synthetic task",
+      number: taskNumbers,
       document: "",
       createdAt: at(createdAt),
     });

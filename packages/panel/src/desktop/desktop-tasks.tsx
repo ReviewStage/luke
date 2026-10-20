@@ -748,6 +748,14 @@ function PlanDocument({
           onMark: (unread) => reads.mark(task, unread),
         }}
         sectionLinks={sectionLinksOf(task.id, workspace)}
+        standing={{
+          workspaceName: home?.name ?? "",
+          onSet: archived
+            ? undefined
+            : (standing) => {
+                void tasks.onSetTaskStanding(task.id, standing);
+              },
+        }}
       />
     </section>
   );

@@ -125,6 +125,7 @@ import {
   tasksRevisionsParamsSchema,
   tasksSetRepositoryAnswerSchema,
   tasksSetRepositoryParamsSchema,
+  tasksSetStandingParamsSchema,
   tasksSkillsAnswerSchema,
   tasksSkillsParamsSchema,
   tasksStartAnswerSchema,
@@ -200,6 +201,7 @@ export const ACT_KIND = {
   TASKS_REPOSITORIES: "tasks.repositories",
   /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
+  TASKS_SET_STANDING: "tasks.setStanding",
   /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
   TASKS_MOVE: "tasks.move",
   /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
@@ -623,6 +625,11 @@ export const ACT = {
     payload: actSchema(tasksRepositoriesParamsSchema),
     result: wireResult<TasksRepositoriesAnswer>(isReadable(tasksRepositoriesAnswerSchema)),
     refusal: "Could not read your GitHub repositories on this system.",
+  },
+  [ACT_KIND.TASKS_SET_STANDING]: {
+    payload: actSchema(tasksSetStandingParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not change where that task stands on this system.",
   },
   [ACT_KIND.TASKS_SET_REPOSITORY]: {
     payload: actSchema(tasksSetRepositoryParamsSchema),

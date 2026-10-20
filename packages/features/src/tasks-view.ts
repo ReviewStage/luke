@@ -47,9 +47,11 @@ import {
   taskFileRefusalSchema,
   taskFileRequestSchema,
   taskFileTextSchema,
+  taskPrioritySchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
+  taskStatusSchema,
   taskSummarySchema,
   taskTreeFolderSchema,
   taskTreeRequestSchema,
@@ -554,6 +556,20 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 });
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
+
+/** Whether a change of where a task stands names its status, its priority, or both. */
+function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
+  return params.status !== undefined || params.priority !== undefined;
+}
+
+/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+export const tasksSetStandingParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  status: EffectSchema.optionalKey(taskStatusSchema),
+  priority: EffectSchema.optionalKey(taskPrioritySchema),
+}).check(EffectSchema.makeFilter(namesAStanding));
+
+export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
 
 /** Moving a task to another of the account's workspaces: the task, and the workspace it moves to. */
 export const tasksMoveParamsSchema = EffectSchema.Struct({
