@@ -963,7 +963,7 @@ function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountC
     seq,
     workspaceId: "workspace-acme",
     reason: ACCOUNT_CHAT_REASON.DIRECT,
-    from: "agent-2",
+    from: "Invite emails",
     planId: TASK_ID,
     touchedSeq: seq,
     updatedAt: READ_AT,
@@ -990,7 +990,7 @@ it.effect(
           chatEntry(40),
           chatEntry(47, {
             reason: ACCOUNT_CHAT_REASON.MENTION,
-            from: "luke",
+            from: "Luke",
             workspaceId: "workspace-beta",
           }),
         ],
@@ -1000,10 +1000,10 @@ it.effect(
       yield* settled;
       // The mention that came to wait is announced; the message already waiting is not.
       assert.ok(
-        f.said().some((said) => said.title === TASK_NAME && said.body === "@luke mentioned you"),
+        f.said().some((said) => said.title === TASK_NAME && said.body === "Luke mentioned you"),
       );
       assert.equal(f.badges.at(-1), 3);
-      f.posted.find((notice) => notice.body === "@luke mentioned you")?.onClick();
+      f.posted.find((notice) => notice.body === "Luke mentioned you")?.onClick();
       // Its click opens the Chat of the workspace it waits in, whichever the window lists.
       assert.deepEqual(f.chatOpened, ["workspace-beta"]);
 
@@ -1024,7 +1024,7 @@ it.effect(
           messageId: chatEntry(51).messageId,
           workspaceId: "workspace-acme",
           taskId: null,
-          words: "@agent-2 asked you",
+          words: "Invite emails asked you",
           detail: "Chat",
         },
       ]);
@@ -1126,8 +1126,8 @@ it.effect(
       });
       yield* settled;
       assert.deepEqual(f.said(), [
-        { title: TASK_NAME, body: "@agent-2 messaged you" },
-        { title: TASK_NAME, body: "@agent-2 mentioned you" },
+        { title: TASK_NAME, body: "Invite emails messaged you" },
+        { title: TASK_NAME, body: "Invite emails mentioned you" },
       ]);
     }),
 );

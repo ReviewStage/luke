@@ -11,9 +11,10 @@ import {
 } from "@luke/database/models/chat-store";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
-import { ASK_STATUS, CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
+import { ASK_STATUS, CHANNEL_KIND, CHAT_MEMBER_LABEL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { Effect, Option, type Schema } from "effect";
 import type { CursorStamp } from "../../http/held-read.js";
+import { type ChatNames, chatNamesOf } from "./chat-names.js";
 
 /**
  * chat-waiting.ts -- what waits on a person in their workspaces' chat, as the account's held read carries it beside the inbox: the asks open to them, and the message their member was last told of.
@@ -25,8 +26,8 @@ import type { CursorStamp } from "../../http/held-read.js";
  * member with the place of the message that addressed them, one at a time
  * (`chat-notify.ts`'s human door), and a read past it lets it go, so this
  * reads each of the account's members and the message at its stamp. Each
- * carries who posted it by handle and the plan of its channel, and none of
- * its words. The stamps the held read looks at between reads say where
+ * carries who posted it by what they are called (`chat-names.ts`) and the
+ * plan of its channel, and none of its words. The stamps the held read looks at between reads say where
  * each stands and nothing more, so a look reads no message, only the
  * asks' places and each member's two cursors.
  */
@@ -100,19 +101,25 @@ export function chatWaitingStamps(
   });
 }
 
-/** One message as an entry carries it, in the workspace of the rosters given. */
+/** A workspace's roster, and how the account names its members. */
+interface NamedRosters extends Rosters {
+  readonly names: ChatNames;
+}
+
+/** One message as an entry carries it, in the workspace of the rosters given, its author by what they are called. */
 function entryOf(
   message: ChatMessageRow,
   reason: AccountChatEntry["reason"],
   taskId: string | null,
-  rosters: Rosters,
+  rosters: NamedRosters,
 ): AccountChatEntry {
+  const author = rosters.members.get(message.authorMemberId);
   return {
     messageId: message.id,
     seq: message.seq,
     workspaceId: rosters.workspaceId,
     reason,
-    from: rosters.members.get(message.authorMemberId)?.handle ?? "",
+    from: author === undefined ? CHAT_MEMBER_LABEL.FORMER_PERSON : rosters.names.name(author),
     planId: taskId,
     touchedSeq: message.touchedSeq,
     updatedAt: message.touchedAt.getTime(),
@@ -120,7 +127,7 @@ function entryOf(
 }
 
 /** The message a member's notice stands at, as an entry: a direct message where its channel is one, else a mention; none where the account no longer sees it. */
-function noticeEntry(userId: string, rosters: Rosters) {
+function noticeEntry(userId: string, rosters: NamedRosters) {
   return Effect.gen(function* () {
     const { own } = rosters;
     if (own === undefined || !noticed(own)) return [];
@@ -140,7 +147,14 @@ export function chatWaitingEntries(
 ): Effect.Effect<readonly AccountChatEntry[], ChatWaitingFailure, DatabaseServices> {
   return Effect.gen(function* () {
     if (!(yield* chatEnabledFor(userId))) return [];
-    const rosters = yield* rostersOf(userId);
+    const rosters = yield* Effect.forEach(
+      yield* rostersOf(userId),
+      (each): Effect.Effect<NamedRosters, ChatWaitingFailure, DatabaseServices> =>
+        Effect.map(chatNamesOf(userId, each.workspaceId, each.members.values()), (names) => ({
+          ...each,
+          names,
+        })),
+    );
     const byWorkspace = new Map(rosters.map((each) => [each.workspaceId, each]));
     const asks = (yield* waitingOn(userId)).flatMap(({ message, taskId }) => {
       const of = byWorkspace.get(message.organizationId);

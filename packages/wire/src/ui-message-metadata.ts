@@ -138,8 +138,8 @@ const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(cohe
 /**
  * A chat notice is a line the chat steered into a coding agent's turn on a
  * member's behalf: which kind of member posted the message it tells, the
- * message's place in its workspace's chat sequence, and the poster's handle.
- * The words are the notice the chat wrote, never the developer's, so a
+ * message's place in its workspace's chat sequence, and what the poster is
+ * called, their name as a card draws it rather than a link. The words are the notice the chat wrote, never the developer's, so a
  * reader that names the developer's task passes this row by.
  */
 const CHAT_NOTICE_METADATA = EffectSchema.Struct({

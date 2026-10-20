@@ -21,7 +21,7 @@ import {
   ensureTaskChannel,
   findOrMakeDm,
   history,
-  memberNamed,
+  memberOfSubject,
   openAsksOf,
   openTopicChannel,
   peekUnread,
@@ -35,7 +35,7 @@ import {
 } from "@luke/database/models/chat-store";
 import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
-import type { ChatMemberMention } from "@luke/features/chat-mentions";
+import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -69,32 +69,30 @@ import {
   type PostPictures,
   postMentions,
   postPictures,
+  subjectOf,
 } from "./chat-ask.js";
-import {
-  blockWords,
-  type ChatReceipt,
-  type ChatTelling,
-  handlesIn,
-  tellMessage,
-} from "./chat-notify.js";
+import { type ChatNames, chatNamesOf } from "./chat-names.js";
+import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./chat-notify.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * chat.ts -- the chat tools of a coding agent and of its plan's Luke: post a message in the workspace's chat, and read it.
  *
- * A coding agent is a member of its plan's workspace's chat, `@agent-N`,
- * minted the first time it posts or reads (`chat-store.ts`), and talks
- * there with the other agents, the plan's Luke, and the people of the
- * workspace. The plan's Luke, `@luke`, runs the same tools as the agent of
- * this module's words, bound in the planner's own host
- * (`../brain-host/chat.ts`). A post goes to the agent's plan channel, or a
- * planless agent's to its workspace's general channel, unless it names a
- * channel by `#name`, which a name no channel holds opens as a topic
- * channel, a member's DM by `@handle`, or a message to answer in its
- * thread; it is told to the members it addresses through the one door a
- * person's post goes through too (`chat-notify.ts`), and the call answers
- * the receipt, so the agent knows who heard it now, who reads it next,
- * who has left, and which handles named no one. A read answers who is in
+ * A coding agent is a member of its plan's workspace's chat, minted the
+ * first time it posts or reads (`chat-store.ts`), and talks there with the
+ * other agents, the plan's Luke, and the people of the workspace. Every
+ * member is named to it by its mention link, as the rest of the app names a
+ * person, an agent, or a task's Luke (`chat-names.ts`), which is how it
+ * addresses one in its words and names a DM by. The plan's Luke runs the
+ * same tools as the agent of this module's words, bound in the planner's
+ * own host (`../brain-host/chat.ts`). A post goes to the agent's plan
+ * channel, or a planless agent's to its workspace's general channel, unless
+ * it names a channel by `#name`, which a name no channel holds opens as a
+ * topic channel, a member's DM by the member's mention link, or a message
+ * to answer in its thread; it is told to the members it addresses through
+ * the one door a person's post goes through too (`chat-notify.ts`), and the
+ * call answers the receipt, so the agent knows who heard it now, who reads
+ * it next, who has left, and which links named no one. A read answers who is in
  * the chat, the channels the agent sees with what it has not read in each,
  * and then the messages: what it has not read, which the read marks read,
  * or a channel's, a thread's, or what came before a place, which marks
@@ -122,15 +120,17 @@ export const CHAT_TOOLS = {
     description:
       "Post a message in your workspace's chat, where the other coding agents, Luke, and the developer's team talk. " +
       `text is Markdown, at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters. ` +
-      "to is where it goes: #name for a channel, where a name no channel holds opens a topic channel under it, or @handle " +
-      "for a direct message to one member; leave it out to post in your task's own channel, where its agents post by default. " +
+      "to is where it goes: #name for a channel, where a name no channel holds opens a topic channel under it, or a member's " +
+      "mention link as read_chat lists it, [@Name](link), or its link alone, for a direct message to one member; leave it " +
+      "out to post in your task's own channel, where its agents post by default. " +
       `purpose says in one line, at most ${CHAT_BOUNDS.MAX_PURPOSE_CHARS} characters, what a topic channel your to opens is for; ` +
       "it is shown under the channel's name and in every read, and is ignored where the channel already stands. " +
       "replyTo is a message's number to answer it in its thread, in that message's channel, with no to. " +
-      "A direct message, an @handle in the words, and a reply in a thread each tell the members they address, " +
+      "A direct message, a member's mention link in the words, and a reply in a thread each tell the members they address, " +
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
-      "The call answers with the message's number, who was told now, who reads it when they next read, who has left, " +
-      "and any @handle that named no member. Post what another agent or person must know or decide, never a running log " +
+      "An @word that is no link names no one. The call answers with the message's number, who was told now, who reads it " +
+      "when they next read, and who has left, each by their mention link, and the label of any link that named no member. " +
+      "Post what another agent or person must know or decide, never a running log " +
       `of your work: you may post at most ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times a turn. ` +
       "blocks go under the words: link blocks naming a page, such as the GitHub settings page a task is done on; code " +
       "blocks pointing at the exact lines a decision is about, where repo is your repository as owner/name, path is from " +
@@ -155,10 +155,12 @@ export const CHAT_TOOLS = {
   READ: {
     name: CHAT_TOOL.READ,
     description:
-      "Read your workspace's chat: who is in it, the channels you see with how many messages you have not read in each " +
+      "Read your workspace's chat: who is in it, each member by the mention link you name them by, the channels you see " +
+      "with how many messages you have not read in each " +
       "and what a topic channel says it is for, an archived topic last and marked, " +
       "then the messages. With nothing named, the messages are the ones you have not read, oldest first, and reading them " +
-      "marks them read. channel (#name, or @handle for your direct messages with that member) reads its latest messages, " +
+      "marks them read. channel (#name, or a member's mention link for your direct messages with that member) reads its " +
+      "latest messages, " +
       "thread (a message's number) reads that message's whole thread, and before (a message's number) reads back from " +
       "there; these mark nothing read. Each message names its number, where it was said, who said it, and the thread it " +
       "replies in.",
@@ -189,7 +191,8 @@ export const CHAT_TOOLS = {
 export const CHAT_TOOL_REFUSAL = {
   UNREADABLE_POST:
     `Not posted: the post does not read. text is Markdown of at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters; ` +
-    "to is #name for a channel or @handle for a member, lowercase; replyTo is a message's number; blocks are link, code, " +
+    "to is #name for a channel, lowercase, or a member's mention link as read_chat lists it; replyTo is a message's number; " +
+    "blocks are link, code, " +
     "or image, a code block's sha the full 40-character lowercase commit, an image naming its path and alt; an ask " +
     "needs a key, a lowercase slug of letters, digits, dots, dashes, and underscores, and its response, one of choice, " +
     `approval, text, task, form, or none; a choice and a select field offer between two and ${CHAT_BOUNDS.MAX_OPTIONS} options.`,
@@ -201,13 +204,13 @@ export const CHAT_TOOL_REFUSAL = {
   EDIT_NAME_TAKEN: "Not edited: another channel holds that name. Pick another.",
   EDIT_TOO_MANY_TOPICS: `Not edited: the workspace keeps ${CHAT_BOUNDS.MAX_TOPIC_CHANNELS} topic channels open already. Archive one first.`,
   UNREADABLE_READ:
-    "Not read: channel is #name or @handle, lowercase, and thread and before are messages' numbers.",
+    "Not read: channel is #name, lowercase, or a member's mention link as read_chat lists it, and thread and before are messages' numbers.",
   REPLY_AND_TO:
     "Not posted: a reply goes in the thread of the message it answers, in that message's channel; name replyTo or to, not both.",
   TOO_MANY_POSTS: `Not posted: you have posted ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times this turn already. Say the rest in one message next turn.`,
   NO_MEMBER:
-    "Not done: no member of the chat answers to that handle. read_chat lists every member.",
-  TO_SELF: "Not posted: that handle is your own.",
+    "Not done: no member of the chat answers to that link. read_chat lists every member by theirs.",
+  TO_SELF: "Not posted: that link names you.",
   NO_CHANNEL: "Not read: you see no channel under that name. read_chat lists the channels you see.",
   NO_MESSAGE:
     "Not posted: replyTo names no message you can see, or one in a channel you cannot post in.",
@@ -221,9 +224,9 @@ export const CHAT_TOOL_REFUSAL = {
   OFF: "Not done: Chat is not turned on for the account that started you.",
 } as const;
 
-/** A member as a read lists it: its handle, its kind, and whether it has left. */
+/** A member as a read lists it: its mention link, or a plain label where none can be written, its kind, and whether it has left. */
 type MemberLine = {
-  readonly handle: string;
+  readonly mention: string;
   readonly kind: MemberKind;
   readonly left?: true;
 };
@@ -250,7 +253,7 @@ export type MessageLine = {
 /**
  * What a post answers: its place, where it was said or the root of the
  * thread it replies in, and the receipt, every member named by its
- * `@handle`; `untold` where the post stands but telling the members it
+ * mention link; `untold` where the post stands but telling the members it
  * addresses failed, who read it when they next read; and the agent's asks
  * where it asked.
  */
@@ -308,10 +311,13 @@ interface ChatSeat {
   readonly self: ChatMemberRow;
 }
 
-/** Where a post goes, as the store takes it, and how the answer names it. */
+/** Where a post goes, as the store takes it, and how the answer names it: a channel by its `#name`, a thread by its root, or a DM by the other member. */
 interface PostPlace {
   readonly to: ChatPost["to"];
-  readonly named: { readonly in: string } | { readonly thread: number };
+  readonly named:
+    | { readonly in: string }
+    | { readonly thread: number }
+    | { readonly with: ChatMemberRow };
 }
 
 /** What the store's refusal of a topic channel reads as to the model. */
@@ -425,11 +431,6 @@ function inTransaction<A, E, R>(
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(body));
 }
 
-/** A handle as a post or a read names a member. */
-function atHandle(handle: string): string {
-  return `${CHAT_TARGET_SIGIL.MEMBER}${handle}`;
-}
-
 /**
  * Where the agent posts unless it names a place: its plan's channel, made
  * where none stands yet, which names the workspace; or for a planless
@@ -450,7 +451,7 @@ function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow
  * The agent's seat: where it posts by default (`homeOf`), its workspace,
  * and its member. Note that every agent on its plan not yet a member, whose
  * starter turned Chat on, is minted first, in the order they were started, because an agent that has
- * never posted or read must still answer to its handle when another on its
+ * never posted or read must still answer to its link when another on its
  * plan writes to it.
  */
 function seatOf(
@@ -476,15 +477,39 @@ function seatOf(
   });
 }
 
-/** How a post names a channel: `#name`, or for a DM the other member's `@handle`. */
+/** The other member of a DM the agent is one of; nothing for another channel, or a member the roster no longer holds. */
+function otherOf(
+  channel: ChatChannelRow,
+  self: ChatMemberRow,
+  members: ReadonlyMap<string, ChatMemberRow>,
+): ChatMemberRow | undefined {
+  if (channel.kind !== CHANNEL_KIND.DM) return undefined;
+  const other = channel.dmAMemberId === self.id ? channel.dmBMemberId : channel.dmAMemberId;
+  return members.get(other ?? "");
+}
+
+/** How a post names a channel: `#name`, or for a DM the other member's mention link. */
 function channelName(
   channel: ChatChannelRow,
   self: ChatMemberRow,
   members: ReadonlyMap<string, ChatMemberRow>,
+  names: ChatNames,
 ): string {
   if (channel.kind !== CHANNEL_KIND.DM) return `${CHAT_TARGET_SIGIL.CHANNEL}${channel.name ?? ""}`;
-  const other = channel.dmAMemberId === self.id ? channel.dmBMemberId : channel.dmAMemberId;
-  return atHandle(members.get(other ?? "")?.handle ?? "");
+  const other = otherOf(channel, self, members);
+  return other === undefined ? "" : names.mention(other);
+}
+
+/** Whether the member stands for the subject: a person by their account, an agent by its id, a Luke by his task. */
+function standsFor(member: ChatMemberRow, subject: ChatMemberSubject): boolean {
+  switch (subject.kind) {
+    case MEMBER_KIND.HUMAN:
+      return member.kind === MEMBER_KIND.HUMAN && member.userId === subject.userId;
+    case MEMBER_KIND.AGENT:
+      return member.kind === MEMBER_KIND.AGENT && member.agentId === subject.agentId;
+    case MEMBER_KIND.LUKE:
+      return member.kind === MEMBER_KIND.LUKE && member.taskId === subject.taskId;
+  }
 }
 
 /** The order a read lists channels in by kind, after the agent's own plan channel: the general one, other plans', topics, then DMs. */
@@ -535,31 +560,35 @@ function channelForPost(
   });
 }
 
-/** The DM between the agent and the member a handle names, made where it is not yet; refused where no member answers to it or it is the agent's own. */
+/**
+ * The DM between the agent and the member a mention link names, made where
+ * it is not yet, and that member; refused where the link names no member,
+ * or names the agent itself. A task's Luke is minted by the first link that
+ * names him, as a post's words mint him (`memberOfSubject`).
+ */
 function dmWith(
   agent: ChatReader,
   seat: ChatSeat,
-  handle: string,
-): ChatStoreEffect<Result.Result<ChatChannelRow, string>> {
+  target: string,
+): ChatStoreEffect<
+  Result.Result<{ readonly channel: ChatChannelRow; readonly with: ChatMemberRow }, string>
+> {
   return Effect.gen(function* () {
     const { userId } = agent;
-    const named = yield* memberNamed(
-      userId,
-      seat.organizationId,
-      handle,
-      agent.taskId ?? undefined,
-    );
+    const mention = chatTargetMember(target);
+    if (mention === undefined) return Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER);
+    const named = yield* memberOfSubject(userId, seat.organizationId, subjectOf(mention));
     if (Option.isNone(named)) return Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER);
     if (named.value.id === seat.self.id) return Result.fail(CHAT_TOOL_REFUSAL.TO_SELF);
     const dm = yield* findOrMakeDm(userId, seat.organizationId, seat.self.id, named.value.id);
     return Option.match(dm, {
       onNone: () => Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER),
-      onSome: (channel) => Result.succeed(channel),
+      onSome: (channel) => Result.succeed({ channel, with: named.value }),
     });
   });
 }
 
-/** Where a post goes: the thread of the message it replies to, the channel or DM its `to` names, or the agent's plan channel. */
+/** Where a post goes: the thread of the message it replies to, the channel its `#name` names, the DM with the member its mention link names, or the agent's plan channel. */
 function placeOf(
   agent: ChatReader,
   seat: ChatSeat,
@@ -575,12 +604,13 @@ function placeOf(
     const name = `${CHAT_TARGET_SIGIL.CHANNEL}${seat.home.name ?? ""}`;
     return Effect.succeed(Result.succeed({ to: { channelId: seat.home.id }, named: { in: name } }));
   }
-  const name = to.slice(1);
-  const channel = to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)
-    ? channelForPost(agent, seat, name, post.purpose)
-    : dmWith(agent, seat, name);
-  return Effect.map(channel, (found) =>
-    Result.map(found, (row) => ({ to: { channelId: row.id }, named: { in: to } })),
+  if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
+    return Effect.map(channelForPost(agent, seat, to.slice(1), post.purpose), (found) =>
+      Result.map(found, (row) => ({ to: { channelId: row.id }, named: { in: to } })),
+    );
+  }
+  return Effect.map(dmWith(agent, seat, to), (found) =>
+    Result.map(found, (dm) => ({ to: { channelId: dm.channel.id }, named: { with: dm.with } })),
   );
 }
 
@@ -647,6 +677,15 @@ function postedLine(
   return Effect.gen(function* () {
     const { message, unresolved } = posted;
     const telling = { ...agent.telling, userId: agent.userId, organizationId: seat.organizationId };
+    // A DM is named as a read names it, by the other member's mention link, however the post's `to` wrote it.
+    const place =
+      "with" in named
+        ? {
+            in: (yield* chatNamesOf(agent.userId, seat.organizationId, [named.with])).mention(
+              named.with,
+            ),
+          }
+        : named;
     const told = yield* Effect.result(tellMessage(telling, message, unresolved));
     const receipt = Result.getOrElse(told, () => NO_RECEIPT);
     const parent = message.parentId === null ? [] : [message.parentId];
@@ -659,11 +698,11 @@ function postedLine(
     return {
       seq: message.seq,
       // A reply whose root could not be read names no thread, since the place it was asked for may be a reply's.
-      ...(thread[0] !== undefined ? { thread: thread[0] } : message.parentId === null ? named : {}),
-      told: receipt.told.map(atHandle),
-      held: receipt.held.map(atHandle),
-      left: receipt.left.map(atHandle),
-      unresolved: receipt.unresolved.map(atHandle),
+      ...(thread[0] !== undefined ? { thread: thread[0] } : message.parentId === null ? place : {}),
+      told: receipt.told,
+      held: receipt.held,
+      left: receipt.left,
+      unresolved: receipt.unresolved,
       ...(Result.isFailure(told) ? { untold: true as const } : undefined),
     };
   });
@@ -828,8 +867,21 @@ function channelNames(
   channels: readonly ChatChannelRow[],
   self: ChatMemberRow,
   members: ReadonlyMap<string, ChatMemberRow>,
+  chat: ChatNames,
 ): ReadonlyMap<string, string> {
-  return new Map(channels.map((channel) => [channel.id, channelName(channel, self, members)]));
+  return new Map(
+    channels.map((channel) => [channel.id, channelName(channel, self, members, chat)]),
+  );
+}
+
+/** The member by its mention link, as a read names it; nothing for one the roster no longer holds. */
+function mentionOf(
+  members: ReadonlyMap<string, ChatMemberRow>,
+  chat: ChatNames,
+  memberId: string,
+): string {
+  const member = members.get(memberId);
+  return member === undefined ? "" : chat.mention(member);
 }
 
 /** The agent's asks as it reads them, named where each was asked and who answered it. */
@@ -837,9 +889,10 @@ function askLines(
   rows: readonly ChatMessageRow[],
   names: ReadonlyMap<string, string>,
   members: ReadonlyMap<string, ChatMemberRow>,
+  chat: ChatNames,
 ): readonly AskLine[] {
-  const handleOf = (memberId: string) => atHandle(members.get(memberId)?.handle ?? "");
-  return rows.flatMap((row) => askLineOf(row, names.get(row.channelId) ?? "", handleOf) ?? []);
+  const nameOf = (memberId: string) => mentionOf(members, chat, memberId);
+  return rows.flatMap((row) => askLineOf(row, names.get(row.channelId) ?? "", nameOf) ?? []);
 }
 
 /** The asks of the agent's member, every open one, then the latest settled, as `askLines` reads them. */
@@ -850,19 +903,34 @@ function asksOf(agent: ChatReader, seat: ChatSeat): ChatStoreEffect<readonly Ask
     const scope = { authorMemberId: self.id };
     const rows = yield* openAsksOf(userId, organizationId, scope, SETTLED_ASKS_SHOWN);
     const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
-    const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
-    return askLines(rows, names, members);
+    const chat = yield* chatNamesOf(userId, organizationId, members.values());
+    const names = channelNames(yield* channelsOf(userId, organizationId), self, members, chat);
+    return askLines(rows, names, members, chat);
   });
 }
 
-/** The channel a read's `channel` names among the ones the agent sees: by `#name`, or the DM with the member an `@handle` names. */
+/**
+ * The channel a read's `channel` names among the ones the agent sees: by
+ * `#name`, or the DM with the member a mention link names, found by what
+ * the member stands for rather than by how its link is spelled.
+ */
 function channelForRead(
   target: string,
   seen: readonly ChatChannelRow[],
   self: ChatMemberRow,
   members: ReadonlyMap<string, ChatMemberRow>,
 ): ChatChannelRow | undefined {
-  return seen.find((channel) => channelName(channel, self, members) === target);
+  if (target.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
+    const name = target.slice(CHAT_TARGET_SIGIL.CHANNEL.length);
+    return seen.find((channel) => channel.kind !== CHANNEL_KIND.DM && channel.name === name);
+  }
+  const mention = chatTargetMember(target);
+  if (mention === undefined) return undefined;
+  const subject = subjectOf(mention);
+  return seen.find((channel) => {
+    const other = otherOf(channel, self, members);
+    return other !== undefined && standsFor(other, subject);
+  });
 }
 
 /** The channels as a read lists them: the agent's plan channel first, then by kind as `CHANNEL_ORDER` has it, and by name within a kind. */
@@ -903,25 +971,24 @@ function messagesOf(
   );
 }
 
-/** What a read names messages by: each channel's name, each member, and each thread root's place, by id. */
+/** What a read names messages by: each channel's name, each member, each thread root's place, by id, and how members are named. */
 interface ReadNames {
   readonly names: ReadonlyMap<string, string>;
   readonly members: ReadonlyMap<string, ChatMemberRow>;
   readonly roots: ReadonlyMap<string, number>;
-  /** The handle of the member a mention link names, which a person's chip is read as. */
-  readonly handleOf: (mention: ChatMemberMention) => string | undefined;
+  readonly chat: ChatNames;
 }
 
-/** A message as the agent reads it: its words, every block read as words, where it was said, and by whom. */
+/** A message as the agent reads it: its words as written, every block read as words, where it was said, and by whom, by their mention link. */
 function lineOf(message: ChatMessageRow, named: ReadNames): MessageLine {
   const thread = message.parentId === null ? undefined : named.roots.get(message.parentId);
   return {
     seq: message.seq,
     in: named.names.get(message.channelId) ?? "",
-    from: atHandle(named.members.get(message.authorMemberId)?.handle ?? ""),
+    from: mentionOf(named.members, named.chat, message.authorMemberId),
     ...(thread === undefined ? undefined : { thread }),
     text: message.blocks
-      .map((block) => blockWords(block, named.handleOf))
+      .map((block) => blockWords(block))
       .filter((part) => part !== "")
       .join("\n\n"),
   };
@@ -989,7 +1056,8 @@ export function readAsAgent(
         seat.organizationId,
         messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
       );
-      const names = channelNames(channels, self, byId);
+      const chat = yield* chatNamesOf(userId, seat.organizationId, members);
+      const names = channelNames(channels, self, byId, chat);
       const asks = yield* openAsksOf(
         userId,
         seat.organizationId,
@@ -998,9 +1066,9 @@ export function readAsAgent(
       );
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        you: atHandle(self.handle),
+        you: chat.mention(self),
         members: members.map((row) => ({
-          handle: atHandle(row.handle),
+          mention: chat.mention(row),
           kind: row.kind,
           ...(row.leftAt === null ? undefined : { left: true as const }),
         })),
@@ -1017,11 +1085,9 @@ export function readAsAgent(
           ...(channel.purpose === null ? undefined : { purpose: channel.purpose }),
           ...(channel.archivedAt === null ? undefined : { archived: true as const }),
         })),
-        messages: messages.map((message) =>
-          lineOf(message, { names, members: byId, roots, handleOf: handlesIn(byId.values()) }),
-        ),
+        messages: messages.map((message) => lineOf(message, { names, members: byId, roots, chat })),
         ...(more ? { more: true as const } : undefined),
-        asks: askLines(asks, names, byId),
+        asks: askLines(asks, names, byId, chat),
       } satisfies ChatToolResult;
     }),
   ).pipe(
@@ -1056,13 +1122,14 @@ export function peekAsAgent(
     if (Option.isNone(unread)) return Option.none();
     const { messages, more, through } = unread.value;
     const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
-    const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+    const chat = yield* chatNamesOf(userId, organizationId, members.values());
+    const names = channelNames(yield* channelsOf(userId, organizationId), self, members, chat);
     const roots = yield* seqsOf(
       userId,
       organizationId,
       messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
     );
-    const named = { names, members, roots, handleOf: handlesIn(members.values()) };
+    const named = { names, members, roots, chat };
     const lines = messages.map((message) => lineOf(message, named));
     return Option.some({ messages: lines, more, through });
   });
@@ -1125,16 +1192,14 @@ export function chatDigest(
       const messages = unread.filter((message) => message.touchedSeq !== noticed);
       if (messages.length === 0 && !more) return undefined;
       const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
-      const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+      const chat = yield* chatNamesOf(userId, organizationId, members.values());
+      const names = channelNames(yield* channelsOf(userId, organizationId), self, members, chat);
       const parents = messages.flatMap((message) =>
         message.parentId === null ? [] : [message.parentId],
       );
       const roots = yield* seqsOf(userId, organizationId, parents);
       const lines = messages.map((message) =>
-        digestLine(
-          message,
-          lineOf(message, { names, members, roots, handleOf: handlesIn(members.values()) }),
-        ),
+        digestLine(message, lineOf(message, { names, members, roots, chat })),
       );
       const rest = more ? [`More waits: ${CHAT_TOOLS.READ.name} reads it.`] : [];
       return [CHAT_DIGEST_HEADING, ...lines, ...rest].join("\n");

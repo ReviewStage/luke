@@ -153,7 +153,7 @@ type CopiedCall = Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>;
 
 interface CopiedTurn {
   readonly speaker: Speaker;
-  /** The handle of the member a chat notice tells of a message from, which its heading names; none on any other turn. */
+  /** The name of the member a chat notice tells of a message from, which its heading names; none on any other turn. */
   readonly from?: string;
   readonly blocks: readonly CopiedBlock[];
 }
@@ -165,7 +165,7 @@ function handedIn(turn: CopiedTurn): boolean {
 
 /** A turn's heading: who said it, a chat notice's under its sender. */
 function headingOf(turn: CopiedTurn): string {
-  return turn.from === undefined ? `## ${turn.speaker}` : `## ${turn.speaker} @${turn.from}`;
+  return turn.from === undefined ? `## ${turn.speaker}` : `## ${turn.speaker} ${turn.from}`;
 }
 
 /** What names the source agent in a copy, which knows it by no tab. */

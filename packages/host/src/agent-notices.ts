@@ -449,7 +449,7 @@ function chatNoticeText(
 ): Pick<AgentNotice, "title" | "body"> {
   return {
     title: taskName ?? CHAT_NOTICE_TITLE,
-    body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
+    body: `${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
   };
 }
 

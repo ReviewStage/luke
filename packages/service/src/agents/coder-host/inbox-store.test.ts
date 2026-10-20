@@ -283,7 +283,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
             authorMemberId: agentMember.id,
             to: { channelId: channel.id },
             blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which expiry?" }],
-            mentions: [],
             clientKey: randomUUID(),
             key: "invite-expiry",
             ask: {
@@ -303,7 +302,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
             authorMemberId: agentMember.id,
             to: { channelId: dm.id },
             blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
-            mentions: [],
             clientKey: randomUUID(),
           }),
         );
@@ -340,8 +338,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
           [
-            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, agentMember.handle],
-            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, agentMember.handle],
+            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, "anthropic/claude-opus-5.5"],
+            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, "anthropic/claude-opus-5.5"],
           ],
         );
         assert.deepEqual(
