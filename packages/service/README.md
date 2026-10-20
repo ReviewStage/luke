@@ -2229,35 +2229,29 @@ and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
-`check.sh` needs no service; the `postgres` CI job runs the same migrations,
-then `test:store`, against a Postgres container. Every one of those is
-Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
-embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
-any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
-dialect an opening of the test database is a database of that opening's own:
-a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
-names, made with `create database ... template ...` on the cluster's
-`postgres` maintenance database and dropped when the file closes it
-(`@luke/database/testing`). Nothing writes to the named
-database itself after `db:migrate`, so a statement a test forgets to scope by
-account or conversation reaches its own file's rows and no other file's.
-Which files `test:store` runs is read from the files, not kept
-in a list: `apps/web/scripts/store-tests.ts` selects every `apps/web/tests/**/*.test.ts` whose
-source imports the one door, `@luke/database/testing` (whose
-`openHostedStoreTestDatabase()` is the hosted store's and `getTestDB()` the
-bare one), because
-`LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
-door cannot meet a Postgres whatever it does. A new store test is therefore
-in the set the moment it imports its harness, and `package.json` is not
-edited. The runner then reads vitest's JSON report back and fails, naming
-each file, when the files vitest ran are not exactly the files selected. A reproduction against a real
-Postgres needs an 18 of your own whose role may `create database`, migrated
-by `db:migrate` alone, because that is the runner which records what it
-applied and the tests copy what it recorded, so run it first:
+`check.sh` and CI's test jobs need no service. The `postgres` CI job
+("Postgres migrations and store") proves only what PGlite cannot: it runs
+`db:migrate` against a fresh Postgres container and then
+`apps/web/tests/storage-schema.test.ts` against what that migrated, so a
+statement PGlite accepts and Postgres refuses, or migrations that do not end
+at the declared schema, fail there. Every one of those is Postgres 18, the
+major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
+18.3, and the CI image is `postgres:18`, so a local `check.sh` is a
+reproduction on 18 already. On either dialect an opening of the test
+database is a database of that opening's own: a fresh PGlite, or a clone of
+the database `LUKE_STORE_TEST_DATABASE_URL` names, made with
+`create database ... template ...` on the cluster's `postgres` maintenance
+database and dropped when the file closes it (`@luke/database/testing`, the
+one door that reads the variable). Nothing writes to the named database
+itself after `db:migrate`, so a statement a test forgets to scope by account
+or conversation reaches its own file's rows and no other file's. To run a
+store test against a real Postgres by hand, use an 18 of your own whose role
+may `create database`, migrated by `db:migrate` alone, because that is the
+runner which records what it applied and the tests copy what it recorded:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
-LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
+LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
 ## Hosted voice service
