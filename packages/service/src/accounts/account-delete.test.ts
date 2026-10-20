@@ -26,7 +26,7 @@ import { noNetwork } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Stream } from "effect";
 import { SqlClient } from "effect/sql";
-import { EVE_RESET_OUTCOME, type EveSessions } from "../agents/brain-host/eve-sessions.js";
+import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/brain-host/eve-sessions.js";
 import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -85,7 +85,7 @@ function deploymentFor(account: string): string {
 /** eve as a deletion reaches it: every retire written down with who asked it, and nothing else a deletion asks. */
 function retiringEve() {
   const retired: (readonly [string, string])[] = [];
-  const asked = (caller: string): EveSessions => ({
+  const asked = (caller: string): AgentSessions => ({
     open: () => Effect.die(new Error("a deletion opens no session")),
     send: () => Effect.die(new Error("a deletion sends no message")),
     cancel: () => Effect.die(new Error("an account's deletion cancels no turn")),

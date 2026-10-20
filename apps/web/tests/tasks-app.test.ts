@@ -69,7 +69,10 @@ import {
   taskTranscriptAnswerSchema,
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
-import { EVE_RESET_OUTCOME, type EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
+import {
+  type AgentSessions,
+  EVE_RESET_OUTCOME,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { messagesProcedures } from "@luke/service/agents/messages-procedures";
 import {
   requestUserId,
@@ -210,7 +213,7 @@ function deploymentFor(account: string): string {
  */
 function retiringEve() {
   const retired: (readonly [string, string])[] = [];
-  const asked = (caller: string): EveSessions => ({
+  const asked = (caller: string): AgentSessions => ({
     open: () => Effect.die(new Error("a task's delete opens no session")),
     send: () => Effect.die(new Error("a task's delete sends no message")),
     cancel: () => Effect.die(new Error("a task with no agent has no turn to cancel")),
