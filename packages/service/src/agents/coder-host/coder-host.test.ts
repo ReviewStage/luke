@@ -114,6 +114,9 @@ import { CURSOR_START, transcriptPast } from "./transcript.js";
 
 const NOW = 1_800_000_000_000;
 
+/** When a turn starts on the relay's clock where a test reads that against the test's own clock, which starts at nothing. */
+const TURN_STARTS_AT = 10 * 60_000;
+
 /** A sandbox door no call of notes alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
@@ -142,8 +145,8 @@ const KEYS: ProviderKeys = {
   openAi: { key: Redacted.make("sk-openai-fixture") },
 };
 
-/** The host over the test's own store, with the writer composed on the test's client, and the title model handed in where a test has one. */
-const hostOverStore = (titleModel?: LanguageModel) =>
+/** The host over the test's own store, with the writer composed on the test's client, the title model handed in where a test has one, and its clock, the fixed instant where a test names none. */
+const hostOverStore = (titleModel?: LanguageModel, now: () => number = () => NOW) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const seams: CoderHostSeams = {
@@ -160,7 +163,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       titleModel: () => titleModel,
       research: () => ({ openAi: undefined, spend: Effect.void }),
       scriptedModel: () => false,
-      now: () => NOW,
+      now,
     };
     return coderHost(seams);
   });
@@ -1668,19 +1671,24 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
     "a typed turn is handed the task as it stands only once someone other than the agent saved the plan after the agent's previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore();
+        // The relay's clock, which stamps when a turn started, stands ten minutes into the test's.
+        const host = yield* hostOverStore(undefined, () => TURN_STARTS_AT);
         const { userId, agent, auth, sessionId, admitted } = yield* openAgent(host);
         assert.ok(agent.taskId !== null);
         const binding = { userId, taskId: agent.taskId };
         const typedAt = (eveTurnId: string) =>
           host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, hostTurnId(sessionId, eveTurnId));
-        const lukeNotes = (at: number, notes: Parameters<typeof saveNotes>[1]) =>
-          Effect.andThen(TestClock.setTime(at), saveNotes(binding, notes));
+        const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
+          Effect.map(
+            host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox),
+            (answer) => answer.status,
+          );
 
         // Luke's notes before the agent's first turn: that turn opens on the plan as its first message.
-        yield* lukeNotes(NOW - 120_000, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
         assert.equal(yield* typedAt("turn_0"), undefined);
-        // The first turn runs, started at the relay's clock.
+        // The first turn runs, started at the relay's clock, after Luke's notes.
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const state = memoryRelayState();
         for (const event of codingTurn("turn_0", "turn.completed")) {
@@ -1690,29 +1698,24 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(yield* typedAt("turn_1"), undefined);
 
         // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
-        yield* TestClock.setTime(NOW + 60_000);
-        const own = yield* host.editPlan(
-          admitted,
-          unparsedWire({ notes: [added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")] }),
-          0,
-          noSandbox,
+        yield* TestClock.adjust("10 minutes");
+        assert.equal(
+          yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")]),
+          ACTION_RESULT_STATUS.ACCEPTED,
         );
-        assert.equal(own.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.equal(yield* typedAt("turn_1"), undefined);
 
         // Luke's notes while that turn ran, and the agent's after them in the same section, which
         // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
-        yield* lukeNotes(NOW + 120_000, [
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [
           added(PLAN_HEADING.APPROACH, "- A withdrawn invite never grants access."),
         ]);
-        yield* TestClock.setTime(NOW + 180_000);
-        const over = yield* host.editPlan(
-          admitted,
-          unparsedWire({ notes: [added(PLAN_HEADING.APPROACH, "- Resending renews the link.")] }),
-          0,
-          noSandbox,
+        yield* TestClock.adjust("1 minute");
+        assert.equal(
+          yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Resending renews the link.")]),
+          ACTION_RESULT_STATUS.ACCEPTED,
         );
-        assert.equal(over.status, ACTION_RESULT_STATUS.ACCEPTED);
         const handed = (yield* typedAt("turn_1")) ?? "";
         assert.ok(handed.includes("saved since your last turn by someone other than you"), handed);
         assert.ok(handed.includes("A withdrawn invite never grants access."), handed);
