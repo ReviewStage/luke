@@ -77,6 +77,7 @@ const DECLARED_TABLES = [
   "jwks",
   "mac_command",
   "mac_command_listener",
+  "mac_command_listener_kind",
   "member",
   "messages",
   "oauth_access_token",

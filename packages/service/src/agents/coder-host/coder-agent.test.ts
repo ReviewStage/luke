@@ -334,7 +334,7 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
-test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run", () => {
+test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
@@ -344,6 +344,13 @@ test("the session and the post tool send whatever is ready for the developer to 
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
+      // An agent another coding agent started sends that agent what it would post instead.
+      assert.ok(
+        inbox?.includes(
+          "Where another coding agent started you, as your first message says, the developer's inbox is that agent's to keep",
+        ),
+        brief,
+      );
     }
   }
   assert.ok(INBOX_TOOLS.POST.description.includes(READY));
@@ -510,6 +517,8 @@ test("with Chat off the instructions are main's own, byte for byte, and with it 
     assert.equal(off.taskless, before.taskless, brief);
     const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
     assert.ok(on.includes("## Chat with other agents"), brief);
+    // Chat's word on the inbox keeps the exception for an agent another coding agent started.
+    assert.ok(on.includes("or, where another coding agent started you, to that agent"), brief);
     const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
     const end = section.indexOf("\n\n## ", 2);
     assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);
