@@ -1920,8 +1920,7 @@
 /* Files changed's list of diffs (diff-list.tsx): every file under a header
    of its own, which Pierre keeps at the top while the file's lines scroll
    under it, so it is drawn opaque, on the code's ground, at the height the
-   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). The file
-   stage-cli's keys stand on is ringed as a focused control is. */
+   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). */
 .diff-list-head {
   background: var(--luke-color-surface);
   color: var(--luke-color-text);
@@ -1945,9 +1944,14 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.diff-list-head[data-standing] {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: var(--luke-focus-ring-inset);
+/* The file stage-cli's keys stand on is marked as a selected card is: the
+   card's own edge, Pierre's file element the header stands in, drawn in the
+   selected edge's ink, around the folded header or the whole open file. It
+   says which file the keys act on, not where the focus is: the keyboard's
+   focus rings the control in the header that holds it, as every control is
+   ringed (base.css), so the card never wears a second border or a ring. */
+.diff-list diffs-container:has(.diff-list-head[data-standing]) {
+  border-color: var(--luke-color-border-selected);
 }
 
 .diff-list-fold {
