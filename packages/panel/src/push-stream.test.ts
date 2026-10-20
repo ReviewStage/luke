@@ -20,7 +20,8 @@ import { stateWith } from "./testing/app-state.js";
  * What main pushes a window, through the window's act port as the desktop
  * opens it: each push reaches the listeners on its own method with the
  * payload main pushed, in the order main pushed them; a document pushed the
- * moment the stream opens is heard; a payload its guard refuses is dropped;
+ * moment the stream opens is heard, and a burst of documents only as its
+ * newest; a payload its guard refuses is dropped;
  * and a window that goes, or reloads, leaves no listener behind in main.
  */
 
@@ -124,19 +125,22 @@ it("the talk key's release is never heard before its press, even behind a burst 
   assert.equal(feeds.heard.length, 200);
 });
 
-it("a document pushed the moment the stream opens is heard, and every one after it in order", async () => {
+it("a document pushed the moment the stream opens is heard, and a burst of them is heard once, as the newest", async () => {
   const main = mainProcess();
   const panel = main.page(PANEL);
   const versions = hearing<number>();
+  const shown = hearing<unknown>();
   panel.listeners.onAppState((snapshot) => versions.hear(snapshot.version));
+  panel.listeners.onShowTask(shown.hear);
   await panel.opened;
 
   for (const version of [1, 2, 3]) {
     main.pushes.push(WINDOW, PUSH.APP_STATE, stateWith({}, { version }));
   }
-  await versions.until(3);
+  main.pushes.push(WINDOW, PUSH.SHOW_TASK, { taskId: "task-1" });
+  await shown.until(1);
 
-  assert.deepEqual(versions.heard, [1, 2, 3]);
+  assert.deepEqual(versions.heard, [3]);
 });
 
 it("a payload its push's guard refuses is dropped, and the pushes after it still arrive", async () => {

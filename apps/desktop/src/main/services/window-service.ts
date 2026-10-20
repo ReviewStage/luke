@@ -15,7 +15,7 @@ import type {
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
-import { type AppStateStore, voiceWindowGone, voiceWindowState } from "@luke/host/client";
+import { type AppStateStore, voiceWindowGone, WindowAppStates } from "@luke/host/client";
 import { PUSH, type PushName, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
@@ -42,7 +42,7 @@ import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
 import { VoiceWindow } from "../window/voice-window";
 import { windowPushes } from "../window/window-pushes";
-import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
+import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
 
@@ -226,14 +226,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const withPanelWindows = Effect.provideService(PanelWindows, {
     standing: () => panels.windows(),
   });
+  /** The stored zoom, applied to the panels only when it moved. */
+  const steerZoom = zoomSteer();
   const applyAppearance = (): Effect.Effect<void> =>
     Effect.suspend(() => {
       const stored = state.snapshot().settings?.stored;
       return Effect.andThen(
         applyThemePreference(stored?.theme).pipe(withNativeTheme),
-        applyZoomPreference(stored?.zoom).pipe(withPanelWindows),
+        steerZoom(stored?.zoom).pipe(withPanelWindows),
       );
     });
+  /** The document as each window was last handed it, so one is handed it again only when something it draws moved. */
+  const windowStates = new WindowAppStates<WebContents>();
 
   function raiseVoiceWindow(): void {
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
@@ -244,8 +248,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     sender: WebContents,
     push: Name,
     payload: PushPayload<Name>,
-  ): void {
-    windowPushes.push(sender, push, payload);
+  ): boolean {
+    return windowPushes.push(sender, push, payload);
   }
 
   function broadcast<Name extends PushName>(
@@ -266,15 +270,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function publishAppState(): void {
     const held = state.snapshot();
-    const send = (sender: WebContents, shown: typeof held) => {
-      const snapshot: AppStateSnapshot = { ...shown, window: windowFactsFor(sender) };
-      sendTo(sender, PUSH.APP_STATE, snapshot);
+    const send = (sender: WebContents, role: { voice: boolean; call: boolean }) => {
+      const snapshot: AppStateSnapshot = { ...held, window: windowFactsFor(sender) };
+      windowStates.offer(sender, role, snapshot, (shown) => sendTo(sender, PUSH.APP_STATE, shown));
     };
-    for (const sender of panels.senders()) send(sender, held);
+    for (const sender of panels.senders()) send(sender, { voice: false, call: false });
     const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
+    if (voice && !voice.isDestroyed()) send(voice.webContents, { voice: true, call: false });
     const call = callWindow.current();
-    if (call) send(call.webContents, voiceWindowState(held));
+    if (call) send(call.webContents, { voice: false, call: true });
     // The call window follows the document it draws, so it stands, goes, and
     // grows for the avatar on the same version every window is told.
     callPresence.voiceChanged(held.voice);
