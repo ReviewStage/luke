@@ -170,6 +170,8 @@ import {
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskHistoryFollow,
+  type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
   type TasksArchiveParams,
@@ -256,6 +258,7 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
@@ -509,6 +512,12 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** A followed plan's pages as they now stand, each time they move while followed. */
   onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+  /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
+  tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+  /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
+  tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+  /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
+  onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
@@ -1503,6 +1512,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(taskPagesFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),
+    tasksHistoryUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, scope)),
+    onTaskHistoryChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(taskHistoryFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

@@ -654,6 +654,9 @@ export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
 export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
 
+/** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
+export const UNKNOWN_AGENT_LABEL = "a coding agent";
+
 /** How a plan's history is read: the newest revisions first, a page at a time. */
 export const PLAN_HISTORY_BOUNDS = {
   /** The most revisions one read of the history carries. */

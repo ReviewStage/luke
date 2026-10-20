@@ -17,6 +17,7 @@ import {
   type TaskSummary,
   taskPrioritySchema,
   taskStatusSchema,
+  UNKNOWN_AGENT_LABEL,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
@@ -38,7 +39,7 @@ import { readPlanTemplate } from "./account-store.js";
 import { followTaskArchive, moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
-import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
+import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
 import {
   linkTaskIssue,

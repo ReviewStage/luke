@@ -39,6 +39,7 @@ import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   type TaskBoardLiveAnswer,
+  type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
@@ -487,6 +488,28 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's newest page of plan history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
+  historyLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskHistoryLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskHistory,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
       LIVE_REFUSALS,
     );
   }

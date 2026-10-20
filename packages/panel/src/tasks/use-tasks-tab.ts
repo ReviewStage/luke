@@ -35,6 +35,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
+  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -2500,6 +2501,24 @@ export function useTasksTab(input: {
           taskId,
           ...(before === undefined ? undefined : { before }),
         }),
+      followNewest: (taskId, take) => {
+        let live = true;
+        let stream: AsyncIteratorObject<TasksRevisionsAnswer> | undefined;
+        act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId })
+          .then(async (opened) => {
+            stream = opened;
+            if (!live) {
+              await opened.return?.(undefined);
+              return;
+            }
+            for await (const answer of opened) if (live) take(answer);
+          })
+          .catch(() => undefined);
+        return () => {
+          live = false;
+          void stream?.return?.(undefined);
+        };
+      },
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),

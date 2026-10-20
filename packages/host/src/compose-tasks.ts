@@ -27,7 +27,9 @@ import {
 import {
   LIVE_SIGNED_OUT,
   pagesOfLiveRows,
+  revisionsOfLiveRows,
   type TaskConversationLiveAnswer,
+  taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
@@ -77,6 +79,7 @@ import {
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TaskWorkTurn,
+  taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
@@ -422,6 +425,7 @@ export type TasksClient = Pick<
   | "boardLive"
   | "recordLive"
   | "pagesLive"
+  | "historyLive"
   | "saveBoard"
   | "readTranscript"
   | "readWork"
@@ -710,6 +714,39 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
+
+  /** The newest page of each task's history a window's version history follows, by the task. */
+  const historyFollows = yield* FiberMap.make<string>();
+  const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
+
+  /** Follows `taskId`'s newest page of history live until let go, each change emitted as `TASKS_HISTORY_CHANGED`. */
+  function followHistory(taskId: string) {
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    return pushLive({
+      seal: (poll, after) =>
+        gate() && userId !== undefined
+          ? Effect.map(served(client.historyLive(taskId, userId, poll, after)), (sealed) =>
+              sealed.ok
+                ? sealed.answer
+                : {
+                    failure: sealed.failure,
+                    gone:
+                      sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                      sealed.failure === LIVE_SIGNED_OUT.failure,
+                  },
+            )
+          : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
+      decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: kernel.now,
+      publish: (page) =>
+        kernel.emit(
+          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+          carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
+        ),
+    });
+  }
 
   /** The pages of each task a window's Inbox follows, by the task. */
   const pagesFollows = yield* FiberMap.make<string>();
@@ -2014,6 +2051,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
+    // A plan's newest page of history is followed for its version history
+    // while it stands, and told only as `TASKS_HISTORY_CHANGED`; a follow of
+    // what is already followed does nothing.
+    [GATEWAY_METHOD.TASKS_HISTORY_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskHistoryFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("following a task's history names the task");
+        }
+        if (!gate()) return {};
+        const { taskId } = read.success;
+        yield* FiberMap.run(historyFollows, taskId, followHistory(taskId), { onlyIfMissing: true });
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(taskHistoryFollowSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("letting a task's history go names the task");
+        }
+        yield* FiberMap.remove(historyFollows, read.success.taskId);
+        return {};
+      }),
     // A plan's pages are followed for a window's Inbox while it draws an item
     // of that plan, and told only as `TASKS_PAGES_CHANGED`; a follow of what
     // is already followed does nothing.
@@ -2767,6 +2827,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(conversationRead);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(pagesFollows);
+      yield* FiberMap.clear(historyFollows);
       yield* FiberMap.clear(followedWorkers);
       // A follow outlives its last reader a while, sealed for the account it opened under, so a sign-out lets every one go.
       for (const key of yield* RcMap.keys(workerTranscripts)) {

@@ -13,6 +13,8 @@ import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
+  type TaskHistoryFollow,
+  type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
   type TasksArchiveParams,
@@ -112,6 +114,10 @@ export interface TasksProceduresDependencies {
     tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
     tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
     onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+    /** A plan's newest page of history followed at the host, its changes heard through `onTaskHistoryChanged`. */
+    tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+    tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+    onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
     tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
@@ -163,6 +169,8 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages. */
   const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
+  /** How many streams stand open of each plan's history. */
+  const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
   return {
     [TASKS_ACT_KIND.TASKS_REFRESH]: actPort[TASKS_ACT_KIND.TASKS_REFRESH].effect(function* ({
       context,
@@ -492,6 +500,24 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
               changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
           },
           openPages,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = followedStream(
+          {
+            keyOf: (scope: TaskHistoryFollow) => scope.taskId,
+            follow: host.tasksHistoryFollow,
+            unfollow: host.tasksHistoryUnfollow,
+            onChanged: host.onTaskHistoryChanged,
+            valueOf: (changed: TaskHistoryFollowed, scope: TaskHistoryFollow) =>
+              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+          },
+          openHistories,
           input,
         );
         return streamed(yield* Stream.toAsyncIterableEffect(pages));
