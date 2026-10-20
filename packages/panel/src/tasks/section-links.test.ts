@@ -8,6 +8,7 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
+import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -68,6 +69,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** The task's page drawn with its sections' links, the mentions it was asked to open kept. */
@@ -559,4 +561,30 @@ test("on a plan that cannot be edited, the title's ⋯ is a Tab stop offering it
 
   assert.equal(more.tabIndex, 0);
   assert.deepEqual(menuLabels(), ["Copy link"]);
+});
+
+test("on a finger's device a tap on a mention in an editable plan opens what it names, however often, and opens no editor", () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const opened: Mention[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const sectionLinks: SectionLinks = {
+    workspace: WORKSPACE,
+    onOpen: (mention) => opened.push(mention),
+    reveal: undefined,
+  };
+  const onEdit = (): Promise<TasksEditAnswer> => Promise.resolve({ saved: true });
+  act(() =>
+    root.render(createElement(PlanBody, { task: TASK, live: false, sectionLinks, onEdit })),
+  );
+
+  const chip = chipNamed(container, "Rollout");
+  act(() => chip.click());
+  act(() => chip.click());
+
+  assert.equal(opened.length, 2, "each tap opened the section it names");
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });

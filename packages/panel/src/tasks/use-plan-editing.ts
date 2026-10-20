@@ -20,6 +20,7 @@ import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
+import { coarsePointerNow } from "../coarse-pointer.js";
 import type { PlanEditorPlacement } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 
@@ -32,10 +33,19 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * editor with it, and words not yet saved go to the task they were typed in.
  * Unsaved words live in this window's memory alone and are never written to
  * disk. The editor itself is `plan-document-editor.tsx`.
+ *
+ * On a device worked by a finger a tap reads, as Notion's page does: a
+ * focused editor raises the keyboard, so the first tap on a block opens
+ * nothing, and a second tap on the same block within `SECOND_TAP_WINDOW`
+ * opens the text there (`tapped`). A scroll or a long press is no tap, so it
+ * opens nothing either. A mouse opens it at the first click, as before.
  */
 
 /** How long the developer pauses before what they typed is saved. */
 const SAVE_PAUSE = Duration.seconds(1);
+
+/** How long after a finger's first tap on a block a second tap on it opens it to edit, in the milliseconds an event's `timeStamp` counts. */
+export const SECOND_TAP_WINDOW = 1500;
 
 /** The pause before a save, as an atom whose work is the wait; setting it again starts the wait over. */
 const savePauseAtom = rendererRuntime.fn((stamp: number) =>
@@ -57,12 +67,26 @@ export const EDITOR_PLACE = {
 /** A block of the document the keyboard selects: a section, by its unit's id, or the title. */
 export type EditorHost = number | typeof EDITOR_PLACE.TITLE;
 
+/** The empty room around the text, which a finger taps twice to open the text at, as it does a block. */
+export const TAP_ROOM = "room";
+
+/** Where a tap lands that may open the text: a block, or the room around it. */
+type TapPlace = EditorHost | typeof TAP_ROOM;
+
 /** The document's one editor, the block the keyboard stands on, and their doors. */
 export interface PlanEditing {
   readonly editor: DocumentEditor | undefined;
   /** Where the editor's caret went as it opened; the start of the text without one. */
   readonly placement: PlanEditorPlacement | undefined;
   readonly open: (placement?: PlanEditorPlacement) => void;
+  /**
+   * Whether a tap or click on `place`, at the event's `timeStamp` `at`, opens
+   * the text: a mouse's always, and a finger's only as the second on the same
+   * place within `SECOND_TAP_WINDOW`, the first one arming it.
+   */
+  readonly tapped: (place: TapPlace, at: number) => boolean;
+  /** Lets go of a finger's first tap, as a scroll or a press on a control does, so the next tap is a first again. */
+  readonly disarm: () => void;
   /** Words typed, and where the editor's comment threads stand in them, where it carries any. */
   readonly typeText: (text: string, anchors?: PlanCommentAnchors) => void;
   /** Ends the edit; `select` is the block the keyboard goes back to once the editor has gone. */
@@ -106,6 +130,8 @@ export function usePlanEditing(
   latest.current = editor;
   const stamp = useRef(0);
   const opening = useRef(0);
+  // The place a finger last tapped and when, which a second tap there opens.
+  const armed = useRef<{ place: TapPlace; at: number } | undefined>(undefined);
   // The save out, which words typed after it wait on as a task is left.
   const flight = useRef<Promise<TasksEditAnswer> | undefined>(undefined);
   // The door of the task last drawn, moved on after each commit, so a
@@ -163,6 +189,7 @@ export function usePlanEditing(
   // holds that task's door and runs before the document can go.
   useEffect(() => {
     opening.current += 1;
+    armed.current = undefined;
     setEditor(undefined);
     setSelecting(undefined);
     setCursor(undefined);
@@ -191,6 +218,16 @@ export function usePlanEditing(
       setEditor(editorOpened(text));
       setPlacement(place);
       setSelecting(undefined);
+    },
+    tapped: (place, at) => {
+      if (!coarsePointerNow()) return true;
+      const was = armed.current;
+      const second = was?.place === place && at - was.at <= SECOND_TAP_WINDOW;
+      armed.current = second ? undefined : { place, at };
+      return second;
+    },
+    disarm: () => {
+      armed.current = undefined;
     },
     typeText: (words, anchors) => changed((now) => editorTyped(now, words, anchors)),
     // The save starts with the close, not a render later, since the close may
