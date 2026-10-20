@@ -595,6 +595,49 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
 }
 
 /**
+ * A settled ask's answer as the draft its controls held when it was sent,
+ * which its box draws them filled in with: a `decide`'s picks, a `do`'s
+ * steps ticked and its press, the title standing as the one step of a
+ * `do` that names none ticked where it was marked done, and an `answer`'s
+ * values. A field or a step the answer left empty stands empty.
+ */
+export function answeredDraft(ask: InboxKnownAsk, answers: InboxAnswers): InboxDraft {
+  const titleStep = ask.type === INBOX_ASK.DO && ask.steps.length === 0;
+  const done = answers.reply === INBOX_REPLY.DONE;
+  return {
+    ...EMPTY_INBOX_DRAFT,
+    choices: answers.choices ?? [],
+    values: answers.values ?? [],
+    steps: titleStep ? (done ? [0] : []) : (answers.steps ?? []),
+    press: answers.reply,
+  };
+}
+
+/** The decisions an approval's or a to-do's answer may be, each held as the card's one pick. */
+const DECISION_REPLIES: ReadonlySet<InboxReplyKind> = new Set([
+  INBOX_REPLY.APPROVED,
+  INBOX_REPLY.DECLINED,
+  INBOX_REPLY.DONE,
+  INBOX_REPLY.NOT_DONE,
+]);
+
+/**
+ * A settled item's answer, from before version 5, as the draft its card
+ * held when it was sent, which its question draws its controls filled in
+ * with: a choice's picks, an approval's or a to-do's decision, and a form's
+ * values; a choice answered in the developer's own words picks nothing.
+ */
+export function repliedDraft(answer: InboxReply): InboxDraft {
+  const choices =
+    answer.reply === INBOX_REPLY.CHOSE
+      ? (answer.choices ?? [])
+      : DECISION_REPLIES.has(answer.reply)
+        ? [answer.reply]
+        : [];
+  return { ...EMPTY_INBOX_DRAFT, choices, values: answer.values ?? [] };
+}
+
+/**
  * The draft after the open ask's option numbered `number`, counted from
  * one, is picked by its key: a `decide`'s, as `withChoice` picks it, the
  * first of two buttons going ahead; none for any other ask.
@@ -649,7 +692,7 @@ export const ANSWER_TONE = {
   BACK: "back",
 } as const;
 
-type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
+export type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
 
 /** An answer as words: what the reply's stamp says, attached or sent, and which way it goes. */
 export interface AnswerStamp {
