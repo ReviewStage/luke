@@ -13,8 +13,8 @@
  * service.
  */
 
-/** The request headers a session may be read from. */
-const SESSION_CREDENTIAL = { AUTHORIZATION: "authorization", COOKIE: "cookie" } as const;
+/** The request headers a caller's credential is read from: a bearer's, and a browser's session cookie's. */
+export const CREDENTIAL_HEADER = { AUTHORIZATION: "authorization", COOKIE: "cookie" } as const;
 
 /**
  * The headers to read a session from and carry it on in: the
@@ -23,10 +23,10 @@ const SESSION_CREDENTIAL = { AUTHORIZATION: "authorization", COOKIE: "cookie" } 
  * blank one, so that the auth service is asked nothing.
  */
 export function sessionCredential(headers: Headers): Headers | undefined {
-  const authorization = headers.get(SESSION_CREDENTIAL.AUTHORIZATION);
+  const authorization = headers.get(CREDENTIAL_HEADER.AUTHORIZATION);
   if (authorization !== null) {
     return authorization.trim() === "" ? undefined : new Headers({ authorization });
   }
-  const cookie = headers.get(SESSION_CREDENTIAL.COOKIE)?.trim();
+  const cookie = headers.get(CREDENTIAL_HEADER.COOKIE)?.trim();
   return cookie ? new Headers({ cookie }) : undefined;
 }

@@ -80,9 +80,11 @@ function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], bo
 }
 
 /**
- * The browser session an admin request rides in on — the maintainer's own
- * sign-in on this site, carrying that account's `role`, never the desktop's
- * bearer token — read from the request's one credential
+ * The Better Auth session an admin request rides in on, carrying that
+ * account's `role`: the maintainer's own sign-in on this site, or the same
+ * account's session as the signed bearer the bearer plugin reads as its
+ * cookie (the Mac's own), and never the desktop's OAuth token, which names
+ * no session. It is read from the request's one credential
  * (`auth/session-credential.ts`), so a junk `Authorization` beside the
  * cookie is signed out rather than read past, and a request carrying neither
  * is signed out without asking the auth service. Better Auth's `getSession`
