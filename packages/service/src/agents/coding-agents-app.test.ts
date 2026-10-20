@@ -2219,13 +2219,14 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
       Effect.gen(function* () {
         const bare = yield* openTask({ repository: null });
         const coded = yield* openTask();
-        const statusOf = (opened: typeof bare) =>
-          Effect.map(
-            readTask(opened.owner, opened.task.id),
-            (read) => Option.getOrThrow(read).task.status,
-          );
-        const before = yield* statusOf(coded);
-        assert.notEqual(before, TASK_STATUS.IN_PROGRESS);
+        const standingOf = (opened: typeof bare) =>
+          Effect.map(readTask(opened.owner, opened.task.id), (read) => {
+            const { status, assignee } = Option.getOrThrow(read).task;
+            return { status, assignee: assignee?.userId };
+          });
+        const before = yield* standingOf(coded);
+        assert.notEqual(before.status, TASK_STATUS.IN_PROGRESS);
+        assert.equal(before.assignee, undefined);
 
         const blankOn = (opened: typeof bare) =>
           Effect.map(
@@ -2260,8 +2261,11 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           repository: RELAY_FULL_NAME,
         });
         assert.deepEqual([...bare.eve.opened, ...coded.eve.opened], []);
-        // No work was handed, so the task stands where it was.
-        assert.equal(yield* statusOf(coded), before);
+        // No work was handed, so the task stands where it was, though its starter is now on it.
+        assert.deepEqual(yield* standingOf(coded), {
+          status: before.status,
+          assignee: coded.owner,
+        });
 
         yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.minutes(1)));
         const listed = readAnswer(

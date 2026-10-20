@@ -872,12 +872,15 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.
-  if (landing.task !== undefined && handed !== null) {
-    yield* beginTaskWork(userId, landing.task.id).pipe(
-      Effect.asVoid,
-      Effect.catch(logStoreFailure),
-    );
-    // Its starter is on a task no one was, where they started it by hand; an automation's run assigns no one.
+  if (landing.task !== undefined) {
+    if (handed !== null) {
+      yield* beginTaskWork(userId, landing.task.id).pipe(
+        Effect.asVoid,
+        Effect.catch(logStoreFailure),
+      );
+    }
+    // Its starter is on a task no one was, where they started it by hand, a blank agent among them;
+    // an automation's run assigns no one.
     if (ask.automationOrigin === undefined) {
       yield* assignUnassignedTask(userId, landing.task.id).pipe(
         Effect.asVoid,
