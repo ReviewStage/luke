@@ -20,6 +20,7 @@ import { type Cause, Effect, Layer, Queue, Redacted, Ref, Schema, Stream } from 
 import {
   AgentBrowser,
   agentBrowserOver,
+  type BrowserSandboxApi,
   type CdpEvent,
   type PageTarget,
 } from "../agents/browser/agent-browser.js";
@@ -33,7 +34,6 @@ import {
   type CommandAsk,
   type ListedSandbox,
   SandboxUnavailable,
-  type VercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
 import type { RelayFrame } from "../terminal/relay.js";
 
@@ -260,7 +260,7 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     status,
     currentSessionId: current,
   });
-  const api: VercelSandboxApi = {
+  const api: BrowserSandboxApi = {
     listTagged: (sessionId) =>
       refused() ??
       Effect.succeed(sessionId === scenario.sessionId && status !== undefined ? [listed()] : []),
@@ -278,8 +278,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
         browserUp = false;
         return listed();
       }),
-    stopSession: () => Effect.void,
-    deleteSandbox: () => Effect.void,
     run: (sandboxSessionId, ask) =>
       refused() ??
       Effect.sync(() => {
@@ -293,15 +291,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     openInteractive: () =>
       refused() ??
       Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
-    updateNetworkPolicy: () => Effect.void,
-    // What the browser never asks of its sandbox: a sandbox opened, retagged, or written, or a detached command.
-    create: () => Effect.fail(new SandboxUnavailable({})),
-    updateTags: () => Effect.void,
-    writeFiles: () => Effect.void,
-    start: () => Effect.fail(new SandboxUnavailable({})),
-    writeStdin: () => Effect.fail(new SandboxUnavailable({})),
-    commandExit: () => Effect.fail(new SandboxUnavailable({})),
-    kill: () => Effect.void,
   };
   return { api, ran };
 }

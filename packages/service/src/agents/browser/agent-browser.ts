@@ -424,9 +424,15 @@ export function browserSessionOf(session: {
   return session.parent?.rootSessionId ?? session.id;
 }
 
+/** The calls of Vercel Sandbox's API the browser makes: a sandbox found, resumed, run in, and its PTY minted. */
+export type BrowserSandboxApi = Pick<
+  VercelSandboxApi,
+  "listTagged" | "resume" | "run" | "openInteractive"
+>;
+
 /** The service over the REST calls the API makes and the PTY the sandbox serves. */
 export function agentBrowserOver(
-  api: VercelSandboxApi,
+  api: BrowserSandboxApi,
   pty: SandboxPtyService,
 ): AgentBrowserService {
   /** The running session of the sandbox tagged with the session, resumed and waited for where it is not running. */
