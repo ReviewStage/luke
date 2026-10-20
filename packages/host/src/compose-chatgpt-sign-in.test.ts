@@ -55,6 +55,8 @@ function harness(
     whileBrowsing?: (signedIn: { key: string | undefined }) => void;
     /** What happens while the service is asked for the host. */
     whileAskingHost?: () => void;
+    /** Whether the service fails the host read. */
+    hostFails?: boolean;
   } = {},
 ) {
   const saves: string[] = [];
@@ -63,6 +65,7 @@ function harness(
   const service = async (request: RecordedRequest) => {
     if (request.pathname === "/api/account/chatgpt/host") {
       options.whileAskingHost?.();
+      if (options.hostFails === true) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
       return jsonResponse({ extAgentHostId: HOST_ID });
     }
     assert.equal(request.pathname, "/api/account/chatgpt/credentials");
@@ -182,19 +185,23 @@ it.effect(
     }),
 );
 
-it.effect("a Cancel pressed while the service is asked for the host opens no browser", () =>
-  Effect.gen(function* () {
-    const composer = { cancel: () => undefined as unknown };
-    const setup = harness({ whileAskingHost: () => composer.cancel() });
-    const answered = yield* Effect.gen(function* () {
-      const built = yield* setup.composer;
-      const cancel = built.methods[GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL];
-      const signIn = built.methods[GATEWAY_METHOD.CHATGPT_SIGN_IN];
-      assert.ok(cancel && signIn);
-      composer.cancel = () => Effect.runSync(cancel({}, CONTEXT));
-      return JSON.stringify(yield* signIn({}, CONTEXT));
-    }).pipe(Effect.scoped, Effect.provide(setup.server.http));
-    assert.deepEqual(JSON.parse(answered), { cancelled: true });
-    assert.deepEqual(setup.opened, []);
-  }),
-);
+for (const hostFails of [false, true]) {
+  it.effect(
+    `a Cancel pressed while the service is asked for the host opens no browser and reads as cancelled${hostFails ? ", the read failing too" : ""}`,
+    () =>
+      Effect.gen(function* () {
+        const composer = { cancel: () => undefined as unknown };
+        const setup = harness({ whileAskingHost: () => composer.cancel(), hostFails });
+        const answered = yield* Effect.gen(function* () {
+          const built = yield* setup.composer;
+          const cancel = built.methods[GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL];
+          const signIn = built.methods[GATEWAY_METHOD.CHATGPT_SIGN_IN];
+          assert.ok(cancel && signIn);
+          composer.cancel = () => Effect.runSync(cancel({}, CONTEXT));
+          return JSON.stringify(yield* signIn({}, CONTEXT));
+        }).pipe(Effect.scoped, Effect.provide(setup.server.http));
+        assert.deepEqual(JSON.parse(answered), { cancelled: true });
+        assert.deepEqual(setup.opened, []);
+      }),
+  );
+}

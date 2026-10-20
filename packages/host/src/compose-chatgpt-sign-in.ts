@@ -115,8 +115,9 @@ function composed(
     const pressedBy = yield* readAccountKey();
     if (pressedBy === undefined) return UNANSWERED;
     const host = yield* Effect.provide(client.chatGptHost(), http);
-    if ("failure" in host) return host;
+    // A Cancel pressed while the host was asked wins over whatever the service answered.
     if (cancels !== asked) return { cancelled: true } as const;
+    if ("failure" in host) return host;
     const outcome = yield* signIn.signIn({
       extAgentHostId: host.extAgentHostId,
       save: saveFor(pressedBy),
