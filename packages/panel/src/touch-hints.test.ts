@@ -72,21 +72,18 @@ function hintsOn(touch: boolean) {
       createElement(
         "div",
         { className: "home-row" },
-        createElement(
-          NavItem,
-          { shortcut: createElement(Shortcut, { chord: CHORD }), onClick: ignore },
-          "Home",
-        ),
-      ),
-      createElement(
-        NavItem,
-        {
+        createElement(NavItem, {
           shortcut: createElement(Shortcut, { chord: CHORD }),
-          count: { value: 3 },
           onClick: ignore,
-        },
-        "Inbox",
+          children: "Home",
+        }),
       ),
+      createElement(NavItem, {
+        shortcut: createElement(Shortcut, { chord: CHORD }),
+        count: { value: 3 },
+        onClick: ignore,
+        children: "Inbox",
+      }),
       createElement(SearchField, {
         label: "Search settings",
         value: "",

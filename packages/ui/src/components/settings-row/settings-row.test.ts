@@ -197,7 +197,7 @@ test("a control as wide as the row stands under its words, named by the label an
 });
 
 /** A switch's row whose words label its switch, holding the switch's state as a settings write would. */
-function LabelledSwitchRow({ adornment }: { adornment?: string }): React.JSX.Element {
+function LabelledSwitchRow({ adornment }: { adornment?: string | undefined }): React.JSX.Element {
   const [checked, setChecked] = useState(false);
   return createElement(SettingsRow, {
     label: "Show captions",
