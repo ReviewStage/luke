@@ -1340,3 +1340,34 @@ test("a reply carries the files picked into its field, and a comment's files are
   );
   assert.equal(field.querySelectorAll('[aria-label="Attached files"] > li').length, 0);
 });
+
+test("a picture pasted into the plain field is attached to the reply, as the editor's paste attaches one", async () => {
+  const { container, asked } = drawn("page");
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card =
+    container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`) ?? assert.fail("no card");
+  const field = card.querySelector("textarea") ?? assert.fail("no textarea");
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(paste, "clipboardData", {
+    value: { files: [new File([png], "screenshot.png", { type: "image/png" })] },
+  });
+  await act(async () => {
+    field.dispatchEvent(paste);
+  });
+  for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
+
+  assert.equal(paste.defaultPrevented, true);
+  await post(field, "Like this.");
+  const [reply] = asked;
+  assert.deepEqual(
+    reply !== undefined && "attachments" in reply.action
+      ? reply.action.attachments?.map((file) => [file.name, file.mediaType])
+      : undefined,
+    [["screenshot.png", "image/png"]],
+  );
+});

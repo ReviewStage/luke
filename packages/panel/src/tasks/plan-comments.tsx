@@ -610,6 +610,7 @@ function PlainCommentText({
   onSubmit,
   onCancel,
   autoFocus = false,
+  onPasteFiles,
 }: CommentTextProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -629,6 +630,11 @@ function PlainCommentText({
       // biome-ignore lint/a11y/noAutofocus: the field is opened by the press that asked for it, as a reply field is.
       autoFocus={autoFocus}
       onChange={(event) => onChange(event.target.value)}
+      onPaste={(event) => {
+        // Note that only files the field takes stop the paste, so text pastes as it always does.
+        const files = Array.from(event.clipboardData.files);
+        if (files.length > 0 && onPasteFiles?.(files) === true) event.preventDefault();
+      }}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
         if (event.key === "Enter" && !event.shiftKey) {
@@ -708,9 +714,12 @@ function ReplyField({
       className="comment-field"
       data-variant={variant}
       data-dropping={dropping ? "" : undefined}
-      // Note that the words in flight, held files, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
+      // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
       data-held={
-        (words === "" ? inFlight : words).trim() !== "" || files.attachments.length > 0 || dictating
+        (words === "" ? inFlight : words).trim() !== "" ||
+        files.attachments.length > 0 ||
+        files.reading > 0 ||
+        dictating
       }
       onDragOver={(event) => {
         if (!carriesFiles(event)) return;
