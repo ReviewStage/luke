@@ -122,14 +122,27 @@
     transform: rotate(90deg);
   }
 
-  .luke-nav-item:is(:hover, :focus-visible)
+  .luke-nav-item:focus-visible
     .luke-nav-item-glyph:has(.luke-nav-item-chevron)
     > .luke-nav-item-icon {
     opacity: 0;
   }
 
-  .luke-nav-item:is(:hover, :focus-visible) .luke-nav-item-chevron {
+  .luke-nav-item:focus-visible .luke-nav-item-chevron {
     opacity: 1;
+  }
+
+  /* Note that the pointer's own reveals, here and below, stand only where
+     there is a hover, because iOS plays a first tap as a hover and spends
+     it on a reveal: the row goes where it leads on the second tap alone. */
+  @media (hover: hover) {
+    .luke-nav-item:hover .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
+      opacity: 0;
+    }
+
+    .luke-nav-item:hover .luke-nav-item-chevron {
+      opacity: 1;
+    }
   }
 
   /* A screen with no hover draws a fold's chevron at rest in its glyph's
@@ -206,8 +219,14 @@
     color: var(--luke-color-accent);
   }
 
-  .luke-nav-item:is(:hover, :focus-visible) .luke-nav-item-count[data-shown="on-hover"] {
+  .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
     opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .luke-nav-item:hover .luke-nav-item-count[data-shown="on-hover"] {
+      opacity: 1;
+    }
   }
 
   /* The chord sits in the row's spare width at rest, unseen, so showing it
@@ -218,7 +237,7 @@
     transition: opacity var(--luke-duration-quick) ease;
   }
 
-  .luke-nav-item:is(:hover, :focus-visible):not(:disabled) > .luke-nav-item-shortcut {
+  .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-shortcut {
     opacity: 1;
   }
 
@@ -226,30 +245,39 @@
     display: none;
   }
 
-  .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
-    > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+  .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
     display: none;
   }
 
-  .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
-    > .luke-nav-item-rest
-    + .luke-nav-item-shortcut {
+  .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut {
     display: inline-flex;
   }
 
-  /* Under a finger there is no keyboard to press the chord on, and a tap
-     leaves the row hovered, so the chord never stands and the count or
-     mark it would take the place of stays. Note that the hovered selectors
-     are written again, because they outweigh a bare one. */
-  @media (hover: none) and (pointer: coarse) {
-    .luke-nav-item-shortcut,
-    .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
-      > .luke-nav-item-rest
-      + .luke-nav-item-shortcut {
+  @media (hover: hover) {
+    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-shortcut {
+      opacity: 1;
+    }
+
+    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
       display: none;
     }
 
-    .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
+    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut {
+      display: inline-flex;
+    }
+  }
+
+  /* Under a finger there is no keyboard to press the chord on, so the chord
+     never stands, even on the row the keyboard reached, and the count or
+     mark it would take the place of stays. Note that the focused selectors
+     are written again, because they outweigh a bare one. */
+  @media (hover: none) and (pointer: coarse) {
+    .luke-nav-item-shortcut,
+    .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut {
+      display: none;
+    }
+
+    .luke-nav-item:focus-visible:not(:disabled)
       > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
       display: inline-flex;
     }

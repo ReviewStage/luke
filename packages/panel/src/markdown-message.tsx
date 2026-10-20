@@ -3,7 +3,7 @@ import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import { createContext, type ReactNode, useContext, useMemo, useRef } from "react";
+import { createContext, memo, type ReactNode, useContext, useMemo, useRef } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PlanDiagram } from "./plan-diagram.js";
@@ -703,9 +703,11 @@ export function markdownClass(className?: string): string {
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
  * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
  * the same component reads at the caption's ten pixels and the plan's own
- * size.
+ * size. Note that it is drawn again only when what it is handed changes,
+ * because the engine parses the words afresh on every draw, and a plan
+ * drawing every section on each frame of its typing would parse them all.
  */
-export function MarkdownMessage({
+export const MarkdownMessage = memo(function MarkdownMessage({
   words,
   className,
   edit,
@@ -737,11 +739,14 @@ export function MarkdownMessage({
   const toggler = useRef(onTask);
   toggler.current = onTask;
   const toggles = onTask !== undefined;
-  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
-  if (toggles) rehypePlugins.push(placeTaskItems);
-  if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words]);
-  if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
-  if (link !== undefined) rehypePlugins.push([glueDrawnLinks, link]);
+  const rehypePlugins = useMemo(() => {
+    const plugins: NonNullable<Options["rehypePlugins"]> = [];
+    if (toggles) plugins.push(placeTaskItems);
+    if (edit !== undefined) plugins.push([drawEdit, edit, words]);
+    if (found !== undefined && found.length > 0) plugins.push([markFound, found]);
+    if (link !== undefined) plugins.push([glueDrawnLinks, link]);
+    return plugins;
+  }, [toggles, edit, words, found, link]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
@@ -797,4 +802,4 @@ export function MarkdownMessage({
       </FenceEdit.Provider>
     </div>
   );
-}
+});

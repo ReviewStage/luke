@@ -1638,9 +1638,9 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
   });
   await settle();
   assert.equal(
-    option(tab, "Files changed").getAttribute("aria-selected"),
+    option(tab, "Chapters").getAttribute("aria-selected"),
     "true",
-    "the arrows move along the row",
+    "the arrows move along the row, Chapters after Checks",
   );
 });
 

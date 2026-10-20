@@ -90,8 +90,6 @@ export function AccountScreen({
       return frame(
         <PageSkeleton
           title="Account"
-          account={account}
-          onSignOut={signOut}
           controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
           back={{ tab: "users", label: "All users", onBack }}
           shapes={ACCOUNT_SHAPES}
@@ -127,8 +125,6 @@ export function AccountScreen({
       return frame(
         <AdminPage
           title={accountLabel(subject)}
-          account={account}
-          onSignOut={signOut}
           controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
         >
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>

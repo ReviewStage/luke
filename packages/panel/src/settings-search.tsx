@@ -25,6 +25,9 @@ import {
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
+  CHAPTERS_GROUP_TITLE,
+  CHAPTERS_KEYS,
+  CHAPTERS_SHORTCUTS,
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
@@ -242,6 +245,18 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Fast", "coding agent fast version speed quick model"],
         }
       : undefined,
+    // The chapters model, which is the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
+          label: "Chapters model",
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "Chapters model",
+            "pull request chapters generate claude haiku sonnet opus review",
+          ],
+        }
+      : undefined,
     // The account's own provider keys, which are the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
@@ -322,6 +337,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         WINDOW_SHORTCUT_WORDS,
         FILES_CHANGED_GROUP_TITLE,
       ],
+    })),
+    // Chapters' own keys, after Files changed's.
+    ...CHAPTERS_KEYS.map((key) => ({
+      id: key,
+      label: CHAPTERS_SHORTCUTS[key].label,
+      page: SETTINGS_VIEW.SHORTCUTS,
+      haystack: [CHAPTERS_SHORTCUTS[key].label, WINDOW_SHORTCUT_WORDS, CHAPTERS_GROUP_TITLE],
     })),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);

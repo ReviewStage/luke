@@ -126,12 +126,14 @@ import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
+  Cache,
   Cause,
   Clock,
   Data,
   Duration,
   Effect,
   Equal,
+  Exit,
   FiberHandle,
   Option,
   Queue,
@@ -320,6 +322,50 @@ const WORKSPACES_READ_EVERY = Duration.minutes(1);
 /** A GitHub page asked behind a closed gate, or of a service that did not answer, which opens nothing. */
 const GITHUB_PAGE_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
+/**
+ * How long the answer to a link's read of one pull request or issue is kept
+ * for every window that asks it again: an answer briefly, so a merge or a
+ * new title shows within a minute, and no answer, a refusal or a GitHub that
+ * failed, for longer, so a service turned away is not asked again by every
+ * link redrawn meanwhile. Note that every link in every window reads through
+ * these, because each card asks on its own mount and a transcript or an
+ * inbox can draw dozens of cards for one pull request at once; each read
+ * spends the installation's GitHub rate limit, which also reads agents' own
+ * pull requests.
+ */
+const LINK_READ_KEPT = {
+  CAPACITY: 512,
+  ANSWERED: Duration.minutes(1),
+  UNANSWERED: Duration.minutes(2),
+} as const;
+
+/** One GitHub page a link reads, by the workspace whose installation reaches it, its repository, and its number. */
+class LinkReadKey extends Data.Class<{
+  readonly workspaceId: string;
+  readonly repository: string;
+  readonly number: number;
+}> {}
+
+/** The key a link's read is kept under, of the place and number it asked. */
+function linkReadKey(asked: {
+  readonly workspaceId: string;
+  readonly repository: string;
+  readonly number: number;
+}): LinkReadKey {
+  return new LinkReadKey({
+    workspaceId: asked.workspaceId,
+    repository: asked.repository,
+    number: asked.number,
+  });
+}
+
+/** How long a link's read is kept: `LINK_READ_KEPT.ANSWERED` where the service answered, `UNANSWERED` where it did not. */
+function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
+  return Exit.isSuccess(exit) && exit.value !== undefined
+    ? LINK_READ_KEPT.ANSWERED
+    : LINK_READ_KEPT.UNANSWERED;
+}
+
 /** A call on a task's linked issues behind a closed gate, or of a service that did not answer. */
 const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
@@ -492,6 +538,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     Effect.provideService(call, HttpClient.HttpClient, http);
   const idleView = (): TasksView => IDLE_TASKS_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+
+  /** The link reads kept for every window (`LINK_READ_KEPT`); a read already out is joined, never asked twice. */
+  const pullRequestReads = yield* Cache.makeWith(
+    (key: LinkReadKey) =>
+      served(
+        client.readRepositoryPullRequest(
+          { workspaceId: key.workspaceId, repository: key.repository },
+          key.number,
+        ),
+      ),
+    { capacity: LINK_READ_KEPT.CAPACITY, timeToLive: linkReadKept },
+  );
+  const issueReads = yield* Cache.makeWith(
+    (key: LinkReadKey) =>
+      served(
+        client.readRepositoryIssue(
+          { workspaceId: key.workspaceId, repository: key.repository },
+          key.number,
+        ),
+      ),
+    { capacity: LINK_READ_KEPT.CAPACITY, timeToLive: linkReadKept },
+  );
 
   /**
    * One read of the service at a time, whichever ask made it. Note that the
@@ -1375,8 +1443,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // A pull request is answered to the link that asked and held nowhere:
-    // its title and where it stands are read again on the next ask.
+    // A pull request is answered to the link that asked, and kept for every
+    // link asking it again for as long as `LINK_READ_KEPT` says.
     [GATEWAY_METHOD.TASKS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPullRequestParamsSchema)(unparsedWire(params));
@@ -1388,11 +1456,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksPullRequestAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const { number, ...place } = read.success;
-        const answer = yield* served(client.readRepositoryPullRequest(place, number));
+        const answer = yield* Cache.get(pullRequestReads, linkReadKey(read.success));
         return carried<TasksPullRequestAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // An issue is answered as a pull request is: to the link that asked, and held nowhere.
+    // An issue is answered as a pull request is: to the link that asked, and kept as it is.
     [GATEWAY_METHOD.TASKS_ISSUE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksIssueParamsSchema)(unparsedWire(params));
@@ -1404,8 +1471,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksIssueAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const { number, ...place } = read.success;
-        const answer = yield* served(client.readRepositoryIssue(place, number));
+        const answer = yield* Cache.get(issueReads, linkReadKey(read.success));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A repository's issues are answered as an issue is: to the picker that asked, and held nowhere.
@@ -2212,6 +2278,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     callEnded,
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);
+      yield* Cache.invalidateAll(pullRequestReads);
+      yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(conversationRead);
       yield* serial(
         Effect.sync(() => {

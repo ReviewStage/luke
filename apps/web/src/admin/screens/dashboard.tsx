@@ -236,8 +236,6 @@ export function DashboardScreen({
       return frame(
         <PageSkeleton
           title={OVERVIEW_TITLE}
-          account={account}
-          onSignOut={signOut}
           controls={
             <>
               <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
@@ -267,8 +265,6 @@ export function DashboardScreen({
       return frame(
         <AdminPage
           title={OVERVIEW_TITLE}
-          account={account}
-          onSignOut={signOut}
           controls={
             <>
               <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />

@@ -109,6 +109,11 @@ export function PlanPictures({
   const { act } = useAct();
   const [viewing, setViewing] = useState<Viewing | undefined>(undefined);
   const names = useRef(new Map<string, string>());
+  // Note that the words are read as a picture is opened, so the door stands
+  // while they change, and every section drawn under it is not drawn again
+  // for a change to another's words.
+  const shownText = useRef(text);
+  shownText.current = text;
   const read = useCallback(
     (owner: string, id: string) =>
       act(ACT_KIND.TASKS_PICTURE_READ, { planId: owner, attachmentId: id }),
@@ -121,7 +126,7 @@ export function PlanPictures({
       name: (id, alt) => names.current.set(id, alt),
       // Note that the viewer walks the pictures read by the press, since one still being read has nothing to show.
       open: (id) => {
-        const shown = planAttachmentIdsIn(text, taskId).flatMap((each) => {
+        const shown = planAttachmentIdsIn(shownText.current, taskId).flatMap((each) => {
           const state = pictureNow(taskId, each);
           if (state.kind !== PICTURE_STATE.READY) return [];
           return [
@@ -138,7 +143,7 @@ export function PlanPictures({
         }
       },
     }),
-    [taskId, read, text],
+    [taskId, read],
   );
   const shownId = viewing?.ids[viewing.at];
   const heading = shownId === undefined ? undefined : sectionOfPicture(text, taskId, shownId);

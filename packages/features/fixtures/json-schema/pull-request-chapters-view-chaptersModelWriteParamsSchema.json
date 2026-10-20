@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "model": {
+      "type": "string",
+      "enum": [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5"
+      ]
+    }
+  },
+  "required": [
+    "model"
+  ],
+  "additionalProperties": false
+}

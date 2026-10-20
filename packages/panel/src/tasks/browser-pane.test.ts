@@ -211,6 +211,23 @@ test("a blank tab asks for an address, and opens a dev server on the Mac over pl
   assert.equal(tab.field().value, "http://localhost:3000/");
 });
 
+test("the bar's steps are the app's own glyph buttons, as every other tab's bar draws them", () => {
+  main();
+  const tab = mount(undefined);
+  const steps = [...tab.container.querySelectorAll(".browser-view-bar button")];
+
+  assert.deepEqual(
+    steps.map((step) => step.getAttribute("aria-label")),
+    ["Back", "Forward", "Reload", "Open in your browser"],
+  );
+  for (const step of steps) {
+    assert.ok(
+      step.matches('.luke-button[data-icon-only="true"]'),
+      step.getAttribute("aria-label") ?? "",
+    );
+  }
+});
+
 test("the bar's steps follow how main says the page stands, and a typed line moves the open page", async () => {
   const doors = main();
   const tab = mount("https://example.com/");

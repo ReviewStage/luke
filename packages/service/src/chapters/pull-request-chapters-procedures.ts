@@ -19,8 +19,10 @@
  * head as stale. The Generate (`POST /api/agents/{id}/chapters`) reads the
  * pull request's files, title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
- * Luke's own key (`chapters-generator.ts`), then answers as the read does. A
- * claim another request holds answers as generating, without reading the
+ * Luke's own key (`chapters-generator.ts`), on the Claude model the member
+ * who pressed it chose in Settings (Haiku where they never chose, or where
+ * what they stored is no model this build offers), then answers as the read
+ * does. A claim another request holds answers as generating, without reading the
  * diff or asking the model; a head pushed while the diff is read is answered
  * as it now stands rather than told under the head it no longer is, since
  * GitHub serves a pull request's files by its number, not its head; a generation that fails lands its kind on the row, and any other
@@ -30,6 +32,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { readAccountPreferences } from "@luke/database/models/account-store";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
@@ -47,6 +50,7 @@ import {
   PULL_REQUEST_CHAPTERS_STATUS,
   type PullRequestChaptersFailure,
 } from "@luke/database/pull-request-chapters-vocabulary";
+import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@luke/features/chapters-model-choice";
 import { chapterSchema } from "@luke/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_STATE,
@@ -95,8 +99,11 @@ import {
 
 export interface PullRequestChaptersProcedureSeams extends PublishedReach {
   resolveUserId: UserIdResolver;
-  /** The model chapters are told on, from the deployment's own Anthropic key; none where it holds none. A test hands in a scripted one. */
-  chaptersModel?: (anthropicKey: Redacted.Redacted | undefined) => ChaptersModel | undefined;
+  /** The model chapters are told on, the one named, from the deployment's own Anthropic key; none where it holds none. A test hands in a scripted one. */
+  chaptersModel?: (
+    anthropicKey: Redacted.Redacted | undefined,
+    modelId: ChaptersModelId,
+  ) => ChaptersModel | undefined;
 }
 
 /** The stored chapters as their wire schema decodes them. */
@@ -245,12 +252,19 @@ const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: Chap
   );
 });
 
-/** The model this deployment tells chapters on, or none where it holds no key for one. */
-const modelOf = (seams: PullRequestChaptersProcedureSeams) =>
+/** The model named, as this deployment tells chapters on it, or none where it holds no key for one. */
+const modelOf = (seams: PullRequestChaptersProcedureSeams, modelId: ChaptersModelId) =>
   Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
-    return (seams.chaptersModel ?? chaptersModelOf)(environment.anthropicKey);
+    return (seams.chaptersModel ?? chaptersModelOf)(environment.anthropicKey, modelId);
   });
+
+/** The model the member chose in Settings, Haiku where they never chose (the store reads one no build offers as Haiku too). */
+const chosenModelOf = (userId: string) =>
+  Effect.map(
+    hostedStoreOrUnavailable(readAccountPreferences(userId)),
+    (row) => row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
+  );
 
 /** What a generation's counted event carries but its length: how it came out, and how many chapters and hunks it told. */
 interface GenerationCounts {
@@ -366,13 +380,15 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       const agent = yield* reachedAgent(context.userId, input.id);
       const subject = yield* subjectOf(published, context.userId, agent, input.number);
       if (Option.isNone(subject)) return { pullRequest: null };
-      const model = yield* modelOf(seams);
+      // Whether the deployment can generate at all, which no member's choice changes.
+      const model = yield* modelOf(seams, CHAPTERS_MODEL_DEFAULT);
       return yield* answerOf(subject.value, model !== undefined);
     }),
 
     generate: signedIn.generate.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.params.id);
-      const model = yield* modelOf(seams);
+      // The model is the presser's own choice, while the chapters it tells are the workspace's.
+      const model = yield* modelOf(seams, yield* chosenModelOf(context.userId));
       if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       const subject = yield* subjectOf(published, context.userId, agent, input.query?.number);
       if (Option.isNone(subject)) return { pullRequest: null };

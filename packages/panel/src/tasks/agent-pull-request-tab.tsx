@@ -69,6 +69,7 @@ import {
 } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
+  BookOpenIcon,
   BotIcon,
   CheckIcon,
   CircleCheckIcon,
@@ -84,8 +85,10 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  lazy,
   type MouseEvent,
   type ReactNode,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -99,6 +102,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
+import { SpinnerRegion } from "../spinner.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import {
@@ -112,6 +116,7 @@ import {
   useChangesReads,
 } from "./agent-changes-tab.js";
 import { threadPreview } from "./changes-model.js";
+import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
 import { centreWithin, scrollerOf } from "./code-pane.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
@@ -179,7 +184,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 import { useWorkingNow, workingTime } from "./working-time.js";
 
 /**
- * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, and its files.
+ * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
  *
  * The overview is read from GitHub afresh by the service on each ask, on
  * the App's token for the agent's repository rather than anyone's own, so
@@ -227,7 +232,10 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * and any other drawn as its link, as ReviewStage/stage draws them; Checks, its head's deployments, the newest of each
  * environment, each opening the address it serves, over every check on its
  * head, those that failed first, then those still running, each opening
- * its page, counted in the colour of how they went; and Files changed (`AgentChangesTab`), its own bar and
+ * its page, counted in the colour of how they went; Chapters
+ * (`agent-chapters-tab.tsx`), its diff told as chapters to review in order,
+ * each over its own hunks in Files changed's list, counted once they are
+ * ready; and Files changed (`AgentChangesTab`), its own bar and
  * tree, counted by the lines it adds and removes. A review carries the
  * threads on lines it started, each headed by its file and lines over the
  * end of the hunk it was made on, drawn as Files changed draws a diff with
@@ -245,12 +253,24 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * (`ph-no-capture`).
  */
 
+/**
+ * The Chapters view, loaded as a chunk of its own the first time it is
+ * shown rather than with the window, as Settings is, because the renderer
+ * bundle is parsed at every window open and the view, its rail, and the
+ * chapter logic are opened seldom (`bundle-budget.json`). What stands while
+ * the chunk loads is the view's own wait, for a frame.
+ */
+const AgentChaptersTab = lazy(() =>
+  import("./agent-chapters-tab.js").then((loaded) => ({ default: loaded.AgentChaptersTab })),
+);
+
 /** The tab's own words. */
 const PULL_REQUEST_WORDS = {
   READING: "Reading pull request",
   READING_CHECKS: "Reading checks",
   READING_DESCRIPTION: "Reading description",
   READING_CONVERSATION: "Reading conversation",
+  READING_CHAPTERS: "Reading chapters",
   FAILED: "The pull request could not be read.",
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
@@ -1561,9 +1581,10 @@ function conversationCount(conversation: CodingAgentOverviewConversation): numbe
 }
 
 /**
- * The three tabs under the header, each counting what Luke has read of it
+ * The four tabs under the header, each counting what Luke has read of it
  * so far: the conversation once read; the checks by how they went from the
- * first frame, as the pill's mark says it, and by how many once read; and
+ * first frame, as the pill's mark says it, and by how many once read; the
+ * chapters once they are ready (`chaptersCount`); and
  * the files by the lines left to review once some are marked viewed, else
  * by the lines what was published adds and removes (`filesCountOf`).
  */
@@ -1572,10 +1593,12 @@ function tabsOf(
   published: CodingAgentPullRequest | undefined,
   held: HeaderPullRequest | undefined,
   changes: ChangesReads,
+  chapters: ChaptersRead,
 ): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   const files = filesCountOf(published, changes);
+  const chapterCount = chaptersCount(chapters);
   return [
     {
       value: PULL_REQUEST_VIEW.CONVERSATION,
@@ -1595,6 +1618,12 @@ function tabsOf(
               held.checks,
               checks === undefined ? undefined : summaryCountOf(checks.checks, held.checks),
             ),
+    },
+    {
+      value: PULL_REQUEST_VIEW.CHAPTERS,
+      icon: <BookOpenIcon />,
+      label: "Chapters",
+      count: chapterCount?.toLocaleString(),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -1932,12 +1961,13 @@ function useConversationAnchors(input: {
  * saying where it stands, its title and number, and, while it is open, the
  * merge control, in one row; then its branches, who opened it and
  * when, and its reviewers, in one line), then a row of tabs, Conversation,
- * Checks, and Files changed (`AgentChangesTab`), each with its count, and
+ * Checks, Chapters, and Files changed (`AgentChangesTab`), each with its count, and
  * Review at its end while it is open. Each tab stands once shown, the others hidden, so
  * switching draws what each last read rather than asking GitHub again. The
  * header's reads, the pull request and its conversation, whose reviews say
- * where each reviewer stands, are asked as the tab is shown; the checks and
- * the files as their tab is first shown. Only a read saying there is no
+ * where each reviewer stands, are asked as the tab is shown; the checks, the
+ * chapters, and the files as their tab is first shown, the files also as
+ * Chapters is, whose diff draws them. Only a read saying there is no
  * pull request yet takes the header and the tabs away; a read that failed
  * says so in its own part, with its own Retry, the others standing. Files
  * changed draws the conversation's review threads on their lines.
@@ -2089,12 +2119,13 @@ function PullRequestTabBody({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads and the checks where their tab was shown, never before,
+  // Refresh reads again the header's reads, and the checks and the chapters where their tab was shown, never before,
   // and what the agent published, which names this tab and its pin by the pull request's title.
   const refresh = () => {
     ask.pullRequest();
     ask.conversation();
     if (askedYet(checksRead)) ask.checks();
+    if (askedYet(chapters)) chapters.ask();
     const read =
       number === undefined
         ? control.readPullRequest(agentId)
@@ -2123,11 +2154,21 @@ function PullRequestTabBody({
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
-  // Files changed's reads, held here so its tab's count reads the same marks it draws; asked as it is first shown, as before.
+  // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
+  // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(
     agentId,
     control,
-    shown && !none && view === PULL_REQUEST_VIEW.FILES,
+    shown && !none && (view === PULL_REQUEST_VIEW.FILES || view === PULL_REQUEST_VIEW.CHAPTERS),
+  );
+  // The Chapters view's chunk is asked for only once the view is first shown.
+  const [chaptersSeen, setChaptersSeen] = useState(false);
+  if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
+  // The chapters, read as their view is first shown, which its tab counts once they are ready.
+  const chapters = useChaptersRead(
+    agentId,
+    control,
+    shown && !none && view === PULL_REQUEST_VIEW.CHAPTERS,
   );
   const overview = landed(parts.pullRequest);
   const title = overview ?? published;
@@ -2233,7 +2274,7 @@ function PullRequestTabBody({
                 <div className="pull-request-tabs">
                   <ChoiceBar<PullRequestView>
                     label="Pull request"
-                    items={tabsOf(parts, published, held, changes)}
+                    items={tabsOf(parts, published, held, changes, chapters)}
                     hint={Tooltip}
                     value={view}
                     onChange={onView}
@@ -2287,6 +2328,31 @@ function PullRequestTabBody({
                       live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                     />
                   </DetailPage>
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CHAPTERS).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CHAPTERS).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CHAPTERS}
+                >
+                  {chaptersSeen ? (
+                    <Suspense
+                      fallback={<SpinnerRegion label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
+                    >
+                      <AgentChaptersTab
+                        agentId={agentId}
+                        control={control}
+                        shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
+                        repository={repository}
+                        tree={tree}
+                        chapters={chapters}
+                        changes={changes}
+                        threads={changesThreads}
+                        lineComments={{ pending: pendingReview, onWritten: written }}
+                      />
+                    </Suspense>
+                  ) : null}
                 </div>
               </>
             )}
