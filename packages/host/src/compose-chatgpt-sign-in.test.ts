@@ -114,11 +114,11 @@ it.effect(
 it.effect("a sign-in the service refuses is a sentence for the row, and no keys", () =>
   Effect.gen(function* () {
     const setup = harness({
-      saved: { keys: [], rejected: PROVIDER_KEY_REJECTION.OTHER_KIND_HELD },
+      saved: { keys: [], rejected: PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN },
     });
     const answered = JSON.parse(yield* press(setup));
     assert.deepEqual(answered, {
-      refused: "Your OpenAI API key is set. Remove it before connecting ChatGPT.",
+      refused: "Luke couldn't verify the ChatGPT sign-in. Try again.",
     });
   }),
 );

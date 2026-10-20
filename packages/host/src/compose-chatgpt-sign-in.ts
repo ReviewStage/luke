@@ -57,8 +57,8 @@ const REJECTION_WORDS = {
   [PROVIDER_KEY_REJECTION.WRONG_PROVIDER]: "Luke couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.UNREACHABLE]: "Luke couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.TOO_MANY_TRIES]: "Too many sign-ins in the last hour. Try again later.",
-  [PROVIDER_KEY_REJECTION.OTHER_KIND_HELD]:
-    "Your OpenAI API key is set. Remove it before connecting ChatGPT.",
+  [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN]:
+    "Luke couldn't verify the ChatGPT sign-in. Try again.",
 } as const satisfies Record<ProviderKeyRejection, string>;
 
 const SAVE_FAILED = "Luke couldn't save the ChatGPT sign-in. Try again.";

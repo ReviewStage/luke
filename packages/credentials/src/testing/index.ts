@@ -15,19 +15,6 @@ import {
 import { Effect } from "effect";
 import { CHATGPT_SIGN_IN } from "../chatgpt-sign-in.js";
 
-/** What the fake issues and where it answers, synthetic throughout. */
-export const CHATGPT_FAKE = {
-  /** Where the fake publishes its endpoints, as its discovery document names them. */
-  AUTHORIZE_URL: "https://auth.openai.com/oauth/authorize",
-  TOKEN_URL: "https://auth.openai.com/oauth/token",
-  JWKS_URL: "https://auth.openai.com/.well-known/jwks.json",
-  ISSUED_CLIENT: "oaiapp_test_client",
-  SUBJECT: "user-chatgpt-subject",
-  ACCESS_TOKEN: "access-token-from-openai",
-  REFRESH_TOKEN: "refresh-token-from-openai",
-  GRANTED: CHATGPT_SIGN_IN.SCOPES.join(" "),
-} as const;
-
 /** An instant no test clock reaches, in Unix seconds (2100-01-01). */
 const FAR_FUTURE_SECONDS = 4_102_444_800;
 
@@ -48,6 +35,44 @@ function idToken(claims: Record<string, JsonValue>): string {
   const signed = `${part({ alg: "RS256", kid: "key-1", typ: "JWT" })}.${part(claims)}`;
   const signature = createSign("RSA-SHA256").update(signed).sign(signingKey.privateKey);
   return `${signed}.${signature.toString("base64url")}`;
+}
+
+/** The access token the fake issues, its claims as OpenAI documents them. */
+const ACCESS_TOKEN = idToken({
+  iss: CHATGPT_SIGN_IN.ISSUER,
+  aud: [CHATGPT_SIGN_IN.RESOURCE],
+  client_id: "oaiapp_test_client",
+  exp: 4_102_444_800,
+});
+
+/** What the fake issues and where it answers, synthetic throughout. */
+export const CHATGPT_FAKE = {
+  /** Where the fake publishes its endpoints, as its discovery document names them. */
+  AUTHORIZE_URL: "https://auth.openai.com/oauth/authorize",
+  TOKEN_URL: "https://auth.openai.com/oauth/token",
+  JWKS_URL: "https://auth.openai.com/.well-known/jwks.json",
+  ISSUED_CLIENT: "oaiapp_test_client",
+  SUBJECT: "user-chatgpt-subject",
+  /** The access token, a JWT naming the issued client, OpenAI's API and OpenAI, as OpenAI's do. */
+  ACCESS_TOKEN,
+  REFRESH_TOKEN: "refresh-token-from-openai",
+  GRANTED: CHATGPT_SIGN_IN.SCOPES.join(" "),
+} as const;
+
+/**
+ * OpenAI's discovery document and published keys, as the service reads them
+ * to check a sign-in's ID token; any other address answers nothing here.
+ */
+export function signingKeysAnswer(url: string): Response | undefined {
+  if (url === CHATGPT_SIGN_IN.DISCOVERY_URL) {
+    return jsonResponse({
+      issuer: CHATGPT_SIGN_IN.ISSUER,
+      authorization_endpoint: CHATGPT_FAKE.AUTHORIZE_URL,
+      token_endpoint: CHATGPT_FAKE.TOKEN_URL,
+      jwks_uri: CHATGPT_FAKE.JWKS_URL,
+    });
+  }
+  return url === CHATGPT_FAKE.JWKS_URL ? jsonResponse({ keys: [PUBLISHED_KEY] }) : undefined;
 }
 
 export interface FakeChatGptAnswers {
@@ -85,15 +110,8 @@ export function fakeChatGptAuthorizationServer(
       assert.ok(answers.elsewhere, `the fake was asked ${request.url}, which nothing answers`);
       return answers.elsewhere(request);
     }
-    if (request.url === CHATGPT_SIGN_IN.DISCOVERY_URL) {
-      return jsonResponse({
-        issuer: CHATGPT_SIGN_IN.ISSUER,
-        authorization_endpoint: CHATGPT_FAKE.AUTHORIZE_URL,
-        token_endpoint: CHATGPT_FAKE.TOKEN_URL,
-        jwks_uri: CHATGPT_FAKE.JWKS_URL,
-      });
-    }
-    if (request.url === CHATGPT_FAKE.JWKS_URL) return jsonResponse({ keys: [PUBLISHED_KEY] });
+    const published = signingKeysAnswer(request.url);
+    if (published !== undefined) return published;
     assert.equal(request.url, CHATGPT_FAKE.TOKEN_URL);
     const form = new URLSearchParams(await new Response(request.init.body).text());
     const verifier = form.get("code_verifier") ?? "";
@@ -109,7 +127,7 @@ export function fakeChatGptAuthorizationServer(
       return jsonResponse({ error: "invalid_grant" }, HTTP_STATUS.BAD_REQUEST);
     }
     return jsonResponse({
-      access_token: CHATGPT_FAKE.ACCESS_TOKEN,
+      access_token: ACCESS_TOKEN,
       refresh_token: CHATGPT_FAKE.REFRESH_TOKEN,
       id_token: idToken({
         iss: CHATGPT_SIGN_IN.ISSUER,
