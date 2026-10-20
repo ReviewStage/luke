@@ -22,8 +22,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * of the row, the act is done with no click, and while the row stands past
  * that line it is armed, the button brighter and its label riding the
  * row's edge a beat behind. Under a finger the line comes nearer, at three
- * quarters of the room the finger had to the row's far edge where that is
- * shorter, though never under `SWIPE.TOUCH_ACT_LEAST`, so a thumb's full
+ * quarters of the way from where the row stood to as far as the finger
+ * can carry it, counting the room it had to the row's far edge, where that
+ * is shorter, though never under `SWIPE.TOUCH_ACT_LEAST`, so a thumb's full
  * swipe acts from wherever on the row it began and a partial one still
  * opens; a mouse and a trackpad keep the row's share. Where a release lands is carried along the
  * hand's speed, so a flick right acts or opens and one back closes. Let go
@@ -170,17 +171,26 @@ function acts(offset: number, line: number): boolean {
   return line > 0 && offset >= line;
 }
 
+/** Where a finger's swipe began: where the row stood, and how far its far edge stood past the finger. */
+interface Touched {
+  readonly from: number;
+  readonly reach: number;
+}
+
 /**
- * Where a swipe acts, in CSS pixels from rest, on a row `row` wide whose
- * far edge stands `reach` past where a finger went down: `SWIPE.ACT_SHARE`
- * of the row, and for a finger nearer still where its reach is short, never
- * under `SWIPE.TOUCH_ACT_LEAST`. A mouse and a trackpad, which give no
- * reach, keep the row's share.
+ * Where a swipe acts, in CSS pixels from rest, on a row `row` wide:
+ * `SWIPE.ACT_SHARE` of the row, and for a finger nearer still where its
+ * reach is short, three quarters of the way from where the row stood to as
+ * far as the finger can carry it, never under `SWIPE.TOUCH_ACT_LEAST`. Note
+ * that the reach is counted from where the row stood, so a finger on a row
+ * already resting open must still carry it most of the way. A mouse and a
+ * trackpad, which give no reach, keep the row's share.
  */
-function actLine(row: number, reach: number | undefined): number {
+function actLine(row: number, touched: Touched | undefined): number {
   const share = row * SWIPE.ACT_SHARE;
-  if (row <= 0 || reach === undefined) return share;
-  return Math.min(share, Math.max(SWIPE.TOUCH_ACT_LEAST, reach * SWIPE.TOUCH_REACH_SHARE));
+  if (row <= 0 || touched === undefined) return share;
+  const carried = touched.from + touched.reach * SWIPE.TOUCH_REACH_SHARE;
+  return Math.min(share, Math.max(SWIPE.TOUCH_ACT_LEAST, carried));
 }
 
 /** Where the act's label stands: centred in the button while it shows, riding the row's edge once armed; and how much of it shows. */
@@ -317,12 +327,15 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     }
     close();
   };
-  // A finger's swipe hands where it went down, for the room it had to the row's far edge.
-  const measure = (touchedAt?: number) => {
+  // A finger's swipe hands where it went down and where the row stood, for the room it had to the row's far edge.
+  const measure = (finger?: { readonly x: number; readonly from: number }) => {
     const box = ref.current?.getBoundingClientRect();
     width.current = box?.width ?? 0;
-    const reach = box === undefined || touchedAt === undefined ? undefined : box.right - touchedAt;
-    line.current = actLine(width.current, reach);
+    const touched =
+      box === undefined || finger === undefined
+        ? undefined
+        : { from: finger.from, reach: box.right - finger.x };
+    line.current = actLine(width.current, touched);
   };
 
   // A row open, or out on a trackpad's swipe, closes on a press or a wheel anywhere else, as another row's swipe begins.
@@ -496,7 +509,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
             return;
           }
           held.swiping = true;
-          measure(held.pointerType === "touch" ? held.x : undefined);
+          measure(held.pointerType === "touch" ? held : undefined);
           ref.current?.setPointerCapture?.(event.pointerId);
           setState(SWIPE_STATE.MOVING);
         }
