@@ -85,8 +85,6 @@ export const PROVIDER_KEY_REJECTION = {
   UNREACHABLE: "unreachable",
   /** The account saved too many keys in too short a time; nothing was sent to the provider. */
   TOO_MANY_TRIES: "too_many_tries",
-  /** The account holds the provider's other kind of credential, which a save never replaces; it is removed first. */
-  OTHER_KIND_HELD: "other_kind_held",
 } as const;
 
 export type ProviderKeyRejection =

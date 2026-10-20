@@ -35,7 +35,8 @@ import {
  * an older version is moved onto the current one and opens under a ring
  * that no longer holds the old, a key already current or one the ring
  * cannot open is left as it was, and a second pass moves nothing. A
- * subscription credential moves as a key does and opens only as its kind.
+ * subscription credential moves as a key does, beside the same provider's
+ * API key, and each opens only as its kind.
  *
  * A member's GitHub token, sealed under the same ring, moves in the same pass.
  *
@@ -132,6 +133,12 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           "sk-ant-oat01-subscriber-setup-token",
           PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
         );
+        yield* storeKey(
+          ring(KEK.ONE),
+          subscriber,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          "sk-ant-subscriber-anthropic",
+        );
         yield* saveGitHubToken(
           second,
           sealGitHubToken(ring(KEK.ONE), second, Redacted.make("second-github-token")),
@@ -149,8 +156,8 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         const again = yield* rewrapProviderKeys(rotating);
         const rotated = ring(KEK.TWO);
 
-        assert.deepEqual(pass, { moved: 4, current: 1, changed: 0, unreadable: 1 });
-        assert.deepEqual(again, { moved: 0, current: 5, changed: 0, unreadable: 1 });
+        assert.deepEqual(pass, { moved: 5, current: 1, changed: 0, unreadable: 1 });
+        assert.deepEqual(again, { moved: 0, current: 6, changed: 0, unreadable: 1 });
         assert.deepEqual(yield* openedUnder(rotated, first), [
           [PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-first-anthropic"],
           [PROVIDER_KEY_PROVIDER.OPENAI, 2, "sk-proj-first-openai"],
@@ -163,6 +170,9 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           yield* openedUnder(rotated, subscriber, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
           [[PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-oat01-subscriber-setup-token"]],
         );
+        assert.deepEqual(yield* openedUnder(rotated, subscriber), [
+          [PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-subscriber-anthropic"],
+        ]);
         const token = yield* readGitHubTokenRow(second);
         assert.equal(token?.keyVersion, 2);
         const openedToken = token && openGitHubToken(rotated, second, token);
