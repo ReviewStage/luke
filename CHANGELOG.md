@@ -215,13 +215,27 @@ follow a link straight to one of its review threads.
   update_agent and update_task
   ([#3803](https://github.com/ReviewStage/luke/pull/3803),
   [#3829](https://github.com/ReviewStage/luke/pull/3829))
+- A form's filled fields go with your Inbox reply, with no Submit, and an
+  answered ask stays drawn as it was filled in
+  ([#4141](https://github.com/ReviewStage/luke/pull/4141),
+  [#4139](https://github.com/ReviewStage/luke/pull/4139))
+- Inbox rows read and hover as the sidebar's task rows do, with the asking
+  agent's card beside them
+  ([#4143](https://github.com/ReviewStage/luke/pull/4143))
+- Branch names in the Pull request tab are chips that copy on click, in a
+  tidier header, with section headings and filters drawn as the app's own
+  ([#4156](https://github.com/ReviewStage/luke/pull/4156),
+  [#4166](https://github.com/ReviewStage/luke/pull/4166),
+  [#4162](https://github.com/ReviewStage/luke/pull/4162))
 - Each version history entry carries its Luke link
   ([#3820](https://github.com/ReviewStage/luke/pull/3820))
 - Luke starts faster and spends less while its windows are hidden
   ([#3808](https://github.com/ReviewStage/luke/pull/3808),
   [#4079](https://github.com/ReviewStage/luke/pull/4079),
   [#4080](https://github.com/ReviewStage/luke/pull/4080),
-  [#4084](https://github.com/ReviewStage/luke/pull/4084))
+  [#4084](https://github.com/ReviewStage/luke/pull/4084),
+  [#4127](https://github.com/ReviewStage/luke/pull/4127),
+  [#4168](https://github.com/ReviewStage/luke/pull/4168))
 
 ### Fixes
 
@@ -258,6 +272,16 @@ follow a link straight to one of its review threads.
   ([#3896](https://github.com/ReviewStage/luke/pull/3896))
 - Fixed the tab strip's fades drawn when it does not scroll
   ([#3994](https://github.com/ReviewStage/luke/pull/3994))
+- Fixed the Inbox reply box keeping your words after a reply was sent
+  ([#4147](https://github.com/ReviewStage/luke/pull/4147))
+- Fixed the call card's controls spaced and aligned unevenly
+  ([#4173](https://github.com/ReviewStage/luke/pull/4173))
+- Fixed a finished turn's lone tool call drawn inside the row above it
+  ([#4153](https://github.com/ReviewStage/luke/pull/4153))
+- Fixed a forked draft's chip breaking across two lines
+  ([#4158](https://github.com/ReviewStage/luke/pull/4158))
+- Fixed cut labels in the task view ending in an ellipsis rather than fading
+  ([#4136](https://github.com/ReviewStage/luke/pull/4136))
 
 ### Misc
 
