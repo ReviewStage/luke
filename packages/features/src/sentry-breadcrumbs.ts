@@ -80,14 +80,20 @@ function attributeWithoutAccessToken([name, value]: [string, unknown]): [string,
   return [name, !isAddressAttribute(name) && namesAccessToken([value]) ? REDACTED : value];
 }
 
+/** Where an absolute URL starts inside a word of a span's name, as in `url=https://…`. */
+const URL_START_PATTERN = /[a-z][a-z0-9+.-]*:\/\//i;
+
 /**
- * A word of a span's name that is an address: an absolute URL, or a path
- * from the root. Note that other words are kept, because a name also holds
- * words such as an element's selector (`button#send`), whose `#` is no
- * fragment.
+ * A word of a span's name as it may be sent: from where an absolute URL
+ * starts in it, or the whole of a path from the root, scrubbed as an
+ * attribute's address is. Note that other words are kept, because a name
+ * also holds words such as an element's selector (`button#send`), whose `#`
+ * is no fragment.
  */
-function isAddressWord(word: string): boolean {
-  return word.includes("://") || word.startsWith("/");
+function scrubbedWord(word: string): string {
+  const urlAt = word.search(URL_START_PATTERN);
+  if (urlAt !== -1) return `${word.slice(0, urlAt)}${scrubbedUrl(word.slice(urlAt))}`;
+  return word.startsWith("/") ? scrubbedUrl(word) : word;
 }
 
 /**
@@ -98,10 +104,7 @@ function isAddressWord(word: string): boolean {
  */
 function nameWithoutAccessToken(name: string): string {
   if (namesAccessToken([name])) return REDACTED;
-  return name
-    .split(" ")
-    .map((word) => (isAddressWord(word) ? scrubbedUrl(word) : word))
-    .join(" ");
+  return name.split(" ").map(scrubbedWord).join(" ");
 }
 
 /** Whether a breadcrumb's text names the token, in its message or its request's URL. */
