@@ -80,11 +80,6 @@ export function pageShownAgain(): Stream.Stream<void> {
   return Stream.as(Stream.merge(shown, restored), undefined);
 }
 
-/** Each time the browser says it is back online. */
-export function backOnline(): Stream.Stream<void> {
-  return Stream.as(Stream.fromEventListener(window, "online"), undefined);
-}
-
 /**
  * Reloads the tab onto a newer release as it comes back to the front, or
  * offers it while a page holds unsaved work, until interrupted.

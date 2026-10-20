@@ -1,9 +1,5 @@
 import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import {
-  type AccountInboxAnswer,
-  accountInboxAnswerSchema,
-} from "@luke/features/account-inbox-wire";
 import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -25,6 +21,8 @@ import {
 } from "@luke/features/automation-view";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
   type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
@@ -75,6 +73,7 @@ import {
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   type CodingAgentWorkspaceListParams,
+  codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
@@ -686,12 +685,10 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
   codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
-  /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
-  codingAgentAccountInboxFollow(): Effect.Effect<void>;
-  /** The account's inbox let go: nothing more is heard of it until it is followed again. */
-  codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
-  /** What waits on the developer across the account, whole, each time it changes while it is followed. */
-  onAccountInboxChanged(listener: (inbox: AccountInboxAnswer) => void): () => void;
+  /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
+  codingAgentAccountInbox(
+    params: CodingAgentAccountInboxParams,
+  ): Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   codingAgentInboxAttachment(
     params: CodingAgentInboxAttachmentParams,
@@ -1960,18 +1957,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
         codingAgentAnswer(codingAgentInboxReadAllViewSchema),
       ),
-    codingAgentAccountInboxFollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
-    codingAgentAccountInboxUnfollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW, {})),
-    onAccountInboxChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(accountInboxAnswerSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
+    codingAgentAccountInbox: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: params.after }),
+        codingAgentAnswer(codingAgentAccountInboxAnswerViewSchema),
       ),
     codingAgentInboxAttachment: (params) =>
       Effect.map(

@@ -13,6 +13,7 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
+import { ACCOUNT_INBOX_ARCHIVED } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import {
   CHAT_ATTACHMENT_QUERY,
@@ -22,6 +23,7 @@ import {
 } from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
@@ -98,7 +100,6 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
-import type { AccountInboxLiveAnswer } from "./live-wire.js";
 import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -853,13 +854,18 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /**
-   * What waits on the developer across the account, sealed for following
-   * over Neon Realtime: answered at once, never held. Unanswered for
-   * anything that went wrong, which the caller answers by asking again.
-   */
-  accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.live.inbox, undefined), {});
+  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
+  accountInbox(
+    after: string,
+  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.inbox.account,
+        { after, archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE },
+        HOSTED_DEADLINE.HELD,
+      ),
+      {},
+    );
   }
 
   /**
