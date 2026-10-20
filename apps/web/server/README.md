@@ -515,8 +515,8 @@ test can end the one it started.
 
 The `SqlClient` is `PgClient.layer` over the connection string `DATABASE_URL`
 names, its pool held to the same `POOL_LIMITS` the `pg.Pool` behind Better
-Auth's Drizzle adapter is built to, one connection per warm instance, so the
-two pools on the one database cannot drift apart on how much of Neon's pooler
+Auth's Drizzle adapter is built to, `DATABASE_POOL_SIZE` (five) connections per
+warm instance, so the two pools on the one database cannot drift apart on how much of Neon's pooler
 a warm instance holds. The layer opens nothing while it builds: the pool keeps
 no minimum and makes its first connection on the first statement, which
 matters because this layer stands in the runtime every function shares and an
