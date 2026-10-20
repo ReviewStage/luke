@@ -162,7 +162,9 @@ const TASK_PLACE_WORDS = {
 
 ## Pages
 
-When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` and its path: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`,
+When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML document, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\`: by its path where you wrote it as a file in your sandbox, or as \`html\` where you have no file of it, such as on a call: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
+
+To sketch a design, a flow, or how parts connect, draw it on the task's whiteboard with \`${CODER_TOOL.DRAW_ON_BOARD}\`, sending the whole diagram each time, and check it with \`${CODER_TOOL.LOOK_AT_BOARD}\` while the developer has the board open.`,
     comments: `
 
 ## Comments
@@ -350,7 +352,7 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
+The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. The checkout opens one commit deep, so a turn that only reads the code starts fast: your first write, and the first \`bash\` command that is more than a plain read, such as any \`git\` or \`gh\` command or a script, fetches the rest of its history before it runs. To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
 
 ## How to work
 
