@@ -288,23 +288,22 @@ beforeEach(() => {
     act: (request: Act) => {
       if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
       if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
-      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-        changes.push([request.payload.agentId, request.payload.request]);
-        changeNumbers.push(request.payload.number);
-        const answer = changeAnswer;
-        return (changeHeld ?? Promise.resolve()).then(() => ({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: answer,
-        }));
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-        images.push(request.payload.src);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]) });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]),
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: (payload) => {
+      changes.push([payload.agentId, payload.request]);
+      changeNumbers.push(payload.number);
+      const answer = changeAnswer;
+      return (changeHeld ?? Promise.resolve()).then(() => answer);
+    },
+    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+      images.push(src);
+      return Promise.resolve(PIXEL);
+    },
+  });
 });
 
 afterEach(() => {

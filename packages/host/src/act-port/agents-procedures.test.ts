@@ -1,5 +1,5 @@
 /**
- * agents-procedures.test.ts -- the Tasks tab's core agent acts through the act port.
+ * agents-procedures.test.ts -- the Tasks tab's agent acts, and what an agent published, through the act port.
  *
  * The Tasks tab's core asks about a task's coding agents, through the act
  * port as a window calls them: only a panel of this build's own renderer
@@ -16,7 +16,16 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import {
+  FILE_VIEWED_STATE,
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+} from "@luke/features/pull-request-write-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
@@ -50,6 +59,22 @@ const STARTED = {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** What an agent published, as the service answers it: its branch and an open pull request. */
+const PUBLISHED = {
+  repository: "acme/relay",
+  branch: "luke/invites",
+  pullRequest: {
+    number: 41,
+    title: "Teammate invitations",
+    url: "https://github.com/acme/relay/pull/41",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
+  },
+};
+
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_MODELS]: "Could not read the models on this system.",
@@ -71,6 +96,23 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]:
+    "Could not read the agent's pull request on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]:
+    "Could not read the agent's pull request on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]:
+    "Could not read the repository's reviewers and labels on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]:
+    "Could not read the pull request's checks on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]:
+    "Could not read the pull request's conversation on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]:
+    "Could not read the pull request's image on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]:
+    "Could not change the pull request on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]:
+    "Could not read which files you viewed on this system.",
 } as const;
 
 type HostAsk = AgentProceduresDependencies["host"];
@@ -152,6 +194,51 @@ const ACTS: readonly {
     payload: { agentId: AGENT_ID },
     ask: "codingAgentPage",
   },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentPullRequest",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_CHANGES,
+    payload: { agentId: AGENT_ID, number: 41 },
+    ask: "codingAgentChanges",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentOverviewPullRequest",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentReviewOptions",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentOverviewChecks",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentOverviewConversation",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE,
+    payload: { agentId: AGENT_ID, src: "https://github.com/user-attachments/assets/seats.png" },
+    ask: "codingAgentGitHubImage",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION,
+    payload: { agentId: AGENT_ID, request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT } },
+    ask: "codingAgentPullRequestAction",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED,
+    payload: { agentId: AGENT_ID },
+    ask: "codingAgentPullRequestViewed",
+  },
 ];
 
 const ports: TestActPort<unknown>[] = [];
@@ -204,6 +291,9 @@ function windowPort(
     },
     observeModels: (models) => {
       noted.push(`models:${models.length}`);
+    },
+    observePublished: (agentId, pullRequest) => {
+      noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
     },
     observeTaskGone: (taskId) => {
       noted.push(`gone:${taskId}`);
@@ -384,6 +474,54 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
   assert.deepEqual(asked, []);
 });
 
+it("a panel's read of an agent's own pull request is noted as what it published, and a read of another by its number is not", async () => {
+  const { call, noted } = windowPort(PANEL, {
+    answers: { codingAgentPullRequest: () => Effect.succeed(PUBLISHED) },
+  });
+
+  const own = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID });
+  const other = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, {
+    agentId: AGENT_ID,
+    number: 52,
+  });
+
+  assert.deepEqual(own, { answer: PUBLISHED });
+  assert.deepEqual(other, { answer: PUBLISHED });
+  assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
+});
+
+it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and its read of which files it viewed hears each file's mark", async () => {
+  const viewed = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+    files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
+  };
+  const { call, asked, noted } = windowPort(PANEL, {
+    answers: {
+      codingAgentPullRequestAction: () =>
+        Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
+      codingAgentPullRequestViewed: () => Effect.succeed(viewed),
+    },
+  });
+  const change = {
+    agentId: AGENT_ID,
+    number: 41,
+    request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT },
+  };
+
+  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, change), {
+    answer: { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
+  });
+  assert.deepEqual(
+    await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
+    { answer: viewed },
+  );
+  assert.deepEqual(asked, [
+    ["codingAgentPullRequestAction", change],
+    ["codingAgentPullRequestViewed", { agentId: AGENT_ID }],
+  ]);
+  assert.deepEqual(noted, []);
+});
+
 it("a host that dies, or answers what the kind cannot carry, is refused in the kind's own words", async () => {
   const died = windowPort(PANEL, { fallback: () => Effect.die(new Error("secret detail")) });
   const malformed = windowPort(PANEL, { fallback: () => Effect.succeed({ agents: "none" }) });
@@ -411,6 +549,17 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
     }),
     { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN] },
   );
+  assert.deepEqual(
+    await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID, stray: true }),
+    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST] },
+  );
+  assert.deepEqual(
+    await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, {
+      agentId: AGENT_ID,
+      request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT, stray: true },
+    }),
+    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION] },
+  );
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
 });
@@ -427,6 +576,19 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
   assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_MODELS, { workspaceId: WORKSPACE_ID }), {
     refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_MODELS],
   });
+  assert.deepEqual(
+    await call(AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, {
+      agentId: AGENT_ID,
+      src: "",
+    }),
+    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE] },
+  );
+  assert.deepEqual(
+    await call(AGENT_ACT_KIND.CODING_AGENTS_CHANGES, { agentId: AGENT_ID, number: 0 }),
+    {
+      refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_CHANGES],
+    },
+  );
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
 });
