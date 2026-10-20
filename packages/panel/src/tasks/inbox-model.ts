@@ -1,4 +1,4 @@
-import type { FileChip } from "@luke/features/attachment-model";
+import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -154,6 +154,39 @@ export function inboxFileChips(
       url: read !== undefined && "url" in read ? read.url : "",
     };
   });
+}
+
+/** A comment's files as they are drawn after its words: its pictures, and every other file. */
+export interface InboxCommentFiles {
+  readonly pictures: readonly InboxFile[];
+  readonly others: readonly InboxFile[];
+}
+
+/**
+ * A comment's files as they are drawn after its words, each in the order
+ * attached: a picture its words already draw left out, since it stands
+ * where they draw it, as an agent's pictures do, then the pictures and
+ * every other file apart, as each is drawn in its own way. Note that only
+ * a picture the words draw as one is left out (`picturesDrawn`): a file
+ * they only link to, quote in code, or name as a picture though it is
+ * none is still drawn here, so it can still be opened.
+ */
+export function inboxCommentFiles(
+  files: readonly InboxFile[],
+  words: string | undefined,
+  itemId: string,
+): InboxCommentFiles {
+  const picture = (file: InboxFile) =>
+    attachmentView({ name: file.name, mediaType: file.mediaType, url: "" }) ===
+    ATTACHMENT_VIEW.IMAGE;
+  const drawn = new Set(
+    words === undefined ? [] : picturesDrawn(words, itemId).map((each) => each.attachmentId),
+  );
+  const after = files.filter((file) => !(picture(file) && drawn.has(file.attachmentId)));
+  return {
+    pictures: after.filter(picture),
+    others: after.filter((file) => !picture(file)),
+  };
 }
 
 /** The board as the tab draws it. */

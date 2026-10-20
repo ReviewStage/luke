@@ -15,7 +15,16 @@
  * Call tab is, and the voice is what the developer hears whatever is shown.
  */
 
-import { Button, IconButton, ResetIcon, VideoIcon, VideoOffIcon, WingFace } from "@luke/ui";
+import {
+  BUTTON_SHAPE,
+  Button,
+  type ButtonShape,
+  IconButton,
+  ResetIcon,
+  VideoIcon,
+  VideoOffIcon,
+  WingFace,
+} from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef } from "react";
 import { ThinkingDots } from "../thinking-dots.js";
@@ -134,13 +143,17 @@ export function AvatarVoice({
 /**
  * Video off or Video on: one button that says which the press will do,
  * named on hover by the system's own hint, since the floating window is too
- * small to hold a tooltip.
+ * small to hold a tooltip. Over the tile it is `round`, a disc on the
+ * tile's round ground, so its fill under the pointer is the ground's own
+ * outline rather than a square inside a circle.
  */
 export function VideoToggle({
   on,
+  shape = BUTTON_SHAPE.SQUARE,
   onSetVideo,
 }: {
   on: boolean;
+  shape?: ButtonShape;
   onSetVideo: (on: boolean) => void;
 }): React.JSX.Element {
   const label = on ? CALL_VIDEO_LABEL.VIDEO_OFF : CALL_VIDEO_LABEL.VIDEO_ON;
@@ -149,6 +162,7 @@ export function VideoToggle({
       <IconButton
         icon={on ? <VideoOffIcon /> : <VideoIcon />}
         label={label}
+        shape={shape}
         onClick={() => onSetVideo(!on)}
       />
     </span>
@@ -183,7 +197,7 @@ export function CallVideoTile({
     <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
       <TileGround status={status} video={video} onRestart={() => onSetVideo(true)} />
       <div className="call-video-controls">
-        <VideoToggle on onSetVideo={onSetVideo} />
+        <VideoToggle on shape={BUTTON_SHAPE.ROUND} onSetVideo={onSetVideo} />
       </div>
     </section>
   );

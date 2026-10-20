@@ -276,6 +276,8 @@ export const TASKS_ACT_KIND = {
   WEB_OPEN: "web.open",
   /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
   GITHUB_CONNECT: "github.connect",
+  /** The admin dashboard, opened in the default browser on the service's own origin, an address the host names and never one a window hands in. The service's gate decides who reads it. */
+  ADMIN_OPEN: "admin.open",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
   /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */

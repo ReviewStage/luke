@@ -15,11 +15,11 @@ import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Effect, Option, Result, Stream } from "effect";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import {
   GITHUB_APP_WITH_TOKENS,
@@ -65,7 +65,7 @@ interface PullRequestOnGitHub {
 /** eve's coding-agent service as the deployment reaches it for each account, writing down every message sent. */
 function fakeEve() {
   const sent: EveMessage[] = [];
-  const sessions: EveSessions = {
+  const sessions: AgentSessions = {
     open: () =>
       Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` }),
     send: (sessionId, message) =>

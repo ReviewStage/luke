@@ -202,7 +202,7 @@ html.call-window[data-pointer-stale="true"]
 }
 
 /* At this size the still face makes room for what the tile says, and
-   Video off keeps closer to the corner on less of a ground. */
+   Video off keeps closer to the corner. */
 .call-card .call-video-face {
   width: 40px;
   height: 40px;
@@ -211,7 +211,6 @@ html.call-window[data-pointer-stale="true"]
 .call-card .call-video-controls {
   right: var(--luke-space-4);
   bottom: var(--luke-space-4);
-  padding: 0;
 }
 
 .call-card-task {
@@ -300,14 +299,14 @@ html.call-window[data-pointer-stale="true"]
 }
 
 /* Video off, in the tile's bottom-right corner over whatever it draws, on
-   the card's ground so it reads over any frame of video. */
+   the card's ground so it reads over any frame of video. The ground is the
+   round button's own disc, with no ring of its own around it. */
 .call-video-controls {
   position: absolute;
   right: var(--luke-space-8);
   bottom: var(--luke-space-8);
   display: flex;
   align-items: center;
-  padding: var(--luke-space-4);
   border-radius: var(--luke-radius-full);
   background: var(--luke-color-overlay);
 }

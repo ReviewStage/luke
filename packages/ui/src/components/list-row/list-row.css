@@ -518,6 +518,39 @@
     }
   }
 
+  /* Where the metadata stands on the title's line, the acts that come in
+     stand over that line's end, and the metadata gives its room up to the
+     title, which is cut where the acts begin (`--luke-list-row-acts`, the
+     width the row measured them at) and fades out there, as a row whose
+     metadata stands at its middle cuts it; so a long title never runs under
+     the acts and a short one never jumps. */
+  .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):is(
+    :has(:focus-visible),
+    [data-menu-open="true"]
+  ) .luke-list-row-meta {
+    display: none;
+  }
+
+  .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):is(
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
+    .luke-list-row-head {
+    padding-inline-end: max(0px, var(--luke-list-row-acts, 0px) - var(--luke-space-12));
+  }
+
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):hover
+      .luke-list-row-meta {
+      display: none;
+    }
+
+    .luke-list-row[data-actions="hover"][data-meta="title"]:has(.luke-list-row-actions):hover
+      .luke-list-row-head {
+      padding-inline-end: max(0px, var(--luke-list-row-acts, 0px) - var(--luke-space-12));
+    }
+  }
+
   /* A screen with no hover never has a row in hand, so each row there keeps
      its metadata at rest, its acts offered by its menu on a long press
      (`menu.tsx`), and the open row alone shows its acts in the room the
@@ -536,6 +569,20 @@
     .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"])
       .luke-list-row-actions {
       position: static;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"][data-meta="title"]:has(
+        .luke-list-row-actions
+      )
+      .luke-list-row-meta {
+      display: none;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"][data-meta="title"]:has(
+        .luke-list-row-actions
+      )
+      .luke-list-row-head {
+      padding-inline-end: max(0px, var(--luke-list-row-acts, 0px) - var(--luke-space-12));
     }
 
     .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"]):has(

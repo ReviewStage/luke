@@ -28,6 +28,8 @@ import {
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
+  type RepositoryTool,
+  repositoryToolsOf,
   type TaskTool,
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
@@ -179,6 +181,43 @@ export function offeredPlanTools(
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<TaskTool>();
       return taskToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The repository's tools the session is offered for the turn it opens, for
+ * those tools' own files (`repositoryToolsOf`): none for a session the host
+ * does not admit, whose conversation is no agent's, or whose agent works in
+ * no repository.
+ */
+export function offeredRepositoryTools(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<ReadonlySet<RepositoryTool>> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return new Set<RepositoryTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<RepositoryTool>();
+      return repositoryToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The conversation so far, for the session's own `instructions/seed.ts` as
+ * it starts: the words already said over a conversation whose last session
+ * retired (`CoderHost.seed`), or nothing for a session the host does not
+ * admit or a conversation with nothing else said.
+ */
+export function sessionSeed(auth: SessionAuth, sessionId: string): Promise<string | undefined> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admitStarting(auth, sessionId);
+      if (Result.isFailure(admitted)) return undefined;
+      return yield* host.seed(admitted.success);
     }),
   );
 }

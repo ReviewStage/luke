@@ -48,11 +48,11 @@ import { DEPLOYMENT_TURNS } from "../agents/brain-host/channel.js";
 import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { ownedAuth } from "../agents/brain-host/door.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
   type EveStreamEvent,
   eveSessions,
 } from "../agents/brain-host/eve-sessions.js";
@@ -148,7 +148,7 @@ function mintSession(): string {
   return `wrun_${randomUUID()}`;
 }
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly opened: EveMessage[];
   /** The delivery id each send into a standing session was answered with, in order. */
   readonly delivered: string[];
@@ -264,7 +264,7 @@ async function stand(
   store: HostedLiveBrainOptions["store"] = database.store,
   conversationId: string = target.conversationId,
   record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
-  over?: EveSessions,
+  over?: AgentSessions,
   accountId: string = target.userId,
   sentry?: RecordingSentry,
 ): Promise<Stand> {

@@ -4,7 +4,7 @@ import { openTaskConversation } from "@luke/database/models/task-store";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
-import type { EveMount, EveSessions } from "../agents/brain-host/eve-sessions.js";
+import type { AgentSessions, EveMount } from "../agents/brain-host/eve-sessions.js";
 import { type CallBackend, callBackendOf } from "./call-backend.js";
 import {
   type AttachedSession,
@@ -37,7 +37,10 @@ interface ExchangeAttachmentDeps {
   /** The store writer a conversation's rows are written through, holding them to the tools the backend that runs it may call. */
   readonly writer: (backend: CallBackend) => StoreWriter;
   /** eve as the deployment reaches it for one account under one mount, for a spoken ask alone, composed by the caller so no secret enters here. */
-  readonly eve: (accountId: string, mount: EveMount) => EveSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
+  readonly eve: (
+    accountId: string,
+    mount: EveMount,
+  ) => AgentSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
   readonly report: (message: string) => void;

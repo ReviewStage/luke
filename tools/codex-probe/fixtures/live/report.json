@@ -1,0 +1,4 @@
+{
+  "placeholder": true,
+  "note": "Not recorded yet. The developer's one live run of `pnpm probe:codex` (Gate A2) replaces this file with the sanitized report and writes the sanitized app-server.jsonl beside it."
+}

@@ -63,7 +63,7 @@ export interface InboxRowPresses {
 }
 
 /** The list's rows' presses, kept as each row is drawn and dropped as it goes. */
-function useInboxRowPresses(): InboxRowPresses {
+export function useInboxRowPresses(): InboxRowPresses {
   const [presses] = useState(() => {
     const held = new Map<string, HTMLElement>();
     const refs = new Map<string, React.RefCallback<HTMLElement>>();

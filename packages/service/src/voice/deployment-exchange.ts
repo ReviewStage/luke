@@ -5,8 +5,8 @@ import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import {
+  type AgentSessions,
   type EveMount,
-  type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../agents/brain-host/eve-sessions.js";
@@ -43,7 +43,7 @@ interface DeploymentExchangeSeams {
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for one account under one mount; a test hands in a fake, the function composes the real client below. */
-  readonly eve?: (accountId: string, mount: EveMount) => EveSessions<SpokenTurn>;
+  readonly eve?: (accountId: string, mount: EveMount) => AgentSessions<SpokenTurn>;
   /**
    * The `HttpClient` eve's client is composed over. The exchange stands inside
    * the voice service, whose effects ask for the store's client alone, so the
@@ -92,7 +92,7 @@ function deploymentEve(
   compose: EveSessionsComposer,
   origin: string,
   deploymentSecret: Redacted.Redacted,
-): (accountId: string, mount: EveMount) => EveSessions<SpokenTurn> {
+): (accountId: string, mount: EveMount) => AgentSessions<SpokenTurn> {
   return (accountId, mount) =>
     compose<SpokenTurn>({
       origin,

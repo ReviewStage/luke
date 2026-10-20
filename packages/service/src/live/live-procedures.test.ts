@@ -3,9 +3,17 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
+import { writeDrawing } from "@luke/database/models/board-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { accountInboxLiveAnswerSchema, taskBoardLiveAnswerSchema } from "@luke/features/live-wire";
+import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import {
+  accountInboxLiveAnswerSchema,
+  LIVE_POLL,
+  LIVE_POLL_URL,
+  taskBoardLiveAnswerSchema,
+  taskBoardLiveRowsSchema,
+} from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -17,11 +25,12 @@ import { type LiveSealer, LiveSealing, SealRefused } from "./realtime.js";
 /**
  * The reads the desktop follows over Neon Realtime, sealed by the
  * procedure the way the hosted oRPC route answers it:
- * refused without a bearer, unavailable where the deployment has no
- * Realtime, and otherwise every part of the account inbox sealed for the
- * bearer's own account, with the address to subscribe at; and a task's
- * whiteboard sealed for an account that reaches the task and not found for
- * one that does not.
+ * refused without a bearer, and otherwise every part of the account inbox
+ * sealed for the bearer's own account, with the address to subscribe at;
+ * a task's whiteboard sealed for an account that reaches the task and not
+ * found for one that does not; and either answered with its rows inline at
+ * the poll address where the reader asks to poll or Realtime is off or
+ * cannot seal it.
  *
  * Synthetic accounts and bearers throughout; the secret is a script that
  * seals a statement as the values it was bound to, so a test can read whose
@@ -88,17 +97,8 @@ it.effect("a request without a bearer is refused, and one by another method is n
   }),
 );
 
-it.effect("a deployment whose Realtime is misconfigured answers unavailable", () =>
-  Effect.gen(function* () {
-    assert.deepEqual(yield* ask({ bearer: "user-dana", sealing: Option.none() }), {
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-      body: { error: HOSTED_API_ERROR.UNAVAILABLE },
-    });
-  }),
-);
-
 it.effect(
-  "every part of the account inbox is sealed for the bearer's own account, with the address to subscribe at, and a seal refused answers unavailable",
+  "every part of the account inbox is sealed for the bearer's own account, with the address to subscribe at",
   () =>
     Effect.gen(function* () {
       const dana = yield* ask({ bearer: "user-dana", sealing: Option.some(SCRIPTED) });
@@ -125,17 +125,11 @@ it.effect(
       assert.ok(
         Object.values(theirs.queries).every((sealed) => sealed.capability.includes('"user-eli"')),
       );
-
-      const refusing: LiveSealer = {
-        url: REALTIME_URL,
-        seal: () => Effect.fail(new SealRefused({ reason: "refused" })),
-      };
-      assert.deepEqual(yield* ask({ bearer: "user-dana", sealing: Option.some(refusing) }), {
-        status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-        body: { error: HOSTED_API_ERROR.UNAVAILABLE },
-      });
     }),
 );
+
+/** One box Luke drew, so the board has a row to read. */
+const BOX = [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }] as const;
 
 /** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
@@ -148,7 +142,8 @@ const openUser = Effect.gen(function* () {
 /** The procedures answering a task board's live read as `bearer`, over the store and the deployment's Realtime. */
 const askBoard = (options: {
   readonly bearer: string;
-  readonly taskId: string;
+  readonly taskId?: string;
+  readonly poll?: boolean;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -160,8 +155,9 @@ const askBoard = (options: {
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = new URL("/api/live/task-board", ORIGIN);
-    url.searchParams.set("id", options.taskId);
+    const url = new URL(options.taskId === undefined ? LIVE_INBOX : "/api/live/task-board", ORIGIN);
+    if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
+    if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     const response = yield* hostedAnswer(
       { live: procedures },
       services,
@@ -205,13 +201,58 @@ it.layer(getTestDB())("the task board's live read", (it) => {
           yield* askBoard({ bearer: dana, taskId: "not-a-task", sealing: Option.some(SCRIPTED) }),
           notFound,
         );
-        assert.deepEqual(
-          yield* askBoard({ bearer: dana, taskId: started.id, sealing: Option.none() }),
-          {
-            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
-          },
-        );
       }),
+  );
+
+  it.effect(
+    "a board asked to poll, or one Realtime is off for or cannot seal, is answered with its rows inline at the poll address, as the statement reads them",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        yield* writeDrawing(dana, started.id, BOX);
+        const refusing: LiveSealer = {
+          url: REALTIME_URL,
+          seal: () => Effect.fail(new SealRefused({ reason: "refused" })),
+        };
+        for (const [why, sealing, poll] of [
+          ["asked to poll", Option.some(SCRIPTED), true],
+          ["Realtime off", Option.none(), false],
+          ["Realtime refusing", Option.some(refusing), false],
+        ] as const) {
+          const polled = yield* askBoard({ bearer: dana, taskId: started.id, poll, sealing });
+          assert.equal(polled.status, HOSTED_HTTP_STATUS.OK, why);
+          const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(polled.body);
+          assert.equal(answer.url, LIVE_POLL_URL, why);
+          assert.deepEqual(
+            Schema.decodeUnknownSync(taskBoardLiveRowsSchema)({ board: answer.queries.board.rows }),
+            {
+              board: [{ taskId: started.id, drawingNumber: 1, appliedDrawing: 0, imaged: false }],
+            },
+            why,
+          );
+        }
+        const sealed = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          sealing: Option.some(SCRIPTED),
+        });
+        const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL, "sealed where Realtime seals and nobody polls");
+        assert.equal(answer.queries.board.rows, undefined);
+      }),
+  );
+
+  it.effect("the account inbox Realtime is off for is answered with every part's rows inline", () =>
+    Effect.gen(function* () {
+      const dana = yield* openUser;
+      const polled = yield* askBoard({ bearer: dana, sealing: Option.none() });
+      assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(polled.body);
+      assert.equal(answer.url, LIVE_POLL_URL);
+      for (const [part, sealed] of Object.entries(answer.queries)) {
+        assert.deepEqual(sealed.rows, [], `${part} holds nothing yet`);
+      }
+    }),
   );
 });

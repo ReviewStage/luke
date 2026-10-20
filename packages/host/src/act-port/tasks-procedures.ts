@@ -8,6 +8,7 @@
  * decide, and comes back as the panel's own answer. Nothing is held here.
  */
 
+import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
 import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
   type CodeLines,
@@ -62,7 +63,7 @@ import {
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
-import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
+import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 
@@ -147,6 +148,16 @@ function pageSourceLines(
 /** Whether an address the host answered parses and stands on the service's own origin. */
 function isServicePage(url: string, serviceBaseUrl: string): boolean {
   return URL.canParse(url) && new URL(url).origin === new URL(serviceBaseUrl).origin;
+}
+
+/**
+ * The admin dashboard's page on the service's own origin, or nothing where
+ * that origin is no http or https one, which the browser alone would open.
+ */
+function adminPage(serviceBaseUrl: string): string | undefined {
+  if (!URL.canParse(ADMIN_PAGE_PATH, serviceBaseUrl)) return undefined;
+  const page = new URL(ADMIN_PAGE_PATH, serviceBaseUrl).href;
+  return isWebAddress(page) && isServicePage(page, serviceBaseUrl) ? page : undefined;
 }
 
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
@@ -313,6 +324,18 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* Effect.fail(errors.REFUSED());
       }
       const { url } = page;
+      yield* Effect.tryPromise({ try: () => openExternal(url), catch: () => errors.REFUSED() });
+    }),
+    // The admin dashboard opens where the browser's own session is, rather
+    // than in a Browser tab, whose cookies are its own. The act carries no
+    // address: the host names the page on the service's origin.
+    [TASKS_ACT_KIND.ADMIN_OPEN]: actPort[TASKS_ACT_KIND.ADMIN_OPEN].effect(function* ({
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const url = adminPage(dependencies.serviceBaseUrl);
+      if (url === undefined) return yield* Effect.fail(errors.REFUSED());
       yield* Effect.tryPromise({ try: () => openExternal(url), catch: () => errors.REFUSED() });
     }),
     // Disconnecting asks the host, which asks the service under the Mac's

@@ -27,9 +27,9 @@ import {
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import {
+  type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
@@ -107,7 +107,7 @@ const resolveUserId = (incoming: Request) =>
 const opened: EveMessage[] = [];
 
 /** eve as the routes reach it under the member's bearer: every open accepted and written down, no other call made. */
-const fakeEve = (): EveSessions => ({
+const fakeEve = (): AgentSessions => ({
   open: (message) =>
     Effect.sync(() => {
       opened.push(message);

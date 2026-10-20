@@ -767,9 +767,9 @@ ul.actor-stack {
   box-shadow: none;
 }
 
-/* A pile whose faces wear badges stands them apart, so each badge reads clear of the next face. */
-.actor-stack:has(.actor-stack-badge) > .actor-stack-face {
-  margin-left: var(--luke-space-4);
+/* A pile whose faces wear badges stands them apart, its count too, so each badge reads clear of what comes next. */
+.actor-stack:has(.actor-stack-badge) > :is(.actor-stack-face, .actor-stack-more) {
+  margin-left: var(--luke-space-6);
 }
 
 .actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
@@ -797,11 +797,11 @@ ul.actor-stack {
 .actor-stack-badge {
   position: absolute;
   z-index: 1;
-  right: -3px;
-  bottom: -3px;
+  right: -4px;
+  bottom: -4px;
   display: grid;
-  width: 10px;
-  height: 10px;
+  width: 13px;
+  height: 13px;
   place-items: center;
   border-radius: 50%;
   background: var(--actor-stack-ground, var(--luke-color-ground));
@@ -3141,6 +3141,22 @@ ul.actor-stack {
 /* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
 .inbox-tasks-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
+}
+
+/* The inbox-first sidebar's list (`sidebar-inbox.tsx`): the sidebar's own
+   section under its places and pins, scrolled by the sidebar's scroller and
+   inset as the sidebar's rows are, with no edge of its own. */
+.inbox-tasks[data-placement="sidebar"] {
+  display: block;
+  border-right: 0;
+}
+
+.inbox-tasks[data-placement="sidebar"] .inbox-tasks-body {
+  padding: 0;
+}
+
+.inbox-tasks[data-placement="sidebar"] .inbox-tasks-chips {
+  padding-inline: 0;
 }
 
 /* An item's row is a sidebar row led by its agent's tile (`actor-ref.tsx`),

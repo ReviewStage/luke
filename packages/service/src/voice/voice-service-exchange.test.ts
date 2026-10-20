@@ -33,11 +33,11 @@ import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
+  type AgentSessions,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveMount,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../agents/brain-host/relay.js";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
@@ -139,7 +139,7 @@ const relay = new StreamRelay({
 });
 const sessionRecord = voiceSessionRecord(() => NOW);
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly opened: EveMessage[];
   /** Every exploring a fresh session asked for, which eve declines, so a test of the developer's asks finds their first ask opens the session. */
   readonly explored: EveMessage[];
