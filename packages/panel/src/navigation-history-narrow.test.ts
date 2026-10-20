@@ -77,6 +77,7 @@ interface Standing {
     readonly revision: number | undefined;
     readonly listed: boolean;
   };
+  readonly issues: { readonly open: boolean };
 }
 
 /** The window on the task, every pane over it shut. */
@@ -87,10 +88,15 @@ const ON_TASK: Standing = {
   inbox: { open: false, chosen: undefined, listed: false },
   chat: { open: false, place: FOR_YOU, listed: true },
   versions: { open: false, revision: undefined, listed: true },
+  issues: { open: false },
 };
 
 /** The Tasks tab over where the window stands, each press moving it as the real one does. */
-function tasksTab(at: Standing, patch: (move: (held: Standing) => Standing) => void): TasksControl {
+function tasksTab(
+  at: Standing,
+  patch: (move: (held: Standing) => Standing) => void,
+  room: ShellRoom,
+): TasksControl {
   const base = tasksControl();
   const versions = (next: Partial<Standing["versions"]>) =>
     patch((held) => ({ ...held, versions: { ...held.versions, ...next } }));
@@ -99,6 +105,9 @@ function tasksTab(at: Standing, patch: (move: (held: Standing) => Standing) => v
     patch((held) => ({ ...held, inbox: { ...held.inbox, ...next } }));
   const chat = (next: Partial<Standing["chat"]>) =>
     patch((held) => ({ ...held, chat: { ...held.chat, ...next } }));
+  const shut = () => panel({ open: false, tab: at.panel.tab });
+  // A narrow room holds the panel full screen alone, so leaving full screen there shuts it.
+  const narrow = room === SHELL_ROOM.NARROW;
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
@@ -109,11 +118,24 @@ function tasksTab(at: Standing, patch: (move: (held: Standing) => Standing) => v
     sidePanel: {
       ...base.sidePanel,
       open: at.panel.open,
-      fullScreen: at.panel.open,
-      fullScreenOnly: true,
+      fullScreen: at.panel.open && narrow,
+      fullScreenOnly: at.panel.open && narrow,
       tab: at.panel.tab,
       onShow: (_taskId, tab) => panel({ open: true, tab }),
       onSetOpen: (open) => panel({ open, tab: at.panel.tab }),
+      onToggle: () => panel({ open: !at.panel.open, tab: at.panel.tab }),
+      onToggleFullScreen: () => (narrow ? shut() : undefined),
+    },
+    // As the real one does, a panel filling the window is the nearer layer than the task.
+    back: () => {
+      if (at.panel.open) shut();
+      return true;
+    },
+    issuesView: {
+      ...base.issuesView,
+      open: at.issues.open,
+      onOpen: () => patch((held) => ({ ...held, issues: { open: true } })),
+      onClose: () => patch((held) => ({ ...held, issues: { open: false } })),
     },
     inboxView: {
       ...base.inboxView,
@@ -187,7 +209,7 @@ function mount(
     const [at, setAt] = useState(start);
     standing = at;
     restand = setAt;
-    const tasks = tasksTab(at, setAt);
+    const tasks = tasksTab(at, setAt, room);
     const settings = at.tab === PANEL_TAB.SETTINGS ? at.settings : undefined;
     const copyLink = useCopyLink(
       tasks,
@@ -289,6 +311,70 @@ test("on a narrow stage the side panel opened over the plan is a step: Back shut
       tab: PAGE_TAB,
     },
   );
+});
+
+test("on a narrow stage each of the side panel's ways out steps back to the plan, so Back does not open the panel again and no open and shut adds a step", () => {
+  const waysOut: readonly [string, (shown: TasksControl) => void][] = [
+    ["its Close", (shown) => shown.sidePanel.onToggle()],
+    [
+      "leaving full screen, as a row opening a tab of the task's column does",
+      (shown) => shown.sidePanel.onToggleFullScreen(),
+    ],
+    ["Escape", (shown) => shown.back()],
+  ];
+  for (const [way, shut] of waysOut) {
+    const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+    for (let round = 0; round < 2; round += 1) {
+      window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+      window.press(() => shut(window.shown()));
+      assert.equal(window.at().panel.open, false, `${way} shuts the panel`);
+      assert.deepEqual(
+        window.addresses(),
+        [TASK_PATH, `${TASK_PATH}/page/page-1`],
+        `${way} adds no step, however often the panel is opened and shut`,
+      );
+      assert.equal(window.standingAddress(), TASK_PATH);
+      assert.equal(window.history().canGoBack, false, `after ${way}, Back has no panel to open`);
+      assert.equal(window.history().canGoForward, true, "and Forward opens it again");
+    }
+    unmountAll();
+  }
+});
+
+test("on a narrow stage a side panel the window opened with, as a link loaded on it opens it, shuts in its own step, leaving none behind or ahead", () => {
+  const window = mount(SHELL_ROOM.NARROW, { ...ON_TASK, panel: { open: true, tab: PAGE_TAB } });
+  assert.deepEqual(window.addresses(), [`${TASK_PATH}/page/page-1`]);
+
+  window.press(() => window.shown().sidePanel.onToggle());
+  assert.equal(window.at().panel.open, false);
+  assert.deepEqual(window.addresses(), [TASK_PATH], "the plan takes the panel's step in place");
+  assert.equal(window.history().canGoBack, false);
+  assert.equal(window.history().canGoForward, false);
+});
+
+test("on a narrow stage a side panel shut over a page other than its plan's is no step: it neither steps back to the plan behind nor takes the step of the plan opened after it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT, EXPERIMENT.ISSUES));
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  // The Issues page is an experiment, whose word arrives with the window's state.
+  await settle();
+  // The Issues page peeks an issue in the side panel, which a narrow room holds full screen over it.
+  window.move((held) => ({
+    ...held,
+    issues: { open: true },
+    panel: { open: true, tab: PAGE_TAB },
+  }));
+  assert.equal(window.addresses().length, 2);
+
+  window.press(() => window.shown().sidePanel.onToggleFullScreen());
+  assert.equal(window.at().panel.open, false);
+  assert.equal(window.at().issues.open, true, "shutting the peek leaves the Issues page standing");
+  assert.equal(window.addresses().length, 2, "and is no step");
+
+  window.move((held) => ({ ...held, issues: { open: false } }));
+  assert.equal(window.addresses().length, 3, "the plan opened after it is a step of its own");
+  assert.equal(window.standingAddress(), TASK_PATH);
+  act(() => window.history().onBack());
+  assert.equal(window.at().issues.open, true, "Back returns to the Issues page");
 });
 
 test("on a narrow stage an Inbox item opened from its list is a step, and the Inbox's way back steps back to the list", () => {
