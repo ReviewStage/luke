@@ -1157,14 +1157,30 @@ function tasklessWaiting(userId: string) {
   );
 }
 
+/** Another item of the same task, read beside the one a statement reads, under its own name. */
+const NEWER = "newer";
+const newer = alias(inboxItem, NEWER);
+
+const ITEMS_READ = sql.raw(String(INBOX_BOUNDS.MAX_ITEMS_READ));
+
+/**
+ * Whether a settled item is among the latest `MAX_ITEMS_READ` settled items
+ * of its task, in the order a task's read keeps (`LATEST_FIRST`): those the
+ * read carries (`findSettledItems`), so the Inbox can list it. Note that the
+ * count of those ahead of it stops at the bound, so a long-lived task costs
+ * no more than its read does.
+ */
+const WITHIN_SETTLED_READ = sql<boolean>`((select count(*) from (select 1 from ${ITEM_TABLE} as ${sql.identifier(NEWER)} where ${newer.taskId} = ${qualified(inboxItem, inboxItem.taskId)} and ${newer.status} <> ${INBOX_STATUS.OPEN} and (${newer.updatedAt}, ${newer.id}) > (${ITEM_UPDATED_AT}, ${ITEM_ID}) limit ${ITEMS_READ}) as ahead) < ${ITEMS_READ})`;
+
 /**
  * Whether the item is the reader's to do, as the Inbox's To do lists it:
- * posted by an agent they started, and open or unread for them, on a task
- * they have not archived. Note that a settled item counts while it is
+ * posted by an agent they started, and open, or unread for them and among
+ * the settled items its task's read carries (`WITHIN_SETTLED_READ`), on a
+ * task they have not archived. Note that a settled item counts while it is
  * unread, such as a thread its agent wrote on again after it was answered.
  */
 function toDoFor(userId: string): SQL<boolean> {
-  return sql<boolean>`(${eq(inboxItem.userId, userId)} and ${isNull(task.archivedAt)} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or ${unreadFor(userId)}))`;
+  return sql<boolean>`(${eq(inboxItem.userId, userId)} and ${isNull(task.archivedAt)} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or (${unreadFor(userId)} and ${WITHIN_SETTLED_READ})))`;
 }
 
 /** How many of a group's items are the reader's to do (`toDoFor`), as a number rather than a `bigint`. */

@@ -2641,6 +2641,43 @@ test("the sidebar's Inbox counts what To do lists, as main counts each task's to
   assert.equal(sidebarInboxCount(page), 2);
 });
 
+test("a read mark stops moving the sidebar's Inbox once main hands the window a read after the service took it, even where another window's mark leaves main's count as it stood", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  // Note that the thread written on again changed before the open asks, so opening the Inbox reads none out of To do.
+  const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
+  const SEEN: InboxItem = {
+    ...RETRY,
+    id: "a1b2c3d4-0000-4000-8000-000000000012",
+    key: "seen",
+    title: "Which region?",
+    updatedAt: 2_000,
+    unread: false,
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
+  const holding = (): readonly AppInboxTaskHolding[] => [
+    { taskId: BILLING.id, items: 3, toDo: 2, updatedAt: 3_000 },
+    { taskId: INVITES.id, items: 1, toDo: 1, updatedAt: 4_000 },
+  ];
+  const { page } = mount([], { holding: holding(), withSidebar: true });
+  await settle();
+  assert.equal(sidebarInboxCount(page), 3);
+
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.equal(sidebarInboxCount(page), 2, "reading the thread drops it at once");
+
+  // Another window marks the read item unread as main hears of this read, so main counts the billing task's two as before.
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, unread: true },
+    { ...followed, unread: false },
+    { ...SEEN, unread: true },
+  ]);
+  act(() => setHolding(holding()));
+  await settle();
+  assert.equal(sidebarInboxCount(page), 3, "main's newer read stands, the mark in it");
+});
+
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {
   inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, updatedAt: 6_000, unread: true }]);
   const { page } = mount([], { withSidebar: true });

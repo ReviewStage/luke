@@ -1556,7 +1556,12 @@ function SidebarColumn({
     () => inboxTasks.filter((holding) => standingTasks.some((task) => task.id === holding.taskId)),
     [inboxTasks, standingTasks],
   );
-  const toDo = useSettledToDo(standingHoldings, tasks.listed.inbox, settledWaiting.waiting);
+  const toDo = useSettledToDo(
+    standingHoldings,
+    tasks.listed.inbox,
+    settledWaiting.waiting,
+    tasks.inboxTasks,
+  );
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {

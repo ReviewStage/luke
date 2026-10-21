@@ -119,7 +119,7 @@ function sameCounted(one: InboxToDoMark, other: InboxToDoMark): boolean {
  * the count from there rather than from what the last mark drew.
  */
 function markedAgain(mark: InboxReadMark, last: Mark | undefined): InboxReadMark {
-  const before = last?.toDo;
+  const before = last?.mainCaughtUp === false ? last.toDo : undefined;
   if (mark.toDo === undefined || before === undefined || !sameCounted(before, mark.toDo)) {
     return mark;
   }
@@ -160,12 +160,15 @@ interface Mark extends InboxReadMark {
   readonly made: symbol;
   readonly taken: boolean;
   readonly held: boolean;
+  /** Whether main handed the window a read of the account since the service took the mark, which holds it, so it moves main's count no longer. */
+  readonly mainCaughtUp: boolean;
 }
 
-/** What the window holds: its sends and its marks, by item. */
+/** What the window holds: its sends and its marks, by item, and main's latest read of the account it saw. */
 interface Book {
   readonly entries: ReadonlyMap<string, Settling>;
   readonly marks: ReadonlyMap<string, Mark>;
+  readonly mainRead?: unknown;
 }
 
 /** What a read saw of the marks as it was drawn. */
@@ -194,7 +197,9 @@ type Change =
     }
   | { readonly unmark: symbol }
   | { readonly marked: symbol }
-  | { readonly marksSeen: MarksSeen };
+  | { readonly marksSeen: MarksSeen }
+  /** Main handed the window this read of the account. */
+  | { readonly mainRead: unknown };
 
 const NOTHING_LAID: Book = { entries: new Map(), marks: new Map() };
 
@@ -250,7 +255,13 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
       const again = markedAgain(mark, next.get(itemId));
       // Note that an item marked again moves to the newest place, so the oldest marks go first.
       next.delete(itemId);
-      next.set(itemId, { ...again, made: change.mark.made, taken: false, held: false });
+      next.set(itemId, {
+        ...again,
+        made: change.mark.made,
+        taken: false,
+        held: false,
+        mainCaughtUp: false,
+      });
     }
     return new Map([...next].slice(-KEPT_MARKS));
   }
@@ -286,8 +297,28 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
   );
 }
 
+/**
+ * The book once main hands the window a read of the account: every mark the
+ * service took before it is caught up, since the read was asked after the
+ * mark was written, the account's held read waking on the reader's marks;
+ * the very book where the read is the one last seen.
+ */
+function mainReadChanged(book: Book, mainRead: unknown): Book {
+  if (book.mainRead === mainRead) return book;
+  const caught = [...book.marks].some(([, mark]) => mark.taken && !mark.mainCaughtUp);
+  if (!caught) return { ...book, mainRead };
+  const marks = new Map(
+    [...book.marks].map(([itemId, mark]) => [
+      itemId,
+      mark.taken ? { ...mark, mainCaughtUp: true } : mark,
+    ]),
+  );
+  return { ...book, marks, mainRead };
+}
+
 /** What the change makes of the book. */
 function changed(book: Book, change: Change): Book {
+  if ("mainRead" in change) return mainReadChanged(book, change.mainRead);
   const marks = marksChanged(book.marks, change);
   if (marks !== book.marks) return { ...book, marks };
   const entries = entriesChanged(book.entries, change);
@@ -596,13 +627,18 @@ export function useSettledWaiting(
 /**
  * Whether a mark's move stands over main's count of its task: main has heard
  * of the item as it was marked, its task's latest change no earlier than the
- * item's, so the mark changes what main counts, and main's word on the task
- * is still what it was as the mark was made.
+ * item's, so the mark changes what main counts; main has handed the window
+ * no read since the service took the mark (`mainReadChanged`); and main's
+ * word on the task is still what it was as the mark was made, which a read
+ * holding the mark before the service's word on it reached the window moves.
+ * Note that the count and the instant alone never prove main has not caught
+ * up, since a mark elsewhere may leave both as they stood.
  */
-function toDoMoveStands(mark: InboxReadMark, holding: AppInboxTaskHolding): boolean {
+function toDoMoveStands(mark: Mark, holding: AppInboxTaskHolding): boolean {
   const counted = mark.toDo?.counted;
   return (
     counted !== undefined &&
+    !mark.mainCaughtUp &&
     mark.updatedAt <= counted.updatedAt &&
     holding.toDo === counted.toDo &&
     holding.updatedAt === counted.updatedAt
@@ -623,14 +659,22 @@ export function useSettledToDo(
   holdings: readonly AppInboxTaskHolding[],
   waiting: readonly AppInboxTask[],
   settled: readonly AppInboxTask[],
+  /** Main's read of the account, whose every new answer catches up the marks the service took before it. */
+  mainRead: unknown,
 ): number | undefined {
   const { marks } = useBook();
+  const change = useAtomSet(settlingAtom);
+  useEffect(() => {
+    change({ mainRead });
+  }, [change, mainRead]);
   return useMemo(() => {
     const counted = new Map<string, AppInboxTaskHolding & { readonly toDo: number }>();
     for (const holding of holdings) {
       if (holding.toDo === undefined) return undefined;
       counted.set(holding.taskId, { ...holding, toDo: holding.toDo });
     }
+    // Note that a task main lists open items on and no count for is one its count cannot stand for yet.
+    if (waiting.some((task) => !counted.has(task.taskId))) return undefined;
     const openIn = (tasks: readonly AppInboxTask[]) =>
       tasks.reduce((sum, task) => sum + (counted.has(task.taskId) ? task.items.length : 0), 0);
     let total = [...counted.values()].reduce((sum, holding) => sum + holding.toDo, 0);

@@ -44,12 +44,14 @@ import {
 import {
   INBOX_ASK,
   INBOX_BLOCK,
+  INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
   type InboxImageBlock,
   type InboxPost,
 } from "@luke/features/inbox-wire";
@@ -1611,6 +1613,56 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
           1,
           "the owner's reads move nothing of the teammate's count",
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's To do counts its unread settled items only among the latest its read carries, as the Inbox can list no older one, alike live and held",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const bound = INBOX_BOUNDS.MAX_ITEMS_READ;
+        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
+        // One more answered item than a task's read carries, none of them read, written as the store keeps them.
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: bound + 1 }, (_, step) => ({
+              userId: owner,
+              taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              key: `settled-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Settled ${step}`,
+              blocks: [],
+              response: { type: INBOX_RESPONSE.TODO },
+              needsReply: false,
+              status: INBOX_STATUS.ANSWERED,
+              answer: DONE,
+              postedAt: at(step),
+              settledAt: at(step),
+              updatedAt: at(step),
+            })),
+          ),
+        );
+        yield* postedId(agent, "open");
+
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const live = yield* liveAnswerOf(owner, held.readAt);
+        assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        assert.deepEqual(
+          held.plans.map((plan) => [plan.items, plan.toDo]),
+          [[bound + 2, bound + 1]],
+          "the open item and the settled ones the read carries, the oldest left out",
+        );
+        assert.equal(
+          (yield* taskInboxItems(owner, taskId)).filter((item) => item.unread === true).length,
+          bound + 1,
+          "as many as the task's read holds unread",
         );
       }),
   );
