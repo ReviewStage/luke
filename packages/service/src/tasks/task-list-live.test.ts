@@ -37,6 +37,7 @@ import {
   taskListLiveRowsSchema,
   taskListOfLiveRows,
 } from "@luke/features/task-list-live";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -295,6 +296,15 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* pinCodingAgent(owner, loose.id, true);
         const gone = yield* openAgent(teammate, { workspaceId: plan.workspaceId }, 2 * 60_000);
         yield* archiveCodingAgent(owner, gone.id, true);
+        // Tasks made for the owner by a coding agent, and by Luke on their call.
+        const followUp = yield* startTask(owner, {
+          name: "Invite emails",
+          origin: { actor: PLAN_ACTOR.AGENT, agentId: done.id },
+        });
+        const fromCall = yield* startTask(owner, {
+          name: "Audit log export",
+          origin: { actor: PLAN_ACTOR.NOTETAKER },
+        });
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
@@ -308,6 +318,15 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ]);
         }
         const read = yield* liveListOf(owner, NOW);
+        const originOf = (taskId: string) => read.plans.find((each) => each.id === taskId)?.origin;
+        assert.deepEqual(
+          [originOf(plan.id), originOf(followUp.id), originOf(fromCall.id)],
+          [
+            undefined,
+            { actor: PLAN_ACTOR.AGENT, agentId: done.id },
+            { actor: PLAN_ACTOR.NOTETAKER },
+          ],
+        );
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual([agents?.total, agents?.working, agents?.pullRequestTotal], [7, 2, 1]);
         assert.ok(

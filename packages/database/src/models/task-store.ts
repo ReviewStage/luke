@@ -12,6 +12,7 @@ import {
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskOrigin,
   type TaskPriority,
   type TaskStatus,
   type TaskSummary,
@@ -177,6 +178,8 @@ export interface NewTask {
   readonly priority?: TaskPriority;
   /** The member the task is assigned to as it starts, who must be a member of its workspace; no one where none is named. */
   readonly assigneeId?: string;
+  /** Who made the task for its member, where they did not make it by hand: Luke on their call, or a coding agent by its id. */
+  readonly origin?: TaskOrigin;
 }
 
 /**
@@ -204,6 +207,13 @@ export interface TaskChanges {
 /** How a task's repository was reached, as a write takes it. */
 const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
+/** Who made a task, as its row holds it. */
+const TaskCreatorActorSchema = Schema.Literals([
+  PLAN_ACTOR.DEVELOPER,
+  PLAN_ACTOR.NOTETAKER,
+  PLAN_ACTOR.AGENT,
+]);
+
 /**
  * The columns a line of the list reads: none of the document. Note that the
  * list projects these alone, because a migration that reshapes the document
@@ -220,6 +230,8 @@ const TASK_SUMMARY_COLUMNS = {
   status: task.status,
   priority: task.priority,
   assigneeId: task.assigneeId,
+  creatorActor: task.creatorActor,
+  creatorAgentId: task.creatorAgentId,
   repository: task.repository,
   githubAccess: task.githubAccess,
   archivedAt: task.archivedAt,
@@ -244,6 +256,8 @@ const TaskSummaryRowSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   assigneeId: Schema.NullOr(Schema.String),
+  creatorActor: TaskCreatorActorSchema,
+  creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
@@ -500,6 +514,7 @@ function summaryOf(
     openedAt: createdAt,
     ownerId: row.userId,
     ...(owner === undefined ? undefined : { createdBy: { userId: row.userId, name: owner } }),
+    ...originOf(row),
     ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
@@ -512,6 +527,15 @@ function summaryOf(
   };
 }
 
+/** Who made a task for its member, as the wire names them: nothing for a task made by hand. */
+function originOf(row: TaskSummaryRow): { readonly origin?: TaskOrigin } {
+  if (row.creatorActor === PLAN_ACTOR.DEVELOPER) return {};
+  const agentId = row.creatorAgentId;
+  return {
+    origin: { actor: row.creatorActor, ...(agentId === null ? undefined : { agentId }) },
+  };
+}
+
 const TaskInsertSchema = Schema.Struct({
   id: Schema.optionalKey(Schema.String),
   userId: Schema.String,
@@ -521,6 +545,8 @@ const TaskInsertSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   assigneeId: Schema.NullOr(Schema.String),
+  creatorActor: TaskCreatorActorSchema,
+  creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
   document: Schema.String,
@@ -539,6 +565,8 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     status: write.status,
     priority: write.priority,
     assigneeId: write.assigneeId,
+    creatorActor: write.creatorActor,
+    creatorAgentId: write.creatorAgentId,
     repository: write.repository,
     githubAccess: write.githubAccess,
     document: write.document,
@@ -857,6 +885,8 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
       assigneeId: started.assigneeId ?? null,
+      creatorActor: started.origin?.actor ?? PLAN_ACTOR.DEVELOPER,
+      creatorAgentId: started.origin?.agentId ?? null,
       number: yield* nextTaskNumber(started.organizationId),
       now,
     };

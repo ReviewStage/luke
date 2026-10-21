@@ -67,6 +67,8 @@ function tasksStatement(userId: string) {
           status: task.status,
           priority: task.priority,
           number: task.number,
+          creatorActor: task.creatorActor,
+          creatorAgentId: task.creatorAgentId,
         },
         {
           pinnedAt: taskPin.pinnedAt,

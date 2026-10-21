@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
-import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -303,6 +303,29 @@ it.layer(getTestDB())("a plan's starting text", (it) => {
       assert.equal((yield* opened(planned.id))?.body, DEFAULT_PLAN_TEMPLATE);
       assert.deepEqual(yield* opened(unplanned.id), { body: "", assumptions: [] });
     }),
+  );
+});
+
+it.layer(getTestDB())("who made a task", (it) => {
+  it.effect(
+    "a task its member made by hand names no origin, and one Luke made on their call names him, in the list too",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const organizationId = yield* openWorkspace(owner);
+        const byHand = yield* createTask(owner, { organizationId });
+        const onCall = yield* createTask(owner, {
+          organizationId,
+          origin: { actor: PLAN_ACTOR.NOTETAKER },
+        });
+
+        assert.equal(byHand.origin, undefined);
+        assert.deepEqual(onCall.origin, { actor: PLAN_ACTOR.NOTETAKER });
+        const listed = yield* listTasks(owner);
+        const originOf = (taskId: string) => listed.find((each) => each.id === taskId)?.origin;
+        assert.equal(originOf(byHand.id), undefined);
+        assert.deepEqual(originOf(onCall.id), { actor: PLAN_ACTOR.NOTETAKER });
+      }),
   );
 });
 
