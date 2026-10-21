@@ -80,6 +80,8 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
 /**

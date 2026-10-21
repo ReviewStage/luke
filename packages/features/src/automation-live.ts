@@ -13,7 +13,7 @@ import {
   automationTargetKindSchema,
   automationTriggerSchema,
 } from "./automation-wire.js";
-import { codingAgentStatusAt, type StatusTurn } from "./coding-agent-status.js";
+import { codingAgentStatusAt, type StatusTurn, statusClockEdge } from "./coding-agent-status.js";
 import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { automationWebhookPath } from "./service-paths.js";
@@ -154,6 +154,22 @@ function runAgentOf(row: RunAgentRow, now: number): AutomationRunSummary["agent"
   };
 }
 
+/** The next instant past `now` the clock alone moves a run's agent; none where only a row moves it. */
+function clockEdgeOf(row: RunAgentRow, now: number): number | undefined {
+  if (row.agentCreatedAt === null) return undefined;
+  return statusClockEdge(turnOf(row), {
+    createdAt: row.agentCreatedAt,
+    now,
+    awaitingLineAt: row.awaitingLineAt ?? undefined,
+  });
+}
+
+/** The earliest of the edges given; none where there is none. */
+function earliest(edges: readonly (number | undefined)[]): number | undefined {
+  const standing = edges.filter((edge): edge is number => edge !== undefined);
+  return standing.length === 0 ? undefined : Math.min(...standing);
+}
+
 /** Latest fired first, and by id among those fired at one instant, as the held history orders runs. */
 function latestFired(
   a: { readonly id: string; readonly firedAt: number },
@@ -261,4 +277,17 @@ export function automationRunsOfLiveRows(
     firedAt: row.firedAt,
     settledAt: row.settledAt,
   }));
+}
+
+/** The next instant past `now` the clock alone moves the automations' newest runs; none where only a row moves them. */
+export function automationsGraceEdge(rows: AutomationsLiveRows, now: number): number | undefined {
+  return earliest(rows.automations.map((row) => clockEdgeOf(row, now)));
+}
+
+/** The next instant past `now` the clock alone moves an automation's runs; none where only a row moves them. */
+export function automationRunsGraceEdge(
+  rows: AutomationRunsLiveRows,
+  now: number,
+): number | undefined {
+  return earliest(rows.runs.map((row) => clockEdgeOf(row, now)));
 }
