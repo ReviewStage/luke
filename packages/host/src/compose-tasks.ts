@@ -1171,7 +1171,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         board === undefined ? was : { ...was, board },
       );
       yield* readPart(OPENED_PART.CODE, client.readCode(taskId), withCodeRead);
-      yield* readPart(OPENED_PART.PAGES, client.readPages(taskId), withPagesRead);
+      yield* readPart(OPENED_PART.PAGES, client.readPages({ taskId }), withPagesRead);
       // Note that the document is read beside the parts, a fiber of its own, so a part as quick as it lands with it.
       const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
       // Another task opened while these reads were out: their answers are not the panel's any more.

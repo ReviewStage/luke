@@ -88,12 +88,7 @@ import {
 import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import {
-  FAKE_ANSWER,
-  fakeActs,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-} from "../testing/app-bridge.js";
+import { FAKE_ANSWER, fakeActs, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
