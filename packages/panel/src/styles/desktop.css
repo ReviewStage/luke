@@ -3249,15 +3249,16 @@ ul.actor-stack {
 }
 
 /* An Inbox row's card leads with what holds the item on one line, its key
-   and then its task's name, the name shrinking to what is left of the card
-   rather than dropping under the key. */
+   and then its task's chip (`InlineRef`'s pill), the chip shrinking to what
+   is left of the card, its name cut at its end, rather than dropping under
+   the key. */
 .task-card-standing[data-line="one"] {
   flex-wrap: nowrap;
+  align-items: center;
+  font-size: var(--luke-type-caption-size);
 }
 
-/* A chip is never wider than the card: one naming a long task shrinks to
-   the card's width and its words end in an ellipsis (`OneLine`), its mark
-   kept whole before them. */
+/* A chip is never wider than the card. */
 .task-card-chip {
   display: inline-flex;
   box-sizing: border-box;
@@ -3274,10 +3275,6 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
-.task-card-chip > :not(.luke-one-line) {
-  flex: none;
-}
-
 .task-card-chip > .luke-task-mark {
   width: var(--luke-type-caption-size);
   height: var(--luke-type-caption-size);
@@ -3289,86 +3286,6 @@ ul.actor-stack {
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
   font-variant-numeric: tabular-nums;
-}
-
-/* An Inbox row's card, the thread's (`inbox-list.tsx`): where the item
-   stands in a caption, the attention ink while it waits on the reader; a
-   choice's options as quiet boxes, the recommended one tagged; a to-do's
-   steps, the ticked struck through. */
-.inbox-card-standing {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-card-standing[data-needs-you="true"] {
-  color: var(--luke-color-attention);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.inbox-card-options,
-.inbox-card-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-card-options > li {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text);
-}
-
-.inbox-card-option {
-  min-width: 0;
-  flex: 1;
-  overflow-wrap: anywhere;
-}
-
-.inbox-card-recommended {
-  flex: none;
-  padding: 0 var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-attention-tint);
-  color: var(--luke-color-attention);
-}
-
-.inbox-card-steps > li {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-text);
-  overflow-wrap: anywhere;
-}
-
-.inbox-card-steps > li > svg {
-  flex: none;
-  width: var(--luke-type-caption-size);
-  height: var(--luke-type-caption-size);
-  margin-top: 0.15em;
-  color: var(--luke-color-text-subtle);
-}
-
-.inbox-card-steps > li[data-done="true"] {
-  color: var(--luke-color-text-subtle);
-  text-decoration: line-through;
-}
-
-.inbox-card-steps > li[data-done="true"] > svg {
-  color: var(--luke-color-complete);
 }
 
 /* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's

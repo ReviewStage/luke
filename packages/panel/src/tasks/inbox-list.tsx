@@ -1,9 +1,10 @@
 import { INBOX_ASK, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BADGE_TONE,
+  Badge,
   BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
@@ -14,18 +15,18 @@ import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
   IconButton,
+  INLINE_REF_LOOK,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_ROW_META,
   List,
   ListRow,
-  ONE_LINE_END,
-  OneLine,
   SCROLL_FADE,
   ScrollArea,
   SKELETON_SHAPE,
@@ -49,6 +50,7 @@ import {
   CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
+  CircleIcon,
   ClockArrowDownIcon,
   ClockArrowUpIcon,
   FactoryIcon,
@@ -63,6 +65,7 @@ import {
   Rows2Icon,
   SlidersHorizontalIcon,
   SquareCheckIcon,
+  SquareIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -84,14 +87,17 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
+import { TaskKeyChip } from "../desktop/task-card.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
+import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { RowHint, RowHintOptions, Tooltip, wholeWordsHint } from "../tooltip.js";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { useAppState } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
+import { TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -153,6 +159,7 @@ import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
+import { useOpenPlace } from "./use-open-link.js";
 
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
@@ -489,15 +496,17 @@ function InboxItemCard({
   const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-row-card="">
-      <HolderChips holder={holder} />
+      <HolderLine holder={holder} />
       <HoverCardHead
         name={cardTitle(item.title)}
+        sub={
+          <>
+            {needsYou ? <AttentionMark /> : null}
+            <span>{standingWords(listed, needsYou, starter)}</span>
+          </>
+        }
         corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
       />
-      <span className="inbox-card-standing" data-needs-you={needsYou ? "true" : undefined}>
-        {needsYou ? <AttentionMark /> : null}
-        {standingWords(listed, needsYou, starter)}
-      </span>
       {thread.ask === undefined ? (
         settled === undefined ? null : (
           <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
@@ -525,40 +534,74 @@ function InboxItemCard({
   );
 }
 
-/** What holds an item, as its card leads with it: a task by its key and its status and name, an automation, or the agents no automation names, by its glyph and name. */
-function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
+/**
+ * What holds an item, as its card leads with it, on one line: a task by its
+ * key, as the task's own card leads with it (`TaskKeyChip`), and by its chip
+ * as a mention of it is drawn (`HolderRef`); an automation, or the agents no
+ * automation names, by their chip alone.
+ */
+function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const workspaces = useAppState()?.tasks?.workspaces;
-  if (holder.kind !== INBOX_HOLDER.TASK) {
-    return (
-      <div className="task-card-standing" data-line="one">
-        <span className="task-card-chip">
-          <HolderGlyph holder={holder} />
-          <ChipWords words={holderName(holder)} />
-        </span>
-      </div>
-    );
-  }
-  const { task } = holder;
-  const workspaceName = workspaces?.find((each) => each.id === task.workspaceId)?.name;
+  const workspaceName =
+    holder.kind === INBOX_HOLDER.TASK
+      ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name
+      : undefined;
   return (
     <div className="task-card-standing" data-line="one">
-      {task.number === undefined || workspaceName === undefined ? null : (
-        <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
-      )}
-      <span className="task-card-chip">
-        <PlanGlyph status={task.status} />
-        <ChipWords words={task.name} />
-      </span>
+      {holder.kind === INBOX_HOLDER.TASK ? (
+        <TaskKeyChip task={holder.task} workspaceName={workspaceName} />
+      ) : null}
+      <HolderRef holder={holder} />
     </div>
   );
 }
 
-/** A holder chip's words, held to one line that ends in an ellipsis where the card cuts them short, and read whole in the hint while it does. */
-function ChipWords({ words }: { words: string }): React.JSX.Element {
+/**
+ * What holds an item, named as a mention of it is (`mention-chip.tsx`): a
+ * pill of its glyph and its name, cut at its end where the card is too
+ * narrow for it. A task's hangs the task's card and opens the task, as a
+ * mention of the task does; an automation's hangs its card where the window
+ * reads it; the agents no automation names hang their name alone.
+ */
+function HolderRef({ holder }: { holder: InboxHolder }): React.JSX.Element {
+  const openPlace = useOpenPlace();
+  const known = useAutomation(
+    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
+  );
+  const glyph = <HolderGlyph holder={holder} />;
+  const name = holderName(holder);
+  if (holder.kind !== INBOX_HOLDER.TASK) {
+    return (
+      <InlineRef
+        look={INLINE_REF_LOOK.PILL}
+        glyph={glyph}
+        label={name}
+        card={known === undefined ? undefined : <AutomationCard {...known} />}
+        data-holder-ref=""
+        data-kind={holder.kind}
+      />
+    );
+  }
+  const { task } = holder;
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={glyph} name={name} />
+    </HoverCard>
+  );
   return (
-    <OneLine end={ONE_LINE_END.ELLIPSIS} hint={wholeWordsHint(words)}>
-      {words}
-    </OneLine>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={glyph}
+      label={name}
+      card={<TaskChipCard taskId={task.id} fallback={fallback} />}
+      onPress={
+        openPlace === undefined
+          ? undefined
+          : () => openPlace({ kind: LINK_PLACE.TASK, planId: task.id })
+      }
+      data-holder-ref=""
+      data-kind={holder.kind}
+    />
   );
 }
 
@@ -576,27 +619,40 @@ function CardAsk({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return (
-        <ul className="inbox-card-options" aria-label="Options">
+        <HoverCardList label="Options">
           {ask.options.map((option) => (
             <li key={option.label}>
-              <span className="inbox-card-option">{option.label}</span>
-              {option.label === ask.recommended ? (
-                <span className="inbox-card-recommended">{RECOMMENDED}</span>
-              ) : null}
+              <HoverCardRow
+                glyph={<CircleIcon aria-hidden="true" />}
+                label={option.label}
+                end={
+                  option.label === ask.recommended ? (
+                    <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
+                  ) : undefined
+                }
+              />
             </li>
           ))}
-        </ul>
+        </HoverCardList>
       );
     case INBOX_ASK.DO:
       return (
-        <ul className="inbox-card-steps" aria-label="Steps">
+        <HoverCardList label="Steps">
           {(ask.steps.length === 0 ? [title] : ask.steps).map((step, at) => (
             <li key={at} data-done={ticked.includes(at) ? "true" : undefined}>
-              <SquareCheckIcon aria-hidden="true" />
-              {plainWords(step)}
+              <HoverCardRow
+                glyph={
+                  ticked.includes(at) ? (
+                    <SquareCheckIcon aria-hidden="true" />
+                  ) : (
+                    <SquareIcon aria-hidden="true" />
+                  )
+                }
+                label={plainWords(step)}
+              />
             </li>
           ))}
-        </ul>
+        </HoverCardList>
       );
     case INBOX_ASK.ANSWER:
       return (

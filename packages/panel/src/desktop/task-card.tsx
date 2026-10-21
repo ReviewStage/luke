@@ -353,6 +353,25 @@ export function TaskCard({
 }
 
 /**
+ * A task's key as a card names it, “STAG-182” in a small chip of its own,
+ * monospace, before what else the card leads with: the task's card, and an
+ * Inbox row's card naming the task its item stands under; nothing for a task
+ * from a service before keys, or where the window holds no such workspace.
+ */
+export function TaskKeyChip({
+  task,
+  workspaceName,
+}: {
+  task: Pick<TaskSummary, "number">;
+  workspaceName: string | undefined;
+}): React.JSX.Element | null {
+  if (task.number === undefined || workspaceName === undefined) return null;
+  return (
+    <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
+  );
+}
+
+/**
  * Where a task stands, as its card leads with it: its key, its status, and
  * its priority, each a small chip of its mark and its words; none it has
  * not got, as a task from a service before keys, statuses, or priorities.
@@ -364,14 +383,11 @@ function TaskStanding({
   task: TaskSummary;
   workspaceName: string | undefined;
 }): React.JSX.Element | null {
-  const key =
-    task.number === undefined || workspaceName === undefined
-      ? undefined
-      : taskKey(workspaceName, task.number);
-  if (key === undefined && task.status === undefined && task.priority === undefined) return null;
+  const keyed = task.number !== undefined && workspaceName !== undefined;
+  if (!keyed && task.status === undefined && task.priority === undefined) return null;
   return (
     <div className="task-card-standing">
-      {key === undefined ? null : <span className="task-card-chip task-card-key">{key}</span>}
+      <TaskKeyChip task={task} workspaceName={workspaceName} />
       {task.status === undefined ? null : (
         <span className="task-card-chip">
           <TaskStatusGlyph status={task.status} />
