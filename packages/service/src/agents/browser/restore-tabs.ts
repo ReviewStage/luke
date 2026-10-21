@@ -18,27 +18,20 @@
  * resume, would leave every later caller attached to a browser without the
  * tabs, and the agent's next `list` would then drop them for good. Two
  * callers reopening at once each open a page, and the row moves for the one
- * whose move lands first; the other closes its page again. A tab that
- * would not reopen keeps its row, for the next connection to try again,
- * since only the agent's own `close` drops a tab; the one exception is a row
- * at the blank address, Chromium's own first page kept before the tool left
- * it out, which holds nothing to reopen and is dropped. Nothing a page holds
- * is logged, a failure only by its kind.
+ * whose move lands first; the other closes its page again, as a caller
+ * does whose move the store could not take. A tab that would not reopen
+ * keeps its row, for the next connection to try again, since only the
+ * agent's own `close` drops a tab, and a browser that could not list its
+ * pages is left for the next connection too. Nothing a page holds is
+ * logged, a failure only by its kind.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  closeBrowserTab,
-  listAgentBrowserTabs,
-  retargetBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
+import { listAgentBrowserTabs, retargetBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import type { CdpSession } from "@luke/features/browser-cdp";
 import { Effect, type Scope } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";
-
-/** The address of a page that holds nothing: Chromium's own first page, which is never kept or reopened. */
-export const BLANK_ADDRESS = "about:blank";
 
 /**
  * Reopens each tab kept for the agent whose conversation is named that the
@@ -53,29 +46,27 @@ export function restoreBrowserTabs(
   return Effect.gen(function* () {
     const rows = yield* listAgentBrowserTabs(conversationId);
     if (rows.length === 0) return;
-    const held = new Set(
-      (yield* Effect.orElseSucceed(cdp.pages, () => [])).map((page) => page.targetId),
-    );
+    // Note that a browser that could not say which pages it holds is left as it is, since every
+    // kept tab would otherwise read as lost and be opened twice; the next connection asks again.
+    const pages = yield* Effect.result(cdp.pages);
+    if (pages._tag === "Failure") {
+      return yield* Effect.logWarning(`The Browser tabs were not read: ${pages.failure.kind}`);
+    }
+    const held = new Set(pages.success.map((page) => page.targetId));
     for (const row of rows) {
       if (held.has(row.targetId)) continue;
-      // Chromium's own first page, kept before the tool left it out, holds nothing to reopen.
-      if (row.address === BLANK_ADDRESS) {
-        yield* closeBrowserTab(conversationId, row.id);
-        continue;
-      }
       const reopened = yield* Effect.result(cdp.openPage(row.address));
       if (reopened._tag === "Failure") {
         yield* Effect.logWarning(`A Browser tab did not reopen: ${reopened.failure.kind}`);
         continue;
       }
-      const moved = yield* retargetBrowserTab(
-        conversationId,
-        row.id,
-        row.targetId,
-        reopened.success,
+      const page = reopened.success;
+      // A page whose row did not move, because the store failed or another caller moved it first, goes.
+      const unkept = Effect.ignore(cdp.closePage(page));
+      const moved = yield* retargetBrowserTab(conversationId, row.id, row.targetId, page).pipe(
+        Effect.onError(() => unkept),
       );
-      // Another caller reopened the tab first: its page stands, and this one goes.
-      if (!moved) yield* Effect.ignore(cdp.closePage(reopened.success));
+      if (!moved) yield* unkept;
     }
   }).pipe(Effect.tapError(logStoreFailure), Effect.ignore);
 }
