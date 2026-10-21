@@ -82,6 +82,19 @@ export const HOSTED_API_ERROR = {
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /**
+   * The agent runs on its starter's plan (a ChatGPT plan, on Codex), and the
+   * starter's sign-in cannot launch it: none is kept, the provider signed it
+   * out, or the service cannot open it. The starter signs in again in
+   * Settings; nothing was written, and nothing turned to another payer.
+   */
+  AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
+  /**
+   * The agent runs on its starter's plan and its provider did not answer as
+   * the sign-in was renewed; nothing was written, and the same request a
+   * little later, under the same key, may be taken.
+   */
+  AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
+  /**
    * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.

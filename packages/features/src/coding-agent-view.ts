@@ -111,8 +111,12 @@ export const CODING_AGENT_CALL_FAILURE = {
   NOT_PERMITTED: "not-permitted",
   /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
-  /** The agent runs on Claude Code, which this part of Luke cannot reach yet. */
+  /** The agent runs on Claude Code or Codex, which this part of Luke cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
+  /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
+  AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
+  /** The agent runs on its starter's plan, whose provider did not answer; the same call a little later may be taken. */
+  AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
 } as const;
 
 export type CodingAgentCallFailure =

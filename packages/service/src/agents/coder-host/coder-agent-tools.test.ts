@@ -3086,6 +3086,60 @@ test("update_agent refuses a Claude Code agent a GPT model, a fast version, and 
   assert.equal((await stored(agents.teammates)).model, SOL);
 });
 
+test("a Codex agent lists its GPT models alone, and update_agent refuses it a Claude model and a context window in words and takes a GPT one", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const onCodex = await claimed(agents.teammates.userId, {
+    ...AGENT_CHOICE,
+    model: SOL,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.billing,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: CODING_AGENT_RUNTIME.CODEX,
+    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  });
+  const call = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    eve.services,
+    modelCatalogOf(RUNTIME_CATALOG),
+  );
+
+  const listed = await call(CODER_TOOL.LIST_MODELS, { agentId: onCodex.id });
+  assert.deepEqual(
+    Array.isArray(listed.models) ? listed.models.map((model) => isRecord(model) && model.id) : [],
+    [SOL],
+  );
+  const refusals = [];
+  for (const change of [
+    { model: OPUS, effort: "high" },
+    { model: SOL, effort: "high", contextWindow: "standard" },
+  ]) {
+    refusals.push(await call(CODER_TOOL.UPDATE_AGENT, { agentId: onCodex.id, ...change }));
+  }
+  assert.deepEqual(refusals, [
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Codex, which runs GPT models alone; choose one of those, or start a new agent on another model.",
+    },
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Codex, which manages its own context; leave contextWindow out.",
+    },
+  ]);
+  const moved = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: onCodex.id,
+    model: SOL,
+    effort: "low",
+  });
+  assert.equal(moved.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(moved));
+  const after = Option.getOrThrow(await database.run(readCodingAgent(onCodex.userId, onCodex.id)));
+  assert.deepEqual([after.model, after.effort], [SOL, "low"]);
+});
+
 test("read_task reads a teammate's task of the caller's workspace with its plan as saved, an archived one too, cuts a long plan on a line, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
   const { caller, teammates } = agents;

@@ -5,9 +5,9 @@
  * fast version or the standard window among them. An agent on a provider's
  * own harness runs that provider's models alone, through the harness's own
  * CLI: Claude Code takes Claude models, never a fast version, and no choice
- * of context window, since the CLI manages its context itself. A runtime's
- * rule is one row of `NATIVE_MODEL_RULE`, so Codex's (GPT models alone) is
- * one row more; a runtime with no row is eve's, which offers everything.
+ * of context window, since the CLI manages its context itself; Codex takes
+ * GPT models on the same terms. A runtime's rule is one row of
+ * `NATIVE_MODEL_RULE`; a runtime with no row is eve's, which offers everything.
  * Start is not narrowed here: it offers every model, and what it starts on
  * decides the runtime (`agent-runtime-choice.ts`).
  */
@@ -35,13 +35,19 @@ const ANY_MODEL: RuntimeModelRule = {
   name: "eve",
 };
 
-/** The native harnesses' rules; Codex's is P24's row. */
+/** The native harnesses' rules. */
 const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> = {
   claude_code: {
     provider: MODEL_PROVIDER.ANTHROPIC,
     fast: false,
     contextWindow: false,
     name: "Claude Code",
+  },
+  codex: {
+    provider: MODEL_PROVIDER.OPENAI,
+    fast: false,
+    contextWindow: false,
+    name: "Codex",
   },
 };
 

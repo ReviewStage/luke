@@ -331,7 +331,11 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   IMAGE_PREPARING:
     "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
   NATIVE_NOT_HERE:
-    "Not sent: that agent runs on Claude Code, which cannot be reached from here yet; a member reaches it from the agent's own tab.",
+    "Not sent: that agent runs on Claude Code or Codex, which cannot be reached from here yet; a member reaches it from the agent's own tab.",
+  PLAN_SIGNED_OUT:
+    "Not sent: the plan that pays for that agent is signed out, so it cannot run until its starter signs in again in Settings; it never turns to another payer.",
+  PLAN_UNREACHABLE:
+    "Not sent: the provider of the plan that pays for that agent did not answer; the same message in a minute or two may be taken.",
 } as const;
 
 /** How the task tools word a priority. */
@@ -387,7 +391,7 @@ export const STOP_AGENT_REFUSAL = {
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
   NATIVE_NOT_HERE:
-    "Not stopped: that agent runs on Claude Code, which cannot be reached from here yet; a member stops it from the agent's own tab.",
+    "Not stopped: that agent runs on Claude Code or Codex, which cannot be reached from here yet; a member stops it from the agent's own tab.",
 } as const;
 
 /** The most characters of a page's HTML a read answers, about ten thousand tokens: the rest is counted, never sent. */
@@ -434,6 +438,10 @@ export const START_CODING_AGENT_REFUSAL = {
   ARCHIVED: "Not started: this task is archived; a member unarchives it first.",
   IMAGE_PREPARING:
     "Not started: the agent's sandbox image is still being prepared; start it again in a minute or two.",
+  PLAN_SIGNED_OUT:
+    "Not started: the plan that would pay for it is signed out; its starter signs in again in Settings.",
+  PLAN_UNREACHABLE:
+    "Not started: the plan's provider did not answer; start it again in a minute or two.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -477,6 +485,8 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.TASK_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_CODING_AGENT_REFUSAL.IMAGE_PREPARING],
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_CODING_AGENT_REFUSAL.PLAN_SIGNED_OUT],
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
 ]);
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
@@ -488,6 +498,8 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, CODING_AGENT_TOOL_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE, CODING_AGENT_TOOL_REFUSAL.NATIVE_NOT_HERE],
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, CODING_AGENT_TOOL_REFUSAL.PLAN_SIGNED_OUT],
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, CODING_AGENT_TOOL_REFUSAL.PLAN_UNREACHABLE],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
