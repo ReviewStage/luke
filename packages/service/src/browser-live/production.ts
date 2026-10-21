@@ -4,7 +4,8 @@
  * Each dependency answers over the services the function's runtime holds,
  * captured once as the service stands, so the relay itself requires none.
  * A store that cannot take a lease's move is logged, since the panel's next
- * message tries again; nothing a tab shows is.
+ * message tries again, as is a keep-alive of the sandbox Vercel did not
+ * confirm; nothing a tab shows is.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -21,6 +22,7 @@ import type { HttpClient } from "effect/http";
 import { AgentBrowser, agentBrowserLayer } from "../agents/browser/agent-browser.js";
 import { connectRestoring } from "../agents/browser/restore-tabs.js";
 import { sandboxPtyLayer } from "../agents/sandbox-pty.js";
+import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
 import type { BrowserLiveDependencies } from "./relay.js";
 
 /** What the live view's dependencies answer over. */
@@ -67,5 +69,6 @@ export const browserLiveDependencies: Effect.Effect<
       run(holdSandbox(conversationId, heldUntil)).pipe(
         Effect.catch(() => Effect.logWarning("a watched browser's lease was not moved on")),
       ),
+    keepAlive: (sessionId) => run(keepSessionSandboxAlive(sessionId)),
   };
 });

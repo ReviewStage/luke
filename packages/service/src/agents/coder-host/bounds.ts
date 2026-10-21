@@ -9,14 +9,41 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
  * by the second eve service beside the brain: the same door, the
  * same conversation admission, the same relay into the store, under a
  * different agent. What differs is named here: how long its sandbox may
- * live and how large it is, how often the repository credential at its
+ * live, how it is kept alive, and how large it is, how often the repository credential at its
  * firewall is renewed, where its checkout stands, how a transcript read
  * waits, how full its context grows before eve compacts it, and how much
  * a worker it delegates to may spend.
  */
 export const CODER = {
-  /** The most a Vercel Sandbox session may live: the platform's own maximum, so a long run is never cut off mid-turn. */
-  SANDBOX_TIMEOUT_MS: 24 * 60 * 60 * 1_000,
+  /**
+   * How long a Vercel Sandbox session lives past its last sign of use: the
+   * timeout it opens with, and how far ahead of now each keep-alive puts its
+   * end (`sandbox-lifetime.ts`). A turn's end stops the sandbox at once, so
+   * this is only the backstop for one nothing stopped, which bills its
+   * memory until then: 8 GB for an hour, where the platform's 24-hour
+   * maximum billed 192 GB-hours. An hour, because a live turn shows use far
+   * more often than that: an eve step starts at least every few minutes
+   * (`SLEEP_MAX` and the credential's renewal already lean on it), a native
+   * runner posts its events as its harness emits them, and a terminal or a
+   * watched browser closes after five idle minutes. Each of them keeps it
+   * alive at most every `SANDBOX_KEEP_ALIVE_EVERY`, which leaves fifty
+   * minutes of margin for the longest quiet stretch inside a turn.
+   */
+  SANDBOX_TIMEOUT_MS: 60 * 60 * 1_000,
+  /**
+   * The longest a Vercel Sandbox session may live in all, however often it is
+   * kept alive: the platform's maximum on Pro and Enterprise, past which it
+   * refuses an extension, so a keep-alive extends to it and no further.
+   */
+  SANDBOX_MAX_LIFETIME_MS: 24 * 60 * 60 * 1_000,
+  /**
+   * How often a live turn, a terminal, or a watched browser keeps the
+   * sandbox alive: one lookup and at most one extension each time, so a
+   * step's start or an event batch costs nothing more between them. Ten
+   * minutes, a sixth of the timeout, so a check that fails once leaves the
+   * next several to land before the sandbox would stop.
+   */
+  SANDBOX_KEEP_ALIVE_EVERY: Duration.minutes(10),
   /**
    * The sandbox's vCPUs, each with 2 GB of memory. Four, because oxlint with
    * JS plugins reserves its arena as one mapping of about 6 GiB, which the

@@ -76,7 +76,8 @@ export const MessageRevealProvider = MessageRevealContext.Provider;
  * not drawn while older ones than the transcript's first held stand is
  * looked for on the older pages (`loadOlder`), read one by one, and while
  * one of them did not answer it waits, the ask standing, for the reader to
- * ask again. It is said
+ * ask again; one held whose row a long log has not drawn is brought into
+ * view through `bringIn`, and lit once its row is drawn. It is said
  * gone through `gone` only once the transcript has `caughtUp`, is held
  * `whole`, and has no such message: for an agent that has `settled`, its last page; for one still
  * writing, a page read after the ask, since an empty page from before it
@@ -85,6 +86,13 @@ export const MessageRevealProvider = MessageRevealContext.Provider;
  * transcript lands page by page, and that a read that failed leaves the ask
  * standing for the tab's Retry.
  */
+/** The element under `root` drawing the message with `messageId`, where it is drawn. */
+function messageElement(root: ParentNode, messageId: string): HTMLElement | undefined {
+  return [...root.querySelectorAll<HTMLElement>(`[${MESSAGE_ID_ATTRIBUTE}]`)].find(
+    (each) => each.getAttribute(MESSAGE_ID_ATTRIBUTE) === messageId,
+  );
+}
+
 export function useMessageReveal(input: {
   agentId: string;
   shown: boolean;
@@ -98,6 +106,12 @@ export function useMessageReveal(input: {
   pages: number;
   settled: boolean;
   drawn: (messageId: string) => boolean;
+  /**
+   * Brings a message held but not drawn, its row scrolled out of a log that
+   * draws only the rows near its view, into view, handing its row to `then`
+   * once drawn; false where the log holds no row of it.
+   */
+  bringIn?: ((messageId: string, then: (row: HTMLElement) => void) => boolean) | undefined;
   gone: () => void;
 }): void {
   const { agentId, shown, caughtUp, pages, settled } = input;
@@ -105,31 +119,52 @@ export function useMessageReveal(input: {
   const asked = standing?.reveal?.agentId === agentId ? standing.reveal : undefined;
   // The pages read when each ask was first seen, by its count.
   const seen = useRef(new Map<number, number>());
+  // The ask whose message is being brought into view, which waits for its row rather than ask again.
+  const bringing = useRef<number | undefined>(undefined);
+  // The ask answered last, so a draw before the window lets it go answers it no second time.
+  const answered = useRef<number | undefined>(undefined);
   if (asked !== undefined && !seen.current.has(asked.ask)) seen.current.set(asked.ask, pages);
   useEffect(() => {
-    if (asked === undefined || !shown) return;
-    const element = input.drawn(asked.messageId)
-      ? [...document.querySelectorAll<HTMLElement>(`[${MESSAGE_ID_ATTRIBUTE}]`)].find(
-          (each) => each.getAttribute(MESSAGE_ID_ATTRIBUTE) === asked.messageId,
-        )
-      : undefined;
-    const since = seen.current.get(asked.ask) ?? pages;
-    if (element !== undefined) {
+    if (asked === undefined || !shown || answered.current === asked.ask) return;
+    const lit = (element: HTMLElement) => {
+      answered.current = asked.ask;
       const scroller = scrollerOf(element);
       if (scroller !== undefined) {
         centreWithin(scroller, element);
         scroller.dispatchEvent(new Event("scroll"));
       }
       element.setAttribute("data-message-revealed", "");
-    } else if (!input.whole) {
+      standing?.onRevealed(asked.ask);
+    };
+    const held = input.drawn(asked.messageId);
+    const element = held ? messageElement(document, asked.messageId) : undefined;
+    const since = seen.current.get(asked.ask) ?? pages;
+    if (element !== undefined) {
+      lit(element);
+      return;
+    }
+    if (held && input.bringIn !== undefined) {
+      if (bringing.current === asked.ask) return;
+      const brought = input.bringIn(asked.messageId, (row) => {
+        bringing.current = undefined;
+        lit(messageElement(row, asked.messageId) ?? row);
+      });
+      if (brought) {
+        bringing.current = asked.ask;
+        return;
+      }
+    }
+    // A message held but not drawn yet, the log still waiting to draw, is waited for.
+    if (held) return;
+    if (!input.whole) {
       // Note that an older read that failed is not asked again here, so a service that does not answer is not asked on every draw; the reader scrolling up asks again.
       if (!input.olderFailed) input.loadOlder();
       return;
-    } else if (caughtUp && (settled || pages > since)) {
-      input.gone();
-    } else {
-      return;
     }
-    standing?.onRevealed(asked.ask);
+    if (caughtUp && (settled || pages > since)) {
+      answered.current = asked.ask;
+      input.gone();
+      standing?.onRevealed(asked.ask);
+    }
   });
 }

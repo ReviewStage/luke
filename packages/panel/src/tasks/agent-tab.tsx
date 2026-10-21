@@ -35,7 +35,13 @@ import {
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { callEndedLine, callPlaces, type TranscriptCallRow } from "@luke/voice/transcript-model";
+import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
+import {
+  callEndedLine,
+  callOfLine,
+  callPlaces,
+  type TranscriptCallRow,
+} from "@luke/voice/transcript-model";
 import { MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
@@ -44,9 +50,11 @@ import {
   Fragment,
   memo,
   type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -56,6 +64,7 @@ import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
+  ConversationRows,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
@@ -66,6 +75,7 @@ import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { FadingWords } from "../fading-words.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
@@ -101,6 +111,7 @@ import {
   agentLines,
   agentListCallIds,
   agentPart,
+  agentParts,
   agentRows,
   agentStillWriting,
   agentTabLabel,
@@ -124,6 +135,7 @@ import {
   placedMessages,
   planPayerOf,
   providerOf,
+  type SpokenMessage,
   settledPlanEdits,
   sidebarCallIds,
   spokenMessages,
@@ -187,6 +199,7 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks.js";
+import { type FindRow, useTranscriptFind } from "./transcript-find.js";
 import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark.js";
 import { useAgentCalls } from "./use-agent-calls.js";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer.js";
@@ -290,6 +303,12 @@ export const AGENT_LEAD: TranscriptLead = {
 
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+
+/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's. */
+const ROW_ESTIMATE_PX = 160;
+
+/** The room between two of the log's rows, in pixels: the log's own step between lines (`--luke-space-12`, tasks.css). */
+const ROW_GAP_PX = 12;
 
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
@@ -774,17 +793,20 @@ function AgentPartView({
   part,
   delegation,
   todos,
+  moving = false,
 }: {
   part: AgentPart;
   delegation: DelegationDoors | undefined;
   todos: TodosPlace;
+  /** Whether the agent may still write to the message the part is of, whose words are then read as they stream. */
+  moving?: boolean;
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
       // The agent's words alone may be replied to, never a call's output or a thought.
       return (
         <div {...{ [REPLY_SCOPE]: "" }}>
-          <TranscriptWords text={part.text} />
+          <TranscriptWords text={part.text} streaming={moving} />
         </div>
       );
     case AGENT_PART.REASONING:
@@ -1363,7 +1385,9 @@ export function AgentMessage({
             rows={stretch.rows}
             trailer={said !== undefined && ends ? foot : undefined}
           >
-            {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
+            {(part) => (
+              <AgentPartView part={part} delegation={delegation} todos={todos} moving={moving} />
+            )}
           </TranscriptRows>
         </MessageContent>
         {said !== undefined || !ends ? null : foot}
@@ -1564,6 +1588,115 @@ function sameMessageDraw(a: AgentMessageProps, b: AgentMessageProps): boolean {
 /** A transcript's message, drawn again only where `sameMessageDraw` says it changed. */
 const SteadyAgentMessage = memo(AgentMessage, sameMessageDraw);
 
+/** The door that brings a message whose row is not drawn into view, handing its row to `then` once drawn; false where no row draws it. */
+export type MessageBringer = (messageId: string, then: (row: HTMLElement) => void) => boolean;
+
+/** A row placed in a transcript: its message, the lines that reached it, and the voice's lines drawn ahead of it. */
+type PlacedRow = SpokenMessage;
+
+/** No rows to find in, while no find bar stands open. */
+const NO_FIND_ROWS: readonly FindRow[] = [];
+
+/** Whether a row draws the message with `messageId`: its own, a line that reached it, or one said ahead of it. */
+function drawsMessage(row: PlacedRow, messageId: string): boolean {
+  return (
+    row.message.id === messageId ||
+    row.arrived.some((line) => line.id === messageId) ||
+    row.said.some((line) => line.id === messageId)
+  );
+}
+
+/** Each message's words as a find counts them, kept by the message, so a page that leaves it reads them once. */
+const wordsFound = new WeakMap<CodingAgentMessage, string>();
+
+/** The words a message draws that a find counts before its row is drawn: its text and its reasoning. */
+function findWordsOf(message: CodingAgentMessage): string {
+  const kept = wordsFound.get(message);
+  if (kept !== undefined) return kept;
+  const words = agentParts(message)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TEXT || part.kind === AGENT_PART.REASONING ? [part.text] : [],
+    )
+    .join("\n");
+  wordsFound.set(message, words);
+  return words;
+}
+
+/** A row as a find reads it before it is drawn: its messages' words. */
+function findRowOf(row: PlacedRow): FindRow {
+  return {
+    key: row.message.id,
+    words: [...row.said, row.message, ...row.arrived].map(findWordsOf).join("\n"),
+  };
+}
+
+/** Whether two runs of lines are the same lines in the same order. */
+function sameLines(a: readonly CodingAgentMessage[], b: readonly CodingAgentMessage[]): boolean {
+  return a === b || (a.length === b.length && a.every((line, index) => line === b[index]));
+}
+
+/** A row as the calls are placed among the rows, kept by its message while the lines drawn in it stand as they did. */
+const callRows = new WeakMap<
+  CodingAgentMessage,
+  { readonly lines: readonly CodingAgentMessage[]; readonly row: CallPlacedRow }
+>();
+
+/** A row placed for the calls into the agent, as `callPlaces` reads it: the message, and every line drawn inside it. */
+type CallPlacedRow = CodingAgentMessage & { readonly arrived: readonly CodingAgentMessage[] };
+
+/** A row as the calls are placed among the rows: read anew only for a message a page touched, or whose lines moved. */
+function callRowOf({ message, arrived, said }: PlacedRow): CallPlacedRow {
+  const lines = said.length === 0 ? arrived : [...arrived, ...said];
+  const kept = callRows.get(message);
+  if (kept !== undefined && sameLines(kept.lines, lines)) return kept.row;
+  const row = { ...message, arrived: lines };
+  callRows.set(message, { lines, row });
+  return row;
+}
+
+/**
+ * Each line that reached a turn, with who sent it, by the turn's message:
+ * named anew only for a message a page touched or whose lines moved, or
+ * once the people it names by are read again, so a page's naming costs as
+ * much as its own messages.
+ */
+function useArrivals(
+  placed: readonly PlacedRow[],
+  readerId: string | undefined,
+  members: Parameters<typeof lineSender>[2],
+  former: Parameters<typeof lineSender>[3],
+): ReadonlyMap<string, readonly ArrivedLine[]> {
+  const kept = useRef<{
+    readonly by: readonly unknown[];
+    readonly named: WeakMap<
+      CodingAgentMessage,
+      { readonly lines: readonly CodingAgentMessage[]; readonly arrived: readonly ArrivedLine[] }
+    >;
+  }>(undefined);
+  return useMemo(() => {
+    const by = [readerId, members, former];
+    if (kept.current === undefined || !kept.current.by.every((each, at) => each === by[at])) {
+      kept.current = { by, named: new WeakMap() };
+    }
+    const { named } = kept.current;
+    return new Map(
+      placed.map(({ message, arrived }) => {
+        const was = named.get(message);
+        if (was !== undefined && sameLines(was.lines, arrived)) return [message.id, was.arrived];
+        const lines =
+          arrived.length === 0
+            ? NO_ARRIVED
+            : arrived.map((line) => ({
+                message: line,
+                sender: lineSender(line.sentBy, readerId, members, former),
+              }));
+        named.set(message, { lines: arrived, arrived: lines });
+        return [message.id, lines];
+      }),
+    );
+  }, [placed, readerId, members, former]);
+}
+
 /**
  * How a transcript's messages are placed, read once for the messages held
  * rather than on every draw: where the to-do lists stand, which message
@@ -1619,8 +1752,14 @@ function AgentTranscriptView({
   endPress,
   endTrail,
   calls = NO_CALLS,
+  bringIn,
+  holding = false,
 }: {
   messages: readonly CodingAgentMessage[];
+  /** Whether the log waits to draw for what stands around it, saying it is loading meanwhile. */
+  holding?: boolean;
+  /** Where the transcript hands the door that brings a message whose row is not drawn into view, which a link to the message asks through; none where nothing asks. */
+  bringIn?: RefObject<MessageBringer | undefined> | undefined;
   /** The calls into the agent, oldest first, which the transcript places among its rows by the call each spoken line names (`callPlaces`); none on a worker's. */
   calls?: readonly TranscriptCallRow[];
   /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
@@ -1677,40 +1816,42 @@ function AgentTranscriptView({
     [messages, working, undelivered, replayed],
   );
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
-  const arrivals = useMemo(
-    () =>
-      new Map(
-        placing.placed.map(({ message, arrived }) => [
-          message.id,
-          arrived.length === 0
-            ? NO_ARRIVED
-            : arrived.map((line) => ({
-                message: line,
-                sender: lineSender(line.sentBy, readerId, members, former),
-              })),
-        ]),
-      ),
-    [placing, readerId, members, former],
-  );
+  const arrivals = useArrivals(placing.placed, readerId, members, former);
   const cards = delegation?.cards;
   const chat = delegation?.chat;
   const live = useMemo(() => ({ cards, chat }), [cards, chat]);
   // Where each call begins and ends among the rows drawn, a line that reached a turn drawn inside it, and what of the calls heard here no row holds yet.
-  const places = useMemo(
-    () =>
-      callPlaces(
-        placing.placed.map(({ message, arrived, said }) => ({
-          ...message,
-          arrived: [...arrived, ...said],
-        })),
-        calls,
-      ),
-    [placing, calls],
-  );
+  const places = useMemo(() => callPlaces(placing.placed.map(callRowOf), calls), [placing, calls]);
   // Note that the clock is the minute's own, so a call's day moves on with it while the rows hold.
   const now = useMinute();
   const heard = places.heard;
-  if (messages.length > 0 || heard.length > 0) {
+  // Each row is keyed by the message it draws, which its measured height is kept by.
+  const rowKeys = useKept(
+    placing.placed.map(({ message }) => message.id),
+    sameIds,
+  );
+  const log = useRef<HTMLDivElement>(null);
+  const rowsHandle = useRef<VirtualRowsHandle>(null);
+  // Note that the rows' words are read only while a find bar stands open over the tab.
+  const finding = useFindOpen();
+  const findRows = useMemo(
+    () => (finding ? placing.placed.map(findRowOf) : NO_FIND_ROWS),
+    [finding, placing],
+  );
+  useTranscriptFind({
+    root: log,
+    rows: findRows,
+    handle: rowsHandle,
+    findable: rowKeys.length > 0,
+  });
+  useLayoutEffect(() => {
+    if (bringIn === undefined) return;
+    bringIn.current = (messageId, then) => {
+      const row = placing.placed.find((placed) => drawsMessage(placed, messageId));
+      return row !== undefined && rowsHandle.current?.bringIn(row.message.id, then) === true;
+    };
+  });
+  if (!holding && (messages.length > 0 || heard.length > 0)) {
     const { todos, first, opening, placed, open } = placing;
     // The plan is the first of the developer's messages, unless the agent
     // was handed a prompt in its place, which is the developer's message as
@@ -1724,73 +1865,86 @@ function AgentTranscriptView({
     const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
-        <Conversation onNearTop={onOlder}>
+        <Conversation list={log} onNearTop={onOlder}>
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
-            {placed.map(({ message, said, read }, index) => (
-              <Fragment key={message.id}>
-                {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
-                  <CallOpen key={call.key} call={call} now={now} />
-                ))}
-                {said.map((line) => (
-                  <SteadyAgentMessage
-                    key={line.id}
-                    message={line}
-                    plan={false}
-                    lead={lead}
-                    moving={false}
-                    forkCut={forkCutOf(line, open)}
-                    delegation={delegation}
-                    sender={lineSender(line.sentBy, readerId, members, former)}
-                  />
-                ))}
-                <SteadyAgentMessage
-                  message={message === first && opening !== undefined ? opening.brief : message}
-                  plan={message === plan}
-                  taskId={message === plan ? taskId : undefined}
-                  lead={lead}
-                  moving={working && index === placed.length - 1}
-                  said={working && index === placed.length - 1 ? undefined : read}
-                  forkCut={forkCutOf(message, open)}
-                  delegation={delegation}
-                  todos={todos}
-                  briefTitle={briefTitle}
-                  origin={message === plan ? origin : undefined}
-                  sender={
-                    message === task
-                      ? briefSender
-                      : lineSender(message.sentBy, readerId, members, former)
-                  }
-                  arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                />
-                {message === first && opening !== undefined && replay !== undefined ? (
+            <ConversationRows
+              keys={rowKeys}
+              estimate={ROW_ESTIMATE_PX}
+              gap={ROW_GAP_PX}
+              rowClassName="agent-log-row"
+              handle={rowsHandle}
+            >
+              {(index) => {
+                const row = placed[index];
+                if (row === undefined) return null;
+                const { message, said, read } = row;
+                return (
                   <>
-                    <ReplayCard
-                      replay={opening.replay}
-                      sentAt={first.sentAt}
-                      place={replay}
-                      taskId={taskId}
-                    />
-                    {opening.note === undefined ? null : (
+                    {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
+                      <CallOpen key={call.key} call={call} now={now} />
+                    ))}
+                    {said.map((line) => (
                       <SteadyAgentMessage
-                        message={opening.note}
+                        key={line.id}
+                        message={line}
                         plan={false}
                         lead={lead}
                         moving={false}
+                        forkCut={forkCutOf(line, open)}
                         delegation={delegation}
-                        sender={briefSender}
+                        sender={lineSender(line.sentBy, readerId, members, former)}
                       />
-                    )}
+                    ))}
+                    <SteadyAgentMessage
+                      message={message === first && opening !== undefined ? opening.brief : message}
+                      plan={message === plan}
+                      taskId={message === plan ? taskId : undefined}
+                      lead={lead}
+                      moving={working && index === placed.length - 1}
+                      said={working && index === placed.length - 1 ? undefined : read}
+                      forkCut={forkCutOf(message, open)}
+                      delegation={delegation}
+                      todos={todos}
+                      briefTitle={briefTitle}
+                      origin={message === plan ? origin : undefined}
+                      sender={
+                        message === task
+                          ? briefSender
+                          : lineSender(message.sentBy, readerId, members, former)
+                      }
+                      arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                    />
+                    {message === first && opening !== undefined && replay !== undefined ? (
+                      <>
+                        <ReplayCard
+                          replay={opening.replay}
+                          sentAt={first.sentAt}
+                          place={replay}
+                          taskId={taskId}
+                        />
+                        {opening.note === undefined ? null : (
+                          <SteadyAgentMessage
+                            message={opening.note}
+                            plan={false}
+                            lead={lead}
+                            moving={false}
+                            delegation={delegation}
+                            sender={briefSender}
+                          />
+                        )}
+                      </>
+                    ) : null}
+                    {earlierOmitted && message === plan ? (
+                      <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                    ) : null}
+                    {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
+                      <CallClose key={call.key} call={call} />
+                    ))}
                   </>
-                ) : null}
-                {earlierOmitted && message === plan ? (
-                  <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                ) : null}
-                {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
-                  <CallClose key={call.key} call={call} />
-                ))}
-              </Fragment>
-            ))}
+                );
+              }}
+            </ConversationRows>
             {heard.map((tail) => (
               <Fragment key={tail.call.key}>
                 <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
@@ -1843,7 +1997,7 @@ function AgentTranscriptView({
   // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
   return (
     <ConversationEmptyState wide>
-      {reading && ended === undefined ? (
+      {holding || (reading && ended === undefined) ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <>
@@ -1903,8 +2057,14 @@ function AgentTabView({
   continuable = false,
   calls,
   call: offeredCall,
+  bringIn,
+  holding = false,
 }: {
   agent: CodingAgentSummary;
+  /** Whether the log waits to draw for what stands around it, while it says it is loading. */
+  holding?: boolean;
+  /** Where the transcript hands the door that brings a message whose row is not drawn into view. */
+  bringIn?: RefObject<MessageBringer | undefined> | undefined;
   /** The calls into the agent, which its transcript places among its rows (`useAgentCalls`). */
   calls: readonly TranscriptCallRow[];
   /** What the tab takes calls through; none where the platform has no voice. */
@@ -2045,7 +2205,8 @@ function AgentTabView({
                     chat,
                     chatOn,
                   }}
-                  reading={transcript.reading}
+                  reading={transcript.reading || holding}
+                  holding={holding}
                   failed={transcript.failed}
                   working={working}
                   sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
@@ -2064,6 +2225,7 @@ function AgentTabView({
                   onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
                   overComposer
                   calls={calls}
+                  bringIn={bringIn}
                 />
               </UndeliveredLines>
             </MentionedServers>
@@ -2189,7 +2351,7 @@ export function AgentTab({
     onTitle: control.onTitle,
   });
   const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
-  const calls = useAgentCalls({
+  const { calls, settled: callsSettled } = useAgentCalls({
     agentId: agent.id,
     read: control.readCalls,
     messages,
@@ -2247,17 +2409,26 @@ export function AgentTab({
     write: control.onSwitchServers,
     onOpenSettings: control.onOpenIntegrations,
   });
-  const published = useAgentPullRequest({
+  const { published, settled: publishedSettled } = useAgentPullRequest({
     agentId: agent.id,
     status: agent.status,
     shown,
     messages: transcript.messages,
     read: control.readPullRequest,
+    known: control.pullRequests.get(agent.id),
   });
+  // Note that the log first draws once what stands around it has landed too: the pull request's dock over the box, and the dividers of calls its lines were said on, so neither moves a line the reader sees.
+  const surroundsLanded =
+    publishedSettled &&
+    (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
+  const opened = useRef(false);
+  if (surroundsLanded) opened.current = true;
+  const holding = messages.length > 0 && !opened.current;
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
+  const bringIn = useRef<MessageBringer | undefined>(undefined);
   useMessageReveal({
     agentId: agent.id,
     shown,
@@ -2268,6 +2439,7 @@ export function AgentTab({
     pages: transcript.pages,
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
+    bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
     gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
   });
   const starter = teammateStarter(agent.startedBy, control.me);
@@ -2316,6 +2488,8 @@ export function AgentTab({
         agent={agent}
         calls={calls}
         call={call}
+        bringIn={bringIn}
+        holding={holding}
         models={control.models}
         readModels={control.readModels}
         transcript={transcript}

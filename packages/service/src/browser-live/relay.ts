@@ -40,7 +40,10 @@
  * connection holds it, and each message the panel sends moves it on,
  * written at most once a minute. The socket closes as idle once the panel
  * has sent nothing for the idle bound, and the sweep stops the sandbox
- * once the lease lapses.
+ * once the lease lapses. While the browser is reached, the connection also
+ * keeps the sandbox alive past its short timeout every keep-alive interval
+ * (`CODER.SANDBOX_KEEP_ALIVE_EVERY`, `agents/sandbox-keep-alive.ts`), so a
+ * member watching after the agent's turn ended is never cut off by it.
  */
 
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
@@ -80,6 +83,7 @@ import {
 import { BROWSER_TAKEOVER_HOLD_MS } from "../agents/agent-browser-tabs-procedures.js";
 import { controlsAgent } from "../agents/agent-reach.js";
 import { BROWSER_UNREACHABLE, type BrowserUnreachable } from "../agents/browser/agent-browser.js";
+import { CODER } from "../agents/coder-host/bounds.js";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 import type { RelaySocket } from "../terminal/relay.js";
 
@@ -153,6 +157,8 @@ export interface BrowserLiveDependencies {
   ) => Effect.Effect<boolean, unknown>;
   readonly handBack: (tabId: string, userId: string) => Effect.Effect<boolean, unknown>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
+  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
 }
 
 /** The panel left: it is sent no close. */
@@ -776,6 +782,12 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
         : BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
     }
     const cdp = connected.success;
+    // The connect resumed the sandbox where it was stopped, so it is kept alive from here for as long as the view stands.
+    yield* Effect.forkScoped(
+      Effect.repeat(deps.keepAlive(session.success.value), {
+        schedule: Schedule.spaced(CODER.SANDBOX_KEEP_ALIVE_EVERY),
+      }),
+    );
     // The tab is read again, since a browser that started afresh reopened it on a new target.
     const current = yield* Effect.result(
       deps.readTab(view.ask.userId, view.ask.taskId, view.ask.tabId),

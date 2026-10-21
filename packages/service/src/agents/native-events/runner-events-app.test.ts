@@ -42,13 +42,16 @@ import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { CODER } from "../coder-host/bounds.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
+  type RunnerAlive,
   type RunnerEnded,
   type RunnerEventsOptions,
   runnerEventsApp,
@@ -354,6 +357,34 @@ it.layer(getTestDB())("the runner events route", (it) => {
         ]);
         const routing = yield* readCodingAgentRouting(agent.userId, agent.agentId);
         assert.equal(Option.getOrThrow(routing).nativeSession, SESSION);
+      }),
+  );
+
+  it.effect(
+    "a run under way keeps its sandbox alive at its first batch and once a keep-alive interval after the last, and a batch that ends the launch keeps nothing alive",
+    () =>
+      Effect.gen(function* () {
+        const told: RunnerAlive[] = [];
+        const post = yield* standingWith({
+          alive: (alive) => Effect.sync(() => void told.push(alive)),
+        });
+        const agent = yield* agentWithBearer;
+        const events = workflowTurn(agent.lineId);
+
+        yield* post(agent.bearer, events.slice(0, 3));
+        yield* post(agent.bearer, events.slice(3, 6));
+        const withinInterval = told.length;
+        yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+        yield* post(agent.bearer, events.slice(6, 11));
+        // The batch carrying the launch's END, past another interval, is the stop's to settle.
+        yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+        yield* post(agent.bearer, events.slice(11));
+
+        assert.equal(withinInterval, 1, "a batch inside the interval asks Vercel nothing");
+        assert.deepEqual(
+          told.map((alive) => alive.target),
+          [agent.target, agent.target],
+        );
       }),
   );
 

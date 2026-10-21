@@ -1249,17 +1249,29 @@ export function taskCards(input: {
         read={subagentCardReading(drawn, agents, held, chosen(drawn.tab))}
       />
     );
+  // Note that each agent's cards are the same value for as long as these are, so a transcript handed them draws nothing again for them.
+  const byAgent = new Map<string, TranscriptCards>();
   return {
     call: { target, agent, worker: () => undefined },
-    agent: (agentId) => ({
-      target,
-      agent,
-      task,
-      worker: ({ callId, task, status }) =>
-        card(
-          drawnSubagent({ subagent: callId, delegation: { agent: agentId, task } }, status, held),
-        ),
-    }),
+    agent: (agentId) => {
+      const known = byAgent.get(agentId);
+      if (known !== undefined) return known;
+      const cards: TranscriptCards = {
+        target,
+        agent,
+        task,
+        worker: ({ callId, task: job, status }) =>
+          card(
+            drawnSubagent(
+              { subagent: callId, delegation: { agent: agentId, task: job } },
+              status,
+              held,
+            ),
+          ),
+      };
+      byAgent.set(agentId, cards);
+      return cards;
+    },
   };
 }
 

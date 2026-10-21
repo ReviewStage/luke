@@ -17,7 +17,7 @@ import {
   type CodingAgentUsage,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
@@ -35,7 +35,8 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * one pushed after the tab was away while more was written than a page
  * holds, takes its place. Older pages are read one at a time as the reader
  * asks for them (`loadOlder`, `codingAgents.transcriptOlder`), each put
- * before the messages held. Each page's status is
+ * before the messages held in a transition, which a page landing meanwhile
+ * goes ahead of. Each page's status is
  * the agent's as the page was read, with why where its turn failed, which
  * the tab's end line says, what its model's context holds, which the box's
  * ring draws, and when its run and each worker it waits on began, which the
@@ -388,9 +389,11 @@ export function useAgentTranscript(input: {
           olderOut: undefined,
         };
       });
-    latest.current
-      .older({ ...transcript, before })
-      .then(settle, () => settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    // Note that an older page is put before the messages in a transition, so drawing it never holds the window: a page or a keystroke landing meanwhile is drawn first.
+    latest.current.older({ ...transcript, before }).then(
+      (answer) => startTransition(() => settle(answer)),
+      () => settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    );
   }, [transcript, before, olderOut]);
 
   const onRetry = useCallback(() => {

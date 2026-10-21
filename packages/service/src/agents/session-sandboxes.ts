@@ -1,5 +1,13 @@
 /**
- * session-sandboxes.ts -- a retired eve session's Vercel Sandboxes deleted, and the sweep that works the queue of them.
+ * session-sandboxes.ts -- a session's Vercel Sandboxes kept alive while it is used, stopped, or deleted once it retired, and the sweep that works the queue of the retired.
+ *
+ * Whatever shows a session's sandbox in use asks `keepAliveFor` on the
+ * rule `sandbox-keep-alive.ts` sets: the running session's lifetime is read
+ * and extended so it ends the timeout from now, within the platform's
+ * maximum. A sandbox opened before that timeout was shortened has its own
+ * lowered to it on the way, for its next sessions, since Vercel reapplies a
+ * sandbox's configuration at every resume. A sandbox that is not running
+ * has nothing to keep alive, and a stopped one is never resumed here.
  *
  * eve opens one persistent Vercel Sandbox per top-level session, tagged with
  * the session's id, and a worker shares its parent's; a stopped sandbox
@@ -30,10 +38,13 @@ import {
   sessionSandboxDeferred,
   sessionSandboxDeleted,
 } from "@luke/database/models/session-sandbox-cleanup";
-import { Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { CODER } from "./coder-host/bounds.js";
+import { keepAliveExtension } from "./sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
+  RUNNING_STATUS,
   SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -60,6 +71,13 @@ const ARCHIVE_STOP = {
 const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
 
 export interface SessionSandboxesService {
+  /**
+   * Keeps every running sandbox tagged with the session alive the timeout
+   * from now, within the platform's maximum lifetime; answers how many were
+   * extended. A sandbox not running, or one already ending far enough ahead,
+   * is left as it is.
+   */
+  readonly keepAliveFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /** Stops every running sandbox tagged with the session, keeping its filesystem for a later resume; answers how many were stopped. */
@@ -73,6 +91,27 @@ export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionS
 /** A session's sandboxes, deleted or stopped, over the REST calls `vercel-sandbox-api.ts` makes. */
 function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
   return {
+    keepAliveFor: (sessionId) =>
+      Effect.gen(function* () {
+        const sandboxes = yield* api.listTagged(sessionId);
+        let extended = 0;
+        for (const sandbox of sandboxes) {
+          const running = sandbox.currentSessionId;
+          if (sandbox.status !== RUNNING_STATUS || running === undefined) continue;
+          // A sandbox opened before the cap reopens each session on its old timeout, which Vercel reapplies at every resume.
+          if (sandbox.timeout !== undefined && sandbox.timeout > CODER.SANDBOX_TIMEOUT_MS) {
+            yield* api.updateTimeout(sandbox.name, CODER.SANDBOX_TIMEOUT_MS);
+          }
+          const lifetime = yield* api.getSession(running);
+          // The sandbox's record can lag its session's, which is the one whose end counts.
+          if (lifetime === undefined || lifetime.status !== RUNNING_STATUS) continue;
+          const extension = keepAliveExtension(lifetime, yield* Clock.currentTimeMillis);
+          if (extension === undefined) continue;
+          yield* api.extendTimeout(running, extension);
+          extended += 1;
+        }
+        return extended;
+      }),
     deleteFor: (sessionId) =>
       Effect.gen(function* () {
         const sandboxes = yield* api.listTagged(sessionId);
@@ -103,6 +142,24 @@ export const sessionSandboxesLayer: Layer.Layer<SessionSandboxes, never, HttpCli
     SessionSandboxes,
     Effect.map(vercelSandboxApi(deploymentOidcToken), sessionSandboxesOver),
   );
+
+/**
+ * The session's sandbox kept alive on the function's own OIDC token, as a
+ * caller that shows it in use asks it: a keep-alive Vercel did not confirm
+ * is logged by its status alone, since the next one tries again well before
+ * the sandbox would stop.
+ */
+export function keepSessionSandboxAlive(
+  sessionId: string,
+): Effect.Effect<void, never, HttpClient.HttpClient> {
+  return Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.keepAliveFor(sessionId)).pipe(
+    Effect.provide(sessionSandboxesLayer),
+    Effect.asVoid,
+    Effect.catch((failure) =>
+      Effect.logWarning(`a session's sandbox was not kept alive: ${failure.message}`),
+    ),
+  );
+}
 
 /** What an archive of an agent asks of the deployment beside it: the service that stops its sandbox, Vercel's in production and a script's in a test, and what keeps the function awake for the stop. */
 export interface SandboxStopReach {
