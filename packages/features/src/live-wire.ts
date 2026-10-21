@@ -41,6 +41,14 @@ import {
 import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
+import {
+  PLAN_ACTOR,
+  PLAN_HISTORY_BOUNDS,
+  type PlanRevisionLine,
+  type PlanRevisionsAnswer,
+  planRevisionSeqSchema,
+  UNKNOWN_AGENT_LABEL,
+} from "./task-wire.js";
 
 /**
  * live-wire.ts -- a read the desktop follows over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
@@ -958,4 +966,88 @@ export function pagesOfLiveRows(rows: typeof taskPagesLiveRowsSchema.Type): read
     .toSorted((one, other) =>
       one.at !== other.at ? other.at - one.at : one.id < other.id ? -1 : one.id > other.id ? 1 : 0,
     );
+}
+
+/**
+ * One task's newest page of plan history sealed for following: the address,
+ * and one statement that delivers the newest revisions as the history's
+ * held read of its newest page reads them, one past the page among them to
+ * say whether an older page stands. The desktop follows it while the task's
+ * version history stands. The service answers `not-found` for a task the
+ * account does not reach; asked with `?poll=true`, the rows inline at the
+ * poll address.
+ */
+export const taskHistoryLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ revisions: sealedLiveQuerySchema }),
+});
+
+export type TaskHistoryLiveAnswer = typeof taskHistoryLiveAnswerSchema.Type;
+
+/** One revision as its row delivers it: who wrote it, the member and the agent as their rows name them now, the call it was written on, and its instants in epoch milliseconds. */
+const taskHistoryLiveRowSchema = EffectSchema.Struct({
+  seq: planRevisionSeqSchema,
+  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  editorId: EffectSchema.NullOr(EffectSchema.String),
+  editorName: EffectSchema.NullOr(EffectSchema.String),
+  liveSessionId: EffectSchema.NullOr(EffectSchema.String),
+  agentId: EffectSchema.NullOr(EffectSchema.String),
+  agentModel: EffectSchema.NullOr(EffectSchema.String),
+  agentTitle: EffectSchema.NullOr(EffectSchema.String),
+  callId: EffectSchema.NullOr(EffectSchema.String),
+  changes: countedNumber,
+  restoredFrom: EffectSchema.NullOr(planRevisionSeqSchema),
+  at: countedNumber,
+  startedAt: countedNumber,
+  restoredAt: EffectSchema.NullOr(countedNumber),
+});
+
+/** A task's newest revisions as Realtime delivers them: none for a task the account no longer reaches. */
+export const taskHistoryLiveRowsSchema = EffectSchema.Struct({
+  revisions: EffectSchema.Array(taskHistoryLiveRowSchema),
+});
+
+type TaskHistoryLiveRow = typeof taskHistoryLiveRowSchema.Type;
+
+/** A revision's line as the version history lists it, from its row, a coding agent named as its row names it now. */
+function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
+  return {
+    seq: row.seq,
+    lastEdit: {
+      actor: row.actor,
+      ...(row.editorId === null || row.editorName === null
+        ? undefined
+        : { by: { userId: row.editorId, name: row.editorName } }),
+      ...(row.actor === PLAN_ACTOR.AGENT
+        ? { label: row.agentTitle ?? row.agentModel ?? UNKNOWN_AGENT_LABEL }
+        : undefined),
+      ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+      at: row.at,
+      duringCall: row.liveSessionId !== null,
+    },
+    ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+    ...(row.callId === null ? undefined : { callId: row.callId }),
+    startedAt: row.startedAt,
+    changes: row.changes,
+    ...(row.restoredFrom === null || row.restoredAt === null
+      ? undefined
+      : { restoredFrom: { seq: row.restoredFrom, at: row.restoredAt } }),
+  };
+}
+
+/**
+ * The history's newest page as its held read answers it, from its rows:
+ * the newest revisions first, a page of them, and where the next older page
+ * is read before where one past the page was delivered.
+ */
+export function revisionsOfLiveRows(
+  rows: typeof taskHistoryLiveRowsSchema.Type,
+): PlanRevisionsAnswer {
+  const newest = rows.revisions.toSorted((one, other) => other.seq - one.seq);
+  const page = newest.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
+  const revisions = page.map(revisionLineOf);
+  const oldest = page.at(-1);
+  return newest.length > page.length && oldest !== undefined
+    ? { revisions, earlier: oldest.seq }
+    : { revisions };
 }

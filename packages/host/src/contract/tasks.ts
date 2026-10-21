@@ -14,6 +14,8 @@ import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent
 import {
   codeLinesSchema,
   type TasksPagesAnswer,
+  type TasksRevisionsAnswer,
+  taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
@@ -234,6 +236,11 @@ export const tasksActsContract = {
   )
     .input(exactInput(taskPagesFollowSchema))
     .output(eventIterator(type<TasksPagesAnswer>())),
+  [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
+    "Could not follow that plan's history on this system.",
+  )
+    .input(exactInput(taskHistoryFollowSchema))
+    .output(eventIterator(type<TasksRevisionsAnswer>())),
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actProcedure("Could not read that picture on this system.")
     .input(exactInput(tasksPictureParamsSchema))
     .output(EffectSchema.flip(tasksPictureAnswerSchema)),

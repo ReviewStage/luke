@@ -27,6 +27,7 @@ import {
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
   taskConversationLiveAnswerSchema,
+  taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
   taskPagesLiveRowsSchema,
   taskRecordLiveAnswerSchema,
@@ -420,6 +421,39 @@ it.layer(getTestDB())("the task board's live read", (it) => {
             pages: rows.queries.pages.rows,
           }).pages.map((page) => [page.id, page.version]),
           [[shown.id, 1]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's newest page of history is sealed for an account that reaches the task, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const path = "/api/live/task-history";
+
+        const sealed = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskHistoryLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        const { capability } = answer.queries.revisions;
+        assert.ok(capability.includes(`"${dana}"`), "read for the bearer");
+        assert.ok(capability.includes(`"${started.id}"`), "read for the task");
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
       }),
   );

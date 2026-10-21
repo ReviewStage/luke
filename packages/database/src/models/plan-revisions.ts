@@ -12,6 +12,7 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionLine,
   type PlanRevisionsAnswer,
+  UNKNOWN_AGENT_LABEL,
 } from "@luke/features/task-wire";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -64,9 +65,6 @@ export const PLAN_REVISION = {
   /** The newest revisions who last changed each section is read off; a section none of them changed names nobody. */
   SECTION_HISTORY: 50,
 } as const;
-
-/** How an agent whose row is gone is named: a discarded start, or a row from before the journal. */
-export const UNKNOWN_AGENT_LABEL = "a coding agent";
 
 /**
  * Who made a save: the notetaker, on the call it listens to where it has

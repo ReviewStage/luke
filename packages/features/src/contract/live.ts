@@ -35,6 +35,7 @@ import {
   scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskConversationLiveAnswerSchema,
+  taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
   workspaceChatLiveAnswerSchema,
@@ -125,6 +126,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_PAGES }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
+  taskHistory: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
   taskConversation: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_CONVERSATION }))
     .input(liveTaskSchema)

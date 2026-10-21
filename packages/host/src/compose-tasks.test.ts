@@ -39,6 +39,7 @@ import {
   LIVE_POLL_URL,
   type TaskBoardLiveAnswer,
   type TaskConversationLiveAnswer,
+  type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
   type TranscriptNowAnswer,
@@ -178,6 +179,8 @@ interface FakeService extends TasksClient {
   recordSeals: Record<string, TaskRecordLiveAnswer>;
   /** What the service seals for following each task's pages; none answers unanswered. */
   pageSeals: Record<string, TaskPagesLiveAnswer>;
+  /** What the service seals for following each task's newest page of history; none answers unanswered. */
+  historySeals: Record<string, TaskHistoryLiveAnswer>;
   /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
   readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
@@ -367,6 +370,7 @@ function fakeService(tasks: Task[]): FakeService {
     boardSeals: {},
     recordSeals: {},
     pageSeals: {},
+    historySeals: {},
     recordReads: [],
     images: {},
     transcripts: {},
@@ -785,6 +789,13 @@ function fakeService(tasks: Task[]): FakeService {
         const sealed = service.boardSeals[taskId];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
+          : { ok: true, answer: sealed };
+      }),
+    historyLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.historySeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
           : { ok: true, answer: sealed };
       }),
     pagesLive: (taskId) =>
@@ -4109,6 +4120,69 @@ it.effect(
       );
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a plan's newest page of history followed for its version history is told as saves land, never in the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.historySeals[INVITES] = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          revisions: { capability: "history-1", queryFingerprint: "history", expiresAt: 3_600_000 },
+        },
+      };
+      const realtime = fakeBoardRealtime();
+      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const row = (seq: number, at: number) => ({
+        seq,
+        actor: PLAN_ACTOR.DEVELOPER,
+        editorId: "user-dean",
+        editorName: "Dean",
+        liveSessionId: null,
+        agentId: null,
+        agentModel: null,
+        agentTitle: null,
+        callId: null,
+        changes: 1,
+        restoredFrom: null,
+        at,
+        startedAt: at,
+        restoredAt: null,
+      });
+      const line = (seq: number, at: number) => ({
+        seq,
+        lastEdit: {
+          actor: PLAN_ACTOR.DEVELOPER,
+          by: { userId: "user-dean", name: "Dean" },
+          at,
+          duringCall: false,
+        },
+        startedAt: at,
+        changes: 1,
+      });
+
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      realtime.deliver("history-1", [row(1, 1_000)]);
+      realtime.deliver("history-1", [row(2, 2_000), row(1, 1_000)]);
+      yield* boardSettled;
+      assert.deepEqual(pushed, [
+        [
+          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+          { taskId: INVITES, view: { revisions: [line(1, 1_000)] } },
+        ],
+        [
+          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+          { taskId: INVITES, view: { revisions: [line(2, 2_000), line(1, 1_000)] } },
+        ],
+      ]);
+      assert.equal(told.length, 0, "a plan's history is never told in the view");
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), []);
     }),

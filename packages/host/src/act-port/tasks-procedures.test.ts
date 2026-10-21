@@ -28,6 +28,7 @@ import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskHistoryFollowed,
   type TaskPagesFollowed,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
@@ -270,6 +271,7 @@ function windowPort(
   const browsed: string[] = [];
   const talked: VoiceCallAbout[] = [];
   const pagesListeners = new Set<(followed: TaskPagesFollowed) => void>();
+  const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
     activeTaskId: TASK_ID,
@@ -407,6 +409,12 @@ function windowPort(
       pagesListeners.add(listener);
       return () => pagesListeners.delete(listener);
     },
+    tasksHistoryFollow: (scope) => ask(`history-follow:${scope.taskId}`, () => undefined),
+    tasksHistoryUnfollow: (scope) => ask(`history-unfollow:${scope.taskId}`, () => undefined),
+    onTaskHistoryChanged: (listener) => {
+      historyListeners.add(listener);
+      return () => historyListeners.delete(listener);
+    },
   };
   const port = testActPort(
     tasksProcedures({
@@ -429,7 +437,11 @@ function windowPort(
   const pagesMoved = (followed: TaskPagesFollowed) => {
     for (const listener of pagesListeners) listener(followed);
   };
-  return { client, asked, browsed, talked, script, pagesMoved };
+  /** A plan's newest page of history as the host tells it moved. */
+  const historyMoved = (followed: TaskHistoryFollowed) => {
+    for (const listener of historyListeners) listener(followed);
+  };
+  return { client, asked, browsed, talked, script, pagesMoved, historyMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -954,4 +966,19 @@ it("the voice window is refused a plan's pages, and the host follows nothing", a
   const { client, asked } = windowPort(VOICE);
   await assert.rejects(client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK));
   assert.deepEqual(asked, []);
+});
+
+it("a plan's newest page of history is streamed to a panel as the host tells it, and let go as the stream closes", async () => {
+  const { client, asked, historyMoved } = windowPort(PANEL);
+  const stream = await client[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW](TASK);
+  const heard = stream.next();
+  await vi.waitFor(() => assert.deepEqual(asked, [`history-follow:${TASK_ID}`]));
+
+  historyMoved({ taskId: "another-task", view: { revisions: [] } });
+  historyMoved({ taskId: TASK_ID, view: { revisions: [], earlier: 3 } });
+  assert.deepEqual(await heard, { done: false, value: { revisions: [], earlier: 3 } });
+  await stream.return?.(undefined);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [`history-follow:${TASK_ID}`, `history-unfollow:${TASK_ID}`]),
+  );
 });
