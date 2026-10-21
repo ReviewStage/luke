@@ -34,6 +34,7 @@ import {
   taskCreateRequestSchema,
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
+  taskRestoreAnswerSchema,
   taskStartAnswerSchema,
   taskUpdateRequestSchema,
 } from "../task-wire.js";
@@ -154,7 +155,7 @@ export const tasksContract = {
   restore: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
-    .output(EffectSchema.flip(taskAnswerSchema)),
+    .output(EffectSchema.flip(taskRestoreAnswerSchema)),
   /** The issues the plan links, each with where it stands now, read live from its provider. */
   issues: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: ISSUES }))
