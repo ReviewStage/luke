@@ -89,34 +89,6 @@
       ],
       "project": ["**/*.ts"]
     },
-    "apps/luke": {
-      "ignoreDependencies": [
-        "@ai-sdk/anthropic",
-        "@ai-sdk/openai",
-        "@better-auth/drizzle-adapter",
-        "@better-auth/electron",
-        "@better-auth/oauth-provider",
-        "@sentry/cli",
-        "@sentry/effect",
-        "@vercel/connect",
-        "@vercel/oidc",
-        "better-auth",
-        "diff",
-        "ws"
-      ],
-      "entry": [
-        "{,subagents/*/}agent.ts",
-        "{,subagents/*/}sandbox.ts",
-        "{,subagents/*/}instructions.ts",
-        "{,subagents/*/}instructions/*.ts",
-        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
-        "instrumentation/*.ts",
-        "nitro.config.ts",
-        "evals/evals.config.ts",
-        "evals/*.eval.ts"
-      ],
-      "project": ["**/*.ts"]
-    },
     "packages/agent-runner": {
       "entry": ["src/main.ts", "scripts/generate-codex-protocol.mjs"],
       "project": ["src/**", "scripts/**"],

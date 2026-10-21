@@ -37,11 +37,10 @@ interface Rewrite {
   readonly destination: { readonly service: string };
 }
 
-const SERVICE = { WEB: "web", LUKE: "luke", DEV: "dev" } as const;
+const SERVICE = { WEB: "web", DEV: "dev" } as const;
 
 interface Services {
   readonly [SERVICE.WEB]: Service;
-  readonly [SERVICE.LUKE]: Service;
   readonly [SERVICE.DEV]: Service;
 }
 
@@ -125,10 +124,10 @@ test("a vercel.json key the generator does not know refuses the generation rathe
  * queue after. A standing session wakes only on its owning deployment's
  * queue, so these never change once a session has started under them.
  */
-const EVE_AGENT_NAME = { [SERVICE.LUKE]: "luke", [SERVICE.DEV]: "coder" } as const;
+const EVE_AGENT_NAME = { [SERVICE.DEV]: "coder" } as const;
 
 test("each eve service keeps the agent name its standing sessions' queue is named after, whatever its directory or service key", () => {
-  for (const service of [SERVICE.LUKE, SERVICE.DEV] as const) {
+  for (const service of [SERVICE.DEV] as const) {
     const manifest = new URL(
       `../../../${vercel.services[service].root}/package.json`,
       import.meta.url,

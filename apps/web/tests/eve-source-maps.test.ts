@@ -224,7 +224,7 @@ test.for(["inject", "upload"] as const)(
 );
 
 /** Each eve root's Nitro config, which decides whether `eve build` writes the maps this step uploads. */
-const NITRO_CONFIGS = ["luke", "dev"].map((root) =>
+const NITRO_CONFIGS = ["dev"].map((root) =>
   fileURLToPath(new URL(`../../${root}/nitro.config.ts`, import.meta.url)),
 );
 

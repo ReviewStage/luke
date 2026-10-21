@@ -16,8 +16,8 @@
 #   scripts/vercel-ignore.sh           decide, as the project's Ignored Build Step
 #   scripts/vercel-ignore.sh --paths   print the deployed tree, one pathspec a line
 #
-# The deployed tree is every path the web, luke and dev services install or
-# build from: the three apps, every package (the services' workspace closure
+# The deployed tree is every path the web and dev services install or
+# build from: the two apps, every package (the services' workspace closure
 # is all of them bar `host` and `credentials`, which is not worth a list that
 # could go stale), the dependency patches, the install's own files, the shared
 # compiler options, the documents the web app prerenders, `vercel.json`, this
@@ -26,7 +26,7 @@
 #
 # Note that since the project's Root Directory became the repository root
 # (#2876), Vercel's own "not affected" skip sees every push as affecting it,
-# so without this step every push of a desktop-only branch built all three
+# so without this step every push of a desktop-only branch built both
 # services and woke its branch's Neon compute (2026-10-15).
 #
 # The comparison is with `VERCEL_GIT_PREVIOUS_SHA`, the commit of this
@@ -39,7 +39,6 @@
 
 DEPLOYED_PATHS=(
     :/apps/web
-    :/apps/luke
     :/apps/dev
     :/packages
     :/patches
