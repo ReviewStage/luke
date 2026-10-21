@@ -63,14 +63,14 @@ import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
-  type TaskSections,
+  type TaskSectionsWritten,
   type TaskSectionWrite,
   taskSectionWriteSchema,
 } from "./task-section-wire.js";
 import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
-  type RepositoryPin,
+  type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
   type Task,
@@ -914,21 +914,19 @@ export class HostedTaskClient {
 
   /**
    * Pins one repository or unpins it, answering the account's pins as they
-   * then stand; nothing where the service refused or did not answer. A
+   * then stand and the transaction the pin was written in, none where it
+   * changed nothing; nothing where the service refused or did not answer. A
    * repository the wire would refuse by shape never travels.
    */
   pinRepository(
     repository: string,
     pinned: boolean,
-  ): Effect.Effect<readonly RepositoryPin[] | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<RepositoryPinsWritten | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(
       readEither(repositoryPinRequestSchema)({ repository, pinned }),
     );
     if (asked === undefined) return Effect.succeed(undefined);
-    return Effect.map(
-      orNothing(askHosted(this.#hosted.repositoryPins.set, asked)),
-      (answer) => answer?.pins,
-    );
+    return orNothing(askHosted(this.#hosted.repositoryPins.set, asked));
   }
 
   /**
@@ -953,12 +951,13 @@ export class HostedTaskClient {
 
   /**
    * Writes one change to the account's sections, answering them all as they
-   * then stand; nothing where the service refused or did not answer. A
+   * then stand and the transaction the change was written in, none where it
+   * changed nothing; nothing where the service refused or did not answer. A
    * write the wire would refuse by shape never travels.
    */
   writeTaskSection(
     write: TaskSectionWrite,
-  ): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskSectionsWritten | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
     if (asked === undefined) return Effect.succeed(undefined);
     return orNothing(askHosted(this.#hosted.taskSections.write, asked));

@@ -358,6 +358,18 @@ export const repositoryPinsAnswerSchema = EffectSchema.Struct({
   pins: EffectSchema.Array(repositoryPinSchema),
 });
 
+/**
+ * A pin's answer (PUT): the pins as they then stand, and the transaction
+ * that wrote them, which a follower of the sidebar waits for before it draws
+ * the pin as done; absent where the pin changed no row.
+ */
+export const repositoryPinsWrittenSchema = EffectSchema.Struct({
+  ...repositoryPinsAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type RepositoryPinsWritten = typeof repositoryPinsWrittenSchema.Type;
+
 /** Pinning a repository, or unpinning it (PUT): asking twice for either moves nothing, and a pin keeps the instant it was first made. */
 export const repositoryPinRequestSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,

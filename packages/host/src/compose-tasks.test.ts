@@ -845,7 +845,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.pins = pinned
           ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
           : others;
-        return service.pins;
+        return { pins: service.pins };
       }),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>

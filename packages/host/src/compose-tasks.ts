@@ -1870,9 +1870,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { repository, pinned } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const pins = yield* served(client.pinRepository(repository, pinned));
-            if (pins === undefined) return { changed: false };
-            write({ repositoryPins: pins });
+            const answer = yield* served(client.pinRepository(repository, pinned));
+            if (answer === undefined) return { changed: false };
+            write({ repositoryPins: answer.pins });
             return { changed: true };
           }),
         );
@@ -1888,8 +1888,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const asked = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const sections = yield* served(client.writeTaskSection(asked));
-            if (sections === undefined) return { changed: false };
+            const written = yield* served(client.writeTaskSection(asked));
+            if (written === undefined) return { changed: false };
+            const { txid: _txid, ...sections } = written;
             write({ taskSections: sections });
             return { changed: true };
           }),
