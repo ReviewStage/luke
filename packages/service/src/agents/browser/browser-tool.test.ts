@@ -14,6 +14,7 @@ import {
   settleMacBrowserResult,
   settleMacCommand,
 } from "@luke/database/models/mac-command-store";
+import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
@@ -25,6 +26,7 @@ import {
   BROWSER_STEP_STATUS,
   type BrowserAgentRun,
 } from "@luke/features/browser-agent-actions";
+import { BROWSER_CURSOR_BEAT } from "@luke/features/browser-agent-cdp";
 import type { PageTarget } from "@luke/features/browser-cdp";
 import {
   MAC_COMMAND_IMAGE_TYPE,
@@ -32,7 +34,7 @@ import {
   type MacCommand,
 } from "@luke/features/mac-command-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Clock, Effect, Fiber, Layer } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
@@ -528,6 +530,125 @@ it.layer(getTestDB())("the browser tool", (it) => {
           "tab-1",
           "tab-2",
         ]);
+      }),
+  );
+
+  it.effect(
+    "a click writes the agent's pointer to its tab's row, and a tab no row keeps yet takes none",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const page = { targetId: "tab-kept", url: "https://kept.test/", title: "Kept" };
+        yield* upsertBrowserTab({
+          conversationId,
+          targetId: page.targetId,
+          address: page.url,
+          title: page.title,
+          openedBy: { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
+        });
+        const { peer } = yield* browser([page]);
+        const layer = yield* runningBrowser(peer);
+        const before = yield* Clock.currentTimeMillis;
+
+        ran(
+          yield* call(
+            conversationId,
+            {
+              actions: [
+                { action: BROWSER_AGENT_ACTION.CLICK, tab: page.targetId, x: 40.5, y: 60 },
+                { action: BROWSER_AGENT_ACTION.OPEN, url: "https://new.test/" },
+                { action: BROWSER_AGENT_ACTION.CLICK, x: 1, y: 2 },
+              ],
+            },
+            layer,
+          ),
+        );
+
+        const rows = yield* listAgentBrowserTabs(conversationId);
+        const byTarget = rows.toSorted((one, other) => one.targetId.localeCompare(other.targetId));
+        const cursors = byTarget.map((row) => ({
+          targetId: row.targetId,
+          x: row.cursorX,
+          y: row.cursorY,
+          kind: row.cursorKind,
+          width: row.cursorViewportW,
+          height: row.cursorViewportH,
+          at: row.cursorAt?.getTime() ?? null,
+        }));
+        assert.deepEqual(cursors, [
+          // The tab this call opened was kept only once the call ran, after its click.
+          {
+            targetId: "tab-1",
+            x: null,
+            y: null,
+            kind: null,
+            width: null,
+            height: null,
+            at: null,
+          },
+          {
+            targetId: "tab-kept",
+            x: 40.5,
+            y: 60,
+            kind: "click",
+            width: 1280,
+            height: 800,
+            at: before,
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a click waits the cursor's beat only while the agent's sandbox is held for someone watching",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const page = { targetId: "tab-kept", url: "https://kept.test/", title: "Kept" };
+        yield* upsertBrowserTab({
+          conversationId,
+          targetId: page.targetId,
+          address: page.url,
+          title: page.title,
+          openedBy: { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
+        });
+        const { peer, sent } = yield* browser([page]);
+        const layer = yield* runningBrowser(peer);
+        const click = {
+          actions: [{ action: BROWSER_AGENT_ACTION.CLICK, tab: page.targetId, x: 4, y: 5 }],
+        };
+        const presses = () =>
+          sent.filter(
+            (command) =>
+              command.method === "Input.dispatchMouseEvent" &&
+              command.params.type === "mousePressed",
+          ).length;
+        const pointed = Effect.map(
+          listAgentBrowserTabs(conversationId),
+          (rows) => rows[0]?.cursorX === 7,
+        );
+
+        // No one watches: the call runs through without the clock moving at all.
+        ran(yield* call(conversationId, click, layer));
+        const pressedUnwatched = presses();
+
+        const now = yield* Clock.currentTimeMillis;
+        yield* holdSandbox(conversationId, new Date(now + 60_000));
+        const watchedClick = {
+          actions: [{ action: BROWSER_AGENT_ACTION.CLICK, tab: page.targetId, x: 7, y: 5 }],
+        };
+        const pending = yield* Effect.forkChild(call(conversationId, watchedClick, layer));
+        while (!(yield* pointed)) yield* Effect.yieldNow;
+        let waited = 0;
+        while (presses() === pressedUnwatched) {
+          yield* TestClock.adjust("10 millis");
+          waited += 10;
+          for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+        }
+        ran(yield* Fiber.join(pending));
+
+        assert.equal(pressedUnwatched, 1);
+        assert.ok(waited >= Duration.toMillis(BROWSER_CURSOR_BEAT), `pressed after ${waited} ms`);
       }),
   );
 

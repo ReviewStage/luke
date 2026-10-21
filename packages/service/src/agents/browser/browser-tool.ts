@@ -26,6 +26,17 @@
  * with its address and title, a `list` writes every page the browser
  * holds, and only a tab the agent closed is dropped.
  *
+ * While it runs, the agent's pointer is written to the tab it points at
+ * (`pointBrowserTab`), one write just before each click, type, or wheel
+ * turn reaches the page, so a member's window draws it gliding there
+ * (`@luke/features/browser-agent-cdp`'s `BrowserCursor`). Where someone is
+ * watching, each such input then waits the cursor's beat, so the glide lands
+ * with the action. Someone is watching while the agent's sandbox lease
+ * stands (`sandbox-terminal-lease.ts`), which the live view moves on while a
+ * panel has one of its tabs open; a Terminal tab in use holds it too, and
+ * counts as watching. An agent no one watches is never slowed. The point
+ * and its kind are no page content and are never logged.
+ *
  * A browser that cannot be reached answers `not-run` and why, never a throw.
  * A screenshot reaches the model as an image (`browserModelOutput`) and is
  * left out of the stored conversation (`storedBrowserOutput`), as
@@ -40,8 +51,10 @@ import {
   browserTabDriver,
   closeBrowserTab,
   listAgentBrowserTabs,
+  pointBrowserTab,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
+import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import {
   BROWSER_AGENT_ACTION,
@@ -55,7 +68,7 @@ import {
   browserAgentRunSchema,
   cutBrowserText,
 } from "@luke/features/browser-agent-actions";
-import { runBrowserActions } from "@luke/features/browser-agent-cdp";
+import { type BrowserCursor, runBrowserActions } from "@luke/features/browser-agent-cdp";
 import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
 import {
   MAC_COMMAND_BOUNDS,
@@ -409,10 +422,36 @@ function withSettledTitles(
   });
 }
 
-/** Runs the actions on the browser, the store kept in step after; a failure to keep it is logged and leaves the run as it ran. */
-function runOn(cdp: CdpSession, call: BrowserCall, actions: readonly BrowserAgentAction[]) {
+/**
+ * The agent's pointer as the tab store keeps it: each move written to its
+ * tab's row, and held for the beat while the sandbox's lease says someone
+ * watches. Note that a write the store refuses is logged by its kind alone
+ * and lets the action go on, since a pointer not drawn breaks nothing.
+ */
+function storedCursor(conversationId: string, now: Date) {
   return Effect.gen(function* () {
-    const run = yield* runBrowserActions(cdp, actions);
+    const watched = yield* sandboxHeld(conversationId, now).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.orElseSucceed(() => false),
+    );
+    return {
+      watched,
+      report: (move) =>
+        pointBrowserTab(conversationId, move).pipe(Effect.tapError(logStoreFailure), Effect.ignore),
+    } satisfies BrowserCursor<DatabaseServices>;
+  });
+}
+
+/** Runs the actions on the browser, the store kept in step after; a failure to keep it is logged and leaves the run as it ran. */
+function runOn(
+  cdp: CdpSession,
+  call: BrowserCall,
+  actions: readonly BrowserAgentAction[],
+  now: Date,
+) {
+  return Effect.gen(function* () {
+    const cursor = yield* storedCursor(call.conversationId, now);
+    const run = yield* runBrowserActions(cdp, actions, { cursor });
     yield* settleTitles(cdp, run.steps);
     const pages = yield* Effect.result(cdp.pages);
     const held = Result.isSuccess(pages) ? pages.success : [];
@@ -458,7 +497,7 @@ function onSandbox(call: BrowserCall, actions: readonly BrowserAgentAction[]) {
           const outcome =
             runnable.length === 0
               ? { run: { steps: [], skipped: 0 }, tabs: [] }
-              : yield* runOn(withoutStartPage(cdp, kept), call, runnable);
+              : yield* runOn(withoutStartPage(cdp, kept), call, runnable, now);
           return { ...outcome, refused, runnable };
         }),
       ),

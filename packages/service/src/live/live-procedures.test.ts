@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { writeDrawing } from "@luke/database/models/board-store";
 import { ensureMember } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
@@ -11,7 +12,9 @@ import { childConversationId } from "@luke/database/models/ids";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
+import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   accountInboxLiveAnswerSchema,
@@ -24,6 +27,8 @@ import {
   scopeInboxLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
+  taskBrowserTabsLiveAnswerSchema,
+  taskBrowserTabsLiveRowsSchema,
   taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
   taskPagesLiveRowsSchema,
@@ -439,6 +444,88 @@ it.layer(getTestDB())("the task board's live read", (it) => {
             pages: rows.queries.pages.rows,
           }).pages.map((page) => [page.id, page.version]),
           [[shown.id, 1]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's Browser tabs are sealed for an account that reaches the task, not found for one that does not, and asked to poll answered with each tab's pointer inline",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const coder = yield* createCodingAgent(dana, {
+          taskId: started.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        const { agent } = Option.getOrThrow(coder);
+        const tab = yield* upsertBrowserTab({
+          conversationId: agent.conversationId,
+          targetId: "target-1",
+          address: "http://localhost:3000/",
+          title: "Invites",
+          openedBy: { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
+        });
+        const at = yield* Clock.currentTimeMillis;
+        yield* pointBrowserTab(agent.conversationId, {
+          tab: "target-1",
+          x: 12,
+          y: 34,
+          kind: BROWSER_CURSOR_KIND.TYPE,
+          viewport: { width: 1280, height: 800 },
+          at,
+        });
+        const path = "/api/live/task-browser-tabs";
+
+        const sealed = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskBrowserTabsLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.ok(answer.queries.tabs.capability.includes(`"${dana}"`), "read for the bearer");
+        assert.ok(answer.queries.tabs.capability.includes(`"${started.id}"`), "read for the task");
+        assert.deepEqual(
+          yield* askBoard({
+            bearer: eli,
+            taskId: started.id,
+            path,
+            sealing: Option.some(SCRIPTED),
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+
+        const polled = yield* askBoard({
+          bearer: dana,
+          taskId: started.id,
+          path,
+          poll: true,
+          sealing: Option.some(SCRIPTED),
+        });
+        const rows = Schema.decodeUnknownSync(taskBrowserTabsLiveAnswerSchema)(polled.body);
+        assert.equal(rows.url, LIVE_POLL_URL);
+        const [line] = Schema.decodeUnknownSync(taskBrowserTabsLiveRowsSchema)({
+          tabs: rows.queries.tabs.rows,
+        }).tabs;
+        assert.deepEqual(
+          line && [
+            line.id,
+            line.agentId,
+            line.cursorX,
+            line.cursorY,
+            line.cursorKind,
+            line.cursorAt,
+          ],
+          [tab.id, agent.id, 12, 34, BROWSER_CURSOR_KIND.TYPE, at],
         );
       }),
   );

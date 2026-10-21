@@ -1,5 +1,14 @@
 import type { AgentBrowserTabOpener } from "@luke/features/agent-browser-tab-wire";
-import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import type { BrowserCursorKind } from "@luke/features/browser-agent-actions";
+import {
+  doublePrecision,
+  index,
+  integer,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { conversations } from "./storage.js";
@@ -23,6 +32,13 @@ import { task } from "./task.js";
  * takeover whose window went away lapses on its own; the take is a
  * check-and-set on the driver and the instant, so two members never both
  * drive one tab.
+ *
+ * The agent's pointer is kept beside the page, so a member's window draws
+ * it over the live view: where the agent last clicked, typed, or turned the
+ * wheel, in the page's CSS pixels, with the visible page's size it was
+ * placed in and when. A point and a kind are no page content. Every cursor
+ * column is null until the agent first points at the tab, and all of them
+ * are written together.
  */
 export const agentBrowserTab = pgTable(
   "agent_browser_tab",
@@ -51,6 +67,18 @@ export const agentBrowserTab = pgTable(
     createdAt: createdAt(),
     /** When the agent last acted on the tab. */
     lastActedAt: timestamptz("last_acted_at").notNull().defaultNow(),
+    /** Where the agent's pointer last went, in CSS pixels from the visible page's left; null until it first points. */
+    cursorX: doublePrecision("cursor_x"),
+    /** The same, from the visible page's top. */
+    cursorY: doublePrecision("cursor_y"),
+    /** What the pointer did there: moved, clicked, or typed. */
+    cursorKind: text("cursor_kind").$type<BrowserCursorKind>(),
+    /** The visible page's width in CSS pixels when the pointer went there. */
+    cursorViewportW: integer("cursor_viewport_w"),
+    /** The visible page's height in CSS pixels when the pointer went there. */
+    cursorViewportH: integer("cursor_viewport_h"),
+    /** When the pointer went there. */
+    cursorAt: timestamptz("cursor_at"),
   },
   (table) => [
     // One row per tab of one browser: an agent's action on a tab it already holds updates that row.

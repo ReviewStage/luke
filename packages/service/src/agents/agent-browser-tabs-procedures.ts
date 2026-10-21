@@ -20,17 +20,13 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  browserTabDriver,
   handBackBrowserTab,
   listTaskBrowserTabs,
   type ReachedBrowserTab,
   readTaskBrowserTab,
   takeOverBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
-import {
-  AGENT_BROWSER_TAB_OPENER,
-  type AgentBrowserTab,
-} from "@luke/features/agent-browser-tab-wire";
+import { type AgentBrowserTab, agentBrowserTabOf } from "@luke/features/agent-browser-tab-wire";
 import { DateTime, Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
@@ -48,23 +44,29 @@ export interface AgentBrowserTabsProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** A reached tab as the wire carries it, its driver only while their takeover stands at `now`. */
+/** A reached tab as the wire carries it, its driver only while their takeover stands at `now`, its cursor once its agent pointed at it. */
 function browserTabOf({ tab, agent }: ReachedBrowserTab, now: Date): AgentBrowserTab {
-  const driver = browserTabDriver(tab, now);
-  return {
-    id: tab.id,
-    agentId: agent.id,
-    address: tab.address,
-    title: tab.title,
-    openedBy:
-      tab.openedBy === AGENT_BROWSER_TAB_OPENER.MEMBER
-        ? { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId: tab.openedByUserId }
-        : { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
-    driver:
-      driver === null ? null : { userId: driver.userId, heldUntil: driver.heldUntil.getTime() },
-    createdAt: tab.createdAt.getTime(),
-    lastActedAt: tab.lastActedAt.getTime(),
-  };
+  return agentBrowserTabOf(
+    {
+      id: tab.id,
+      agentId: agent.id,
+      address: tab.address,
+      title: tab.title,
+      openedBy: tab.openedBy,
+      openedByUserId: tab.openedByUserId,
+      driverUserId: tab.driverUserId,
+      heldUntil: tab.heldUntil?.getTime() ?? null,
+      createdAt: tab.createdAt.getTime(),
+      lastActedAt: tab.lastActedAt.getTime(),
+      cursorX: tab.cursorX,
+      cursorY: tab.cursorY,
+      cursorKind: tab.cursorKind,
+      cursorViewportW: tab.cursorViewportW,
+      cursorViewportH: tab.cursorViewportH,
+      cursorAt: tab.cursorAt?.getTime() ?? null,
+    },
+    now.getTime(),
+  );
 }
 
 /** The tab the path names, where the member reaches it; not found otherwise. */

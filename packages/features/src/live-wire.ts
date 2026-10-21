@@ -11,6 +11,11 @@ import {
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
 import {
+  type AgentBrowserTab,
+  agentBrowserTabLineSchema,
+  agentBrowserTabOf,
+} from "./agent-browser-tab-wire.js";
+import {
   type ChatAnswer,
   type ChatChannel,
   type ChatMember,
@@ -948,6 +953,52 @@ export function pagesOfLiveRows(rows: typeof taskPagesLiveRowsSchema.Type): read
     .toSorted((one, other) =>
       one.at !== other.at ? other.at - one.at : one.id < other.id ? -1 : one.id > other.id ? 1 : 0,
     );
+}
+
+/**
+ * One task's Browser tabs sealed for following: the address, and one
+ * statement that delivers every tab the task's held list of tabs lists the
+ * account, the agent's pointer on each among it, so a window draws the
+ * pointer moving within a moment of the agent's action. The service answers
+ * `not-found` for a task the account does not reach; asked with
+ * `?poll=true`, the rows inline at the poll address.
+ */
+export const taskBrowserTabsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ tabs: sealedLiveQuerySchema }),
+});
+
+export type TaskBrowserTabsLiveAnswer = typeof taskBrowserTabsLiveAnswerSchema.Type;
+
+/** A task's tabs as Realtime delivers them, each as the service keeps it: none for a task the account no longer reaches. */
+export const taskBrowserTabsLiveRowsSchema = EffectSchema.Struct({
+  tabs: EffectSchema.Array(agentBrowserTabLineSchema),
+});
+
+/**
+ * The tabs as the held list answers them at the instant given, in epoch
+ * milliseconds, from their rows: the oldest first, then by id. Note that a
+ * takeover lapses with no row moving, so a reader reads its rows again at
+ * `nextBrowserTabLapse`.
+ */
+export function browserTabsOfLiveRows(
+  rows: typeof taskBrowserTabsLiveRowsSchema.Type,
+  now: number,
+): readonly AgentBrowserTab[] {
+  return rows.tabs
+    .toSorted((one, other) => byKeys([one.createdAt, other.createdAt], [one.id, other.id]))
+    .map((line) => agentBrowserTabOf(line, now));
+}
+
+/** The next instant, in epoch milliseconds, a takeover the rows hold lapses at after `now`; none where none stands. */
+export function nextBrowserTabLapse(
+  rows: typeof taskBrowserTabsLiveRowsSchema.Type,
+  now: number,
+): number | undefined {
+  const lapses = rows.tabs.flatMap(({ driverUserId, heldUntil }) =>
+    driverUserId !== null && heldUntil !== null && heldUntil > now ? [heldUntil] : [],
+  );
+  return lapses.length === 0 ? undefined : Math.min(...lapses);
 }
 
 /**

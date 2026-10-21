@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
+import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
@@ -21,6 +22,7 @@ import {
   handBackBrowserTab,
   listAgentBrowserTabs,
   listTaskBrowserTabs,
+  pointBrowserTab,
   readTaskBrowserTab,
   renewBrowserTabTakeover,
   retargetBrowserTab,
@@ -290,6 +292,58 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         [own.id],
       );
     }),
+  );
+
+  it.effect(
+    "a pointer move is kept on the tab its own agent's browser names, and a tab no row keeps takes none",
+    () =>
+      Effect.gen(function* () {
+        const { agent, other } = yield* openTask;
+        const tab = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-1", "https://shop.test/"),
+        );
+        yield* TestClock.adjust("1 minute");
+        const at = (yield* DateTime.nowAsDate).getTime();
+        const move = {
+          tab: "target-1",
+          x: 10.25,
+          y: 20,
+          kind: BROWSER_CURSOR_KIND.CLICK,
+          viewport: { width: 1279.6, height: 800 },
+          at,
+        };
+
+        assert.equal(yield* pointBrowserTab(other.conversationId, move), false);
+        assert.equal(
+          yield* pointBrowserTab(agent.conversationId, { ...move, tab: "target-2" }),
+          false,
+        );
+        assert.equal(yield* pointBrowserTab(agent.conversationId, move), true);
+        const [kept] = yield* listAgentBrowserTabs(agent.conversationId);
+        assert.deepEqual(
+          kept && {
+            id: kept.id,
+            x: kept.cursorX,
+            y: kept.cursorY,
+            kind: kept.cursorKind,
+            width: kept.cursorViewportW,
+            height: kept.cursorViewportH,
+            at: kept.cursorAt?.getTime(),
+            lastActedAt: kept.lastActedAt.getTime(),
+          },
+          {
+            id: tab.id,
+            x: 10.25,
+            y: 20,
+            kind: "click",
+            width: 1280,
+            height: 800,
+            at,
+            lastActedAt: at,
+          },
+        );
+        assert.deepEqual(yield* listAgentBrowserTabs(other.conversationId), []);
+      }),
   );
 
   it.effect("a close deletes the tab from its own agent's browser alone", () =>

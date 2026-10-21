@@ -7,8 +7,13 @@ import {
   BROWSER_STEP_STATUS,
   type BrowserAgentAction,
   type BrowserAgentStep,
+  type BrowserCursorMove,
 } from "@luke/features/browser-agent-actions";
-import { runBrowserActions } from "@luke/features/browser-agent-cdp";
+import {
+  BROWSER_CURSOR_BEAT,
+  type BrowserCursor,
+  runBrowserActions,
+} from "@luke/features/browser-agent-cdp";
 import type { CdpEvent, PageTarget } from "@luke/features/browser-cdp";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -76,13 +81,29 @@ function browser(
   }));
 }
 
-/** Runs the actions on a session with the peer's browser, as the tool will. */
-function run(peer: FakeCdpPeer, actions: readonly BrowserAgentAction[]) {
+/** Runs the actions on a session with the peer's browser, as the tool will, with the cursor given. */
+function run(peer: FakeCdpPeer, actions: readonly BrowserAgentAction[], cursor?: BrowserCursor) {
   const { api } = fakeSandboxApi({ status: "running", sessionId: SESSION });
   const service = agentBrowserOver(api, fakeBridgePty(peer));
   return Effect.scoped(
-    Effect.flatMap(service.connect(SESSION), (cdp) => runBrowserActions(cdp, actions)),
+    Effect.flatMap(service.connect(SESSION), (cdp) =>
+      runBrowserActions(cdp, actions, cursor === undefined ? {} : { cursor }),
+    ),
   );
+}
+
+/** A cursor that writes each move it hears into the browser's own record, so the order of moves and commands reads as one. */
+function cursorInto(sent: FakeCdpCommand[], watched: boolean) {
+  const moves: BrowserCursorMove[] = [];
+  const cursor: BrowserCursor = {
+    watched,
+    report: (move) =>
+      Effect.sync(() => {
+        moves.push(move);
+        sent.push({ method: "cursor", params: { kind: move.kind, x: move.x, y: move.y } });
+      }),
+  };
+  return { cursor, moves };
 }
 
 /** The commands sent to pages and to the browser about them, without the listing a step reads along the way. */
@@ -598,6 +619,126 @@ it.effect("a listed title and a long page's snapshot hold to their caps", () =>
       snapshotted.text,
       /\n… the rest of the page was left out; scroll and take a snapshot again to read it$/u,
     );
+  }),
+);
+
+it.effect(
+  "a cursor hears each click, type, and wheel point before its input, with the page's visible size",
+  () =>
+    Effect.gen(function* () {
+      const { peer, sent } = yield* browser(
+        (command) => {
+          if (command.method === "DOM.getContentQuads" && command.params.backendNodeId === 42) {
+            return { result: { quads: [[100, 200, 140, 200, 140, 220, 100, 220]] } };
+          }
+          if (command.method === "DOM.getContentQuads" && command.params.backendNodeId === 7) {
+            return { result: { quads: [[10, 20, 50, 20, 50, 40, 10, 40]] } };
+          }
+          if (command.method === "Runtime.evaluate") {
+            return { result: { result: { value: { x: 300, y: 400 } } } };
+          }
+          return undefined;
+        },
+        [{ targetId: "page-shop", url: "https://shop.example/", title: "Shop" }],
+      );
+      const { cursor, moves } = cursorInto(sent, false);
+      const tab = "page-shop";
+
+      const ran = yield* run(
+        peer,
+        [
+          { action: BROWSER_AGENT_ACTION.CLICK, tab, ref: "e42" },
+          { action: BROWSER_AGENT_ACTION.TYPE, ref: "e7", text: "dean@example.com" },
+          { action: BROWSER_AGENT_ACTION.TYPE, text: "hello" },
+          { action: BROWSER_AGENT_ACTION.CLICK, x: 5, y: 6 },
+          { action: BROWSER_AGENT_ACTION.SCROLL, deltaY: 300 },
+        ],
+        cursor,
+      );
+
+      assert.ok(ran.steps.every((step) => step.status === BROWSER_STEP_STATUS.DONE));
+      const viewport = { width: 1280, height: 800 };
+      assert.deepEqual(
+        moves.map(({ at: _at, ...move }) => move),
+        [
+          { tab, x: 120, y: 210, kind: "click", viewport },
+          { tab, x: 30, y: 30, kind: "type", viewport },
+          { tab, x: 300, y: 400, kind: "type", viewport },
+          { tab, x: 5, y: 6, kind: "click", viewport },
+          { tab, x: 640, y: 400, kind: "move", viewport },
+        ],
+      );
+      // Each move is heard after its point is found and before the input that acts there.
+      const order = sent
+        .filter((command) =>
+          ["cursor", "Input.dispatchMouseEvent", "Input.insertText"].includes(command.method),
+        )
+        .map((command) => String(command.params.kind ?? command.params.type ?? "insertText"));
+      assert.deepEqual(order, [
+        "click",
+        "mouseMoved",
+        "mousePressed",
+        "mouseReleased",
+        "type",
+        "insertText",
+        "type",
+        "insertText",
+        "click",
+        "mouseMoved",
+        "mousePressed",
+        "mouseReleased",
+        "move",
+        "mouseWheel",
+      ]);
+    }),
+);
+
+it.effect("typing nowhere the page can point to moves no cursor, and the text still goes in", () =>
+  Effect.gen(function* () {
+    const { peer, sent } = yield* browser(
+      (command) =>
+        command.method === "Runtime.evaluate" ? { result: { result: { value: null } } } : undefined,
+      [{ targetId: "page-shop", url: "https://shop.example/", title: "Shop" }],
+    );
+    const { cursor, moves } = cursorInto(sent, false);
+
+    const ran = yield* run(
+      peer,
+      [{ action: BROWSER_AGENT_ACTION.TYPE, tab: "page-shop", text: "hello" }],
+      cursor,
+    );
+
+    assert.deepEqual(moves, []);
+    assert.deepEqual(ran.steps, [{ action: "type", status: "done", tab: "page-shop" }]);
+    assert.ok(sent.some((command) => command.method === "Input.insertText"));
+  }),
+);
+
+it.effect("while someone watches, a click waits the cursor's beat after its move is heard", () =>
+  Effect.gen(function* () {
+    const { peer, sent } = yield* browser(undefined, [
+      { targetId: "page-shop", url: "https://shop.example/", title: "Shop" },
+    ]);
+    const { cursor, moves } = cursorInto(sent, true);
+    const pressed = () =>
+      sent.some(
+        (command) =>
+          command.method === "Input.dispatchMouseEvent" && command.params.type === "mousePressed",
+      );
+
+    const clicking = yield* Effect.forkChild(
+      run(peer, [{ action: BROWSER_AGENT_ACTION.CLICK, tab: "page-shop", x: 40, y: 60 }], cursor),
+    );
+    yield* TestClock.adjust(Duration.subtract(BROWSER_CURSOR_BEAT, Duration.millis(1)));
+    const heardBeforeBeat = moves.length;
+    const pressedBeforeBeat = pressed();
+    yield* TestClock.adjust(Duration.millis(1));
+    const clicked = yield* Fiber.join(clicking);
+
+    assert.equal(heardBeforeBeat, 1);
+    assert.equal(pressedBeforeBeat, false);
+    assert.deepEqual(clicked.steps, [{ action: "click", status: "done", tab: "page-shop" }]);
+    assert.ok(pressed());
   }),
 );
 

@@ -103,6 +103,12 @@ const REACHED: ReachedBrowserTab = {
     heldUntil: null,
     createdAt: new Date(0),
     lastActedAt: new Date(0),
+    cursorX: null,
+    cursorY: null,
+    cursorKind: null,
+    cursorViewportW: null,
+    cursorViewportH: null,
+    cursorAt: null,
   },
   agent: { id: "agent-1", userId: "starter-1", githubAccess: GITHUB_ACCESS.APP },
 };
