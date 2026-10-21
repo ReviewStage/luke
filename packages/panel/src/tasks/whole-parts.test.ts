@@ -217,3 +217,18 @@ test("a cut thought is read whole as its fold opens, and one whose read fails dr
   assert.match(output, /compiled the last file/u);
   assert.doesNotMatch(output, /compiled the middle file/u);
 });
+
+test("a read that answers some other call than the one cut, as an index read across a deploy that retired a tool would, leaves the cut call at its two ends", async () => {
+  const { container } = await drawnTab(() =>
+    Promise.resolve({
+      part: { ...COMMAND, toolCallId: "call-other", output: "compiled the middle file" },
+    }),
+  );
+
+  press(container.querySelector<HTMLElement>('[data-call-id="call-build"] summary'));
+  await settled();
+  const output =
+    container.querySelector('[data-call-id="call-build"] [data-tool-output]')?.textContent ?? "";
+  assert.match(output, /compiled the first file/u);
+  assert.doesNotMatch(output, /compiled the middle file/u);
+});

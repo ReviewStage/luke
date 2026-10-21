@@ -36,7 +36,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { callEndedLine, callPlaces, type TranscriptCallRow } from "@luke/voice/transcript-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
@@ -742,15 +742,28 @@ function CutToolCallView({
   cut: AgentPartCut;
   jobs: WorkerJobs | undefined;
 }): ReactNode {
-  const read = useWholePart(cut);
-  const whole = "part" in read ? agentPart(read.part) : undefined;
-  if (whole?.kind === AGENT_PART.TOOL) return <ToolCallView part={whole} jobs={jobs} />;
-  return <ToolCallView part={part} jobs={jobs} cut={"body" in read ? read.body : undefined} />;
+  const { callId } = part;
+  const isCall = useCallback(
+    (read: WireValue) => {
+      const whole = agentPart(read);
+      return whole.kind === AGENT_PART.TOOL && whole.callId === callId;
+    },
+    [callId],
+  );
+  const read = useWholePart(cut, isCall);
+  if ("body" in read) return <ToolCallView part={part} jobs={jobs} cut={read.body} />;
+  const whole = agentPart(read.part);
+  return <ToolCallView part={whole.kind === AGENT_PART.TOOL ? whole : part} jobs={jobs} />;
+}
+
+/** Whether a part read is a thought, which a cut thought's whole read must be. */
+function isThought(read: WireValue): boolean {
+  return agentPart(read).kind === AGENT_PART.REASONING;
 }
 
 /** A thought its page carried cut: its line as any thought's, its body reading the words whole as it opens. */
 function CutReasoningView({ cut }: { cut: AgentPartCut }): ReactNode {
-  const read = useWholePart(cut);
+  const read = useWholePart(cut, isThought);
   if ("body" in read) return <TranscriptReasoning text="" cut={read.body} />;
   const whole = agentPart(read.part);
   return <TranscriptReasoning text={whole.kind === AGENT_PART.REASONING ? whole.text : ""} />;

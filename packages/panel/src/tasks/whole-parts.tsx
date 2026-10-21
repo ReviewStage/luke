@@ -13,7 +13,9 @@ import type { AgentPartCut } from "./coding-agent-model.js";
  * what every command printed. The part's fold reads the part whole as it
  * opens, through the door the tab hands down, and draws the reading while it
  * waits; a part that grew since, as a thought still streaming does, is read
- * again. A part no door reaches, or whose read fails, stays at its two ends.
+ * again. A part no door reaches, or whose read fails, stays at its two ends,
+ * and so does one whose read answers some other part than the one cut, as
+ * an index read across a deploy that retired a tool would.
  */
 
 /** Where a transcript's cut parts are read whole: an agent's, or a worker's under its delegation call. */
@@ -75,6 +77,8 @@ export interface CutBody {
  */
 export function useWholePart(
   cut: AgentPartCut,
+  /** Whether a part read is the one cut: the same call, or a thought. */
+  isCutPart: (part: WireValue) => boolean,
 ): { readonly part: WireValue } | { readonly body: CutBody } {
   const door = useContext(WholePartsContext);
   const [held, setHeld] = useState<WholePartRead>({ bytes: cut.bytes, state: WHOLE_PART.CUT });
@@ -92,13 +96,13 @@ export function useWholePart(
     door.read(messageId, index).then(
       (answer) =>
         setHeld(
-          "part" in answer
+          "part" in answer && isCutPart(answer.part)
             ? { bytes, state: WHOLE_PART.WHOLE, part: answer.part }
             : { bytes, state: WHOLE_PART.FAILED },
         ),
       () => setHeld({ bytes, state: WHOLE_PART.FAILED }),
     );
-  }, [door, messageId, index, bytes, unasked]);
+  }, [door, messageId, index, bytes, unasked, isCutPart]);
   if (read.state === WHOLE_PART.WHOLE) return { part: read.part };
   return { body: { state: read.state, bytes, head: cut.head, tail: cut.tail, onOpen } };
 }
