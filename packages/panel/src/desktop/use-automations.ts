@@ -69,8 +69,19 @@ export function useAutomations(workspaceId: string | undefined) {
   // Note that a push that fails keeps the list it would have replaced, so a
   // page drawn from it, an editor's draft among them, stands; only a failure
   // with nothing held yet is said as one.
+  // Note that every list pushed is counted, so a write's answer that lands after a push it was
+  // sent before draws nothing over it: that push may hold a newer write of another window's, and
+  // the write's own commit is pushed after it in any case.
+  const pushes = useRef(0);
+  // Note that every automation a push carried is remembered, so a new one's answer is not put back
+  // into a list that has carried it already, and since lost it to a deletion.
+  const pushedIds = useRef(new Set<string>()).current;
   const reload = useFollowedAutomations(workspaceId, (read) => {
     if (workspaceId === undefined) return;
+    if (!("failure" in read)) {
+      pushes.current += 1;
+      for (const each of read.automations) pushedIds.add(each.id);
+    }
     setHeld((was) =>
       "failure" in read &&
       was?.workspaceId === workspaceId &&
@@ -82,7 +93,10 @@ export function useAutomations(workspaceId: string | undefined) {
   });
   /**
    * One write out: counted as its automation's newest, a new one's under
-   * no automation yet, and its answer handed to `land` only while it still is.
+   * no automation yet, and its answer handed to `land` only while it still
+   * is and, for a write of one the list holds, no list was pushed since it
+   * was sent. A new one's answer is always handed on, since its page opens on
+   * it before any push may carry it.
    */
   const written = useCallback(
     <Answer>(
@@ -94,13 +108,34 @@ export function useAutomations(workspaceId: string | undefined) {
       writes.current += 1;
       const count = writes.current;
       if (automationId !== undefined) newestWrite.set(automationId, count);
+      const pushedBefore = pushes.current;
       const settled = (answer: Answer): Answer => {
-        if (automationId === undefined || newestWrite.get(automationId) === count) land(answer);
+        if (automationId === undefined) {
+          land(answer);
+          return answer;
+        }
+        if (newestWrite.get(automationId) === count && pushes.current === pushedBefore) {
+          land(answer);
+        }
         return answer;
       };
       return asked.then(settled, () => settled(refused));
     },
     [newestWrite],
+  );
+  /** A new automation taken into the list of the workspace it is of, first, unless a push already carried it, which is as new as the answer or newer, whether it still holds it or has since lost it to a deletion. */
+  const landCreated = useCallback(
+    (answer: AutomationView) => {
+      if (!("automation" in answer)) return;
+      const { automation } = answer;
+      if (pushedIds.has(automation.id)) return;
+      setHeld((was) =>
+        was !== undefined && was.workspaceId === automation.workspaceId
+          ? { ...was, read: replaced(was.read, automation) }
+          : was,
+      );
+    },
+    [pushedIds],
   );
   /** A write's answer taken into the list of the workspace it is of, in its place, and into no other's. */
   const landAutomation = useCallback((answer: AutomationView) => {
@@ -118,9 +153,9 @@ export function useAutomations(workspaceId: string | undefined) {
         undefined,
         act(ACT_KIND.AUTOMATIONS_CREATE, params),
         UNANSWERED,
-        landAutomation,
+        landCreated,
       ),
-    [act, written, landAutomation],
+    [act, written, landCreated],
   );
   const change = useCallback(
     (params: AutomationChangeParams) =>

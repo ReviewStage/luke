@@ -215,6 +215,8 @@ function pushStanding(): void {
 
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
+/** The creates held unanswered, each committed and answered by its resolver, where creates are held at all. */
+let heldCreates: (() => void)[] | undefined;
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
 /** Every workspace whose list was read, in order. */
@@ -276,6 +278,7 @@ beforeEach(() => {
   lists = [];
   listHeld = false;
   heldChanges = undefined;
+  heldCreates = undefined;
   listed = [];
   changes = [];
   creates = [];
@@ -345,11 +348,20 @@ beforeEach(() => {
             ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
             : undefined),
         });
-        standing = [made, ...standing];
         // A webhook's secret is answered once, by the write that minted it.
         const value = hooked
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
+        if (heldCreates !== undefined) {
+          const held = heldCreates;
+          return new Promise((resolve) =>
+            held.push(() => {
+              standing = [made, ...standing];
+              resolve({ status: FAKE_ANSWER.DONE, value });
+            }),
+          );
+        }
+        standing = [made, ...standing];
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
@@ -583,6 +595,28 @@ test("an older switch's answer landing after a newer one's draws nothing over it
   assert.equal(
     page.querySelector(".automation-row-name")?.textContent,
     "Nightly flaky-test sweep, write 2",
+  );
+});
+
+test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  await settle();
+
+  // Another window renames it meanwhile, and the host pushes the list before the switch answers.
+  standing = standing.map((each) =>
+    each.id === SWEEP.id ? { ...each, name: "Sweep, as another window left it" } : each,
+  );
+  pushStanding();
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.equal(
+    page.querySelector(".automation-row-name")?.textContent,
+    "Sweep, as another window left it",
   );
 });
 
@@ -1044,6 +1078,25 @@ test("a new automation is created only once it is named and told its task, and t
     archiveSuccessful: false,
     repositories: ["acme/ledger"],
   });
+  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
+  assert.equal(crumbs(page), "AutomationsMorning triage");
+});
+
+test("a new automation whose answer lands after a list pushed before it was made still stands as its own page", async () => {
+  heldCreates = [];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Create").click());
+  await settle();
+
+  // Something else moves the list while the create is out, before it is made.
+  pushStanding();
+  await settle();
+  heldCreates[0]?.();
+  await settle();
+
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
   assert.equal(crumbs(page), "AutomationsMorning triage");
 });
