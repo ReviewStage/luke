@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { test } from "vitest";
 import {
+  confirmWrite,
   LiveBroken,
   type LiveClient,
   liveRows,
   openRealtimeClient,
   type SealedRead,
+  shareLiveClients,
+  type TxWait,
 } from "./live-follow.js";
 
 /**
@@ -49,7 +53,9 @@ function read(round: number, expiresAt: number): SealedRead<Part> {
  * subscribed with, the seals it was renewed with, a way to deliver rows to
  * one or stop it for good, and whether the client was closed.
  */
-function fakeRealtime(options: { readonly refuseRenewal?: boolean } = {}) {
+function fakeRealtime(
+  options: { readonly refuseRenewal?: boolean; readonly arrivesOn?: string } = {},
+) {
   const listeners = new Map<
     string,
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
@@ -68,6 +74,11 @@ function fakeRealtime(options: { readonly refuseRenewal?: boolean } = {}) {
           ? Promise.reject(new Error("refused"))
           : Promise.resolve();
       },
+      // A transaction arrives on the one part named, as a write reaches only the parts whose rows it changes.
+      awaitTxId: () =>
+        query.capability === (options.arrivesOn ?? query.capability)
+          ? Promise.resolve()
+          : Promise.reject(new Error("timed out")),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => {
@@ -324,5 +335,217 @@ it.effect("a poll that fails is asked again a second later, then longer, up to f
     assert.deepEqual(gaps.slice(0, 4), [1_000, 2_000, 4_000, 5_000]);
     assert.ok(gaps.every((gap) => gap <= 5_000));
     yield* Fiber.interrupt(following);
+  }),
+);
+
+it.effect("a read whose session the service refuses as signed out ends, and is asked no more", () =>
+  Effect.gen(function* () {
+    const exit = yield* liveRows<Part>(
+      {
+        openLive: () => fakeRealtime().client,
+        reseal: () => Effect.succeed(LIVE_SIGNED_OUT),
+        poll: () => Effect.succeed(LIVE_SIGNED_OUT),
+        now: () => 0,
+      },
+      { ...read(0, 0), url: LIVE_POLL_URL },
+    ).pipe(Stream.runDrain, Effect.exit);
+    assert.ok(Exit.isFailure(exit));
+  }),
+);
+
+/**
+ * Every read at one address shares one Realtime client: a second read opens
+ * nothing new, the client closes once the last read lets go, a connection
+ * error makes the next read open a new client, and a sign-out drops it.
+ * Realtime's client is a script that counts what it opened and closed.
+ */
+
+function scriptedClients() {
+  const opened: string[] = [];
+  const closed: string[] = [];
+  const listeners: ((snapshot: { readonly status: string; readonly data: undefined }) => void)[] =
+    [];
+  const open = (url: string): LiveClient => {
+    opened.push(url);
+    return {
+      subscribe: () => ({
+        onChange: (listener) => {
+          listeners.push(listener);
+          return () => undefined;
+        },
+        renew: () => Promise.resolve(),
+        awaitTxId: () => Promise.resolve(),
+        unsubscribe: () => undefined,
+      }),
+      close: () => void closed.push(url),
+    };
+  };
+  /** Every subscription so far moves to `error`, as a failed connection moves them. */
+  const fail = () => {
+    for (const listener of listeners) listener({ status: "error", data: undefined });
+  };
+  return { open, opened, closed, fail };
+}
+
+const ADDRESS = "wss://realtime.example/v1";
+const sealedAs = (capability: string) => ({
+  capability,
+  queryFingerprint: capability,
+  expiresAt: 0,
+});
+
+test("two reads at one address share one client, closed once the last lets go", async () => {
+  const clients = scriptedClients();
+  const shared = shareLiveClients(clients.open);
+  const [inbox, plan] = await Promise.all([shared.open(ADDRESS), shared.open(ADDRESS)]);
+  inbox.subscribe(sealedAs("inbox"));
+  plan.subscribe(sealedAs("plan"));
+  assert.deepEqual(clients.opened, [ADDRESS]);
+
+  inbox.close();
+  inbox.close();
+  assert.deepEqual(clients.closed, [], "a handle let go twice counts once");
+  plan.close();
+  assert.deepEqual(clients.closed, [ADDRESS]);
+});
+
+test("a connection error makes the next read open a new client; the old closes once let go", async () => {
+  const clients = scriptedClients();
+  const shared = shareLiveClients(clients.open);
+  const inbox = await shared.open(ADDRESS);
+  inbox.subscribe(sealedAs("inbox"));
+  clients.fail();
+
+  const plan = await shared.open(ADDRESS);
+  assert.equal(clients.opened.length, 2, "the next read opens a new client");
+  inbox.close();
+  assert.equal(clients.closed.length, 1, "the failed one closes");
+  plan.close();
+  assert.equal(clients.closed.length, 2);
+});
+
+test("a sign-out drops the shared client", async () => {
+  const clients = scriptedClients();
+  const shared = shareLiveClients(clients.open);
+  const before = await shared.open(ADDRESS);
+  shared.drop();
+  const after = await shared.open(ADDRESS);
+  assert.equal(clients.opened.length, 2, "the next read opens a new client");
+  before.close();
+  assert.equal(clients.closed.length, 1, "the dropped one closes once its read lets go");
+  after.close();
+  assert.equal(clients.closed.length, 2);
+});
+
+test("a client that failed to load is loaded afresh by the next read", async () => {
+  const clients = scriptedClients();
+  let loads = 0;
+  const shared = shareLiveClients((url) => {
+    loads += 1;
+    return loads === 1 ? Promise.reject(new Error("offline")) : clients.open(url);
+  });
+  await assert.rejects(shared.open(ADDRESS));
+  await shared.open(ADDRESS);
+  assert.deepEqual(clients.opened, [ADDRESS]);
+});
+
+it.effect(
+  "hands out a wait for a write's transaction once every part is live, settled by the part it reaches, and none once let go",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime({ arrivesOn: "right-0" });
+      const handed: { wait?: TxWait | undefined } = {};
+      const following = yield* Effect.forkChild(
+        liveRows<Part>(
+          {
+            openLive: () => realtime.client,
+            reseal: () => Effect.succeed(read(1, 3_600_000)),
+            poll: () => Effect.succeed({ failure: "unavailable" }),
+            now: () => 0,
+            onTxWait: (next) => {
+              handed.wait = next;
+            },
+          },
+          read(0, 3_600_000),
+        ).pipe(Stream.runDrain),
+      );
+      yield* settled;
+      assert.ok(handed.wait === undefined, "no wait before every part is live");
+      realtime.deliver("left-0", []);
+      realtime.deliver("right-0", []);
+      yield* settled;
+      const wait = handed.wait as TxWait | undefined;
+      assert.ok(wait, "a wait once every part is live");
+      yield* wait("42", Duration.seconds(5));
+      yield* Fiber.interrupt(following);
+      assert.equal(handed.wait, undefined, "none once let go");
+    }),
+);
+
+it.effect(
+  "a read that falls back to polling hands out no wait, so its writes confirm at once",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const handed: { wait?: TxWait | undefined } = {};
+      const following = yield* Effect.forkChild(
+        liveRows<Part>(
+          {
+            openLive: () => realtime.client,
+            reseal: () => Effect.succeed(read(1, 3_600_000)),
+            poll: () => Effect.succeed(polledRead([], "0")),
+            now: () => 0,
+            onTxWait: (next) => {
+              handed.wait = next;
+            },
+          },
+          read(0, 3_600_000),
+        ).pipe(Stream.runDrain),
+      );
+      yield* settled;
+      realtime.deliver("left-0", []);
+      realtime.deliver("right-0", []);
+      yield* settled;
+      assert.ok(handed.wait !== undefined, "a wait while live");
+      realtime.fail("left-0");
+      yield* settled;
+      assert.equal(handed.wait, undefined, "no wait while polled");
+      const confirmed = yield* Effect.forkChild(confirmWrite(handed.wait, "42"));
+      yield* settled;
+      assert.ok(confirmed.pollUnsafe(), "confirmed without waiting");
+      yield* Fiber.interrupt(following);
+    }),
+);
+
+it.effect(
+  "a write confirms at once where it changed no row, and waits for its transaction where it did",
+  () =>
+    Effect.gen(function* () {
+      const arrived = new Set<string>();
+      const wait: TxWait = (txid) =>
+        Effect.repeat(Effect.sleep(Duration.millis(100)), { until: () => arrived.has(txid) });
+      const unchanged = yield* Effect.forkChild(confirmWrite(wait, undefined));
+      yield* settled;
+      assert.ok(unchanged.pollUnsafe(), "no txid, nothing to wait for");
+
+      const committed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.equal(committed.pollUnsafe(), undefined, "still waiting");
+      arrived.add("42");
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.ok(committed.pollUnsafe(), "confirmed once it arrived");
+    }),
+);
+
+it.effect("a write whose transaction never arrives is confirmed still once ten seconds pass", () =>
+  Effect.gen(function* () {
+    const wait: TxWait = (_txid, timeout) =>
+      Effect.andThen(Effect.sleep(timeout), Effect.fail(new LiveBroken({ reason: "timed out" })));
+    const committed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+    yield* TestClock.adjust(Duration.seconds(9));
+    assert.equal(committed.pollUnsafe(), undefined, "still waiting");
+    yield* TestClock.adjust(Duration.seconds(1));
+    const exit = committed.pollUnsafe();
+    assert.ok(exit !== undefined && Exit.isSuccess(exit), "confirmed, since it committed");
   }),
 );

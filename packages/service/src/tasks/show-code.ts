@@ -16,11 +16,8 @@ import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import {
   type CheckedOutSandbox,
-  checkedOutSandbox,
   REPOSITORY_REFUSAL,
-  type RepositoryCall,
   type RepositoryRefusal,
-  type RepositoryShellServices,
   runInSandbox,
 } from "../agents/repository-shell.js";
 import {
@@ -43,9 +40,8 @@ import {
  * show-code.ts -- `show_code`, every agent's tool for code: lines of its repository put on the developer's screen as it talks about them.
  *
  * The call reads the lines itself, from the checkout its caller hands it
- * (`CodeCheckout`): the brain's, made by `run_in_repository`'s shell
- * (`repository-shell.ts`), or a coding agent's own, which its sandbox
- * checked out as it opened. It reads a window of the file around the lines
+ * (`CodeCheckout`): a coding agent's own, which its sandbox checked out as
+ * it opened. It reads a window of the file around the lines
  * pointed at, cut to `SHOWN_CODE_BOUNDS`. The model writes a note beside
  * them, a sentence or two on what the lines do for the task and what to
  * notice, so the Code tab reads as a walkthrough rather than bare code. The
@@ -309,12 +305,4 @@ export function showCodeIn<R>(
       Effect.succeed(showCodeRejected(`${NOT_SHOWN}${refusal.reason}`)),
     ),
   );
-}
-
-/** One brain call of `show_code`, on the task's checkout, made first where none stands (`checkedOutSandbox`). */
-export function runShowCode(
-  call: RepositoryCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, RepositoryShellServices> {
-  return showCodeIn(checkedOutSandbox(call), input);
 }

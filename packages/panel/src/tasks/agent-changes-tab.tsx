@@ -272,7 +272,7 @@ const CHANGES_MENU_WORDS = {
   DOWNLOAD_PATCH: "Download PR patch",
   PATCH_COPIED: "Patch copied",
   /** Why the patch is not offered where the read stopped short of every file. */
-  TRUNCATED: "Only the first files were read",
+  TRUNCATED: "This pull request has more files than were read",
   /** Why the patch is not offered where no file has lines to copy. */
   NO_PATCH: "No file has lines to copy",
 } as const;

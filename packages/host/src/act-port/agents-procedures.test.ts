@@ -15,16 +15,12 @@ import { afterEach, it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentMessagesAnswerView,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptPage,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -63,22 +59,6 @@ const STARTED = {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** What an agent published, as the service answers it: its branch and an open pull request. */
-const PUBLISHED = {
-  repository: "acme/relay",
-  branch: "luke/invites",
-  pullRequest: {
-    number: 41,
-    title: "Teammate invitations",
-    url: "https://github.com/acme/relay/pull/41",
-    state: PULL_REQUEST_STATE.OPEN,
-    checks: CHECK_SUMMARY.PASSING,
-    additions: 12,
-    deletions: 3,
-    changedFiles: 2,
-  },
-};
-
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_MODELS]: "Could not read the models on this system.",
@@ -90,6 +70,9 @@ const REFUSAL = {
     "Could not read the workspace's agents on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_START]: "Could not start an agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_PART]: "Could not read the agent's output on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]:
+    "Could not read the agent's earlier messages on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: "Could not message the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: "Could not rename the agent on this system.",
@@ -99,6 +82,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
+  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: "Could not mark the agent as read on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
   [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]:
     "Could not read the agent's pull request on this system.",
@@ -155,6 +139,16 @@ const ACTS: readonly {
     ask: "codingAgentMessages",
   },
   {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_PART,
+    payload: { agentId: AGENT_ID, messageId: "message-1", index: 1 },
+    ask: "codingAgentPart",
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER,
+    payload: { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID, before: "40" },
+    ask: "transcriptOlder",
+  },
+  {
     kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGE,
     payload: { agentId: AGENT_ID, text: "Carry on.", clientKey: "send-1" },
     ask: "codingAgentMessage",
@@ -192,6 +186,10 @@ const ACTS: readonly {
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,
     payload: { agentId: AGENT_ID, inboxTaskId: null },
+  },
+  {
+    kind: AGENT_ACT_KIND.CODING_AGENTS_SEEN,
+    payload: { agentId: AGENT_ID },
   },
   {
     kind: AGENT_ACT_KIND.CODING_AGENTS_PAGE,
@@ -296,14 +294,14 @@ function windowPort(
     observeModels: (models) => {
       noted.push(`models:${models.length}`);
     },
-    observePublished: (agentId, pullRequest) => {
-      noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
-    },
     observeTaskGone: (taskId) => {
       noted.push(`gone:${taskId}`);
     },
     shown: (agentId) => {
       noted.push(`shown:${agentId}`);
+    },
+    seen: (agentId) => {
+      noted.push(`seen:${agentId}`);
     },
     shownInbox: (taskId) => {
       noted.push(`inbox:${taskId}`);
@@ -358,6 +356,22 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
       act.ask === undefined ? [] : [act.payload === undefined ? [act.ask] : [act.ask, act.payload]],
     ),
   );
+});
+
+it("a panel's Start from an agent on its own page reaches the host with no task, only the agent it starts from, and the press's own key", async () => {
+  const { call, asked } = windowPort(PANEL, {
+    answers: { codingAgentStart: () => Effect.succeed(STARTED) },
+  });
+
+  const started = await call(AGENT_ACT_KIND.CODING_AGENTS_START, {
+    idempotencyKey: "press-1",
+    from: { agentId: AGENT_ID },
+  });
+
+  assert.deepEqual(started, { answer: STARTED });
+  assert.deepEqual(asked, [
+    ["codingAgentStart", { idempotencyKey: "press-1", from: { agentId: AGENT_ID } }],
+  ]);
 });
 
 it("a panel's Start reaches the host with the plan and the press's own key, hears the agent, and the agent is noted", async () => {
@@ -478,20 +492,14 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
   assert.deepEqual(asked, []);
 });
 
-it("a panel's read of an agent's own pull request is noted as what it published, and a read of another by its number is not", async () => {
-  const { call, noted } = windowPort(PANEL, {
-    answers: { codingAgentPullRequest: () => Effect.succeed(PUBLISHED) },
-  });
+it("a panel's Mark as read on an agent clears its unseen dot without naming a page shown, and answers nothing", async () => {
+  const { call, asked, noted } = windowPort(PANEL);
 
-  const own = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID });
-  const other = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, {
-    agentId: AGENT_ID,
-    number: 52,
-  });
+  const answer = await call(AGENT_ACT_KIND.CODING_AGENTS_SEEN, { agentId: AGENT_ID });
 
-  assert.deepEqual(own, { answer: PUBLISHED });
-  assert.deepEqual(other, { answer: PUBLISHED });
-  assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
+  assert.deepEqual(answer, { answer: undefined });
+  assert.deepEqual(noted, [`seen:${AGENT_ID}`]);
+  assert.deepEqual(asked, []);
 });
 
 it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and its read of which files it viewed hears each file's mark", async () => {
@@ -628,11 +636,12 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   ports.push(port);
   const client = port.as(PANEL);
   const transcript: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
-  const page: CodingAgentMessagesAnswerView = {
+  const page: CodingAgentTranscriptPage = {
     messages: [],
     cursor: "1:0",
     status: CODING_AGENT_STATUS.RUNNING,
     title: "Invites",
+    caughtUp: false,
   };
 
   const one = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);

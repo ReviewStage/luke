@@ -1,11 +1,11 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, and on a phone the toasts and the captions.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, and on a phone the toasts and the voice's notice line.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a task's call bar, whichever stand. */
-const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .desktop-call-bar";
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a call's video, whichever stand. */
+const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .agent-call-foot";
 
 /**
  * A chat's composer at its foot, never a thread's reply box, which scrolls
@@ -27,6 +27,24 @@ const COLUMN_DOCK = "--column-dock";
 
 /** The card that floats over the column while the sidebar is folded. */
 const FLOATING_CARD = '.call-card[data-surface="floating"]';
+
+/** The length the floating card's own height is written in. */
+const FLOATING_CARD_HEIGHT = "--floating-card";
+
+/** Writes `length` on `element` as `value`, or takes it away where there is none, touching the style only when it changes. */
+function writeLength(element: HTMLElement, length: string, value: string | undefined): void {
+  const was = element.style.getPropertyValue(length);
+  if (value === undefined) {
+    if (was !== "") element.style.removeProperty(length);
+    return;
+  }
+  if (was !== value) element.style.setProperty(length, value);
+}
+
+/** Whether two lists hold the same elements in the same order. */
+function sameElements(a: readonly Element[], b: readonly Element[]): boolean {
+  return a.length === b.length && a.every((element, index) => element === b[index]);
+}
 
 /** From the column's foot to the top of its highest docked part, or nothing where none stands. */
 function dockHeight(column: Element, docked: string, card: DOMRect | undefined): number {
@@ -58,6 +76,13 @@ function dockHeight(column: Element, docked: string, card: DOMRect | undefined):
  * the composer. `key` names what the shell is drawing,
  * so a page or a panel coming and going finds its column afresh. A shell
  * with no such column (Settings, a version history) says no dock at all.
+ *
+ * Note that every change under the shell (a transcript's message landing, a
+ * hover card) wakes the MutationObserver, and each measure lays out the whole
+ * window, so the changes of one frame are read once, at that frame, the
+ * column and its parts followed afresh only where they are others than were
+ * followed; and that a length is written only when it changes, since a
+ * length on the document's root restyles every element under it.
  */
 export function useColumnDock(
   shell: RefObject<HTMLElement | null>,
@@ -78,39 +103,55 @@ export function useColumnDock(
     // Beside the work only the card reads the dock, so a chat's composer docks only under it.
     const besideCard = !panelFull && !narrow;
     let column = host.querySelector(columnSelector);
+    // What the observer follows, so a change that leaves them standing follows nothing anew.
+    let followed: readonly Element[] = [];
     const sized = new ResizeObserver(() => write());
     function write(): void {
       if (host === null) return;
       const card = host.querySelector(FLOATING_CARD);
       const under = besideCard ? cardSpan(card) : undefined;
-      if (column === null) root.style.removeProperty(COLUMN_DOCK);
-      else root.style.setProperty(COLUMN_DOCK, `${dockHeight(column, docked, under)}px`);
-      if (card === null) host.style.removeProperty("--floating-card");
-      else host.style.setProperty("--floating-card", `${card.getBoundingClientRect().height}px`);
+      writeLength(
+        root,
+        COLUMN_DOCK,
+        column === null ? undefined : `${dockHeight(column, docked, under)}px`,
+      );
+      writeLength(
+        host,
+        FLOATING_CARD_HEIGHT,
+        card === null ? undefined : `${card.getBoundingClientRect().height}px`,
+      );
     }
     function follow(): void {
       if (host === null) return;
-      sized.disconnect();
-      if (column !== null) {
-        sized.observe(column);
-        for (const part of column.querySelectorAll(docked)) sized.observe(part);
-      }
       const card = host.querySelector(FLOATING_CARD);
-      if (card !== null) sized.observe(card);
+      const standing = [
+        ...(column === null ? [] : [column, ...column.querySelectorAll(docked)]),
+        ...(card === null ? [] : [card]),
+      ];
+      if (sameElements(standing, followed)) return;
+      followed = standing;
+      sized.disconnect();
+      for (const element of standing) sized.observe(element);
     }
+    let frame: number | undefined;
     const arrived = new MutationObserver(() => {
-      column = host.querySelector(columnSelector);
-      follow();
-      write();
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        column = host.querySelector(columnSelector);
+        follow();
+        write();
+      });
     });
     arrived.observe(host, { childList: true, subtree: true });
     follow();
     write();
     return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
       sized.disconnect();
       arrived.disconnect();
       root.style.removeProperty(COLUMN_DOCK);
-      host.style.removeProperty("--floating-card");
+      host.style.removeProperty(FLOATING_CARD_HEIGHT);
     };
   }, [shell, panelFull, narrow, key]);
 }

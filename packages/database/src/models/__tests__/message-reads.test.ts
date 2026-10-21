@@ -9,8 +9,11 @@ import {
   TURN_STATUS,
   type TurnStatus,
 } from "@luke/wire";
+import { eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option } from "effect";
-import { Database } from "../../core/query.js";
+import { SqlClient } from "effect/sql";
+import { Database, queryBuilder } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
@@ -22,6 +25,8 @@ import {
   listTurnOpeners,
   messageCursorNow,
   messageSeqOf,
+  newestAwaitingLineAt,
+  readMessageById,
   runningChildTurns,
   turnStoppedUnderReached,
 } from "../message-reads.js";
@@ -49,7 +54,8 @@ const openConversation = (userId: string, parentConversationId?: string) =>
     yield* db.insert(conversations).values({
       id,
       userId,
-      kind: parentConversationId === undefined ? CONVERSATION_KIND.TASK : CONVERSATION_KIND.CHILD,
+      kind:
+        parentConversationId === undefined ? CONVERSATION_KIND.OBSERVED : CONVERSATION_KIND.CHILD,
       ...(parentConversationId === undefined ? undefined : { parentConversationId }),
     });
     return id;
@@ -116,6 +122,52 @@ const openTurn = (userId: string, conversationId: string, status: TurnStatus) =>
         .returning({ id: turns.id }),
     ),
     ([row]) => row?.id ?? "",
+  );
+
+/** A row of a turn carrying the words given, as eve's receipt of a line holds them. */
+const writeReceipt = (
+  userId: string,
+  conversationId: string,
+  seq: number,
+  turnId: string,
+  text: string,
+) =>
+  Database.use((db) =>
+    db.insert(messages).values({
+      userId,
+      conversationId,
+      seq,
+      turnId,
+      clientId: randomUUID(),
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text }],
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+      createdAt: new Date(),
+      placedAt: new Date(),
+      finishedAt: new Date(),
+    }),
+  );
+
+/** The conversation a live statement reads the awaiting line of, under a name of its own so the read's own join of `conversations` is not the one it names. */
+const named = alias(conversations, "named");
+
+/** The live statement's fragment for one conversation, as a select of its own, rendered as Realtime takes it. */
+const awaitingLineStatement = (conversationId: string) =>
+  queryBuilder
+    .select({ at: newestAwaitingLineAt(named.id) })
+    .from(named)
+    .where(eq(named.id, conversationId));
+
+/** When the newest line awaiting its turn in the conversation was written, by the live statement's fragment, in epoch milliseconds; null where none awaits. */
+const awaitingLineAt = (conversationId: string) =>
+  Effect.map(
+    Database.use((db) =>
+      db
+        .select({ at: newestAwaitingLineAt(named.id) })
+        .from(named)
+        .where(eq(named.id, conversationId)),
+    ),
+    ([row]) => (row?.at === null || row?.at === undefined ? null : new Date(row.at).getTime()),
   );
 
 it.layer(getTestDB())("a conversation's reader", (it) => {
@@ -188,6 +240,30 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
           yield* messageSeqOf(other, conversation, second.id, MESSAGE_ROLE.USER),
           Option.none(),
         );
+      }),
+  );
+
+  it.effect(
+    "a message is read by its id, and not in another conversation or another account's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const conversation = yield* openConversation(owner);
+        const elsewhere = yield* openConversation(owner);
+        yield* writeLine(owner, conversation, 1);
+        yield* writeLine(owner, conversation, 2);
+        const read = yield* listMessagesPast(owner, conversation, {}, { seq: 0, revision: 0 });
+        const second = read.read.ok ? read.read.value[1] : assert.fail("the page read");
+        assert.ok(second !== undefined);
+        const partsOf = (page: Effect.Success<ReturnType<typeof readMessageById>>) =>
+          page.ok ? page.value.map((record) => record.message.parts) : assert.fail("the row read");
+
+        assert.deepEqual(partsOf(yield* readMessageById(owner, conversation, {}, second.id)), [
+          [{ type: "text", text: "Line 2" }],
+        ]);
+        assert.deepEqual(partsOf(yield* readMessageById(owner, elsewhere, {}, second.id)), []);
+        assert.deepEqual(partsOf(yield* readMessageById(other, conversation, {}, second.id)), []);
       }),
   );
 
@@ -281,6 +357,66 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
         assert.equal(yield* turnStoppedUnderReached(conversation, "call-1"), true);
         assert.equal(yield* turnStoppedUnderReached(conversation, "call-2"), false);
         assert.equal(yield* turnStoppedUnderReached(elsewhere, "call-1"), false);
+      }),
+  );
+
+  it.effect(
+    "the live statement reads the newest line awaiting its turn, none once a later turn's row carries its words whole or coalesced, and only the conversation named",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const waiting = yield* openAgentConversation(owner);
+        const received = yield* openAgentConversation(owner);
+        const coalesced = yield* openAgentConversation(owner);
+        const foreign = yield* openAgentConversation(other);
+
+        yield* writeLine(owner, waiting, 1, new Date(1_000));
+        yield* writeLine(owner, waiting, 2, new Date(5_000));
+        const answered = yield* openTurn(owner, waiting, TURN_STATUS.SETTLED);
+        // A turn's row carrying other words is no receipt of either line.
+        yield* writeReceipt(owner, waiting, 3, answered, "Line 2 and more");
+
+        yield* writeLine(owner, received, 1, new Date(2_000));
+        const took = yield* openTurn(owner, received, TURN_STATUS.SETTLED);
+        yield* writeReceipt(owner, received, 2, took, "Line 1");
+
+        yield* writeLine(owner, coalesced, 1, new Date(3_000));
+        yield* writeLine(owner, coalesced, 2, new Date(4_000));
+        const folded = yield* openTurn(owner, coalesced, TURN_STATUS.SETTLED);
+        yield* writeReceipt(owner, coalesced, 3, folded, "Line 1\n\nLine 2");
+
+        yield* writeLine(other, foreign, 1, new Date(9_000));
+
+        assert.equal(yield* awaitingLineAt(waiting), 5_000);
+        assert.equal(yield* awaitingLineAt(received), null);
+        assert.equal(yield* awaitingLineAt(coalesced), null);
+        assert.equal(yield* awaitingLineAt(foreign), 9_000);
+        assert.deepEqual(
+          [...(yield* awaitingLinesOf(owner, [waiting, received, coalesced, foreign])).entries()],
+          [[waiting, new Date(5_000)]],
+        );
+      }),
+  );
+
+  it.effect(
+    "the live statement finds a conversation's turnless lines through their partial index, in a plan made once for every value it is run with",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* SqlClient.SqlClient;
+        const statement = awaitingLineStatement(randomUUID()).toSQL();
+        const values = statement.params.map((value) => `'${String(value)}'`).join(", ");
+        // Note that the scan of the whole table is refused, so a table this small still reads as
+        // one of millions would, and the plan is generic, as one prepared once and run again is.
+        yield* client.unsafe("set enable_seqscan = off");
+        yield* client.unsafe("set plan_cache_mode = force_generic_plan");
+        yield* client.unsafe(`prepare awaiting_line as ${statement.sql}`);
+        const plan = yield* client.unsafe(`explain execute awaiting_line(${values})`);
+        yield* client.unsafe("deallocate awaiting_line");
+        yield* client.unsafe("reset plan_cache_mode");
+        yield* client.unsafe("reset enable_seqscan");
+
+        assert.match(JSON.stringify(plan), /messages_awaiting_line/);
       }),
   );
 });

@@ -26,7 +26,7 @@ import {
   INLINE_DIFF_LABEL,
 } from "./diff-view.js";
 import { EXPERIMENT, experimentOn } from "./experiments.js";
-import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
+import { choiceSetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
@@ -239,32 +239,6 @@ export const APP_SETTING_SCHEMA = {
     // Nothing to run per write: a web page reads the choice as it loads.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
-  }),
-  voiceCaptions: toggleSetting({
-    field: "voiceCaptions",
-    id: APP_SETTING_ID.VOICE_CAPTIONS,
-    label: "Captions",
-    detail:
-      "Shows your words as well as Luke's, and keeps neither. Luke's appear anyway while the Mac's sound is muted or at zero.",
-    default: false,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 50,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: voiceControlDrawn,
-  }),
-  voiceHotkey: hotkeySetting({
-    field: "voiceHotkey",
-    id: APP_SETTING_ID.TALK_HOTKEY,
-    order: 60,
-    sideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
-  }),
-  stopHotkey: hotkeySetting({
-    field: "stopHotkey",
-    id: APP_SETTING_ID.STOP_HOTKEY,
-    order: 80,
-    sideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
   }),
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",

@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_PAYER,
+  CODING_AGENT_STATUS,
+  type CodingAgentPayer,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import type { IntegrationProviderParams } from "@luke/features/integration-view";
 import {
@@ -13,31 +18,43 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeysAnswer,
+} from "@luke/features/provider-key-wire";
+import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
   pressInComposer,
 } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import type { AgentCallDoors } from "./agent-call.js";
 import { startFailureNote } from "./coding-agent-model.js";
 import { DraftAgentTab } from "./draft-agent-tab.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentDraft, CodingAgentsControl, DraftCallStart } from "./use-coding-agents.js";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
@@ -135,6 +152,7 @@ function mount(
   answers: (Failure | undefined)[],
   draft: AgentDraft = DRAFT,
   extra: Partial<CodingAgentsControl> = {},
+  call?: AgentCallDoors,
 ) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
@@ -165,27 +183,31 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  // Each tab reads the window's document from a registry of its own, so one test's account never answers another's.
   act(() =>
     root.render(
-      createElement(
-        OpenSettingsProvider,
-        { value: (link: SettingsLink) => links.push(link) },
+      onRegistry(
+        AtomRegistry.make(),
         createElement(
-          GitHubConnectProvider,
-          {
-            value: {
-              connection: { connected: false, login: null },
-              connect: () => {
-                github.connects += 1;
-                return Promise.resolve(true);
-              },
-              disconnect: () => Promise.resolve(false),
-            },
-          },
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => links.push(link) },
           createElement(
-            RepositoryRemedyProvider,
-            { value: doors },
-            createElement(DraftAgentTab, { draft, control }),
+            GitHubConnectProvider,
+            {
+              value: {
+                connection: { connected: false, login: null },
+                connect: () => {
+                  github.connects += 1;
+                  return Promise.resolve(true);
+                },
+                disconnect: () => Promise.resolve(false),
+              },
+            },
+            createElement(
+              RepositoryRemedyProvider,
+              { value: doors },
+              createElement(DraftAgentTab, { draft, control, call }),
+            ),
           ),
         ),
       ),
@@ -589,4 +611,225 @@ test("a draft New task handed over after its agent was refused sends nothing by 
     [{ refused: undefined }],
     "the refusal handed over is let go as it sends",
   );
+});
+
+/** The account's keys as the service holds them: a Claude plan, its default as given, and an Anthropic API key. */
+function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
+  const kept = {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    hint: "sk-ant-…fake",
+    addedAt: 0,
+    status: PROVIDER_KEY_STATUS.VERIFIED,
+    statusAt: 0,
+  };
+  return {
+    keys: [kept],
+    subscriptions: [
+      {
+        ...kept,
+        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        status: PROVIDER_KEY_STATUS.UNVERIFIED,
+        forAgents,
+      },
+    ],
+  };
+}
+
+/** A draft on a Claude model, the account's keys read as given; each Start's payer written down. */
+async function payerTab(options: {
+  keys: ProviderKeysAnswer;
+  payer?: CodingAgentPayer;
+  model?: string;
+  onDraftChange?: CodingAgentsControl["onDraftChange"];
+}) {
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(options.keys),
+  });
+  handState({}, { access: { admin: false } });
+  const payers: (CodingAgentPayer | undefined)[] = [];
+  const tab = mount(
+    [],
+    {
+      ...DRAFT,
+      choice: { model: options.model ?? "anthropic/claude-opus-5.5", effort: "high" },
+      ...(options.payer === undefined ? undefined : { payer: options.payer }),
+    },
+    {
+      startPrompt: (...args) => {
+        payers.push(args[5]);
+        return Promise.resolve(undefined);
+      },
+      ...(options.onDraftChange === undefined
+        ? undefined
+        : { onDraftChange: options.onDraftChange }),
+    },
+  );
+  await settle();
+  const field = () =>
+    [...document.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label")?.startsWith("Who pays: ") === true,
+    );
+  return { ...tab, payers, field };
+}
+
+test("an account with a Claude plan sees who pays beside the chip, standing on its default, and a Start names the payer it shows", async () => {
+  const tab = await payerTab({ keys: plannedKeys(true) });
+  assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: Claude plan");
+  await tab.send();
+  assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]);
+});
+
+test("picking another payer in the field hands it to the draft as its own", async () => {
+  const picks: unknown[] = [];
+  const tab = await payerTab({
+    keys: plannedKeys(true),
+    onDraftChange: (change) => picks.push(change),
+  });
+  const field = tab.field() ?? assert.fail("no payer field");
+  act(() => field.click());
+  await settle();
+  const item =
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menuitemradio"], [role="menuitemcheckbox"], [role="menuitem"]',
+      ),
+    ].find((each) => each.textContent?.includes("API key")) ?? assert.fail("no API key item");
+  act(() => item.click());
+  await settle();
+  assert.deepEqual(picks, [{ payer: CODING_AGENT_PAYER.API_KEY }]);
+});
+
+test("a payer picked for the one agent is the one its Start names, and with the default off the field stands on the API key", async () => {
+  const picked = await payerTab({
+    keys: plannedKeys(true),
+    payer: CODING_AGENT_PAYER.API_KEY,
+  });
+  assert.equal(picked.field()?.getAttribute("aria-label"), "Who pays: API key");
+  await picked.send();
+  assert.deepEqual(picked.payers, [CODING_AGENT_PAYER.API_KEY]);
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  const off = await payerTab({ keys: plannedKeys(false) });
+  assert.equal(off.field()?.getAttribute("aria-label"), "Who pays: API key");
+});
+
+test("with no plan connected, or on a GPT model with a Claude plan alone, the draft is as it was: no payer drawn or sent", async () => {
+  const none = await payerTab({
+    keys: { ...plannedKeys(true), subscriptions: [] },
+    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  });
+  assert.equal(none.field(), undefined);
+  await none.send();
+  assert.deepEqual(none.payers, [undefined]);
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  const gpt = await payerTab({ keys: plannedKeys(true), model: "openai/gpt-5.5" });
+  assert.equal(gpt.field(), undefined);
+});
+
+test("an account with ChatGPT connected sees ChatGPT plan beside a GPT model's chip, and a Start names it", async () => {
+  const tab = await payerTab({
+    model: "openai/gpt-5.5",
+    keys: {
+      keys: [],
+      subscriptions: [
+        {
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          hint: "ChatGPT",
+          addedAt: 0,
+          status: PROVIDER_KEY_STATUS.UNVERIFIED,
+          statusAt: 0,
+          forAgents: true,
+        },
+      ],
+    },
+  });
+  assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: ChatGPT plan");
+  await tab.send();
+  assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]);
+});
+
+/** A desktop whose voice can take a call, the microphone granted. */
+function voiced(): void {
+  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
+}
+
+/** A draft's tab whose Call starts the agent given, each draft it was handed and each call opened written down. */
+function callTab(
+  draft: AgentDraft,
+  answer: DraftCallStart,
+  extra: Partial<CodingAgentsControl> = {},
+) {
+  const called: AgentDraft[] = [];
+  const opened: string[] = [];
+  const tab = mount(
+    [],
+    draft,
+    {
+      startCall: (held) => {
+        called.push(held);
+        return Promise.resolve(answer);
+      },
+      ...extra,
+    },
+    { onPress: (agentId) => opened.push(agentId) },
+  );
+  return { ...tab, called, opened };
+}
+
+test("Call on an empty draft starts its agent blank and opens a call into the agent it started", async () => {
+  voiced();
+  const tab = callTab({ ...DRAFT, prompt: "" }, { agentId: "agent-voice" });
+  await settle();
+  await tab.press(CALL_LABEL);
+
+  assert.deepEqual(
+    tab.called.map((held) => [held.id, held.prompt]),
+    [[DRAFT.id, ""]],
+  );
+  assert.deepEqual(tab.opened, ["agent-voice"]);
+});
+
+test("Call on a draft holding words starts its agent on them and opens a call into it, and one that did not start keeps the words, its Retry calling again", async () => {
+  voiced();
+  const tab = callTab(DRAFT, { agentId: "agent-words" });
+  await settle();
+  await tab.press(CALL_LABEL);
+  assert.deepEqual(
+    tab.called.map((held) => held.prompt),
+    [DRAFT.prompt],
+  );
+  assert.deepEqual(tab.opened, ["agent-words"]);
+
+  const refused = callTab(DRAFT, {
+    failure: startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
+  });
+  await settle();
+  await refused.press(CALL_LABEL);
+  assert.match(refused.note() ?? "", /could not be started/u);
+  assert.equal(refused.draft(), DRAFT.prompt);
+  await refused.press("Retry");
+  assert.equal(refused.called.length, 2, "Retry presses Call again");
+  assert.deepEqual(refused.starts, [], "and never sends the words without a call");
+  assert.deepEqual(refused.opened, []);
+});
+
+test("a draft offers no Call where the platform takes no calls, nor on a fork, which starts from its source", async () => {
+  voiced();
+  const web = mount([], DRAFT, { startCall: () => Promise.resolve({ agentId: "x" }) });
+  await settle();
+  assert.equal(web.button(CALL_LABEL), undefined);
+
+  const fork = callTab(
+    { ...DRAFT, fork: { agentId: "agent-source", messageId: "message-1", opening: "Fix it." } },
+    { agentId: "x" },
+  );
+  await settle();
+  assert.equal(fork.button(CALL_LABEL), undefined);
 });

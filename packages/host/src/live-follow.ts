@@ -1,11 +1,18 @@
-import { LIVE_POLL_URL, liveDigestOf, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import {
+  LIVE_POLL_URL,
+  LIVE_SIGNED_OUT,
+  liveDigestOf,
+  type SealedLiveQueryWire,
+} from "@luke/features/live-wire";
 import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "effect";
 
 /**
  * live-follow.ts -- a read the host follows over Neon Realtime, as Neon's guide says to: sealed statements subscribed to at the address the service names, and renewed before they expire.
  *
- * Each read is one or more parts, one sealed statement each, all on one
- * socket ("Subscribe to the sealed query"). Once every part has its first
+ * Each read is one or more parts, one sealed statement each, and every read
+ * at one address shares one client and its one socket ("Create one client
+ * for the whole app, because every subscription shares its connection").
+ * Once every part has its first
  * result, every change of any part is the parts' rows whole, undecoded, for
  * the caller to decode at this boundary. Every seal is renewed ten seconds
  * before the earliest expires, a fetch that failed asked again a second
@@ -34,8 +41,18 @@ const LIVE_POLL_FLOOR = Duration.millis(500);
 const POLL_BACKOFF = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]);
 /** How often Realtime is subscribed to again while a read is polled. */
 const RESUBSCRIBE_EVERY = Duration.seconds(15);
-/** Why a read stopped for good: it names nothing the account reaches any more. */
-const GONE = "the read is gone";
+/**
+ * Whether a failed seal ends the read for good: it names nothing the account
+ * reaches any more, or the service refused the session as signed out, which
+ * Neon's guide says is never asked again ("When the session changes").
+ */
+function ended(failed: { readonly failure: string; readonly gone?: boolean }): boolean {
+  return failed.gone === true || failed.failure === LIVE_SIGNED_OUT.failure;
+}
+
+/** Why a read stopped for good: it names nothing the account reaches any more, or its session signed out. */
+export const LIVE_GONE = "the read is gone";
+const GONE = LIVE_GONE;
 /** What a go at Realtime leaves to do: subscribe again later, or stay polled, the service answering polled. */
 const AGAIN = "again";
 const STAY = "stay";
@@ -57,8 +74,20 @@ interface LiveSubscription {
     }) => void,
   ): () => void;
   renew(query: SealedLiveQueryWire): Promise<void>;
+  /** Settles once the transaction named has arrived on the subscription, or rejects once the timeout passes, as Realtime's own does. */
+  awaitTxId(txid: string, timeout?: number): Promise<void>;
   unsubscribe(): void;
 }
+
+/** How long a write waits for its transaction to reach the read that shows it, as Neon's guide says always to bound it. */
+const TX_WAIT_TIMEOUT = Duration.seconds(10);
+
+/**
+ * A wait for a write's transaction to arrive on a followed read: it settles
+ * once any of the read's parts has it, and fails once the timeout passes,
+ * as Realtime's `awaitTxId` does.
+ */
+export type TxWait = (txid: string, timeout: Duration.Duration) => Effect.Effect<void, LiveBroken>;
 
 /** One socket to Realtime, every part's subscription on it. */
 export interface LiveClient {
@@ -67,12 +96,82 @@ export interface LiveClient {
 }
 
 /**
- * Realtime's own client, at the address the service named, loaded only when
- * a read is first followed, so its protocol's validators stay out of the
- * web app's first load.
+ * One client per address, shared by every read following there: each open
+ * takes a handle, and the client closes once the last handle is let go. The
+ * client is opened once however many reads wait on it while it loads; one
+ * that failed to load is forgotten, so the next read loads it afresh. So is
+ * one any of whose subscriptions moved to `error`: where its connection
+ * failed, every subscription on it is in `error` and Neon's guide says to
+ * create a new client before subscribing again, so the next read opens a
+ * new one and the old one closes once its last holder lets go. `drop`
+ * forgets every client the same way, for a sign-out or an account switch.
  */
-export const openRealtimeClient = (url: string): Promise<LiveClient> =>
-  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url }));
+export function shareLiveClients(open: (url: string) => LiveClient | PromiseLike<LiveClient>): {
+  readonly open: (url: string) => Promise<LiveClient>;
+  readonly drop: () => void;
+} {
+  interface Shared {
+    readonly client: Promise<LiveClient>;
+    holders: number;
+  }
+  const standing = new Map<string, Shared>();
+  const forget = (url: string, shared: Shared) => {
+    if (standing.get(url) === shared) standing.delete(url);
+  };
+  return {
+    open: async (url) => {
+      let shared = standing.get(url);
+      if (shared === undefined) {
+        const opening: Shared = { client: Promise.resolve(url).then(open), holders: 0 };
+        opening.client.catch(() => forget(url, opening));
+        standing.set(url, opening);
+        shared = opening;
+      }
+      const held = shared;
+      held.holders += 1;
+      let client: LiveClient;
+      try {
+        client = await held.client;
+      } catch (error) {
+        held.holders -= 1;
+        throw error;
+      }
+      let holding = true;
+      return {
+        subscribe: (query) => {
+          const subscription = client.subscribe(query);
+          subscription.onChange((snapshot) => {
+            if (snapshot.status === "error") forget(url, held);
+          });
+          return subscription;
+        },
+        close: () => {
+          if (!holding) return;
+          holding = false;
+          held.holders -= 1;
+          if (held.holders > 0) return;
+          forget(url, held);
+          client.close();
+        },
+      };
+    },
+    drop: () => standing.clear(),
+  };
+}
+
+const realtimeClients = shareLiveClients((url) =>
+  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url })),
+);
+
+/**
+ * Realtime's own client at the address the service named, shared by every
+ * read following there, and loaded only when a read is first followed, so
+ * its protocol's validators stay out of the web app's first load.
+ */
+export const openRealtimeClient = realtimeClients.open;
+
+/** Forgets the shared Realtime clients, on a sign-out or an account switch: the next read opens a new one, and each old one closes once its reads let go. */
+export const dropRealtimeClients = realtimeClients.drop;
 
 /** A read sealed for following: where to subscribe, and each part's sealed statement. */
 export interface SealedRead<Part extends string> {
@@ -101,6 +200,12 @@ export interface LiveFollowDependencies<Part extends string> {
   ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /**
+   * Hears the read's wait for a write's transaction once its parts are
+   * subscribed over Realtime, and none once they are let go, a polled read
+   * included, which has no transaction to wait on.
+   */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** The earliest any of the read's sealed statements expires, in epoch milliseconds. */
@@ -131,6 +236,24 @@ function realtimeRows<Part extends string>(
         (opened) => Effect.sync(() => opened.close()),
       );
       const rows = new Map<Part, readonly unknown[]>();
+      /**
+       * The read's wait for a write's transaction, handed out once every part
+       * is live (its first result in) and taken back once they are let go.
+       * Note that a write reaches only the parts whose rows it changes, so
+       * the first part it reaches settles the wait.
+       */
+      let standing: ReadonlyArray<readonly [Part, LiveSubscription]> = [];
+      let handed = false;
+      const txWait: TxWait = (txid, timeout) =>
+        Effect.tryPromise({
+          try: () =>
+            Promise.any(
+              standing.map(([, subscription]) =>
+                subscription.awaitTxId(txid, Duration.toMillis(timeout)),
+              ),
+            ),
+          catch: () => new LiveBroken({ reason: "the write's transaction did not arrive" }),
+        });
       const broken = (reason: string) =>
         Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason })));
       const subscriptions = yield* Effect.acquireRelease(
@@ -157,22 +280,27 @@ function realtimeRows<Part extends string>(
               const whole = Object.fromEntries(rows);
               // SAFETY: `rows` holds every part once its size is the parts', and only parts.
               Queue.offerUnsafe(queue, whole as Readonly<Record<Part, readonly unknown[]>>);
+              if (handed) return;
+              handed = true;
+              dependencies.onTxWait?.(txWait);
             });
             return [part, subscription] as const;
           }),
         ),
-        (standing) =>
+        (subscribed) =>
           Effect.sync(() => {
-            for (const [, subscription] of standing) subscription.unsubscribe();
+            if (handed) dependencies.onTxWait?.(undefined);
+            for (const [, subscription] of subscribed) subscription.unsubscribe();
           }),
       );
+      standing = subscriptions;
       let expiresAt = earliestExpiry(first);
       const renewal = Effect.gen(function* () {
         const wait = expiresAt - Duration.toMillis(RENEW_EARLY) - dependencies.now();
         yield* Effect.sleep(Duration.millis(Math.max(0, wait)));
         let next = yield* dependencies.reseal();
         while ("failure" in next) {
-          if (next.gone === true) {
+          if (ended(next)) {
             return yield* Effect.fail(new LiveBroken({ reason: GONE }));
           }
           yield* Effect.sleep(RENEW_RETRY);
@@ -202,6 +330,26 @@ function realtimeRows<Part extends string>(
         ),
       );
     }),
+  );
+}
+
+/**
+ * Confirms a write once its transaction reaches the read that shows it, as
+ * Neon's guide waits on `awaitTxId`: at once where the write changed no row
+ * (no txid) or the read is not subscribed over Realtime (polled, or not yet
+ * subscribed), since a poll shows the write on its next answer anyway. A
+ * transaction that does not arrive within `TX_WAIT_TIMEOUT` is said in the
+ * log and the write confirmed still, since it committed.
+ */
+export function confirmWrite(
+  wait: TxWait | undefined,
+  txid: string | undefined,
+): Effect.Effect<void> {
+  if (wait === undefined || txid === undefined) return Effect.void;
+  return wait(txid, TX_WAIT_TIMEOUT).pipe(
+    Effect.catch((why) =>
+      Effect.logWarning(`live-follow: a write's transaction did not arrive (${why.reason})`),
+    ),
   );
 }
 
@@ -243,7 +391,7 @@ export function liveRows<Part extends string>(
       const pollOnce = Effect.gen(function* () {
         const read = yield* dependencies.poll(seen);
         if ("failure" in read) {
-          if (read.gone === true) {
+          if (ended(read)) {
             gone();
             return yield* Effect.never;
           }
@@ -286,7 +434,7 @@ export function liveRows<Part extends string>(
        * nor where the service answered it polled, Realtime being off.
        */
       const attempt = Effect.gen(function* () {
-        if ("failure" in sealed) return sealed.gone === true ? GONE : AGAIN;
+        if ("failure" in sealed) return ended(sealed) ? GONE : AGAIN;
         if (sealed.url === LIVE_POLL_URL) {
           const rows = rowsOf(parts, sealed);
           if (rows !== undefined) emit(rows);

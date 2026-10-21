@@ -151,27 +151,6 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
   };
 }
 
-/**
- * The document as the hidden voice window and the call window are sent it: the
- * whole of it but the task turns' work, as the task's work page projects
- * it and as its task conversation reads it. Note that both are kept from
- * those windows because they draw neither, and both carry the output of
- * commands run in the developer's repository and on the developer's Mac,
- * which nothing there needs.
- */
-export function voiceWindowState<State extends Pick<AppState, "tasks">>(held: State): State {
-  const { work: _work, conversation: _conversation, ...tasks } = held.tasks;
-  return { ...held, tasks };
-}
-
-/** The document as the window that asked is to read it: the voice and call windows' as `voiceWindowState` leaves it, from their first read on, and a panel's whole. */
-export function windowAppState<State extends Pick<AppState, "tasks">>(
-  held: State,
-  window: { readonly voice: boolean; readonly call: boolean },
-): State {
-  return window.voice || window.call ? voiceWindowState(held) : held;
-}
-
 /** Which window a document is handed to, as far as what it draws goes. */
 interface WindowRole {
   readonly voice: boolean;
@@ -179,13 +158,11 @@ interface WindowRole {
 }
 
 /**
- * One slice as a window draws it. The voice and call windows draw the tasks
- * as `voiceWindowState` leaves them; and the voice window draws no voice view,
+ * One slice as a window draws it: the voice window draws no voice view,
  * because that view is the one it reports itself (`reportVoiceView`), so a
  * view it sent is never handed back to it.
  */
 function drawnSlice(snapshot: AppStateSnapshot, slice: keyof AppStateSnapshot, window: WindowRole) {
-  if (slice === "tasks" && (window.voice || window.call)) return voiceWindowState(snapshot).tasks;
   if (slice === "voice" && window.voice) {
     const { view: _view, ...drawn } = snapshot.voice;
     return drawn;
@@ -211,8 +188,7 @@ function drawnMoved(sent: AppStateSnapshot, next: AppStateSnapshot, window: Wind
 /**
  * The document as each window was last handed it, so a window is handed it
  * again only when a slice it draws, or its own facts, moved: the voice window
- * is not told of the view it just reported, and neither it nor the call
- * window of the task turns' work, which they are never sent. Note that a
+ * is not told of the view it just reported. Note that a
  * window is held weakly, by the platform's handle on it, so a window that
  * goes takes its entry with it; and one that reloads reads the document on
  * its first read, so the entry its old page left skips nothing it needs.
@@ -221,8 +197,8 @@ export class WindowAppStates<Window extends object> {
   readonly #sent = new WeakMap<Window, AppStateSnapshot>();
 
   /**
-   * Hands `send` the window's own reading of `snapshot`, as `windowAppState`
-   * projects it, unless nothing it draws moved since the last one it took;
+   * Hands `send` the snapshot, unless nothing the window draws moved since
+   * the last one it took;
    * `send` answers whether the window took it, which one with no stream open
    * does not.
    */
@@ -234,7 +210,7 @@ export class WindowAppStates<Window extends object> {
   ): void {
     const sent = this.#sent.get(window);
     if (sent !== undefined && !drawnMoved(sent, snapshot, role)) return;
-    if (send(windowAppState(snapshot, role))) this.#sent.set(window, snapshot);
+    if (send(snapshot)) this.#sent.set(window, snapshot);
   }
 }
 
@@ -292,7 +268,6 @@ export function initialAppState(
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },

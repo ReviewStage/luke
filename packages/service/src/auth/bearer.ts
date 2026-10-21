@@ -7,10 +7,14 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../core.js";
+import type { RelayCredential } from "../http/relay-upgrade.js";
 import { auth } from "./auth.js";
 import { BearerCallers } from "./bearer-callers.js";
 import { resolveBrowserSessionUserId } from "./browser-session.js";
 import { CREDENTIAL_HEADER, sessionCredential } from "./session-credential.js";
+
+/** The address a relay page's headers are read against as a request: only the headers are read. */
+const RELAY_PAGE_BASE = "http://localhost/";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {
@@ -96,6 +100,22 @@ export function requestUserId(
   return session({ headers: cookie }).pipe(Effect.orElseSucceed(Option.none<string>));
 }
 
+/**
+ * The account a relay's upgrade names (`http/relay-upgrade.ts`): the
+ * desktop's bearer, as every hosted route reads one, or a page's session
+ * cookie, as every route reads a browser's, its headers holding the cookie
+ * alone.
+ */
+export function relayUserId(
+  credential: RelayCredential,
+  userInfo: UserInfoEndpoint,
+  session: SessionEndpoint,
+): Effect.Effect<Option.Option<string>> {
+  if ("bearer" in credential) return userIdForAuthorization(credential.bearer, userInfo);
+  const page = new Request(RELAY_PAGE_BASE, { headers: credential.page });
+  return requestUserId(page, userInfo, session);
+}
+
 /** The auth service's own answer, asked afresh. */
 const askedUserInfo: UserInfoEndpoint = (input) =>
   Effect.tryPromise(async () => {
@@ -136,4 +156,11 @@ export function resolveHostedUserId(request: Request): Effect.Effect<Option.Opti
  */
 export function resolveHostedBearerUserId(request: Request): Effect.Effect<Option.Option<string>> {
   return hostedUserId(request, hostedUserInfo);
+}
+
+/** The account a relay's upgrade names against the same store: the terminal relay's and the Browser tab's live view's alike. */
+export function resolveRelayUserId(
+  credential: RelayCredential,
+): Effect.Effect<Option.Option<string>> {
+  return relayUserId(credential, hostedUserInfo, resolveBrowserSessionUserId);
 }

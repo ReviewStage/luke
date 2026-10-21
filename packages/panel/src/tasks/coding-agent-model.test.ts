@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentMessage,
@@ -33,6 +34,7 @@ import {
   messageWords,
   modelLabel,
   offeredModels,
+  planPayerOf,
   publishedUrl,
   pullRequestPillLabel,
   pullRequestStateWord,
@@ -44,6 +46,7 @@ import {
   unreadSentLines,
   withAgentRun,
 } from "./coding-agent-model.js";
+import { dayAndTimeText } from "./task-time.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [
@@ -572,6 +575,33 @@ test("a message refused for a repository out of reach names the plan's remedy on
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
+});
+
+test("a message a Claude plan refused says to reconnect it, a limit says when it resets, and a plan's refusal says nothing of turning to another payer", () => {
+  const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
+  const claude = planPayerOf(CODING_AGENT_RUNTIME.CLAUDE_CODE);
+  const words = (refused: Parameters<typeof messageFailureNote>[0], payer = claude) =>
+    messageFailureNote(refused, null, payer).text;
+
+  assert.deepEqual(
+    [
+      words({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }),
+      words({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt }),
+      words({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED }),
+      words(
+        { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+        planPayerOf(CODING_AGENT_RUNTIME.CODEX),
+      ),
+      messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
+    ],
+    [
+      "Your Claude plan needs reconnecting in Settings.",
+      `Your Claude plan has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Your Claude plan has reached its usage limit. It waits until the limit resets.",
+      `The plan paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
+    ],
+  );
 });
 
 test("a page that reads an agent as the list already holds it answers the list as it was, and one that moves it moves only that agent", () => {

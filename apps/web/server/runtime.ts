@@ -1,8 +1,9 @@
+import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
 import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
 import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
-import { type Effect, Layer, ManagedRuntime } from "effect";
+import { type Context, Effect, Layer, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module
@@ -26,6 +27,19 @@ function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesErr
 /** The one place `apps/web` runs an effect, which is what makes this the edge. */
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
+}
+
+/**
+ * The deployment's services as a route reads them once per instance, with
+ * the native harnesses beside them where its function provides them
+ * (`native-agents.ts`), built over this one runtime.
+ */
+export function webServicesWith(
+  beside?: Layer.Layer<NativeAgentSessions, never, WebServices>,
+): Promise<Context.Context<WebServices>> {
+  return beside === undefined
+    ? runWeb(Effect.context<WebServices>())
+    : runWeb(Effect.provide(Effect.context<WebServices | NativeAgentSessions>(), beside));
 }
 
 /**

@@ -51,6 +51,8 @@ export function SidebarInbox({
     named,
     reading,
     filteredOut,
+    search,
+    searched,
     read,
     archivedRead,
     taskless,
@@ -77,6 +79,7 @@ export function SidebarInbox({
             unread: anyUnread(standing),
             onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
           },
+          search,
         }}
         models={named.models}
         readerId={tasks.me}
@@ -90,6 +93,7 @@ export function SidebarInbox({
             counts={counts}
             onList={() => undefined}
             onRetry={onRetry}
+            searched={searched}
           />
         }
         onChoose={(listed: InboxListed) => onOpen(choiceOf(listed))}

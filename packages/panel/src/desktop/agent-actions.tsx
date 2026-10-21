@@ -1,8 +1,14 @@
-import type { CodingAgentBrief, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentAttachment,
+  CodingAgentBrief,
+  CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
+import { useSteadyDoor } from "../steady-door.js";
+import type { AgentFork } from "../tasks/fork-model.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { agentTranscript, readWholeTranscript } from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
@@ -18,26 +24,27 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * nothing of its own beside it, so an agent with no task, as an
  * automation's run starts, is acted on as a task's is: Rename, which opens
  * its name's field where the surface draws its name, while nothing it
- * stands under is archived; Open terminal and Run, where the platform runs
- * them and the agent's repository is known, and no terminal for an
- * archived agent, whose sandbox takes no shell; Copy link; its transcript's
+ * stands under is archived; Open terminal, where the platform runs one,
+ * and none for an archived agent, whose sandbox takes no shell; Copy link; its transcript's
  * two copies, read whole from the service; and Archive agent, asked first
  * while it works (`agent-archive.tsx`), or Unarchive once it is archived.
+ * Run, which runs the agent's pushed branch on this Mac, stands on its
+ * Pull request tab instead (`agent-pull-request-tab.tsx`).
  * The doors that open a terminal are the column's, from where it stands
- * (`useAgentTerminalDoors`).
+ * (`useAgentTerminalDoors`), and so are those that open a fork of one of its
+ * messages or a continue of it as a draft (`useAgentDraftDoors`): the
+ * task's draft tab, or the draft on an agent's own page, each started
+ * through the same control.
  */
 
 /** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`). */
-type AgentDoors = Pick<
-  TabDoors,
-  "onCopy" | "onRename" | "onOpenTerminal" | "onOpenOnMac" | "archive" | "copyLink"
->;
+type AgentDoors = Pick<TabDoors, "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "copyLink">;
 
 /** The doors a column opens an agent's terminals through, by the agent; each none where it is not offered. */
 export interface AgentTerminalDoors {
   /** Shows the agent's own Terminal tab in the side panel, adding no shell; none where the platform runs no terminals. */
   readonly onOpenTerminal: ((agentId: string) => void) | undefined;
-  /** Runs the agent's pushed branch in a terminal of this Mac in the side panel; none where no repository is known or the platform has no Mac terminal. */
+  /** Runs the agent's pushed branch in a terminal of this Mac in the side panel, which its Pull request tab's Run offers (`side-panel.tsx`); none where no repository is known or the platform has no Mac terminal. */
   readonly onOpenOnMac: ((agentId: string) => void) | undefined;
   /** Whether the platform runs terminals, which ⌘J and New terminal stand on. */
   readonly terminals: boolean;
@@ -91,6 +98,38 @@ export function useAgentTerminalDoors(
   };
 }
 
+/** The doors an agent's pane opens a fork or a continue of the agent through, each as the place's draft; none while what it stands under is archived. */
+export interface AgentDraftDoors {
+  readonly onFork: ((fork: AgentFork) => void) | undefined;
+  readonly onContinue:
+    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | undefined;
+}
+
+/**
+ * The doors a surface opens a fork or a continue of one of its agents
+ * through: the control's draft, the task's or the agent page's, made a fork
+ * of the message or a continue of the agent, then shown where the surface
+ * shows a draft (`onOpenDraft`), by its key. Each is steady across renders
+ * (`useSteadyDoor`), and none while what the agents stand under is archived.
+ */
+export function useAgentDraftDoors(
+  agents: Pick<CodingAgentsControl, "onForkDraft" | "onContinueDraft">,
+  archived: boolean,
+  onOpenDraft: (draftId: string) => void,
+): AgentDraftDoors {
+  const onFork = useSteadyDoor(
+    archived ? undefined : (fork: AgentFork) => onOpenDraft(agents.onForkDraft(fork)),
+  );
+  const onContinue = useSteadyDoor(
+    archived
+      ? undefined
+      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
+          onOpenDraft(agents.onContinueDraft(agentId, words, attachments)),
+  );
+  return { onFork, onContinue };
+}
+
 /** One agent's actions, as every surface that draws it offers them. */
 export function useAgentActions(
   agent: CodingAgentSummary,
@@ -100,7 +139,7 @@ export function useAgentActions(
     readonly label: string;
     /** Whether the surface is on screen, which the Archive's question asks on. */
     readonly shown: boolean;
-    readonly terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenOnMac">;
+    readonly terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   },
 ): AgentActions {
   const { label, shown, terminals } = input;
@@ -111,7 +150,7 @@ export function useAgentActions(
   const unarchive = useAgentUnarchive(agent.id, agents);
   // Note that an Unarchive stands while the agent or its task is archived, and neither is renamed then.
   const renamable = agents.onUnarchive === undefined;
-  const { onOpenTerminal, onOpenOnMac } = terminals;
+  const { onOpenTerminal } = terminals;
   const read = agentTranscriptRead(
     agents.readTranscript,
     agent.id,
@@ -123,12 +162,11 @@ export function useAgentActions(
     doors: {
       onCopy: copied(read),
       onRename: renamable ? rename.begin : undefined,
-      // Note that an archived agent's sandbox takes no shell, so it offers no terminal; Run reads only its pushed branch.
+      // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
       onOpenTerminal:
         onOpenTerminal === undefined || agent.archivedAt !== undefined
           ? undefined
           : () => onOpenTerminal(agent.id),
-      onOpenOnMac: onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       archive: agent.archivedAt === undefined ? archive.action : unarchive,
       copyLink,
     },

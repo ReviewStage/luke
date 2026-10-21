@@ -12,10 +12,10 @@ import { Tooltip } from "../tooltip.js";
 /**
  * start-agent-button.tsx -- the task toolbar's Start: a split button that starts a coding agent on the task.
  *
- * The main part starts one on the account's default model and effort, and
- * says which on hover: "Opus 5.5 High Fast". The chevron drops
- * the shared model menu (`../tasks/model-menu.tsx`), the default
- * checked; what the menu chooses is what the main part then starts on while
+ * The main part starts a new agent on the account's default model and
+ * effort, and says which on hover: "Opus 5.5 High Fast". The chevron drops
+ * the shared model menu (`../tasks/model-menu.tsx`), the default checked; what the menu chooses is what
+ * the main part then starts on while
  * the plan's tab stays open (the button is drawn afresh for each task and
  * each return to its plan, so a pick never outlives the Start it was made
  * for by much), and is never kept as the account's default, which only

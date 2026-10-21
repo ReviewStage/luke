@@ -81,6 +81,7 @@ function agentLine(
     line: {
       id: agent.id,
       title: agent.title,
+      ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
       model: agent.model,
       effort: agent.effort,
       status,

@@ -1,11 +1,8 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxParams,
-} from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { useCallback, useEffect, useMemo } from "react";
+import { searchTokens } from "@luke/ui/search-tokens";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useInboxTaskFolds, useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
@@ -19,7 +16,6 @@ import {
   type InboxGroup,
   type InboxListed,
   inboxCounts,
-  inboxList,
   listedItems,
   type TasklessInboxAgent,
   taskHolder,
@@ -27,6 +23,7 @@ import {
 } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
 import { useCodingAgents } from "./use-coding-agents.js";
+import { useHeldInboxList } from "./use-held-inbox-list.js";
 import { useInboxItems } from "./use-inbox-items.js";
 import { useInboxReadMarks } from "./use-inbox-read-marks.js";
 import { useTaskInbox } from "./use-task-inbox.js";
@@ -46,6 +43,10 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * two never read or choose apart. Note that the list's reads stand as long
  * as it is read, so a sidebar that lists it reads every task holding items
  * while it is on screen, where the page read them only while it stood.
+ *
+ * Its search, the words typed in the list's head, is held here too, so the
+ * page's list and the sidebar's narrow alike, the item the pane shows
+ * keeping its place among the steps, as it does under any scope (`inboxList`).
  */
 
 /**
@@ -90,11 +91,17 @@ const NO_TASKLESS: TasksControl["inboxTaskless"] = [];
 
 /**
  * The window's Inbox as it is read and listed, and its chosen item; see the
- * module's head. Where it is not `enabled` it reads nothing, lists nothing,
+ * module's head, its list held still while it is shown (`use-held-inbox-list.ts`).
+ * Where it is not `enabled` it reads nothing, lists nothing,
  * and chooses nothing, so a shell that always calls it costs nothing while
  * the inbox-first sidebar is off.
  */
-export function useInboxListing(tasks: TasksControl, enabled = true) {
+export function useInboxListing(
+  tasks: TasksControl,
+  enabled = true,
+  /** Whether the list is in sight, where it is drawn apart from the Inbox's page, as the inbox-first sidebar draws it; none reads it as the page's. */
+  listShown?: boolean,
+) {
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useInboxViewChoices();
@@ -105,10 +112,6 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
   const { inboxTasks, tasks: listedTasks, archived: listedArchived } = tasks.listed;
   const holdings = useMemo(
     () => (enabled ? listedHoldings(inboxTasks, listedTasks) : NO_HOLDINGS),
@@ -118,12 +121,11 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     () => (enabled ? listedHoldings(inboxTasks, listedArchived) : NO_HOLDINGS),
     [enabled, inboxTasks, listedArchived],
   );
-  const read = useInboxItems({ holdings, readInbox });
+  const read = useInboxItems({ holdings });
   // Note that the archived tasks' items are read only while Archived is shown, since nothing in them waits on anyone.
   const showArchived = choices.show === INBOX_SHOW.ARCHIVED;
   const archivedRead = useInboxItems({
     holdings: showArchived ? archivedHoldings : NO_HOLDINGS,
-    readInbox,
   });
   const waitingTaskless = enabled ? tasks.inboxTaskless : NO_TASKLESS;
   const tasklessReads = useTasklessInboxItems(waitingTaskless);
@@ -155,17 +157,10 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     onStarted: () => undefined,
     me: tasks.me,
   });
-  const readAgentInbox = useCallback(
-    (after: string) =>
-      chosenAgentId === undefined
-        ? Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const)
-        : act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId: chosenAgentId, after }),
-    [act, chosenAgentId],
-  );
   // Note that an agent with no task holds its own read, by its id, as a task's is held by the task's.
   const live = useTaskInbox({
     taskId: taskId ?? chosenAgentId,
-    ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
+    kind: chosenAgentId === undefined ? INBOX_SCOPE_KIND.PLAN : INBOX_SCOPE_KIND.AGENT,
     shown: tasks.shown,
     waiting:
       tasks.inbox.some((each) => each.taskId === taskId) ||
@@ -207,17 +202,8 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
           },
         ]
       : [];
-  const { onReread: rereadTasks } = read;
-  const { onReread: rereadTaskless } = taskless;
-  // Note that every item marked read moves nothing main hears of, so the Inbox reads its items again once the service took it.
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: tasks.workspace?.id,
-    onMarkedAll: () => {
-      rereadTasks();
-      rereadTaskless();
-    },
-  });
+  // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
+  const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
   // The archived tasks' items stand under Archived alone, which counts what main says each holds whether or not it is read yet.
   const standing: readonly InboxGroup[] = [
@@ -225,6 +211,9 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
   const entries = showArchived ? archivedEntries : standing;
+  // The list's search, which narrows what it lists, never what it counts.
+  const [query, setQuery] = useState("");
+  const search = searchTokens(query);
   const archivedCount = archivedHoldings.reduce((total, holding) => total + holding.items, 0);
   const counts = {
     ...inboxCounts(standing, tasks.me, choices.whose),
@@ -240,17 +229,25 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     show: choices.show,
     sort: choices.sort,
     whose: showArchived ? EVERYONES : choices.whose,
+    search,
     readerId: tasks.me,
   };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(entries, { ...filter, chosen: undefined });
-  const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
+  // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
+  // both held still while the list is shown: the page's while it stands, else what the caller says.
+  const { list, steps } = useHeldInboxList(
+    entries,
+    filter,
+    asked?.itemId,
+    enabled && (listShown ?? (view.open && tasks.shown)),
+  );
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
   // Note that a scope leaving out every item listed is said apart from an Inbox holding none, the
   // archived tasks' items among what another scope would list.
   const holdsItems = (groups: readonly InboxGroup[]) =>
     groups.some(({ items }) => items.length > 0);
+  const searched = search.length > 0 ? query : undefined;
   const filteredOut =
+    searched === undefined &&
     listedItems(list).length === 0 &&
     (showArchived
       ? holdsItems(standing)
@@ -346,6 +343,8 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     steps,
     chosen,
     filteredOut,
+    search: { query, onQuery: setQuery },
+    searched,
     missing,
     reading,
     choose,

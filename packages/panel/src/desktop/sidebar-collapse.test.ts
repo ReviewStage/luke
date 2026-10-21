@@ -66,16 +66,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 /** The sidebar fold the developer chose, as storage keeps it. */
@@ -141,15 +131,17 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
         canGoForward: false,
         onBack: ignore,
         onForward: ignore,
+        steps: { back: [], forward: [] },
+        onGoTo: ignore,
         onLeaveVersionHistory: ignore,
       },
       sidebar,
       room: stage.room,
       settingsStep: { listed: true, onList: ignore },
       call: undefined,
-      captions: {
-        caption: { content: undefined, shown: false },
-        volumeHint: { wanted: false, text: "", onDismiss: ignore },
+      notice: {
+        notice: { content: undefined, shown: false },
+        onDismissHint: ignore,
       },
       settings: SETTINGS,
     });

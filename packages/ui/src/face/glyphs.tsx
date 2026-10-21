@@ -127,7 +127,16 @@ export function UnpinIcon(): React.JSX.Element {
   );
 }
 
-/** A box under its lid: puts a task away under Archived. */
+/** A check, drawn as a button's glyph: marks a task done. */
+export function MarkDoneIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.8 12.6 9.6 17.3 19.2 6.9" />
+    </Glyph>
+  );
+}
+
+/** A box under its lid: puts an agent, or a task left archived, away under Archived. */
 export function ArchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -668,6 +677,23 @@ export function CallIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
       <path d="M13.58 15.93a.86.86 0 0 0 1.043-.261l.305-.4A1.72 1.72 0 0 1 16.3 14.58h2.58a1.72 1.72 0 0 1 1.72 1.72v2.58a1.72 1.72 0 0 1-1.72 1.72A15.48 15.48 0 0 1 3.4 5.12a1.72 1.72 0 0 1 1.72-1.72h2.58a1.72 1.72 0 0 1 1.72 1.72v2.58a1.72 1.72 0 0 1-.688 1.376l-.402.302a.86.86 0 0 0-.251 1.06 12.04 12.04 0 0 0 5.497 5.49" />
+    </Glyph>
+  );
+}
+
+/**
+ * A sound wave's bars: a call into an agent, which starts one where none is
+ * up. Its path is Lucide's `audio-lines` (ISC licence), drawn in our stroke.
+ */
+export function WaveformIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2 10v3" />
+      <path d="M6 6v11" />
+      <path d="M10 3v18" />
+      <path d="M14 8v7" />
+      <path d="M18 5v13" />
+      <path d="M22 10v3" />
     </Glyph>
   );
 }

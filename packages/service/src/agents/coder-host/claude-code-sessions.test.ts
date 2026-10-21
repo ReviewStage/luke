@@ -17,13 +17,20 @@ import {
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
+import { saveProviderKey, setPlanStatus } from "@luke/database/models/provider-key-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
+import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
+import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import {
   connectWorkspaceGitHub,
@@ -42,7 +49,9 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
+import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import {
   type ClaudeCodeSessionsOptions,
   claudeCodeSessions,
@@ -51,6 +60,8 @@ import {
   runnerEnded,
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { RUNNER_CHOICE } from "./runtime-sessions.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -92,7 +103,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
-  nativeAgentAccounts: [],
 };
 
 /** Everything but the store, around the fake Vercel given. */
@@ -152,6 +162,18 @@ const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   message: text,
   ...(lineId === undefined ? undefined : { lineId }),
 });
+
+/** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
+const turnUnderWay = (userId: string, agent: CodingAgent) =>
+  Effect.gen(function* () {
+    const turnId = randomUUID();
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    yield* writer.enqueueTurn(
+      { userId, conversationId: agent.conversationId },
+      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+    );
+    return turnId;
+  });
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -273,6 +295,84 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a setup-token Anthropic refused refuses the launch as one to reconnect, a limit refuses it with its reset until that passes, and neither starts a runner while refused",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const { userId, agent } = yield* openAgent;
+        const ring = parseKeyRing(Redacted.make(RING));
+        assert.ok(Result.isSuccess(ring));
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring.success, owner, Redacted.make(PLAN_TOKEN)),
+          "sk-ant-oat…oken",
+          null,
+          new Date(0),
+        );
+        const markPlan = (
+          status: typeof PROVIDER_KEY_STATUS.LIMIT_REACHED | typeof PROVIDER_KEY_STATUS.INVALID,
+          resetsAt?: Date,
+        ) =>
+          Effect.gen(function* () {
+            const now = yield* DateTime.nowAsDate;
+            yield* setPlanStatus(userId, owner.provider, owner.kind, status, resetsAt, now, now);
+          });
+        const openOn = (api: ReturnType<typeof runnerSandboxApi>) =>
+          Effect.gen(function* () {
+            const sessions = yield* sessionsFor(userId, { next: 0 }, null).pipe(
+              Effect.provide(services(api)),
+            );
+            return yield* sessions.open(message(agent, "Go."));
+          });
+
+        const resetsAt = new Date((yield* DateTime.nowAsDate).getTime() + 30 * 60_000);
+        yield* markPlan(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt);
+        const limited = runnerSandboxApi();
+        assert.deepEqual(yield* openOn(limited), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+          planResetsAt: resetsAt.getTime(),
+        });
+        assert.deepEqual(limited.commands, []);
+
+        yield* TestClock.adjust("31 minutes");
+        const reset = runnerSandboxApi();
+        const live = yield* sessionsFor(userId, { next: 0 }, null).pipe(
+          Effect.provide(services(reset)),
+        );
+        const reopened = yield* live.open(message(agent, "Go."));
+        assert.ok(reopened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(reset.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
+
+        // Another agent's turn finds the plan refused: a message to this live runner is refused too, and nothing is written to it.
+        yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
+        const written = linesOf(reset.commands[0]).length;
+        assert.deepEqual(yield* live.send(reopened.sessionId, message(agent, "Also the emails.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+        });
+        assert.equal(linesOf(reset.commands[0]).length, written);
+
+        const refused = runnerSandboxApi();
+        assert.deepEqual(yield* openOn(refused), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+        });
+        assert.deepEqual(refused.commands, []);
+      }),
+  );
+
+  it.effect(
     "open answers failed and opens nothing where no snapshot or no setup-token stands",
     () =>
       Effect.gen(function* () {
@@ -320,7 +420,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         opened.sessionId,
         message(agent, "Also the emails.", lineId),
       );
-      const cancelled = yield* sessions.cancel(opened.sessionId, "turn_0");
+      const turnId = yield* turnUnderWay(userId, agent);
+      const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
 
       assert.deepEqual(sent, {
         outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -337,8 +438,62 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           uuid: lineId,
           content: [{ type: "text", text: "Also the emails." }],
         },
-        { type: INPUT_LINE.STOP },
+        // The stop names the launch running the turn, by its first event number.
+        { type: INPUT_LINE.STOP, launch: 0 },
       ]);
+    }),
+  );
+
+  it.effect(
+    "a change of model and effort reaches the running runner as a model line alone, and a session with no runner takes nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
+
+        const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
+        const elsewhere = yield* sessions.retune(
+          `${opened.sessionId.slice(0, -4)}0000`,
+          agent.conversationId,
+        );
+
+        assert.deepEqual([retuned, elsewhere], [RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE]);
+        assert.equal(api.commands.length, 1);
+        assert.deepEqual(linesOf(api.commands[0]).slice(2), [
+          { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
+        ]);
+      }),
+  );
+
+  it.effect("a Stop of a turn no longer under way writes nothing to the runner", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent } = yield* openAgent;
+      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      // The turn a Stop was pressed on, then a newer one the Stop arrives during.
+      const stopped = yield* turnUnderWay(userId, agent);
+      yield* TestClock.adjust("1 second");
+      yield* turnUnderWay(userId, agent);
+
+      const cancelled = yield* sessions.cancel(opened.sessionId, stopped);
+
+      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.ok(
+        (linesOf(api.commands[0]) as InputLine[]).every((line) => line.type !== INPUT_LINE.STOP),
+      );
     }),
   );
 
@@ -396,6 +551,49 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox, a new checkout with no CLI session to resume",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        sequence.next = 42;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(expired.deleted, true);
+        const fresh = api.sandboxes[1];
+        assert.ok(fresh !== undefined);
+        assert.equal(fresh.status, "running");
+        assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
+        const relaunch = api.commands[1];
+        assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
+        const [config, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, undefined);
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Now the emails." }]);
+        // The session is found again by its tag, in the new sandbox alone.
+        const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+        assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 2);
       }),
   );
 

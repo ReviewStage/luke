@@ -1,28 +1,15 @@
-import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
 import type { Board, DrawingElement } from "@luke/features/board-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
-  type CodeToken,
-  TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
   type TaskCodeShowing,
   type TasksRepositoriesAnswer,
   type TasksView,
-  type TaskWorkTurn,
 } from "@luke/features/tasks-view";
-import {
-  type TaskTranscript,
-  TRANSCRIPT_PART_TYPE,
-  type TranscriptMessage,
-} from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
-import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
-import type { WireRecord, WireValue } from "@luke/wire";
-import { TOOL_STATE } from "../ai-elements/tool.js";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -202,30 +189,10 @@ const FIXTURE_TASK_LIST: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** The fixture's colours as the host's highlighter gives them, in GitHub's dark and light themes. */
-const KEYWORD = { color: "#ff7b72", lightColor: "#cf222e" } as const;
-const FUNCTION = { color: "#d2a8ff", lightColor: "#8250df" } as const;
-const STRING = { color: "#a5d6ff", lightColor: "#0a3069" } as const;
-const COMMENT = { color: "#8b949e", lightColor: "#6e7781" } as const;
-const TYPE = { color: "#ffa657", lightColor: "#953800" } as const;
-
-/** One run of a fixture line in the colours it is drawn in. */
-function run(
-  text: string,
-  colours: { readonly color: string; readonly lightColor: string },
-): CodeToken {
-  return { text, ...colours };
-}
-
-/** One fixture line from its runs, a bare word drawn in the theme's own foreground. */
-function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
-  return runs.map((part) => (part instanceof Object ? part : { text: part }));
-}
-
 /**
  * The code on screen in the fixture's call: Luke pointing at the invite
- * check he is asking about, lines 6 to 9 of an invented file, coloured as
- * the host's highlighter colours TypeScript.
+ * check he is asking about, lines 6 to 9 of an invented file, which the
+ * Code tab colours as it draws it.
  */
 const FIXTURE_CODE: TaskCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
@@ -233,82 +200,20 @@ const FIXTURE_CODE: TaskCode = {
   firstLine: 1,
   lineCount: 14,
   lines: [
-    fixtureLine(
-      run("import", KEYWORD),
-      " { db } ",
-      run("from", KEYWORD),
-      " ",
-      run('"../db"', STRING),
-      ";",
-    ),
-    [],
-    fixtureLine(run("// An invite link is good once, and for seven days.", COMMENT)),
-    fixtureLine(
-      run("export", KEYWORD),
-      " ",
-      run("async", KEYWORD),
-      " ",
-      run("function", KEYWORD),
-      " ",
-      run("acceptInvite", FUNCTION),
-      "(token: ",
-      run("string", TYPE),
-      ") {",
-    ),
-    fixtureLine(
-      "  ",
-      run("const", KEYWORD),
-      " invite = ",
-      run("await", KEYWORD),
-      " db.invites.",
-      run("find", FUNCTION),
-      "(token);",
-    ),
-    fixtureLine("  ", run("if", KEYWORD), " (!invite || invite.acceptedAt) {"),
-    fixtureLine(
-      "    ",
-      run("throw", KEYWORD),
-      " ",
-      run("new", KEYWORD),
-      " ",
-      run("InviteError", FUNCTION),
-      "(",
-      run('"no-longer-valid"', STRING),
-      ");",
-    ),
-    fixtureLine("  }"),
-    fixtureLine(
-      "  ",
-      run("if", KEYWORD),
-      " (",
-      run("expired", FUNCTION),
-      "(invite)) ",
-      run("throw", KEYWORD),
-      " ",
-      run("new", KEYWORD),
-      " ",
-      run("InviteError", FUNCTION),
-      "(",
-      run('"expired"', STRING),
-      ");",
-    ),
-    fixtureLine(
-      "  ",
-      run("await", KEYWORD),
-      " db.members.",
-      run("add", FUNCTION),
-      "(invite.workspaceId, invite.email);",
-    ),
-    fixtureLine(
-      "  ",
-      run("await", KEYWORD),
-      " db.invites.",
-      run("accept", FUNCTION),
-      "(invite.id);",
-    ),
-    fixtureLine("}"),
-    [],
-    fixtureLine(run("export", KEYWORD), " { acceptInvite };"),
+    'import { db } from "../db.js";',
+    "",
+    "// An invite link is good once, and for seven days.",
+    "export async function acceptInvite(token: string) {",
+    "  const invite = await db.invites.find(token);",
+    "  if (!invite || invite.acceptedAt) {",
+    '    throw new InviteError("no-longer-valid");',
+    "  }",
+    '  if (expired(invite)) throw new InviteError("expired");',
+    "  await db.members.add(invite.workspaceId, invite.email);",
+    "  await db.invites.accept(invite.id);",
+    "}",
+    "",
+    "export { acceptInvite };",
   ],
 };
 
@@ -323,10 +228,14 @@ function fixtureExcerpt(startLine: number, endLine: number): TaskCode {
   };
 }
 
+/** The coding agent on the fixture's task whose typed turn showed the last of its code. */
+const FIXTURE_CODING_AGENT_ID = "7b3c5d7e-9f1a-4b2c-8d4e-6f8a0b2c4d6e";
+
 /**
- * Every code Luke showed in the fixture's call, a walkthrough of one file in
- * three steps, each with his note: where a link lands, the check he is asking
- * about, and the expiry after it.
+ * Every code shown on the fixture's task: Luke's in its call, a walkthrough
+ * of one file in three steps, each with his note (where a link lands, the
+ * check he is asking about, and the expiry after it), and after the call, one
+ * more from a typed turn of the task's coding agent.
  */
 const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
   {
@@ -356,43 +265,17 @@ const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
       note: "Expiry is checked after that, so a link that is both withdrawn and expired reads as no longer valid.",
     },
   },
-];
-
-const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
-
-/** What was said on the fixture task's one earlier call, as the record answers it: each line a message named by its place, and by the row the voice wrote for it. */
-const FIXTURE_TRANSCRIPT: TaskTranscript = {
-  calls: [
-    {
-      id: "3c5e7a9b-1d2f-4a6c-8e0b-2d4f6a8c0e1a",
-      startedAt: Date.parse("2026-10-07T16:20:00Z"),
-      messages: (
-        [
-          [USER, "I want members to be able to invite a teammate by email.", "fixture-earlier-0"],
-          [ASSISTANT, "Who can invite today — only admins?", "fixture-earlier-1"],
-          [
-            USER,
-            "Right, an admin creates the account by hand. Any member should be able to.",
-            "fixture-earlier-2",
-          ],
-          [
-            ASSISTANT,
-            "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
-            "fixture-earlier-3",
-          ],
-        ] as const
-      ).map(
-        ([role, text, rowId], index): TranscriptMessage => ({
-          id: String(index),
-          role,
-          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
-          metadata: { rowIds: [rowId] },
-        }),
-      ),
+  {
+    callId: "fixture-show-4",
+    turnId: "fixture-turn-typed",
+    shownAt: Date.parse("2026-10-07T16:40:00Z"),
+    agentId: FIXTURE_CODING_AGENT_ID,
+    code: {
+      ...fixtureExcerpt(10, 11),
+      note: "The member is added before the invite is marked accepted, so a failure between the two leaves the link good for a second use.",
     },
-  ],
-  earlierOmitted: false,
-};
+  },
+];
 
 /**
  * The open task mid-call, the brain running a repository command
@@ -404,7 +287,6 @@ const FIXTURE_OPEN_TASK: TasksView = {
   activeTaskId: FIXTURE_TASK.id,
   document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
   activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
-  transcript: { status: TASKS_READ.READY, transcript: FIXTURE_TRANSCRIPT },
   shownCode: FIXTURE_SHOWN_CODE,
 };
 
@@ -482,123 +364,6 @@ const FIXTURE_BOARD: Board = {
 /** The open task on its whiteboard, as the tasks-board profile captures it. */
 const FIXTURE_OPEN_BOARD: TasksView = { ...FIXTURE_OPEN_TASK, board: FIXTURE_BOARD };
 
-/** A call of the fixture's turns, as the AI SDK journals it: answered with `output`, or running where it has none. */
-function fixtureCall(tool: string, id: string, input: WireRecord, output?: WireValue) {
-  return {
-    type: `tool-${tool}`,
-    toolCallId: id,
-    state: output === undefined ? TOOL_STATE.INPUT_AVAILABLE : TOOL_STATE.OUTPUT_AVAILABLE,
-    input,
-    ...(output === undefined ? undefined : { output }),
-  };
-}
-
-/** A repository command of the fixture's turns, answered with `stdout` where it has answered. */
-function fixtureCommand(id: string, command: string, stdout?: string) {
-  return fixtureCall(
-    AGENT_TOOL.RUN_IN_REPOSITORY,
-    id,
-    { command },
-    stdout === undefined ? undefined : { status: "ran", exitCode: 0, stdout, stderr: "" },
-  );
-}
-
-/** The store's id for the session of the fixture's call standing now. */
-const FIXTURE_LIVE_SESSION = "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f";
-
-/**
- * What Luke's brain did on the fixture's calls: an earlier turn
- * that read the members code and answered, and the turn standing now, which
- * handed a comparison to the worker and is reading on while it runs.
- * Synthetic throughout: no real repository, command output, or page.
- */
-const FIXTURE_WORKER_TASK =
-  "Compare how two invite libraries let an admin revoke a pending invite.";
-
-const FIXTURE_WORK: readonly TaskWorkTurn[] = [
-  {
-    turnId: "fixture-turn-1",
-    startedAt: Date.parse("2026-10-07T16:21:00Z"),
-    state: TASK_WORK_STATE.DONE,
-    earlierOmitted: false,
-    // The earlier call's "Any member should be able to." asked for it.
-    asked: ["fixture-earlier-2"],
-    journal: [
-      fixtureCommand("fixture-call-1", "ls src/members", "invite.ts\nmembership.ts\nroles.ts"),
-      fixtureCommand(
-        "fixture-call-2",
-        "grep -rn withdraw src/members",
-        "src/members/invite.ts:42:export function withdrawInvite(invite: Invite, by: Member) {",
-      ),
-      { type: "text", text: "Only the member who sent an invite can withdraw it today." },
-    ],
-    workers: [],
-  },
-  {
-    turnId: "fixture-turn-2",
-    startedAt: Date.parse("2026-10-07T16:44:00Z"),
-    state: TASK_WORK_STATE.RUNNING,
-    earlierOmitted: false,
-    // The call standing now's "who can withdraw an invite?" asked for it, under the service's own row id, which the line heard on the call is matched to by where it began.
-    asked: ["fixture-service-1"],
-    askedAt: [{ voiceSessionId: FIXTURE_LIVE_SESSION, fromMs: 1_200 }],
-    journal: [
-      {
-        type: "reasoning",
-        text: "The developer wants admins to withdraw invites too. Before suggesting a library, check whether removal already has an admin check to reuse, and hand the library comparison to the worker so the answer is not held up.",
-      },
-      fixtureCall(
-        EVE_TOOL.WORKER,
-        "fixture-call-3",
-        { message: FIXTURE_WORKER_TASK },
-        "Started task worker-fixture. Its result will arrive in a <task_result> message.",
-      ),
-      { type: "text", text: "While that runs, I'm checking how removal works now." },
-      fixtureCommand(
-        "fixture-call-4",
-        "sed -n 30,60p src/members/membership.ts",
-        "export function removeMember(member: Member, by: Member) {\n  assertAdmin(by);\n  …",
-      ),
-      fixtureCommand("fixture-call-5", "grep -rn pending src/members"),
-    ],
-    workers: [
-      {
-        callId: "fixture-call-3",
-        taskId: "worker-fixture",
-        task: FIXTURE_WORKER_TASK,
-        state: TASK_WORK_STATE.RUNNING,
-        earlierOmitted: false,
-        journal: [
-          fixtureCall(
-            AGENT_TOOL.SEARCH_WEB,
-            "fixture-worker-1",
-            { query: "invite library revoke pending invite admin" },
-            {
-              status: "found",
-              query: "invite library revoke pending invite admin",
-              summary:
-                "invite-kit documents revoking invites; invitely exposes DELETE /invites/:id.",
-              findings: [],
-            },
-          ),
-          fixtureCommand(
-            "fixture-worker-2",
-            "grep -rn revoke node_modules/invite-kit/README.md",
-            "README.md:88:Admins may revoke any pending invite with revoke(invite).",
-          ),
-          {
-            type: "text",
-            text: "invite-kit lets any admin revoke a pending invite; invitely only lets its sender.",
-          },
-        ],
-      },
-    ],
-  },
-];
-
-/** The open task mid-call on its work, as the tasks-work profile captures it. */
-const FIXTURE_OPEN_WORK: TasksView = { ...FIXTURE_OPEN_TASK, work: FIXTURE_WORK };
-
 /** The side panels the fixture profiles open their task with. */
 const FIXTURE_CODE_PANEL: SidePanelState = {
   open: true,
@@ -609,36 +374,6 @@ const FIXTURE_CODE_PANEL: SidePanelState = {
 const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
 const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
-
-/**
- * The call a fixture run's status row and transcript read: listening, about
- * the fixture's open task, with what was said on it so far.
- */
-export const FIXTURE_TASKS_CALL: Pick<VoiceView, "voiceStatus" | "callTaskId"> & {
-  readonly callTranscript: VoiceCallTranscript;
-} = {
-  voiceStatus: LIVE_STATUS.LISTENING,
-  callTaskId: FIXTURE_TASK.id,
-  callTranscript: {
-    voiceSessionId: FIXTURE_LIVE_SESSION,
-    lines: [
-      {
-        rowId: "fixture-1",
-        speaker: USER,
-        words: "Picking up where we left off: who can withdraw an invite?",
-        startMs: 1_200,
-        endMs: 4_800,
-      },
-      {
-        rowId: "fixture-2",
-        speaker: ASSISTANT,
-        words: "Either the member who sent it or any admin. I'm checking how removal works now.",
-        startMs: 5_400,
-        endMs: 9_900,
-      },
-    ],
-  },
-};
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the
@@ -653,7 +388,7 @@ export function fixtureTasksView(run: {
   if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_OPEN_TASK;
   if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_OPEN_BOARD;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_OPEN_TASK;
-  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_OPEN_WORK;
+  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_OPEN_TASK;
   return FIXTURE_TASK_LIST;
 }
 

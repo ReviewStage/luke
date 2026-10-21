@@ -2,7 +2,6 @@ import { timingSafeEqual } from "node:crypto";
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
 import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
-import { CODER_ENVIRONMENT } from "./agents/coder-host/bounds.js";
 import { GITHUB_APP_ENVIRONMENT } from "./auth/auth-deployment.js";
 import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
@@ -35,14 +34,12 @@ export interface HostedEnvironmentValues {
   readonly posthogIngestHost: string | undefined;
   /** Vercel's own bearer on every scheduled call, which the maintenance routes asked by hand take too and eve's door never does; absent refuses every sweep. */
   readonly cronSecret: Redacted.Redacted | undefined;
-  /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by both eve services; absent, blank, or the cron's own value refuses every delegation. */
+  /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by the eve service; absent, blank, or the cron's own value refuses every delegation. */
   readonly eveDeploymentSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs the Luke GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
   /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every agent on Luke's keys. */
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
-  /** The cohort whose plan-paid coding agents may run on a provider's own harness, by user id; empty, as it is unset, admits none. */
-  readonly nativeAgentAccounts: readonly string[];
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -65,14 +62,6 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
       Option.map(Option.fromNullishOr(text(Redacted.value(secret))), Redacted.make),
     ),
   );
-}
-
-/** A list as the environment holds it: entries apart by commas or whitespace, each once, and none where it is unset or blank. */
-function listed(value: Option.Option<string>): readonly string[] {
-  const entries = Option.getOrElse(value, () => "")
-    .split(/[\s,]+/)
-    .filter((entry) => entry.length > 0);
-  return [...new Set(entries)];
 }
 
 /** What the log says, once a build, where the eve secret is read as unset for holding the cron's value: the two names, never a value. */
@@ -148,7 +137,6 @@ export const hostedEnvironment = Layer.effect(
       providerKeyEncryptionKeys: Config.option(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
       ),
-      nativeAgentAccounts: Config.option(Config.String(CODER_ENVIRONMENT.NATIVE_AGENT_ACCOUNTS)),
     }),
     (read) => {
       const cronSecret = presentRedacted(read.cronSecret);
@@ -166,7 +154,6 @@ export const hostedEnvironment = Layer.effect(
         eveDeploymentSecret,
         githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
         providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
-        nativeAgentAccounts: listed(read.nativeAgentAccounts),
       };
       // Note that the warning names the two variables alone, because a value in a log line is a leaked secret.
       return eveDeploymentSecret === namedEveSecret

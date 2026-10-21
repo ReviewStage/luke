@@ -8,8 +8,9 @@
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall —
  * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
  * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
- * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`, and
- * `updateNetworkPolicy` when it moves; `readFile` is Vercel's documented
+ * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`,
+ * `updateNetworkPolicy`, `getSession`, `extendTimeout`, and `updateSandbox`
+ * when it moves; `readFile` is Vercel's documented
  * `fs/read`), directly rather than through the SDK,
  * because
  * the SDK bundled into a function fails it as it loads and carries a dozen
@@ -41,8 +42,14 @@ import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 /** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Luke opens itself carries it too. */
 export const SESSION_TAG = "sessionId";
 
+/** The status a sandbox is up in, which the list of running sandboxes filters on. */
+export const RUNNING_STATUS = "running";
+
 /** Vercel's answer for a sandbox or session already gone. */
 const NOT_FOUND_STATUS = 404;
+
+/** Vercel's answer for a resume whose snapshot is gone: expired past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. */
+export const SNAPSHOT_GONE_STATUS = 410;
 
 const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
 
@@ -80,6 +87,8 @@ export interface ListedSandbox {
   readonly currentSnapshotId?: string | undefined;
   /** When the sandbox was created, in epoch milliseconds. */
   readonly createdAt?: number | undefined;
+  /** The timeout each session of the sandbox opens with, which Vercel reapplies at every resume. */
+  readonly timeout?: number | undefined;
 }
 
 /** A command the sandbox ran to its end: its exit code and what it printed on stdout and stderr. */
@@ -170,11 +179,42 @@ interface SandboxFile {
   readonly mode: number;
 }
 
+/**
+ * A sandbox session's lifetime as Vercel holds it: where it stands, when it
+ * started (when it was created where Vercel names no start), and how long
+ * from then it may run, which an extension lengthens.
+ */
+export interface SessionLifetime {
+  readonly status: string;
+  readonly startedAt: number;
+  readonly timeoutMs: number;
+}
+
+/** The order a list runs in by when each sandbox was created. */
+export const LIST_ORDER = { OLDEST_FIRST: "asc", NEWEST_FIRST: "desc" } as const;
+
+export type ListOrder = (typeof LIST_ORDER)[keyof typeof LIST_ORDER];
+
+/** A page of the running sandboxes: the sandboxes, and the cursor of the next page where there is one. */
+export interface RunningPage {
+  readonly sandboxes: readonly ListedSandbox[];
+  readonly next: string | undefined;
+}
+
 export interface VercelSandboxApi {
   /** Every sandbox carrying the session's tag. */
   readonly listTagged: (
     sessionId: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
+  /**
+   * One page of the project's running sandboxes, every kind, by when they
+   * were created in the order given, from the cursor a page before answered;
+   * with the cursor of the next page where there is one.
+   */
+  readonly listRunning: (
+    cursor: string | undefined,
+    order: ListOrder,
+  ) => Effect.Effect<RunningPage, SandboxUnavailable>;
   /** The named sandbox, resumed from its snapshot first where it was stopped. */
   readonly resume: (name: string) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /** Stops the sandbox session named, keeping its filesystem; one already gone counts as stopped. */
@@ -201,6 +241,19 @@ export interface VercelSandboxApi {
   readonly openInteractive: (
     sandboxSessionId: string,
   ) => Effect.Effect<InteractiveShell, SandboxUnavailable>;
+  /** The sandbox session's lifetime as it stands; nothing where Vercel holds no such session. */
+  readonly getSession: (
+    sandboxSessionId: string,
+  ) => Effect.Effect<SessionLifetime | undefined, SandboxUnavailable>;
+  /**
+   * Lengthens the running sandbox session's timeout by the duration given,
+   * which Vercel takes from a second up and refuses past the account's
+   * maximum lifetime; answers the lifetime it then stands at.
+   */
+  readonly extendTimeout: (
+    sandboxSessionId: string,
+    durationMs: number,
+  ) => Effect.Effect<SessionLifetime, SandboxUnavailable>;
   /** Sets the running sandbox session's network policy whole. */
   readonly updateNetworkPolicy: (
     sandboxSessionId: string,
@@ -228,6 +281,11 @@ export interface VercelSandboxApi {
    * refused, so of two snapshots asked at once only the first is taken.
    */
   readonly snapshot: (sandboxSessionId: string) => Effect.Effect<string, SandboxUnavailable>;
+  /** Sets the timeout the named sandbox's next sessions open with; the running session keeps its own. */
+  readonly updateTimeout: (
+    name: string,
+    timeoutMs: number,
+  ) => Effect.Effect<void, SandboxUnavailable>;
   /** Replaces the named sandbox's tags whole. */
   readonly updateTags: (
     name: string,
@@ -271,6 +329,17 @@ const ListedSandboxSchema = Schema.Struct({
   tags: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   currentSnapshotId: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
+  timeout: Schema.optional(Schema.Number),
+});
+
+/** A session's answer, a lookup's or an extension's: the session and its lifetime. */
+const SessionSchema = Schema.Struct({
+  session: Schema.Struct({
+    status: Schema.String,
+    timeout: Schema.Number,
+    createdAt: Schema.Number,
+    startedAt: Schema.optional(Schema.Number),
+  }),
 });
 
 /** A snapshot's answer: the snapshot taken. */
@@ -292,6 +361,14 @@ const StdinSchema = Schema.Struct({ bytesWritten: Schema.optional(Schema.Number)
 
 /** A page of the sandboxes listed under a tag. */
 const ListedSandboxesSchema = Schema.Struct({ sandboxes: Schema.Array(ListedSandboxSchema) });
+
+/** A page of the running sandboxes, with the cursor of the next where there is one. */
+const RunningSandboxesSchema = Schema.Struct({
+  sandboxes: Schema.Array(ListedSandboxSchema),
+  pagination: Schema.optional(
+    Schema.Struct({ next: Schema.optional(Schema.NullOr(Schema.String)) }),
+  ),
+});
 
 /** A lookup's answer: the sandbox, and the session it runs now, which a resume opened. */
 const FoundSandboxSchema = Schema.Struct({
@@ -333,12 +410,22 @@ function isSandboxShellAddress(address: string): boolean {
 const readClaims = readEither(OidcClaimsSchema, { excess: EXCESS_KEYS.DROP });
 const readInteractive = readEither(InteractiveSchema, { excess: EXCESS_KEYS.DROP });
 const readListed = readEither(ListedSandboxesSchema, { excess: EXCESS_KEYS.DROP });
+const readRunning = readEither(RunningSandboxesSchema, { excess: EXCESS_KEYS.DROP });
 const readFound = readEither(FoundSandboxSchema, { excess: EXCESS_KEYS.DROP });
 const readCommandLine = readEither(CommandLineSchema, { excess: EXCESS_KEYS.DROP });
 const readCreated = readEither(CreatedSandboxSchema, { excess: EXCESS_KEYS.DROP });
 const readCommand = readEither(CommandSchema, { excess: EXCESS_KEYS.DROP });
 const readStdin = readEither(StdinSchema, { excess: EXCESS_KEYS.DROP });
 const readSnapshot = readEither(SnapshotTakenSchema, { excess: EXCESS_KEYS.DROP });
+const readSession = readEither(SessionSchema, { excess: EXCESS_KEYS.DROP });
+
+/** A session's answer as its lifetime, counted from its start, or from its creation where it names no start yet. */
+function lifetimeOf(text: string): SessionLifetime | undefined {
+  const read = readSession(jsonOf(text));
+  if (Result.isFailure(read)) return undefined;
+  const { status, timeout, createdAt, startedAt } = read.success.session;
+  return { status, startedAt: startedAt ?? createdAt, timeoutMs: timeout };
+}
 
 /** SIGTERM's number, which the kill takes. */
 const SIGTERM = 15;
@@ -546,6 +633,31 @@ export function vercelSandboxApi(
           }
           return page.success.sandboxes;
         }),
+      listRunning: (cursor, order) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl("", asked.teamId, {
+            project: asked.projectId,
+            limit: String(SANDBOX_API.PAGE),
+            // Note that the API takes a status filter only under a sort by creation.
+            sortBy: "createdAt",
+            sortOrder: order,
+            status: RUNNING_STATUS,
+            ...(cursor === undefined ? undefined : { cursor }),
+          });
+          const listed = yield* callApi(
+            client,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          const page = readRunning(jsonOf(listed.text));
+          if (!succeeded(listed.status) || Result.isFailure(page)) {
+            return yield* new SandboxUnavailable({ status: listed.status });
+          }
+          return {
+            sandboxes: page.success.sandboxes,
+            next: page.success.pagination?.next ?? undefined,
+          };
+        }),
       resume: (name) =>
         Effect.gen(function* () {
           const asked = yield* credentials;
@@ -668,6 +780,38 @@ export function vercelSandboxApi(
             return yield* new SandboxUnavailable({});
           }
           return { url: read.success.url, token: Redacted.make(read.success.token) };
+        }),
+      getSession: (sandboxSessionId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(`/sessions/${encodeURIComponent(sandboxSessionId)}`, asked.teamId);
+          const found = yield* callApi(
+            client,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          if (found.status === NOT_FOUND_STATUS) return undefined;
+          const lifetime = lifetimeOf(found.text);
+          if (!succeeded(found.status) || lifetime === undefined) {
+            return yield* new SandboxUnavailable({ status: found.status });
+          }
+          return lifetime;
+        }),
+      extendTimeout: (sandboxSessionId, durationMs) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/extend-timeout`,
+            asked.teamId,
+          );
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ duration: durationMs }),
+          );
+          const extended = yield* callApi(client, request);
+          const lifetime = lifetimeOf(extended.text);
+          if (!succeeded(extended.status) || lifetime === undefined) {
+            return yield* new SandboxUnavailable({ status: extended.status });
+          }
+          return lifetime;
         }),
       updateNetworkPolicy: (sandboxSessionId, policy) =>
         Effect.gen(function* () {
@@ -802,6 +946,20 @@ export function vercelSandboxApi(
             return yield* new SandboxUnavailable({ status: taken.status });
           }
           return read.success.snapshot.id;
+        }),
+      updateTimeout: (name, timeoutMs) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
+            projectId: asked.projectId,
+          });
+          const request = HttpClientRequest.patch(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ timeout: timeoutMs }),
+          );
+          const updated = yield* callApi(client, request);
+          if (!succeeded(updated.status)) {
+            return yield* new SandboxUnavailable({ status: updated.status });
+          }
         }),
       updateTags: (name, tags) =>
         Effect.gen(function* () {

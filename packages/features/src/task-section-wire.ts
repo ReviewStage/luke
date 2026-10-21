@@ -132,7 +132,7 @@ export const taskSectionTitleSchema = EffectSchema.Trim.check(
 );
 
 /** One of the account's sections, in the workspace it was made in. */
-const taskSectionSchema = EffectSchema.Struct({
+export const taskSectionSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   workspaceId: workspaceIdSchema,
   title: taskSectionTitleSchema,
@@ -146,7 +146,7 @@ const taskSectionSchema = EffectSchema.Struct({
 export type TaskSection = typeof taskSectionSchema.Type;
 
 /** A task the account keeps in one of its sections. */
-const taskSectionEntrySchema = EffectSchema.Struct({
+export const taskSectionEntrySchema = EffectSchema.Struct({
   taskId: wireUuidSchema,
   sectionId: wireUuidSchema,
   /** Where it stands among the section's tasks once dragged there; absent while it stands by `addedAt`. */
@@ -164,6 +164,18 @@ export const taskSectionsAnswerSchema = EffectSchema.Struct({
 });
 
 export type TaskSections = typeof taskSectionsAnswerSchema.Type;
+
+/**
+ * A write's answer (PUT): the sections as they then stand, and the
+ * transaction that wrote them, which a follower of the sidebar waits for
+ * before it draws the write as done; absent where the write changed no row.
+ */
+export const taskSectionsWrittenSchema = EffectSchema.Struct({
+  ...taskSectionsAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type TaskSectionsWritten = typeof taskSectionsWrittenSchema.Type;
 
 /**
  * One write (PUT): make a section under the id given, in a workspace the

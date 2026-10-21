@@ -28,8 +28,8 @@ export const voiceRuntimeActsContract = {
       ),
     )
     .output(EffectSchema.Void),
-  [VOICE_RUNTIME_ACT_KIND.CALL_SHOW_TASK]: actProcedure(
-    "Could not bring the call's task forward on this system.",
+  [VOICE_RUNTIME_ACT_KIND.CALL_SHOW_AGENT]: actProcedure(
+    "Could not bring the call's agent forward on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
@@ -58,13 +58,6 @@ export const voiceRuntimeActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Boolean),
-  [VOICE_RUNTIME_ACT_KIND.LUKE_STOP]: actProcedure("Could not stop Luke on this system.")
-    .input(
-      exactInput(
-        EffectSchema.Struct({ taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString) }),
-      ),
-    )
-    .output(EffectSchema.Void),
   [VOICE_RUNTIME_ACT_KIND.VOICE_DIAGNOSTICS]: actProcedure(
     "Could not read the voice diagnostics on this system.",
   )

@@ -1,4 +1,3 @@
-import { Duration } from "effect";
 import {
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
@@ -7,30 +6,18 @@ import {
 } from "../../core.js";
 
 /**
- * The bounds and names the hosted brain host runs under: how a request names
- * the conversation and the kind of turn it opens, how long the runtime keeps
- * one session, and what a rotated session is seeded with. Every one is a
+ * The bounds and names the agents' hosts run under: how a request names the
+ * conversation and the kind of turn it opens, and what a reopened session
+ * is seeded with. Every one is a
  * product knob as much as an implementation detail.
  */
 export const BRAIN_HOST = {
-  /** The model's context window as the runtime is told it; the compaction threshold is a fraction of this. */
-  MODEL_CONTEXT_WINDOW_TOKENS: 400_000,
-  /** The fraction of the window at which eve folds the session's context. */
-  COMPACTION_THRESHOLD: 0.8,
   /** The longest one stored message is rendered in the rotation seed, in characters. */
   RECENT_MESSAGE_CHARS: 600,
   /** How many stored messages a rotated session is seeded with, newest last. */
   SEED_MESSAGES: 60,
   /** The longest the seed grows, in characters, cut from the front. */
   SEED_CHARS: 40_000,
-  /**
-   * The snapshots Vercel keeps of a session's sandbox: the newest alone, which
-   * is all a resume reads, so snapshot storage stays flat however often it
-   * stops. An evicted one is deleted at once, and the kept one expires a
-   * month after it was last used, named here because Vercel's own pages
-   * disagree on the default.
-   */
-  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(30), deleteEvicted: true },
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */
@@ -178,23 +165,15 @@ export const BRAIN_HOST_TURN_KIND = {
 
 /** The environment the host reads beside the names every hosted route already honours. */
 export const BRAIN_HOST_ENVIRONMENT = {
-  /** Selects the scripted fixture model in place of OpenAI; set only by the fixture eval. */
-  MODEL_FIXTURE: "LUKE_BRAIN_MODEL_FIXTURE",
-  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/v1/*` rewrite. */
+  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/coder/v1/*` rewrite. */
   EVE_ORIGIN: "LUKE_EVE_ORIGIN",
   /**
    * The secret the deployment acts for an account under at eve's door, read on
-   * both sides of it: the web functions and each eve service send it, and both
-   * eve services admit it. It is never the cron's `CRON_SECRET`, so the bearer
+   * both sides of it: the web functions and the eve service send it, and the
+   * eve service admits it. It is never the cron's `CRON_SECRET`, so the bearer
    * Vercel's scheduler holds opens no eve session.
    */
   DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",
-} as const;
-
-/** The one fixture the model environment may name, and the model id its turns are recorded under. */
-export const BRAIN_HOST_MODEL_FIXTURE = {
-  SCRIPTED: "scripted",
-  SCRIPTED_MODEL_ID: "luke-scripted",
 } as const;
 
 /** Why the host refused a request's standing, in words the model or a route can read. */
@@ -207,7 +186,6 @@ export const BRAIN_HOST_REFUSAL = {
   NO_ACCOUNT: "Not run: the deployment's request names no account.",
   NOT_DEPLOYMENT_ACT:
     "Not run: the deployment may only open the turns it is admitted for, stop one, or retire a session.",
-  NO_MODEL: "Not run: this deployment holds no model key, so the hosted brain is off.",
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
 } as const;
 

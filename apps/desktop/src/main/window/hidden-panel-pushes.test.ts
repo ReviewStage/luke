@@ -46,7 +46,6 @@ vi.mock("electron", () => ({
 const RUN_MODE: RunMode = {
   requiresAccount: false,
   observesProviders: false,
-  registersGlobalKeys: false,
   animates: false,
   takesFocus: false,
   sendsNetwork: false,
@@ -131,8 +130,8 @@ test("three documents pushed while the panel is hidden are one delivery, the thi
   await pending.read;
   expect(pending.heard()).toBe(3);
   // Nothing else was held for it: the next read is the event pushed after.
-  windowPushes.push(page, PUSH.SHOW_TASK, { taskId: "task-1" });
-  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_TASK);
+  windowPushes.push(page, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
+  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_AGENT);
 });
 
 test("a minimized panel is held until it is restored", async () => {
@@ -160,10 +159,10 @@ test("an event reaches a hidden panel, behind the document held before it", asyn
   const { window, stream, page } = shownPanel();
   window?.emit("hide");
   windowPushes.push(page, PUSH.APP_STATE, documentAt(1));
-  windowPushes.push(page, PUSH.SHOW_TASK, { taskId: "task-1" });
+  windowPushes.push(page, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
 
   expect((await nextHeard(stream)).heard()).toBe(1);
-  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_TASK);
+  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_AGENT);
 });
 
 test("a hidden panel running the avatar's session is told every document until the grant is withdrawn", async () => {

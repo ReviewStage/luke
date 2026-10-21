@@ -344,21 +344,17 @@ export function AgentActorRef({
   subject,
   models,
   onOpen,
-  nameOnly = false,
 }: {
   subject: AgentSubject;
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
   onOpen: () => void;
-  /** Whether the name stands without its tile, whose face the line already draws. */
-  nameOnly?: boolean;
 }): React.JSX.Element {
   return (
     <ActorRef
       actor={subject.tile}
       card={<AgentCard subject={subject} models={models} />}
       onOpen={onOpen}
-      nameOnly={nameOnly}
     />
   );
 }

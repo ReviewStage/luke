@@ -421,7 +421,7 @@ test("a filter that leaves nothing says so, and Show all lists everyone's again"
   choose(sidebar, "Created by", "Me");
   assert.equal(taskRows(sidebar).length, 0);
   const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
-    each.textContent?.startsWith("None of your tasks here."),
+    each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
   assert.ok(showAll, "the note offers Show all");
@@ -444,7 +444,7 @@ test("with every task pinned, a filter still says it leaves nothing under Tasks,
   choose(sidebar, "Created by", "Charles Pan");
   const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
   assert.ok(
-    notes.some((note) => note?.startsWith("None of their tasks here.")),
+    notes.some((note) => note?.startsWith("No tasks match this view.")),
     "the empty filter says so",
   );
 });
@@ -816,7 +816,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 4);
+  assert.equal(opened, 5);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -852,7 +852,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin once pinned, and Archive agent last, and an archived one offers no pin nor Rename but Unarchive", async () => {
+test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, and Archive agent last, and an archived one offers no pin nor Rename but Unarchive", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
     TRIAGE,
@@ -862,6 +862,7 @@ test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin 
 
   assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
     "Copy link",
+    "Mark as unread",
     "Rename",
     "Pin",
     "Archive agent",
@@ -869,6 +870,7 @@ test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin 
   await act(async () => menuItem("Pin").click());
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
     "Copy link",
+    "Mark as unread",
     "Rename",
     "Unpin",
     "Archive agent",
@@ -877,7 +879,11 @@ test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin 
   assert.deepEqual(pinsAsked, ["a-1:true", "a-2:false"]);
 
   toggleArchived(sidebar);
-  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link", "Unarchive"]);
+  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), [
+    "Copy link",
+    "Mark as unread",
+    "Unarchive",
+  ]);
 });
 
 /** The buttons a sidebar row named `title` draws at its end, by their names. */
@@ -891,12 +897,12 @@ function rowMarks(sidebar: HTMLElement, title: string): string[] {
   );
 }
 
-test("a one-off agent's row draws Pin and Archive at its end as a task's row does, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
+test("a one-off agent's row draws Pin and Archive at its end where a task's row draws Pin and Mark done, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE, shelved]);
   const task = TASKS[0] ?? assert.fail("a task stands");
 
-  assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), rowMarks(sidebar, task.name));
+  assert.deepEqual(rowMarks(sidebar, task.name), ["Pin", "Mark done"]);
   assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), ["Pin", "Archive"]);
   const pin = [
     ...(sidebar.querySelectorAll<HTMLButtonElement>(
@@ -1051,7 +1057,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   assert.equal(chipWords(sidebar), "Assigned to Charles Pan");
   assert.equal(taskRows(sidebar).length, 0);
   const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
-    each.textContent?.startsWith("Nothing assigned to them here."),
+    each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
   assert.ok(showAll, "the note offers Show all");

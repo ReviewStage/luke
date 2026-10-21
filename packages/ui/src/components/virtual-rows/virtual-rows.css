@@ -1,0 +1,20 @@
+/* A run of rows drawing only those near the view (virtual-rows.tsx): the
+   rows not drawn are the spacers before and after those drawn, and each
+   row holds its children's margins, so the height it measures is the room
+   it takes. The browser's own scroll anchoring is left out of the run,
+   because the virtualizer holds the reader's place itself, and both would
+   move the scroll twice. */
+@layer components {
+  .luke-virtual-rows {
+    padding-block: var(--luke-virtual-before) var(--luke-virtual-after);
+    overflow-anchor: none;
+  }
+
+  .luke-virtual-row {
+    display: flow-root;
+  }
+
+  .luke-virtual-row + .luke-virtual-row {
+    margin-block-start: var(--luke-virtual-gap);
+  }
+}

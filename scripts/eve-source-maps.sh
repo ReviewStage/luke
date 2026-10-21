@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Uploads an eve root's source maps to Sentry's `luke-web` project after its
-# `eve build`, so a stack trace from the luke or dev service reads as the
+# `eve build`, so a stack trace from the dev service reads as the
 # source rather than as `_libs/eve.mjs`. Each service's build command in the
 # root `vercel.json` runs it from the service's root, after the build:
 #

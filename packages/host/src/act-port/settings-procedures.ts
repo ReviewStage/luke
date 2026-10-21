@@ -8,18 +8,13 @@ import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { ORPCError } from "@orpc/server";
 import { Effect, Option } from "effect";
-import { SETTINGS_ACT_KIND, type SettingUpdatePayload } from "../contract/index.js";
+import { SETTINGS_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";
 import { type ActSender, actPort } from "./base.js";
 
-/** What one client-side effect is handed: the snapshot, and whether to wait. */
+/** What one client-side effect is handed: the snapshot. */
 interface ClientSettingSideEffectContext {
   readonly settings: AppSettings;
-  /**
-   * Whether an effect that may be deferred must be waited on. A reset applies
-   * every field in its scope and must not answer before the keys are back.
-   */
-  readonly waitForDeferredEffects: boolean;
 }
 
 type ClientSettingSideEffect = (context: ClientSettingSideEffectContext) => Promise<void> | void;
@@ -37,11 +32,10 @@ export type ClientSettingSideEffects = Readonly<
 /**
  * settings-procedures.ts -- the settings writes as a client answers them.
  *
- * Each write is validated here against what the client alone holds — the
- * chord reservations its keys hold — carried to the host, which stores it,
- * applies its own side effects, counts it, and tells every other window; and
- * then applied through the client's own side effects, the ones only it has
- * hands on (the desktop's login item, keys, and duck).
+ * Each write is carried to the host, which stores it, applies its own side
+ * effects, counts it, and tells every other window; and then applied through
+ * the client's own side effects, the ones only it has hands on (the
+ * desktop's login item and duck).
  */
 export interface SettingsProceduresDependencies {
   host: Pick<
@@ -58,15 +52,13 @@ export interface SettingsProceduresDependencies {
   lastSettings: () => AppSettings | undefined;
   /** The client's own side effects, applied after the host's. */
   sideEffects: ClientSettingSideEffects;
-  /** Which key already holds a chord the stop key would claim, named the way the row draws it; undefined where it is free. */
-  stopChordHolder: (chord: string) => string | undefined;
 }
 
 /** A procedure's own refusal, worded as given, or in its own sentence where none is. */
 type Refused = (options?: { message?: string }) => ORPCError<string, unknown>;
 
 export function settingsProcedures(dependencies: SettingsProceduresDependencies) {
-  const { host, reporterOf, lastSettings, sideEffects, stopChordHolder } = dependencies;
+  const { host, reporterOf, lastSettings, sideEffects } = dependencies;
 
   /**
    * A refusal decided here rather than by the host: the settings as they
@@ -128,38 +120,17 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
   function applyClientSettingSideEffect(
     field: AppSettingField,
     settings: AppSettings,
-    waitForDeferredEffects = false,
   ): Effect.Effect<void, unknown> {
     return Effect.tryPromise({
-      try: () =>
-        Promise.resolve(
-          sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({
-            settings,
-            waitForDeferredEffects,
-          }),
-        ),
+      try: () => Promise.resolve(sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings })),
       catch: (error) => error,
     });
   }
-
-  /**
-   * Which key a chord this write would claim is already spoken for, named the
-   * way the row will draw it. Read from the payload rather than a field and a
-   * value apart, because it is the field that says the value is a chord.
-   */
-  const chordHolder = (payload: SettingUpdatePayload): string | undefined => {
-    if (payload.field !== APP_SETTING_SCHEMA.stopHotkey.field) return undefined;
-    if (payload.value === undefined) return undefined;
-    return stopChordHolder(payload.value);
-  };
 
   return {
     [SETTINGS_ACT_KIND.SETTING_UPDATE]: actPort[SETTINGS_ACT_KIND.SETTING_UPDATE].effect(
       function* ({ input, context, errors }) {
         const reporter = yield* reporterFor(context.actor, errors.REFUSED);
-        const holder = chordHolder(input);
-        if (holder)
-          return yield* refuse(`That chord is reserved for the ${holder} key.`, errors.REFUSED);
         return yield* write(
           errors.REFUSED,
           // SAFETY: the procedure's own input schema parsed this value for this field.
@@ -199,7 +170,7 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
                       !input.kept.includes(field)
                     );
                   }),
-                  (field) => applyClientSettingSideEffect(field, result.settings, true),
+                  (field) => applyClientSettingSideEffect(field, result.settings),
                   { discard: true },
                 ),
         );

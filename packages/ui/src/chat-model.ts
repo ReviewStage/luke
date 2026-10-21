@@ -220,19 +220,17 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
-/** A member by its id, the way every line names it: an agent by its title, a task's Luke as Luke, a person by their account's name, the reader by their own. */
+/** A member by its id, the way every line names it: an agent by its human name, else its title, a person by their account's name, the reader by their own. */
 export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
   const member = chat.members.find((each) => each.id === memberId);
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
   const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
-    member?.kind === MEMBER_KIND.LUKE
-      ? CHAT_MEMBER_LABEL.LUKE
-      : member?.kind === MEMBER_KIND.AGENT
-        ? (agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
-        : memberId === chat.self && names.selfName !== undefined
-          ? names.selfName
-          : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
+    member?.kind === MEMBER_KIND.AGENT
+      ? (agent?.personaName ?? agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
+      : memberId === chat.self && names.selfName !== undefined
+        ? names.selfName
+        : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
   return { member, name, agent, taskName };
 }
 
@@ -378,6 +376,21 @@ export function channelThreads(chat: ChatAnswer, channelId: string): readonly Ch
     }));
 }
 
+/** How long after a message its author's next one still reads as the same run, drawn under one name as Slack draws it. */
+export const CHAT_RUN_SPAN = 5 * 60 * 1000;
+
+/**
+ * Whether a root continues the run the one before it began: the same
+ * author, within `CHAT_RUN_SPAN` of it, and the one before holding no
+ * replies, since its thread stands between them. A continued root draws
+ * without its author's face and name, as Slack's grouped messages do.
+ */
+export function continuesRun(before: ChatThread | undefined, thread: ChatThread): boolean {
+  if (before === undefined || before.replies.length > 0) return false;
+  const gap = thread.message.postedAt - before.message.postedAt;
+  return before.message.authorId === thread.message.authorId && gap >= 0 && gap <= CHAT_RUN_SPAN;
+}
+
 /** Why a message waits on the reader, or nothing where it does not. */
 function waitingReason(chat: ChatAnswer, message: ChatMessage, channel: ChatChannel) {
   if (message.authorId === chat.self) return undefined;
@@ -411,13 +424,10 @@ export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | 
   return chat.channels.find((channel) => channel.id === place.channelId);
 }
 
-/** The mention a chip writes a member as: a person by their account, an agent by its id, and a Luke by his task; none for a member whose account, agent, or task is gone. */
+/** The mention a chip writes a member as: a person by their account, an agent by its id; none for a member whose account or agent is gone, or for a task's Luke, whom no post names any more. */
 function mentionOf(member: ChatMember): ChatMemberMention | undefined {
   if (member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined) {
     return { kind: MENTION_KIND.PERSON, userId: member.userId };
-  }
-  if (member.kind === MEMBER_KIND.LUKE && member.planId !== undefined) {
-    return { kind: MENTION_KIND.LUKE, taskId: member.planId };
   }
   if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
     // An agent on a task is linked under it, so its chip opens the task's tab for it rather than the agent alone.
@@ -429,19 +439,44 @@ function mentionOf(member: ChatMember): ChatMemberMention | undefined {
 }
 
 /**
+ * Whether a post in the channel reaches the member, as the service holds
+ * the chat to its tasks (`chat-store.ts`): a person in any channel; a
+ * task's agents in that task's own channel alone, and an
+ * agent on no task in the general channel; and in a DM, its own two. A
+ * member a post cannot reach hears nothing of it, so naming them there
+ * names no one.
+ */
+export function reachedIn(member: ChatMember, channel: ChatChannel): boolean {
+  if (channel.kind === CHANNEL_KIND.DM) return channel.members?.includes(member.id) ?? false;
+  if (member.kind === MEMBER_KIND.HUMAN) return true;
+  if (channel.kind === CHANNEL_KIND.TASK) {
+    return member.planId !== undefined && member.planId === channel.planId;
+  }
+  return (
+    channel.kind === CHANNEL_KIND.GENERAL &&
+    member.kind === MEMBER_KIND.AGENT &&
+    member.planId === undefined
+  );
+}
+
+/**
  * What the composer offers to name: every member who has not left but the
  * reader, by name, each with the link a chip writes them as in the
- * workspace's place, and every channel standing that is not a DM. Note that
- * a member is offered only where that place is known, since a member is
- * written as their link and nothing else.
+ * workspace's place, and every channel standing that is not a DM. Where
+ * the composer posts in a channel, only the members a post there reaches
+ * are offered (`reachedIn`), so an agent is never named where it cannot
+ * hear it. Note that a member is offered only where that place is known,
+ * since a member is written as their link and nothing else.
  */
 export function chatTargets(
   chat: ChatAnswer,
   names: ChatNames,
   place: MentionPlace | undefined,
+  channel?: ChatChannel,
 ): readonly ChatTarget[] {
   const members = chat.members
     .filter((member) => !member.left && member.id !== chat.self)
+    .filter((member) => channel === undefined || reachedIn(member, channel))
     .flatMap((member): readonly ChatTarget[] => {
       const mention = mentionOf(member);
       if (mention === undefined || place === undefined) return [];

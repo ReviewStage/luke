@@ -43,7 +43,7 @@ const WORKING_LINE = "Working…";
 const WORKED_WORDS = "Worked for ";
 
 /** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour (`.status-line`, tasks.css). */
-export const STATUS_LINE_CLASS = "status-line";
+const STATUS_LINE_CLASS = "status-line";
 
 /** What separates how long a finished turn worked from when it ended. */
 export const WORKED_SEPARATOR = " · ";

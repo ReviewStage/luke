@@ -5,7 +5,7 @@ import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { Tooltip } from "../tooltip.js";
 
 /**
- * annotation-card.tsx -- one card for whatever is written on lines of code: a review thread in Files changed and in the Conversation, and Luke's note on lines of a File tab.
+ * annotation-card.tsx -- one card for whatever is written on lines of code: a review thread in Files changed and in the Conversation, and an agent's note on lines of a File tab.
  *
  * The card is the review thread's quiet one (surface ground, quiet border,
  * its corners rounded), standing under the last line it is on, from the

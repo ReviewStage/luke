@@ -53,13 +53,17 @@ import {
   inboxList,
   inboxMedia,
   inboxMissing,
+  inboxPlaces,
   inboxPreview,
   inboxReply,
+  inboxSettledStanding,
   inboxSettledWords,
   inboxSteps,
   inboxThreadOf,
   inboxThreadSend,
+  isDone,
   listedItems,
+  NO_PLACES,
   nextNeedingYou,
   numberedPick,
   openItems,
@@ -284,15 +288,9 @@ test("a thread's form attaches its values to the reply as they are filled, with 
   });
 });
 
-test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
-  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.OPTION,
-    line: "Pick an option",
-  });
-  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.OPTION,
-    line: "Pick at least one",
-  });
+test("what an answer lacks follows what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
+  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
+  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
   assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"] }), undefined);
   assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, note: "Use SQS." }), undefined);
   const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
@@ -313,11 +311,10 @@ test("what an answer lacks is said by what it asks: a choice its pick, unless th
   assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.FIELD,
     label: "Effort",
-    line: "Fill in Effort",
   });
   assert.deepEqual(
     inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
-    { kind: INBOX_MISSING.FIELD, label: "Effort", line: "Fill in Effort" },
+    { kind: INBOX_MISSING.FIELD, label: "Effort" },
     "blank words fill nothing",
   );
   const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
@@ -335,7 +332,6 @@ test("what an answer lacks is said by what it asks: a choice its pick, unless th
   const question = item({ id: "question" });
   assert.deepEqual(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: " " }), {
     kind: INBOX_MISSING.WORDS,
-    line: "Write your answer",
   });
   assert.equal(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
 });
@@ -394,13 +390,9 @@ test("an approval and a task are answered by the decision the card holds, or a c
 test("an approval or a to-do lacks its decision until one is picked, a note lacks nothing, and a number key picks an approval's or a to-do's decision, the one going ahead first, as it picks a choice's option", () => {
   const step = item({ id: "step", response: { type: INBOX_RESPONSE.APPROVAL } });
   const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
-  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.OPTION,
-    line: "Approve or decline",
-  });
+  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
   assert.deepEqual(inboxMissing(task, { ...EMPTY_INBOX_DRAFT, note: "Did half." }), {
     kind: INBOX_MISSING.OPTION,
-    line: "Tick it, or say you couldn't",
   });
   assert.equal(inboxMissing(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE)), undefined);
   const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
@@ -605,6 +597,69 @@ test("the list holds every item the latest changed first, under its plan, the pl
     ),
     ["retry", "expiry", "threshold", "channel"],
   );
+});
+
+test("an item whose place is held stands where the list drew it, under the status it stood under, whatever it changed to since, under either sort and every grouping", () => {
+  // The threshold question is answered once the list is drawn, which changes when it changed and where it stands.
+  const answered = TASKS.map(({ holder, items }) => ({
+    holder,
+    items: items.map((each) =>
+      each.id === "threshold" ? { ...each, status: INBOX_STATUS.ANSWERED, updatedAt: 60 } : each,
+    ),
+  }));
+  for (const grouping of Object.values(INBOX_GROUPING)) {
+    for (const sort of Object.values(INBOX_SORT)) {
+      const view = { grouping, sort, show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined };
+      const drawnFirst = inboxList(TASKS, view);
+      const places = inboxPlaces(drawnFirst, NO_PLACES);
+      assert.deepEqual(drawn(inboxList(answered, { ...view, places })), drawn(drawnFirst));
+      assert.notDeepEqual(drawn(inboxList(answered, view)), drawn(drawnFirst), "unheld, it moves");
+    }
+  }
+  const status = {
+    grouping: INBOX_GROUPING.STATUS,
+    show: INBOX_SHOW.ALL,
+    readerId: undefined,
+    chosen: undefined,
+  } as const;
+  assert.deepEqual(
+    drawn(
+      inboxList(answered, { ...status, places: inboxPlaces(inboxList(TASKS, status), NO_PLACES) }),
+    ),
+    [
+      [INBOX_STATUS_GROUP.NEEDS_YOU, ["expiry", "threshold"]],
+      [INBOX_STATUS_GROUP.ANSWERED, ["retry", "channel"]],
+    ],
+  );
+});
+
+test("a list's places are its rows', a held one kept and a new one where it stands now, so an item it no longer draws holds none and one new to it stands where it changed", () => {
+  const all = {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
+    readerId: undefined,
+    chosen: undefined,
+  } as const;
+  const held = inboxPlaces(inboxList(TASKS, all), NO_PLACES);
+  const toDo = inboxList(TASKS, { ...all, show: INBOX_SHOW.TO_DO, places: held });
+  const kept = inboxPlaces(toDo, held);
+  assert.deepEqual([...kept.keys()].toSorted(), ["expiry", "threshold"], "the settled items left");
+  const fresh = [
+    ...TASKS,
+    { holder: taskHolder(INVITES), items: [item({ id: "fresh", updatedAt: 35 })] },
+  ];
+  assert.deepEqual(drawn(inboxList(fresh, { ...all, show: INBOX_SHOW.TO_DO, places: kept })), [
+    "expiry",
+    "fresh",
+    "threshold",
+  ]);
+});
+
+test("an item is done with once it is settled, answered or closed, and read; one open, or settled and unread since, is not", () => {
+  assert.equal(isDone(item({ id: "answered", status: INBOX_STATUS.ANSWERED })), true);
+  assert.equal(isDone(item({ id: "closed", status: INBOX_STATUS.CLOSED })), true);
+  assert.equal(isDone(item({ id: "open" })), false);
+  assert.equal(isDone(item({ id: "again", status: INBOX_STATUS.ANSWERED, unread: true })), false);
 });
 
 test("To do lists only what waits, and the item chosen where one is given, as the steps through the list keep it, and a plan with nothing listed has no group", () => {
@@ -1062,7 +1117,7 @@ test("a code block near the file's top reads from its first line, a file that en
       branch: block.sha,
       firstLine: 1,
       lineCount: 1,
-      lines: [[{ text: "export {};" }]],
+      lines: ["export {};"],
     },
   };
   assert.deepEqual(codeReadOf(block, short), {
@@ -1435,7 +1490,7 @@ test("an item is drawn as its thread where the thread asks, or where the agent's
   assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
 });
 
-test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words", () => {
+test("a reply on a thread is plain unless an answer is attached: a pick, a press, a field filled, or, to an ask of words alone, its words or files; an attached answer the ask would refuse sends nothing", () => {
   const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
   const decide = [asking(pick)];
   const draft: InboxDraft = { ...EMPTY_INBOX_DRAFT, note: "  Why not C?  " };
@@ -1452,9 +1507,14 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
   });
 
   const answer = [asking({ type: INBOX_ASK.ANSWER })];
-  const pressed: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.ANSWERED };
-  assert.equal(inboxThreadSend(answer, pressed), undefined, "Answer's words are the answer");
-  assert.deepEqual(inboxThreadSend(answer, { ...pressed, note: "Use 90%" })?.answers, {
+  assert.equal(inboxThreadSend(answer, EMPTY_INBOX_DRAFT), undefined, "no words, no answer");
+  assert.deepEqual(
+    inboxThreadSend(answer, { ...EMPTY_INBOX_DRAFT, note: "Use 90%" })?.answers,
+    { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED },
+    "an ask of words alone is answered by the reply's words, with no press",
+  );
+  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
+  assert.deepEqual(inboxThreadSend(answer, { ...EMPTY_INBOX_DRAFT, attachments: files })?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.ANSWERED,
   });
@@ -1907,4 +1967,50 @@ test("a settled item's card says how it ended whatever its row's glyph: an answe
 
   const open = item({ id: "s3", thread: [asked] });
   assert.equal(inboxSettledWords(open, previewName), undefined, "an open item has not ended");
+});
+
+test("a settled item's card names its ending in the word its line says it in: answered, resolved by a member, or withdrawn by its agent", () => {
+  const asked = asking({
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "7 days" }, { label: "14 days" }],
+  });
+  const answered = item({ id: "w1", status: INBOX_STATUS.ANSWERED, thread: [asked] });
+  assert.equal(inboxSettledStanding(answered), "Answered");
+
+  const resolved = item({
+    id: "w2",
+    status: INBOX_STATUS.CLOSED,
+    closedBy: CHARLES,
+    thread: [asked],
+  });
+  assert.equal(inboxSettledWords(resolved, previewName), "Charles Pan: Resolved without an answer");
+  assert.equal(inboxSettledStanding(resolved), "Resolved");
+
+  // Note that the service's member close withdraws the ask it left open, saying no why.
+  const resolvedAsked = item({
+    id: "w5",
+    status: INBOX_STATUS.CLOSED,
+    closedBy: CHARLES,
+    thread: [standing(asked, INBOX_ASK_STATUS.WITHDRAWN)],
+  });
+  assert.equal(
+    inboxSettledWords(resolvedAsked, previewName),
+    "Charles Pan: Resolved without an answer",
+  );
+  assert.equal(inboxSettledStanding(resolvedAsked), "Resolved");
+
+  const takenBack = item({
+    id: "w3",
+    status: INBOX_STATUS.CLOSED,
+    thread: [standing(asked, INBOX_ASK_STATUS.WITHDRAWN)],
+  });
+  assert.equal(inboxSettledWords(takenBack, previewName), "Withdrawn");
+  assert.equal(inboxSettledStanding(takenBack), "Withdrawn");
+
+  const before = item({ id: "w4", status: INBOX_STATUS.CLOSED, closedReason: "Merged already." });
+  assert.equal(
+    inboxSettledStanding(before),
+    "Withdrawn",
+    "an agent's close before threads says why",
+  );
 });

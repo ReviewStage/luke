@@ -1,20 +1,22 @@
 /**
  * web-host.ts -- the shared host composed in a browser tab: its seams answered by the tab, signed in by the service's cookie, and reached by the panel through the in-process bridge.
  *
- * The host is the desktop's own (`@luke/host`), assembled with no platform
- * concern: no terminals, neither the Mac's own nor an agent's, so nothing here
- * spawns a process or opens a terminal socket. What the desktop's seams read
- * from the machine the tab answers instead: the settings file in the
- * browser's storage, ids from `crypto`, the service at the origin that
- * served the page, and the account from the session cookie that origin set,
- * which no code here reads or keeps. The voice socket refuses, since the web
- * client runs no voice yet.
+ * The host is the desktop's own (`@luke/host`), assembled with one platform
+ * concern, an agent's terminals: each shell's relay socket is opened from
+ * the page on its own origin under the session cookie
+ * (`web-terminal-socket.ts`), and its port is posted to the panel in the
+ * same page. Nothing here spawns a process or reaches the Mac's own
+ * terminal. What the desktop's seams read from the machine the tab answers
+ * instead: the settings file in the browser's storage, ids from `crypto`,
+ * the service at the origin that served the page, and the account from the
+ * session cookie that origin set, which no code here reads or keeps. The
+ * voice socket refuses, since the web client runs no voice yet.
  *
  * The panel's acts reach the host's own procedures on the act port in this
  * process; the few a platform answers itself (a copy, a download, focus, the
- * contact mail, feedback, and Settings' test notification) are the tab's, and
- * every other platform kind is refused in its own words, so the table stays
- * total. A
+ * contact mail, feedback, Settings' test notification, and an agent's
+ * Terminal tab) are the tab's, and every other platform kind is refused in
+ * its own words, so the table stays total. A
  * notice is the panel's toast while the tab is shown and the browser's
  * notification while it is hidden (`web-notices.ts`). The composition is a
  * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
@@ -24,7 +26,8 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import type { LinkPlatform } from "@luke/features/link-open";
-import { highlightSnippet, runModeFor } from "@luke/host";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
+import { runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,
   type AgentProceduresDependencies,
@@ -32,6 +35,8 @@ import {
   createActPortHandler,
   type PlatformActProcedures,
   refusedPlatformProcedures,
+  type TerminalPortSeam,
+  terminalProcedures,
   WindowPushes,
 } from "@luke/host/act-port";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
@@ -44,6 +49,7 @@ import {
   initialAppState,
   linkClientNotices,
   linkNetworkWatch,
+  linkSessionReload,
   type OperatorClient,
 } from "@luke/host/client";
 import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
@@ -53,6 +59,7 @@ import {
   cookieAccountSourceLayer,
   type DuplicateGatewayMethod,
   Environment,
+  HOST_PLATFORM_CONCERN,
   HostAssemblyTag,
   type HostTag,
   hostAssemblyLayer,
@@ -66,9 +73,11 @@ import {
   SettingsChangedElsewhere,
   ShutdownSignal,
   StateRoot,
+  TerminalSocket,
   VoiceSocket,
 } from "@luke/host/effect";
 import { effectServiceLayer } from "@luke/host/service-layer";
+import { highlightSnippet } from "@luke/host/task-code";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
 import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
@@ -87,7 +96,8 @@ import {
   type WebNoticeDoors,
   webNoticeDoors,
 } from "./web-notices";
-import { downloadText, openTab, webPlatform } from "./web-platform";
+import { copyPng, downloadText, openTab, webPlatform } from "./web-platform";
+import { openTerminalSocketFromPage } from "./web-terminal-socket";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
 const STATE_ROOT = "/luke";
@@ -185,6 +195,7 @@ function seamLayers(storage: Storage) {
     Layer.succeed(ShutdownSignal, { notify: undefined }),
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
+    Layer.succeed(TerminalSocket, openTerminalSocketFromPage),
     Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere(storage)),
   );
 }
@@ -236,24 +247,62 @@ const noticeDoors = (
   );
 
 /**
- * The platform procedures the tab answers itself: a copy, a download, focus,
- * the contact mail, Settings' test notification, and feedback. Every other
- * platform kind is refused in its own words, since a page cannot carry it
- * yet: the updater, Browser tabs, the microphone, the system's notification
- * settings, the terminals and the Mac's own, the voice, the call window, and
- * the avatar.
+ * How the host in this tab hands a shell's port to the panel beside it: a
+ * channel in the page, its far end posted to this window under the
+ * terminal's channel and the ticket naming the shell, as the desktop's
+ * preload posts one (`@luke/panel`'s `terminal-port.ts` reads it). The page
+ * goes only with the tab, and the host with it, so no port outlives it.
+ */
+const pageTerminalPorts: TerminalPortSeam<WebSender> = {
+  open: (sender, ticket) => {
+    const { port1, port2 } = new MessageChannel();
+    sender.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, sender.location.origin, [port2]);
+    port1.start();
+    return {
+      post: (message) => port1.postMessage(message),
+      onMessage: (listener) => port1.addEventListener("message", (event) => listener(event.data)),
+      close: () => port1.close(),
+    };
+  },
+  whenGone: () => undefined,
+};
+
+/** What the tab's own procedures reach of the host: its operator, and the runtime a port's message is run on. */
+interface PlatformHost {
+  readonly operator: OperatorClient;
+  readonly fork: WebHostOptions["fork"];
+}
+
+/**
+ * The platform procedures the tab answers itself: a copy of words or a
+ * picture, a download, focus, the contact mail, Settings' test notification,
+ * feedback, and an agent's Terminal tab, its shells' ports posted to the
+ * page. Every other platform kind is refused in its own words, since a page
+ * cannot carry it yet: the updater, Browser tabs, the microphone, the
+ * system's notification settings, the Mac's own terminal, the voice, the
+ * call window, and the avatar.
  */
 function platformProcedures(
   http: HttpClient.HttpClient,
   doors: WebNoticeDoors,
+  { operator, fork }: PlatformHost,
 ): PlatformActProcedures<WebSender> {
   const port = actPortFor<WebSender>();
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
   const KIND = WINDOW_SURFACE_ACT_KIND;
   return {
     ...refusedPlatformProcedures<WebSender>(),
+    ...terminalProcedures<WebSender>({
+      host: operator.host,
+      ports: pageTerminalPorts,
+      createId: () => crypto.randomUUID(),
+      fork,
+    }),
     [KIND.WINDOW_COPY_TEXT]: port[KIND.WINDOW_COPY_TEXT].handler(({ input }) =>
       navigator.clipboard.writeText(input.words),
+    ),
+    [KIND.WINDOW_COPY_IMAGE]: port[KIND.WINDOW_COPY_IMAGE].handler(({ input }) =>
+      copyPng(Promise.resolve(input.png)),
     ),
     [KIND.WINDOW_SAVE_FILE]: port[KIND.WINDOW_SAVE_FILE].handler(({ input }) =>
       downloadText({ name: input.name, text: input.text }),
@@ -313,23 +362,17 @@ function portDependencies(
         [SETTING_SIDE_EFFECT.NONE]: nothing,
         [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
         [SETTING_SIDE_EFFECT.VOICE]: nothing,
-        [SETTING_SIDE_EFFECT.TALK_HOTKEY]: nothing,
-        [SETTING_SIDE_EFFECT.STOP_HOTKEY]: nothing,
         [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
       },
-      // A tab claims no global key, so no chord is ever held.
-      stopChordHolder: () => undefined,
     },
-    // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
+    // No voice stands in a tab, so an agent's Call press reaches none.
     tasks: {
       host,
       colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
       activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: nothing,
-      voiceReady: () => false,
-      callStanding: () => false,
+      talkTo: nothing,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
@@ -412,9 +455,11 @@ const composedWeb = (
         node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
-      // No voice window and no talk key stand beside the panel.
-      operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
+      // No voice window stands beside the panel.
+      operator.link({ sendToVoice: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
+      yield* linkSessionReload({ state, reload: () => location.reload() });
 
       // The notices' toasts reach the panel through the bridge, which is built
       // after the notices, so they find it late.
@@ -451,7 +496,7 @@ const composedWeb = (
       events = made.events;
       const actPort = yield* servedActPort(
         portDependencies(operator, state, notices, crypto.randomUUID(), tabs),
-        platformProcedures(http, doors),
+        platformProcedures(http, doors, { operator, fork }),
         services,
       );
       return {
@@ -469,10 +514,11 @@ const composedWeb = (
 
 /**
  * The host in the tab, composed and started: the assembly over the tab's
- * seams with no platform concern, then the composers started in the
- * launch's order, then the operator's first bootstrap read into the
- * document, so the panel's first read finds the account already settled.
- * The scope this is built in is the tab's; closing it is the host's drain.
+ * seams, an agent's terminals its one platform concern, then the composers
+ * started in the launch's order, then the operator's first bootstrap read
+ * into the document, so the panel's first read finds the account already
+ * settled. The scope this is built in is the tab's; closing it is the
+ * host's drain.
  */
 export function composeWeb(
   options: WebHostOptions,
@@ -483,7 +529,7 @@ export function composeWeb(
   // Read once, so the files and the word of another tab's write are the same storage, in memory where the browser blocks it.
   const storage = tabStorage();
   const assembly = Layer.provide(
-    hostAssemblyLayer([]),
+    hostAssemblyLayer([HOST_PLATFORM_CONCERN.TERMINALS]),
     Layer.mergeAll(
       Layer.provideMerge(hostKernelLayer, seamLayers(storage)),
       localStorageFileSystem(storage),

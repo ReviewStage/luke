@@ -17,6 +17,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { RetryButton } from "../retry-button.js";
 import { SpinnerRegion } from "../spinner.js";
+import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
@@ -29,7 +30,7 @@ import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { MAIN_TAB, type MainTab, type MainTabsControl } from "../tasks/use-main-tabs.js";
+import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
@@ -42,64 +43,50 @@ import {
   type TabPin,
   type TabViews,
 } from "./strip-tabs.js";
+import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
- * main-tabs.tsx -- the task's column's tabs: its Call, each coding agent's, the draft agent's, and its Chat, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the task's column's tabs: each agent's, the draft agent's, and its Chat, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * Each part draws what `use-main-tabs.ts` holds and hands every press back
- * to it. The strip is the side panel's in every way but its first tab: the
- * same pills, the same hover and chosen fills, dragged and stepped along,
- * closed by ×, Delete, ⌘W, or the menu's Close and Close others, each tab's
- * menu on a right-click (`strip-tabs.tsx`). The toolbar's ⋯ acts on the
- * chosen tab: the task's actions on the Call's tab, and on an agent's its
- * Rename, its Open terminal, its transcript's copies, and its Archive,
- * standing in the one slot the toolbar keeps for it, left empty on a tab
- * with nothing of the kind.
- *
- * The Call's tab stands first: the task's calls with Luke and what his
- * brain wrote and ran on them (`task-call.tsx`). It hangs the task's card,
- * as its sidebar row does (`task-card.tsx`): its repository, its agents,
- * and its pull requests. It is anchored there: it
- * never moves, and Close others on it closes every other tab. Beside
- * another tab it closes as that tab does, and the "+" offers the Call first
- * to open it again; as the column's only tab it offers no close, so the
- * column is never empty (`use-main-tabs.ts`). Its menu offers Pin tab, as
- * an agent's does. While it is the column's only tab it is quiet, drawing
- * no fill at rest, as a lone tab need not be told from others; beside an
- * agent's it is drawn as any tab is. The plan's document and the task's
- * Inbox stand in the side panel (`side-panel.tsx`).
+ * to it. The strip is the side panel's in every way: the same pills, the
+ * same hover and chosen fills, dragged and stepped along, closed by ×,
+ * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
+ * right-click (`strip-tabs.tsx`). A tab's own actions, on an agent's its
+ * Rename, its Open terminal, its transcript's copies, and its Archive, are
+ * its right-click menu's alone: the toolbar's one ⋯ is the task's.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
- * works and an alert once it failed, and hangs a card naming it whole with
- * when it last moved and its latest step, read from what its tab last drew
- * and never from the service. Its menu offers Pin tab, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, Open
- * terminal, which shows the agent's own Terminal tab in the side panel as
- * ⌘J does from the tab, and its transcript's two copies. Closing it closes
- * only the view: the agent goes on as it was, and the "+" opens it again. A
- * tab an agent ended on while no one was looking at it reads in semibold
- * until shown. The draft's tab,
- * named New coding agent as the "+" row that opens it is, stands after the
- * agents until its first message starts the agent, and closing it lets the
- * draft go. Every tab wears its kind's look (`tab-look.tsx`), and an
+ * works and an alert once it failed, and the voice's live mark while a call
+ * into it is in progress, and hangs a card naming it whole with when it
+ * last moved and its latest step, read from what its tab last drew and
+ * never from the service. Its menu offers Pin tab, which puts it in the
+ * sidebar, Rename, which turns the tab into its name's field, Open terminal,
+ * which shows the agent's own Terminal tab in the side panel as ⌘J does from
+ * the tab, and its transcript's two copies. Closing it closes only the view:
+ * the agent goes on as it was, and the "+" opens it again. A tab an agent
+ * ended on while no one was looking at it reads in semibold until shown. The
+ * draft's tab, named New agent as the "+" row that opens it is, stands after
+ * the agents until its first message, or its Call, starts the agent, and
+ * closing it lets the draft go. A task with no other tab standing shows a
+ * draft's (`use-main-tabs.ts`), so a voice chat or a typed one is the
+ * developer's to start from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
  * chosen, the Draft pencil at its end (`draft-mark.tsx`).
  *
- * The "+" after the last tab drops the shared searchable menu: the Call,
- * which chooses its tab or opens it again where it was closed, the task's
- * Chat while there is one, New coding agent, which opens a draft agent's
- * tab, or chooses the task's draft where it has one, unavailable with
- * Start's own reason while Start could not run, and each of the task's
- * agents in the order started, picking one choosing its tab or opening it
- * again. An archived task starts no agent,
- * so its menu offers only the agents to read, and its agents are not
- * renamed.
+ * The "+" after the last tab drops the shared searchable menu: New agent,
+ * which opens a draft agent's tab, or chooses the
+ * task's draft where it has one, unavailable with Start's own reason while
+ * Start could not run; the task's Chat while there is one; and each of the
+ * task's agents in the order started, picking one choosing its tab or
+ * opening it again. An archived task starts nothing, so its menu offers
+ * only the agents to read, and its agents are not renamed.
  */
 
 /** The "+" menu's section for the task's agents, which the task's summary lists under the same heading. */
-export const AGENTS_SECTION = "Coding agents";
+export const AGENTS_SECTION = "Agents";
 
 /** The "+" menu's row that opens a draft agent, which no agent's id spells. */
 const NEW_AGENT_ROW = "new-coding-agent";
@@ -109,9 +96,6 @@ const NEW_AGENT_STARTING = "Starting…";
 
 /** The row that opens the task's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
-
-/** The "+" menu's row that opens the Call's tab, which no agent's id spells. */
-const CALL_ROW = "call";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
@@ -172,14 +156,13 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, whose menu and toolbar ⋯ offer the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
+/** An agent's tab, whose menu offers the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
 function AgentMenuTab({
   agent,
   agents,
   look,
   doors,
   shown,
-  slot,
   terminals,
 }: {
   agent: CodingAgentSummary;
@@ -187,8 +170,7 @@ function AgentMenuTab({
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
-  slot: HTMLElement | null;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenOnMac">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, { label: look.label, shown, terminals });
   return (
@@ -198,7 +180,6 @@ function AgentMenuTab({
         doors={{ ...doors, ...actions.doors }}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
-        slot={slot}
       />
       {actions.dialog}
     </>
@@ -209,8 +190,8 @@ function AgentMenuTab({
 interface DrawnTab {
   tab: MainTab;
   look: TabLook;
-  /** Closes the tab, as its × does; none for the Call's while it stands alone. */
-  close: (() => void) | undefined;
+  /** Closes the tab, as its × does. */
+  close: () => void;
   agent?: CodingAgentSummary | undefined;
 }
 
@@ -229,9 +210,11 @@ function agentTabs(input: {
   views: TabViews;
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
   drafted: readonly string[];
+  /** The agent a call is in progress into, whose glyph wears the live mark; none while no call stands. */
+  calling: string | undefined;
 }): DrawnTab[] {
-  const { main, agents, unread, views, drafted } = input;
-  const chosen = (tab: MainTab) => sameTab(tab, main.tab);
+  const { main, agents, unread, views, drafted, calling } = input;
+  const chosen = (tab: MainTab) => main.tab !== undefined && sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
     ...drawn,
@@ -249,7 +232,7 @@ function agentTabs(input: {
       tab,
       agent,
       look: look(tab, {
-        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent, calling: agent.id === calling }),
         endMark: agentEndMark(agent, false) ?? draftMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
@@ -345,18 +328,14 @@ export function chatEntries(available: boolean, onPick: () => void): AddEntry[] 
 }
 
 /**
- * The "+" menu's rows: the Call, which opens its tab again where it was
- * closed, and its Chat, each by itself under no heading; New coding agent,
- * unavailable with Start's own reason while Start could not run, and left
- * out on an archived task; then each of its agents under Coding agents
- * (`agentEntries`).
+ * The "+" menu's rows: New agent, unavailable with Start's own reason while
+ * Start could not run, left out on an archived task, by itself under no
+ * heading; then each of its agents under Agents (`agentEntries`). A voice
+ * chat is started from a draft's composer, its Call. The task's Chat
+ * stands in the side panel, whose own "+" offers it.
  */
-function addEntries(main: MainTabsControl, agents: CodingAgentsControl, chat: boolean): AddEntry[] {
+function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   const { start } = agents;
-  const call: AddEntry = {
-    row: { id: CALL_ROW, ...tabLook({ kind: TAB_KIND.CALL }) },
-    onPick: () => main.onChoose(MAIN_TAB.CALL),
-  };
   const newAgent: AddEntry = {
     row: {
       id: NEW_AGENT_ROW,
@@ -366,21 +345,18 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl, chat: bo
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
-  const chatRows = chatEntries(chat, () => main.onChoose(MAIN_TAB.CHAT));
   const agentRows = agentEntries(main, agents);
-  return [call, ...chatRows, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
+  const starts = agents.onUnarchive === undefined ? [newAgent] : [];
+  return [...starts, ...agentRows];
 }
 
 /**
- * The column's strip across its toolbar: the Call's tab where open, the
- * agents', the draft's, and the Chat's, then the "+", which stands apart
- * from the strip so it is never dragged nor dropped before. ⌘W closes the
- * chosen tab while the column holds the window's focus (`keys`), and
- * nothing on the Call's while it stands alone.
+ * The column's strip across its toolbar: the agents' and the draft's, then the "+", which stands apart from the strip so it is never
+ * dragged nor dropped before. ⌘W closes the chosen tab while the column
+ * holds the window's focus (`keys`).
  */
 export function MainTabStrip({
   task,
-  taskCard,
   main,
   agents,
   unread,
@@ -388,20 +364,16 @@ export function MainTabStrip({
   pins,
   keys,
   shown,
-  actionsSlot,
   onOpenTerminal,
-  onOpenOnMac,
-  chat,
+  calling,
 }: {
   task: TaskSummary;
-  /** The task's card, as its sidebar row hangs it, which the Call's tab hangs (`task-card.tsx`). */
-  taskCard: React.ReactNode;
   main: MainTabsControl;
   agents: CodingAgentsControl;
   /** The agents that ended while no one was looking, each in semibold until shown. */
   unread: readonly StripTab[];
   views: TabViews;
-  /** The sidebar's pins, which an agent's tab and the Call's are pinned among, and their presses. */
+  /** The sidebar's pins, which an agent's tab is pinned among, and their presses. */
   pins: {
     pinned: readonly PinnedTab[];
     onPin: (tab: ColumnPinnableTab, label: string, model?: string) => void;
@@ -411,56 +383,23 @@ export function MainTabStrip({
   keys: boolean;
   /** Whether the task's page is on screen, which a tab's Archive asks its question on. */
   shown: boolean;
-  /** The toolbar's slot the chosen tab's ⋯ stands in, where the task's own stands on the Call's tab. */
-  actionsSlot: HTMLElement | null;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
-  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository or the platform has no Mac terminal. */
-  onOpenOnMac?: ((agentId: string) => void) | undefined;
-  /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
-  chat: boolean;
+  /** The agent a call is in progress into, whose tab's glyph wears the live mark; none while no call stands. */
+  calling: string | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.task === task.id && sameTab(pin.tab, tab));
-  const chatTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CHAT)
-    ? [
-        {
-          tab: MAIN_TAB.CHAT,
-          look: {
-            ...tabLook({ kind: TAB_KIND.CHAT }),
-            selected: main.tab === MAIN_TAB.CHAT,
-            onSelect: () => main.onChoose(MAIN_TAB.CHAT),
-          },
-          close: () => main.onClose(MAIN_TAB.CHAT),
-        },
-      ]
-    : [];
-  // The agents', the draft's, and Chat's tabs in the column's order,
+  // The agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    [...agentTabs({ main, agents, unread, views, drafted }), ...chatTab],
+    agentTabs({ main, agents, unread, views, drafted, calling }),
     main.tabs,
     (entry) => entry.tab,
   );
-  const callTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CALL)
-    ? [
-        {
-          tab: MAIN_TAB.CALL,
-          look: {
-            ...tabLook({ kind: TAB_KIND.CALL }),
-            selected: main.tab === MAIN_TAB.CALL,
-            quiet: own.length === 0,
-            anchored: true,
-            card: taskCard,
-            onSelect: () => main.onChoose(MAIN_TAB.CALL),
-          },
-          // Alone, the Call's tab stays, so the column always has one to show.
-          close: own.length === 0 ? undefined : () => main.onClose(MAIN_TAB.CALL),
-        },
-      ]
-    : [];
-  const strip = [...callTab, ...own];
+  const strip = own;
+  useStripLooks(LOOK_STRIP.COLUMN, task.id, strip);
   const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
@@ -474,17 +413,13 @@ export function MainTabStrip({
   const doorsOf = (entry: DrawnTab): TabDoors => {
     // An agent's link is its own action (`agent-actions.tsx`); the Call's is the task's.
     const linked: LinkPlace | undefined =
-      entry.tab === MAIN_TAB.CALL ? { kind: LINK_PLACE.CALL, planId: task.id } : undefined;
-    const others = strip.flatMap((other) =>
-      other === entry || other.close === undefined ? [] : [other.close],
-    );
+      entry.agent === undefined
+        ? undefined
+        : { kind: LINK_PLACE.AGENT, planId: task.id, agentId: entry.agent.id };
+    const others = strip.flatMap((other) => (other === entry ? [] : [other.close]));
     const { agent } = entry;
     const pinTab: ColumnPinnableTab | undefined =
-      agent !== undefined
-        ? { agent: agent.id }
-        : entry.tab === MAIN_TAB.CALL
-          ? MAIN_TAB.CALL
-          : undefined;
+      agent === undefined ? undefined : { agent: agent.id };
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -510,13 +445,7 @@ export function MainTabStrip({
       >
         {strip.map((entry) =>
           entry.agent === undefined ? (
-            <DoorsTab
-              key={tabKey(entry.tab)}
-              look={entry.look}
-              doors={doorsOf(entry)}
-              // The Call's ⋯ is the task's own, which the toolbar draws itself.
-              slot={entry.tab === MAIN_TAB.CALL ? undefined : actionsSlot}
-            />
+            <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry)} />
           ) : (
             <AgentMenuTab
               key={tabKey(entry.tab)}
@@ -525,8 +454,7 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
-              slot={actionsSlot}
-              terminals={{ onOpenTerminal, onOpenOnMac }}
+              terminals={{ onOpenTerminal }}
             />
           ),
         )}
@@ -543,7 +471,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents, chat)}
+        entries={addEntries(main, agents)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
@@ -555,8 +483,6 @@ export function MainTabStrip({
 
 /** What an agent's or the draft's tab is called to a reader of the column. */
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
-  if (tab === MAIN_TAB.CALL) return tabLook({ kind: TAB_KIND.CALL }).label;
-  if (tab === MAIN_TAB.CHAT) return tabLook({ kind: TAB_KIND.CHAT }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
@@ -583,9 +509,12 @@ export function MainTabContent({
   chat,
   onFork,
   onContinue,
+  call,
 }: {
-  tab: Exclude<MainTab, typeof MAIN_TAB.CALL | typeof MAIN_TAB.CHAT>;
+  tab: MainTab;
   agents: CodingAgentsControl;
+  /** What an agent's tab, and a draft's Call, take calls through; none where the platform has no voice. */
+  call?: AgentCallDoors | undefined;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
   views: TabViews;
@@ -614,7 +543,13 @@ export function MainTabContent({
     // The tab stands for a draft the task no longer holds only until the
     // column moves back to the task, a render away.
     return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
+      <DraftAgentTab
+        key={tab.draft}
+        draft={agents.draft}
+        control={agents}
+        cards={cards.call}
+        call={call}
+      />
     ) : (
       <SpinnerRegion label="Loading agent" />
     );
@@ -649,6 +584,7 @@ export function MainTabContent({
         chat={chat}
         onHeld={views.onAgentHeld}
         run={agents.origin}
+        call={call}
       />
     </ForkProvider>
   );

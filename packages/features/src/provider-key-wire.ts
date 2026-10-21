@@ -12,7 +12,8 @@ import { countedNumber } from "./service-wire.js";
  * provider last answered it — and never the key itself. A save is checked
  * with the provider before it is kept, so a key the provider refuses is
  * answered as rejected and nothing is written. `DELETE` with the provider in
- * the query removes one. Every answer carries the account's keys as they
+ * the query removes one, and `PATCH` turns a plan's default for the
+ * account's coding agents on or off. Every answer carries the account's keys as they
  * then stand, so the page draws the service's word rather than its own guess.
  */
 
@@ -64,6 +65,10 @@ export const PROVIDER_KEY_STATUS = {
   UNREADABLE: "unreadable",
   /** A subscription credential no provider has answered yet: it is kept unchecked, since Luke never calls a provider on a plan itself. */
   UNVERIFIED: "unverified",
+  /** A plan whose usage limit refused an agent's turn; it pays again once the limit resets, which `limitResetsAt` says where the provider said. */
+  LIMIT_REACHED: "limit_reached",
+  /** A ChatGPT account OpenAI answered is not eligible to run Codex on its plan. */
+  INELIGIBLE: "ineligible",
 } as const;
 
 export type ProviderKeyStatus = (typeof PROVIDER_KEY_STATUS)[keyof typeof PROVIDER_KEY_STATUS];
@@ -133,6 +138,8 @@ const providerKeySummarySchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(PROVIDER_KEY_STATUS)),
   /** When the status was last set, in epoch milliseconds. */
   statusAt: countedNumber,
+  /** When a plan's reached limit resets, in epoch milliseconds, where the provider said; absent otherwise. */
+  limitResetsAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type ProviderKeySummary = typeof providerKeySummarySchema.Type;
@@ -141,6 +148,12 @@ export type ProviderKeySummary = typeof providerKeySummarySchema.Type;
 const subscriptionKeySummarySchema = EffectSchema.Struct({
   ...providerKeySummarySchema.fields,
   kind: providerKeyKindSchema,
+  /**
+   * Whether the plan pays for the account's coding agents by default, as
+   * "Use my Claude plan for coding agents" says; on once it is connected.
+   * A service that predates the default answers none, which reads as on.
+   */
+  forAgents: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type SubscriptionKeySummary = typeof subscriptionKeySummarySchema.Type;
@@ -175,6 +188,26 @@ export const providerKeySaveRequestSchema = EffectSchema.Struct({
     EffectSchema.isPattern(/^\S+$/u),
   ),
 });
+
+/** The subscription kinds, which alone carry a default for the account's coding agents. */
+const subscriptionKindSchema = EffectSchema.Literals([
+  PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+  PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+]);
+
+/**
+ * Turning a connected plan's default for the account's coding agents on or
+ * off (PATCH): the provider and the subscription's kind, and whether it
+ * pays for them unless Start picks another payer. A plan the account does
+ * not hold changes nothing, and the answer shows it absent.
+ */
+export const providerKeyForAgentsRequestSchema = EffectSchema.Struct({
+  provider: providerSchema,
+  kind: subscriptionKindSchema,
+  forAgents: EffectSchema.Boolean,
+});
+
+export type ProviderKeyForAgentsRequest = typeof providerKeyForAgentsRequestSchema.Type;
 
 /** No OAuth token, client id, or subject Luke is handed is longer; a field past it is no credential. */
 const CHATGPT_CREDENTIAL_BOUNDS = {

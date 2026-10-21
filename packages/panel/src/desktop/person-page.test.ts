@@ -9,7 +9,7 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -31,6 +31,7 @@ import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -217,18 +218,16 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
   fakeAppBridge({});
+  // The host pushes each task's inbox, and the sweep agent's, as it is followed, unless the test holds or refuses them.
+  const host = followedInboxes(({ kind, id }) => {
+    if (inboxHeld) return undefined;
+    if (kind === INBOX_SCOPE_KIND.AGENT) return { items: [SWEEP_ITEM] };
+    return inboxRefused
+      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+      : { items: INBOXES.get(id) ?? [] };
+  });
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: () => {
-      if (inboxHeld) return new Promise(() => undefined);
-      const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
-      return Promise.resolve(value);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      if (inboxHeld) return new Promise(() => undefined);
-      if (inboxRefused) return Promise.reject(refusedOnPort("Not here."));
-      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
-      return Promise.resolve(value);
-    },
+    ...host.procedures,
     [ACT_KIND.AUTOMATIONS_LIST]: () => {
       if (automationsHeld) return new Promise(() => undefined);
       if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));
@@ -292,7 +291,6 @@ function mountWith(
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     ...overrides,

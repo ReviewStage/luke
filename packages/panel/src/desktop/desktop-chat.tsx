@@ -11,6 +11,7 @@ import {
   ErrorState,
   IconButton,
   LIST_ROW_CURRENT,
+  LIST_ROW_INK,
   LIST_ROW_META,
   ListRow,
   PencilIcon,
@@ -42,7 +43,9 @@ import { SpinnerRegion } from "../spinner.js";
 import { useChatActor } from "../tasks/chat-actors.js";
 import { ChatPane } from "../tasks/chat-pane.js";
 import { RelativeTime } from "../tasks/relative-time.js";
+import { PlanGlyph } from "../tasks/tab-look.js";
 import { useMinute } from "../tasks/task-time.js";
+import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
@@ -256,11 +259,12 @@ function RailRow({
   const { latest } = row;
   // A direct message is named by who it is with, both of its two where the reader is neither (`channelLabel`).
   const title = row.label;
+  const taskStatus = useTaskStatus(row.channel.planId);
   const mark =
     other !== undefined ? (
       <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
     ) : row.channel.kind === CHANNEL_KIND.TASK ? (
-      <DocumentIcon />
+      <PlanGlyph status={taskStatus} />
     ) : (
       <HashIcon />
     );
@@ -328,6 +332,7 @@ function PlaceRow({
         </span>
       }
       metaAt={LIST_ROW_META.TITLE}
+      ink={LIST_ROW_INK.SIDEBAR}
       current={current ? LIST_ROW_CURRENT.PAGE : undefined}
       unread={unread}
       hint={{ Hint: Tooltip, label: title }}

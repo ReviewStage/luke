@@ -1,5 +1,7 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
+  type AskTurn,
+  askTurnsOf,
   awaitingLinesOf,
   type CodingAgent,
   type CodingAgentDelegation,
@@ -12,7 +14,8 @@ import {
   linePlacesOf,
   lineSendersOf,
   readCodingAgentContext,
-  readCodingAgentOfConversation,
+  readCodingAgentHeaderOfConversation,
+  readCodingAgentRouting,
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
@@ -20,8 +23,11 @@ import {
 import { childConversationId } from "@luke/database/models/ids";
 import {
   type LatestTurn,
+  listMessagesBefore,
   listMessagesPast,
   type MessageCursor,
+  type MessageListRead,
+  messageCursorNow,
   readMessageByClientId,
   type StoredMessageRecord,
   turnsBefore,
@@ -45,6 +51,7 @@ import {
   type CodingAgentUsage,
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
+import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import {
@@ -57,7 +64,6 @@ import {
   TURN_STATUS,
 } from "../../core.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
-import { turnRecordOf } from "../turn-record.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -108,6 +114,11 @@ import { usageOfTurns } from "./usage.js";
  * and lands its parts in the journal, so the page that wakes on a step
  * carries the step before it. The wire spells the cursor as the two
  * numbers joined by a colon.
+ *
+ * A reader that opens a long transcript reads it back from its end instead
+ * (`transcriptNewest`): the newest page with all a page carries and the
+ * cursor to follow on from, then each older page below the oldest row it
+ * holds (`transcriptBefore`), which carries the rows alone.
  */
 
 const CURSOR_SEPARATOR = ":";
@@ -134,6 +145,8 @@ type TranscriptMessage = StoredUIMessage &
     readonly sentBy?: CodingAgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
+    readonly turnId?: string;
+    readonly readFrom?: AskTurn;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -180,8 +193,13 @@ type AgentStart = Pick<AgentStanding, "createdAt" | "blank">;
 /** The agent's status now, read from its newest turn and when the newest line awaiting one was written, when that run began, why where that turn failed, and the instant the clock alone would move it, where one stands. */
 const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart) =>
   Effect.gen(function* () {
-    const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
-    const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
+    const { turns, awaiting } = yield* Effect.all(
+      {
+        turns: latestTurnsOf(target.userId, [target.conversationId]),
+        awaiting: awaitingLinesOf(target.userId, [target.conversationId]),
+      },
+      { concurrency: CODER.READ_CONCURRENCY },
+    );
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
     const awaitingLineAt = awaiting.get(target.conversationId);
@@ -193,22 +211,28 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     return { status, runStartedAt, failureReason, turn, graceEdge };
   });
 
+/** The agent's context as its row holds it, on its own transcript; nothing on a worker's. */
+const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
+  own === undefined
+    ? Effect.succeed(Option.none<HeldContext>())
+    : readCodingAgentContext(target.userId, own.id);
+
+type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readCodingAgentContext>>>;
+
 /**
  * The agent's context as its row holds it, against the window the catalog
  * lists for the model and window the same read says it runs on now;
- * nothing before its first step. Note that the choice is read here rather
- * than taken from the agent the request read, because a change of model or
- * window during the hold is what the step this page carries ran on.
+ * nothing before its first step. Note that the choice is read with the page
+ * rather than taken from the agent the request read, because a change of
+ * model or window during the hold is what the step this page carries ran on.
  */
-const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly OfferedModel[]) =>
-  Effect.map(readCodingAgentContext(target.userId, own.id), (held) =>
-    Option.isNone(held)
-      ? undefined
-      : codingAgentContextOf(
-          held.value,
-          contextWindowOf(offered, held.value.model, held.value.contextWindow),
-        ),
-  );
+const contextOf = (held: Option.Option<HeldContext>, offered: readonly OfferedModel[]) =>
+  Option.isNone(held)
+    ? undefined
+    : codingAgentContextOf(
+        held.value,
+        contextWindowOf(offered, held.value.model, held.value.contextWindow),
+      );
 
 /** What a turn whose journal is on a page says of itself: when it began, and what it ran on and spent. */
 interface JournalTurn {
@@ -284,10 +308,30 @@ function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[
     .map((record) => record.id);
 }
 
-/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in. */
+/** The asks the voice's lines among the rows followed, by their delegation, each the ask's client id. */
+function delegationsAmong(records: readonly StoredMessageRecord[]): readonly string[] {
+  return [
+    ...new Set(
+      records.flatMap((record) => {
+        const delegation = spokenDelegationOf(record.message);
+        return delegation === undefined ? [] : [delegation];
+      }),
+    ),
+  ];
+}
+
+/** The ask a line the agent said on a call followed, where the voice handed one on before it; none for any other row. */
+function spokenDelegationOf(message: StoredUIMessage): string | undefined {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT || !spokenOnCall(message)) return undefined;
+  const { metadata } = message;
+  return "delegation_id" in metadata ? metadata.delegation_id : undefined;
+}
+
+/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in; and of the agent's own lines on a call, the turn each one's ask ran in, by the ask. */
 interface LinesRead {
   readonly senders: ReadonlyMap<string, LineSent>;
   readonly places: ReadonlyMap<string, LinePlace>;
+  readonly asked: ReadonlyMap<string, AskTurn>;
 }
 
 /** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
@@ -302,14 +346,19 @@ function spokenOnCall(message: StoredUIMessage): boolean {
  * and what sent it and where in a turn under way it arrived, for a line the
  * agent said on a call when its words began, and for a turn's journal when
  * the turn began and what it ran on and, once the journal closed, when it
- * did and what it spent. Note that a spoken line of the agent's carries no
- * turn's record, though the store names the turn it was read aloud from,
- * because the line is what was said and the turn's journal is its own row.
+ * did and what it spent, and the turn it is the journal of. Note that a
+ * spoken line of the agent's carries no turn's record, because the line is
+ * what was said and the turn's journal is its own row; it names instead the
+ * turn whose work it answers (`readFrom`), the one the ask it followed ran
+ * in, read from the ask's binding at every page rather than stamped on the
+ * row as it was said, so a line said while that turn ran, or long after it
+ * settled, or before the ask learned its turn, names it all the same, and
+ * where the ask joined a typed turn under way, the steps begun before it.
  */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
-  { senders, places }: LinesRead,
+  { senders, places, asked }: LinesRead,
 ): TranscriptMessage {
   if (record.message.role === MESSAGE_ROLE.USER) {
     const sent = senders.get(record.id);
@@ -321,11 +370,21 @@ function transcriptMessageOf(
       ...(place === undefined ? undefined : { arrivedIn: place }),
     };
   }
-  if (spokenOnCall(record.message)) return { ...record.message, sentAt: record.placedAt.getTime() };
+  if (spokenOnCall(record.message)) {
+    const delegation = spokenDelegationOf(record.message);
+    const readFrom = delegation === undefined ? undefined : asked.get(delegation);
+    return {
+      ...record.message,
+      sentAt: record.placedAt.getTime(),
+      ...(readFrom === undefined ? undefined : { readFrom }),
+    };
+  }
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
     ...record.message,
+    // Note that a turn's journal shares the turn's id as its client id, which no other row of the turn does.
+    ...(record.clientId === record.turnId ? { turnId: record.turnId } : undefined),
     startedAt: turn.startedAt,
     ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
     ...turn.record,
@@ -401,6 +460,14 @@ const subagentStandingsOf = (
     }));
   });
 
+/** Who pays for the agent whose own transcript a page is, as its row records it; nothing on a worker's, or for an agent from before payers were recorded. */
+const payerOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
+  own === undefined
+    ? Effect.succeed(null)
+    : Effect.map(readCodingAgentRouting(target.userId, own.id), (routing) =>
+        Option.isNone(routing) ? null : routing.value.payer,
+      );
+
 /**
  * The page with what the agent has cost: every settled turn of its
  * conversation and its workers', summed and priced at the catalog as the
@@ -409,7 +476,8 @@ const subagentStandingsOf = (
  * price the window draws means the whole run's. On the agent's own transcript, with what
  * its model's context holds, against the window the same catalog lists,
  * and every title its workers have so far, which land beside their starts
- * and so on no page of their own.
+ * and so on no page of their own. The usage names the agent's payer where its
+ * row records one, so a plan's is drawn as the plan's rather than in dollars.
  */
 const withUsage = (
   target: ConversationTarget,
@@ -419,17 +487,34 @@ const withUsage = (
   own: OwnAgent | undefined,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> =>
   Effect.gen(function* () {
-    const rows = yield* turnUsagesOf(target.userId, target.conversationId);
     const catalog = yield* ModelCatalog;
-    const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
-    const usage = usageOfTurns(rows, offered);
-    const context = own === undefined ? undefined : yield* contextOf(target, own, offered);
-    const delegations =
-      own !== undefined && WAITING_STATUSES.has(page.status)
-        ? yield* delegationsUnderWay(target, tools, turn)
-        : [];
-    const subagentTitles = own === undefined ? [] : yield* delegationTitlesOf(target);
-    const subagents = own === undefined ? [] : yield* subagentStandingsOf(target);
+    // Note that every read here stands apart from the others, so they run at once rather than one round trip after another.
+    const { rows, offered, payer, held, delegations, subagentTitles, subagents } =
+      yield* Effect.all(
+        {
+          rows: turnUsagesOf(target.userId, target.conversationId),
+          offered: catalog.read.pipe(Effect.orElseSucceed((): readonly OfferedModel[] => [])),
+          payer: payerOf(target, own),
+          held: heldContextOf(target, own),
+          delegations:
+            own !== undefined && WAITING_STATUSES.has(page.status)
+              ? delegationsUnderWay(target, tools, turn)
+              : Effect.succeed<readonly CodingAgentDelegationStart[]>([]),
+          subagentTitles:
+            own === undefined
+              ? Effect.succeed<readonly CodingAgentSubagentTitle[]>([])
+              : delegationTitlesOf(target),
+          subagents:
+            own === undefined
+              ? Effect.succeed<readonly CodingAgentSubagentStanding[]>([])
+              : subagentStandingsOf(target),
+        },
+        { concurrency: CODER.READ_CONCURRENCY },
+      );
+    const priced = usageOfTurns(rows, offered);
+    // Note that the payer rides on the usage, because the one line that draws a price is the one that says who paid.
+    const usage = priced === undefined || payer === null ? priced : { ...priced, payer };
+    const context = contextOf(held, offered);
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
@@ -438,6 +523,25 @@ const withUsage = (
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),
       ...(subagents.length === 0 ? undefined : { subagents }),
     };
+  });
+
+/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines, where it arrived, and the turn each of the agent's spoken lines answers. */
+const transcriptMessagesOf = (
+  target: ConversationTarget,
+  records: readonly StoredMessageRecord[],
+): TranscriptEffect<readonly TranscriptMessage[]> =>
+  Effect.gen(function* () {
+    const lines = lineIdsAmong(records);
+    const { journalTurns, ...linesRead } = yield* Effect.all(
+      {
+        journalTurns: journalTurnsOf(target.userId, records),
+        senders: lineSendersOf(target, lines),
+        places: linePlacesOf(target, lines),
+        asked: askTurnsOf(target, delegationsAmong(records)),
+      },
+      { concurrency: CODER.READ_CONCURRENCY },
+    );
+    return records.map((record) => transcriptMessageOf(record, journalTurns, linesRead));
   });
 
 /** One read of the page past the cursor with the status beside it; a page the vocabulary refuses answers no messages, since nothing readable stands past the cursor. */
@@ -452,27 +556,24 @@ function pagePast(
   readonly graceEdge: number | undefined;
 }> {
   return Effect.gen(function* () {
-    const { read, cursor } = yield* listMessagesPast(
-      target.userId,
-      target.conversationId,
-      tools,
-      after,
-      CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+    const { past, standing } = yield* Effect.all(
+      {
+        past: listMessagesPast(
+          target.userId,
+          target.conversationId,
+          tools,
+          after,
+          CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+        ),
+        standing: statusNow(target, agent),
+      },
+      { concurrency: CODER.READ_CONCURRENCY },
     );
-    const { status, runStartedAt, failureReason, turn, graceEdge } = yield* statusNow(
-      target,
-      agent,
-    );
-    const records = read.ok ? read.value : [];
-    const journalTurns = yield* journalTurnsOf(target.userId, records);
-    const lines = lineIdsAmong(records);
-    const linesRead: LinesRead = {
-      senders: yield* lineSendersOf(target, lines),
-      places: yield* linePlacesOf(target, lines),
-    };
+    const { read, cursor } = past;
+    const { status, runStartedAt, failureReason, turn, graceEdge } = standing;
     return {
       page: {
-        messages: records.map((record) => transcriptMessageOf(record, journalTurns, linesRead)),
+        messages: yield* transcriptMessagesOf(target, read.ok ? read.value : []),
         cursor,
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
@@ -544,7 +645,7 @@ function ownTitleWindow(
   since: Date,
 ): TranscriptEffect<Option.Option<Date>> {
   return Effect.gen(function* () {
-    const own = yield* readCodingAgentOfConversation(target.userId, target.conversationId);
+    const own = yield* readCodingAgentHeaderOfConversation(target.userId, target.conversationId);
     if (Option.isNone(own) || own.value.title !== null) return Option.none();
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const newest = turns.get(target.conversationId);
@@ -705,4 +806,102 @@ export function transcriptNow(
     const now = yield* Clock.currentTimeMillis;
     return { ...read, wakeIn: Math.max(1, Math.min(...edges) - now) };
   });
+}
+
+/** A page of the transcript read back from its end: its messages, oldest first, and where the page older still is read below; none where nothing older stands. */
+export interface TranscriptOlder {
+  readonly messages: readonly TranscriptMessage[];
+  readonly before?: number;
+}
+
+/** The transcript's newest page, with all a page past a cursor carries, its cursor the one to follow on from, and where the page older still is read below; none where nothing older stands. */
+export interface TranscriptNewest {
+  readonly page: TranscriptPage;
+  readonly before?: number;
+}
+
+/**
+ * A page read below a sequence as a reader back from the end takes it: a
+ * full page names its oldest row as where the next is read below, and a
+ * shorter one is the transcript's start. A page the vocabulary refuses
+ * answers no messages and is read on below the row it refused, so one row
+ * this build cannot read costs the reader the rows above it on that page
+ * rather than everything older.
+ */
+const olderPageOf = (
+  target: ConversationTarget,
+  read: MessageListRead,
+): TranscriptEffect<TranscriptOlder> =>
+  Effect.gen(function* () {
+    if (!read.ok) return { messages: [], before: read.seq };
+    const records = read.value;
+    const messages = yield* transcriptMessagesOf(target, records);
+    const [oldest] = records;
+    return records.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE || oldest === undefined
+      ? { messages }
+      : { messages, before: oldest.seq };
+  });
+
+/**
+ * The transcript's newest page, read at once: the newest rows, oldest
+ * first, with the agent's status and everything a page past a cursor
+ * carries, read once for the whole answer. Its cursor is where a reader
+ * who has every row as it now stands is (`messageCursorNow`), read before
+ * the rows, which are read up to and including it, so a row written or
+ * amended after the cursor is heard by the follow from it, and one amended
+ * between the two reads is heard twice rather than missed.
+ */
+export function transcriptNewest(
+  target: ConversationTarget,
+  tools: ToolSet,
+  agent: AgentStart,
+  own?: OwnAgent,
+): TranscriptEffect<TranscriptNewest, ModelCatalog> {
+  return Effect.gen(function* () {
+    const cursor = yield* messageCursorNow(target.userId, target.conversationId);
+    const { read, standing } = yield* Effect.all(
+      {
+        read: listMessagesBefore(
+          target.userId,
+          target.conversationId,
+          tools,
+          cursor.seq + 1,
+          CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+        ),
+        standing: statusNow(target, agent),
+      },
+      { concurrency: CODER.READ_CONCURRENCY },
+    );
+    const { messages, before } = yield* olderPageOf(target, read);
+    const { status, runStartedAt, failureReason, turn } = standing;
+    const page: TranscriptPage = {
+      messages,
+      cursor,
+      status,
+      ...(runStartedAt === undefined ? undefined : { runStartedAt }),
+      ...(failureReason === undefined ? undefined : { failureReason }),
+    };
+    return {
+      page: yield* withUsage(target, tools, page, turn, own),
+      ...(before === undefined ? undefined : { before }),
+    };
+  });
+}
+
+/** The page of the transcript below a sequence, read at once, carrying nothing of the agent as a whole, which its newest page told. */
+export function transcriptBefore(
+  target: ConversationTarget,
+  tools: ToolSet,
+  before: number,
+): TranscriptEffect<TranscriptOlder> {
+  return Effect.flatMap(
+    listMessagesBefore(
+      target.userId,
+      target.conversationId,
+      tools,
+      before,
+      CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+    ),
+    (read) => olderPageOf(target, read),
+  );
 }

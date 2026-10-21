@@ -54,8 +54,16 @@
           "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
+          "src": "/api/agents/native-sessions",
+          "dest": "/api/default.js?route=agents/native-sessions"
+        },
+        {
           "src": "/api/agents/runner-events",
           "dest": "/api/default.js?route=agents/runner-events"
+        },
+        {
+          "src": "/api/agents/runner-token",
+          "dest": "/api/default.js?route=agents/runner-token"
         },
         {
           "src": "/api/github/install",
@@ -92,6 +100,14 @@
         {
           "src": "/api/maintenance/sweep",
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
+        },
+        {
+          "src": "/api/browser/live",
+          "dest": "/api/browser/live"
+        },
+        {
+          "src": "/api/browser/live\\.js",
+          "dest": "/api/browser/live.js"
         },
         {
           "src": "/api/feedback",
@@ -227,13 +243,6 @@
         }
       ]
     },
-    "luke": {
-      "root": "apps/luke",
-      "framework": "eve",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
-      "buildCommand": "pnpm exec eve build && pnpm exec bash ../../scripts/eve-source-maps.sh",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json :/scripts/eve-source-maps.sh"
-    },
     "dev": {
       "root": "apps/dev",
       "framework": "eve",
@@ -265,12 +274,6 @@
       "source": "/eve/coder/v1/(.*)",
       "destination": {
         "service": "dev"
-      }
-    },
-    {
-      "source": "/eve/v1/(.*)",
-      "destination": {
-        "service": "luke"
       }
     },
     {

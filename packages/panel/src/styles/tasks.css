@@ -430,6 +430,17 @@
   pointer-events: none;
 }
 
+/* The room a date picker opened from words at rest hangs in
+   (`words-dates.tsx`): laid over the words whole, so the picker is placed
+   from the room's own box wherever it stands, and only the picker takes
+   the pointer. */
+.words-date-room {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 .date-picker-anchor > * {
   pointer-events: auto;
 }
@@ -1117,21 +1128,28 @@
 
 /* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
    left in the muted ink, a hairline running on from them, and what the
-   caller puts at the right, stuck to the log's top on the well's own ground
-   so nothing shows through. A standing call's "Live" stands at the right in
-   the developer's colour beside the voice mark (../tasks/call-card.tsx). */
+   caller puts at the right, on no ground of its own, so in an agent's
+   transcript a call's divider is the plain rule the transcript's other
+   lines are drawn on. A standing call's "Live" stands at the right in the
+   developer's colour beside the voice mark (../tasks/call-card.tsx). */
 .checkpoint {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-12) 0 var(--luke-space-8);
-  background: var(--luke-color-well);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
+}
+
+/* In the Code tab's feed, a divider sticks to the log's top as its cards
+   scroll under it, on the well's own ground, which is the feed's, so
+   nothing shows through. */
+.checkpoint-log .checkpoint {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--luke-color-well);
 }
 
 .checkpoint-rule {
@@ -1141,23 +1159,127 @@
   background: var(--luke-color-border);
 }
 
-.checkpoint-live {
+/* A call's ends (../tasks/call-card.tsx): a rule across the log carrying a
+   pill in its middle, on no band of its own, so it reads as one of the
+   transcript's dividers, only louder. The pill says what happened in the
+   body ink and when in the muted one. */
+.call-marker {
   display: flex;
   align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.call-marker-rule {
+  height: 1px;
+  min-width: var(--luke-space-12);
+  flex: 1;
+  background: var(--luke-color-border);
+}
+
+.call-marker-pill {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
   gap: var(--luke-space-6);
+  margin: 0;
+  padding: var(--luke-space-2) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  white-space: nowrap;
+}
+
+/* The words and when, one run of text, so the separators keep their own spaces. */
+.call-marker-text {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.call-marker-words {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
+}
+
+/* The duration rides the words' span (`data-call-length`) but in the muted ink, as the time does. */
+.call-marker-detail {
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-regular);
+}
+
+.call-marker-icon {
+  display: inline-flex;
+  width: 14px; /* off-scale: the voice mark at the pill's words */
+  height: 14px;
+  flex: none;
+  color: var(--luke-color-text-muted);
+}
+
+.call-marker-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A standing call's waveform wears the live green, as its Live mark does. */
+.call-marker-icon[data-live] {
   color: var(--luke-color-complete);
 }
 
-.checkpoint-live > svg {
-  width: 14px; /* off-scale: the voice mark at the divider's words */
-  height: 14px;
+/* "Live": a dot and the word in the live green. */
+.call-marker-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  color: var(--luke-color-complete);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.call-marker-live::before {
+  width: var(--luke-space-6);
+  height: var(--luke-space-6);
+  border-radius: var(--luke-radius-full);
+  background: currentcolor;
+  content: "";
+}
+
+/* A standing call's start stays pinned to the log's top while the developer
+   scrolls among its lines: it is the log's own child, and the call runs on
+   to the log's foot, so it sticks for as long as any of the call is in view
+   and goes back to its place above the call's first line. It stands on the
+   window's ground so the lines scrolling under it do not show through. */
+.call-marker[data-call-marker="start"][data-live] {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: var(--luke-color-ground);
+}
+
+/* An agent's glyph while a call into it is in progress: the divider's live
+   mark, in the same tint, in the glyph's own footprint (`tab-look.tsx`). */
+.agent-calling-glyph {
+  color: var(--luke-color-complete);
 }
 
 /* One line, as a teammate's heading already keeps (`.call-caller`), so a
    time that would wrap in a narrow panel cannot outgrow the band. */
-.checkpoint-log [data-checkpoint] {
+.checkpoint-log :is([data-checkpoint], [data-call-marker="start"]) {
   height: var(--checkpoint-height);
   white-space: nowrap;
+}
+
+/* In the Code tab's feed a call's start sticks as a divider does, on the
+   well's ground, whether or not the call still stands. */
+.checkpoint-log .call-marker[data-call-marker="start"] {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  box-sizing: border-box;
+  padding-block: 0;
+  background: var(--luke-color-well);
 }
 
 /* The card clips at its rounded edge, against which its header's actions
@@ -1191,58 +1313,14 @@
   margin-left: auto;
 }
 
-/* A File tab: the file's heading over its lines, which fill the tab and
-   scroll, with a row above and below them that reads more of the file. */
+/* A File tab: its file, or the lines Luke showed of it under why the file
+   is not shown, filling the tab. */
 .file-tab {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   background: var(--code-ground);
-}
-
-/* How a run of lines filling its place is drawn (code-lines.tsx), as
-   the File tabs' settings say (file-view-settings.ts): lines unwrapped,
-   which scroll on both axes together, stand as wide as the longest or the
-   place, so the lit lines' ground runs under the whole of every one; and
-   the numbers' gutter may be gone. The frame around them is as wide as
-   the place, which a note between them measures itself by. */
-.code-lines-frame {
-  container: code-lines / inline-size;
-}
-
-/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
-   stand on the theme's ground, as a diff in that theme does; every run
-   coloured in the theme names its own ink. */
-.code-lines-ground {
-  --code-ground: light-dark(
-    var(--theme-ground-light, var(--luke-color-ground)),
-    var(--theme-ground-dark, var(--luke-color-ground))
-  );
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 0%;
-  flex-direction: column;
-  background: var(--code-ground);
-}
-
-.code-lines[data-wrap="false"] {
-  width: max-content;
-  min-width: 100%;
-}
-
-.code-lines[data-wrap="false"] .code-line-text {
-  overflow-wrap: normal;
-  white-space: pre;
-}
-
-.code-lines[data-line-numbers="false"] .code-line-number {
-  display: none;
-}
-
-.code-lines[data-line-numbers="false"] .code-line-text {
-  padding-left: var(--luke-space-12);
 }
 
 /* A File tab beside its repository's tree, under one bar across both: the
@@ -1755,6 +1833,57 @@
 
 .page-card-preview[data-loaded="true"] .page-card-frame {
   opacity: 1;
+}
+
+/* A cloud Browser tab (cloud-browser-pane.tsx): whose browser it is and
+   the page's address beside who drives it, then the page drawn on a canvas
+   of the page's own shape, centred in the body, with a quiet line over it
+   while no page stands to drive. */
+.cloud-browser-bar {
+  gap: var(--luke-space-8);
+}
+
+.cloud-browser-where {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+}
+
+/* Whose browser it is stays whole; the address gives way first. */
+.cloud-browser-where > :first-child {
+  flex: none;
+}
+
+.cloud-browser-body {
+  align-items: center;
+  justify-content: center;
+  background: var(--luke-color-well);
+}
+
+.cloud-browser-canvas {
+  display: block;
+  outline: none;
+}
+
+.cloud-browser-canvas[data-driving] {
+  box-shadow: 0 0 0 1px var(--luke-color-border);
+}
+
+.cloud-browser-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--luke-space-8);
+  pointer-events: none;
+}
+
+.cloud-browser-notice > * {
+  pointer-events: auto;
 }
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
@@ -2839,6 +2968,7 @@
   display: flex;
   flex: none;
   align-items: center;
+  gap: var(--luke-space-8);
   margin-inline-start: auto;
 }
 
@@ -3689,7 +3819,7 @@
 .diff-note {
   /* Note that a percentage padding is read against the row's width, so the
      note keeps the code's inset and comes in to the pane's narrower one
-     where the row is under 440px (\`annotation-card.tsx\`), with no query
+     where the row is under 440px (`annotation-card.tsx`), with no query
      on a container the note itself would have to be inside. */
   padding: var(--luke-space-8)
     clamp(var(--luke-space-8), (100% - 440px) * 999, var(--luke-space-12));
@@ -4272,43 +4402,46 @@
   font-size: var(--luke-type-caption-size);
 }
 
-.file-tab-edge {
-  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
-  color: var(--luke-color-text-subtle);
-  -webkit-user-select: none;
-  user-select: none;
+/* A whole file drawn by Pierre (whole-file.tsx), a File tab's or a page's
+   source: its scroll area fills the place, Pierre drawing into it as the
+   scroller it virtualizes over, with the ring standing over it while the
+   diff bundle loads. */
+.whole-file {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
-/* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
-   annotation card (`.annotation-card`), standing from the code's column past
-   the numbers, or at the pane's inset where the place is narrow. Lines
-   unwrapped scroll sideways under it while it keeps to the place's width in
-   view. */
+.whole-file > .luke-spinner-region {
+  position: absolute;
+  inset: 0;
+}
+
+/* A note under a line of a whole file, its card or its chip: Pierre stands
+   it at the code's column, sticky in view while unwrapped lines scroll
+   sideways, so it keeps only the room between it and the lines, and none
+   while it is a chip alone, which floats over the end of its line. */
+.whole-file-note {
+  padding: var(--luke-space-6) var(--luke-space-12) var(--luke-space-6) 0;
+  white-space: normal;
+}
+
+.whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+  padding-block: 0;
+}
+
+.whole-file-note .file-note {
+  margin: 0;
+}
+
+/* Luke's note under the lines it is on (file-note.tsx): the annotation card
+   (`.annotation-card`), measured as one so a narrow place steps its parts
+   back, in the element Pierre keeps for it under a File tab's line or a
+   Code card's (`.whole-file-note`, `.diff-note`), which insets it. */
 .file-note {
-  --file-note-start: 48px; /* off-scale: the numbers' gutter, `.code-line-number` */
-  --file-note-end: var(--luke-space-12);
-  margin: var(--luke-space-6) var(--file-note-end) var(--luke-space-6) var(--file-note-start);
   container: annotation / inline-size;
-}
-
-.code-lines[data-line-numbers="false"] > .file-note {
-  --file-note-start: var(--luke-space-12);
-}
-
-@container code-lines (max-width: 439px) {
-  .code-lines[data-line-numbers] > .file-note {
-    --file-note-start: var(--luke-space-8);
-    --file-note-end: var(--luke-space-8);
-  }
-}
-
-/* Note that the note is stuck within the lines, which are as wide as the
-   longest, so it stays in view across the whole of them, and is as wide
-   as the place they scroll in, less its margins. */
-.code-lines[data-wrap="false"] > .file-note {
-  position: sticky;
-  left: var(--file-note-start);
-  width: calc(100cqi - var(--file-note-start) - var(--file-note-end));
 }
 
 /* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
@@ -4330,83 +4463,15 @@
   overflow-wrap: anywhere;
 }
 
-/* Luke's note reads as the step's words, so the path above it steps back. */
-.code-card:has(> .code-card-note) [data-file-ref] {
-  color: var(--luke-color-text-muted);
+/* A snippet not yet near the view stands at about the height its lines
+   will take (code-snippet.tsx), so the feed does not jump as cards mount. */
+.code-snippet-pending {
+  height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
-.code-card-note {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  overflow-wrap: anywhere;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.code-card-header:has(+ .code-card-note) {
-  border-bottom: 0;
-}
-
-/* Lines wrap rather than scroll sideways, so no card takes a swipe from the
-   feed. Note that they opt back into selection, because the window selects
-   nothing by default (`base.css`): a File tab's, a card's, and an inbox
-   item's code is read to be copied, the gutter's numbers left out of it. */
-/* A run of lines in the type View settings sets, a File tab's and a page
-   source's alike (`code-lines.tsx`), or the window's code type where its
-   box names none. */
-.code-lines {
-  padding: var(--luke-space-6) 0;
-  color: var(--code-text);
-  font-family: var(--code-font, var(--luke-font-mono));
-  font-size: var(--code-font-size, var(--luke-type-caption-size));
-  line-height: var(--code-line-height, var(--luke-type-reading-leading));
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.code-line {
-  display: flex;
-}
-
-/* The lines pointed at, lit across the whole width with a bar in the gutter. */
-.code-line[data-pointed="true"] {
-  background: var(--code-pointed);
-  box-shadow: inset 2px 0 0 var(--code-pointed-edge);
-}
-
-.code-line-number {
-  flex: 0 0 auto;
-  width: 48px; /* off-scale: a gutter for four digits */
-  padding: 0 var(--luke-space-12) 0 0;
-  color: var(--code-line-number);
-  text-align: right;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.code-line[data-pointed="true"] .code-line-number {
-  color: var(--code-line-number-pointed);
-}
-
-.code-line-text {
-  padding-right: var(--content-inset);
-  font: inherit;
-  /* Ligatures are the code's alone, so a note between its lines keeps its
-     prose's own (file-note.tsx). */
-  font-feature-settings: var(--code-font-features, normal);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-/* Each run carries its colour in both appearances (`code-lines.tsx`); a run
-   in the theme's own foreground carries neither and takes the pane's. A
-   transcript's fenced block is coloured the same way. */
-.code-line-text > span,
+/* A transcript's fenced block: each run carries its colour in both
+   appearances (`transcript-markdown.tsx`); a run in the theme's own
+   foreground carries neither and takes the pane's. */
 .transcript-code-body span {
   color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
 }
@@ -5725,6 +5790,22 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   display: none;
 }
 
+/* A call's controls in the composer's row, in Call's place beside Send
+   (`agent-call.tsx`): the mutes and Video as the row's own presses, End
+   call on its red disc. They never fold into the ⋯, because they are the
+   call, and a narrow card folds the presses around them first. */
+.agent-call-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-inline-size: 0;
+  /* End call stands a step off Send, so the two discs never read as a pair. */
+  margin: 0 var(--luke-space-4) 0 0;
+  padding: 0;
+  border: 0;
+}
+
 /* Too narrow for every press: the ⋯ takes in the MCP servers, the
    context ring, and the microphone. The servers' and the
    ring's boxes stay, out of the row at its right end, so a popover the ⋯
@@ -5755,76 +5836,15 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   }
 }
 
-/* The Inbox's answer box draws the same card and field
-   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
-   box's does, and its quiet line beside it is cut short before its
-   microphone and Send are, and goes once the card is too narrow for
-   both, when the microphone goes too. */
-.inbox-answer-tools {
-  flex: 1 1 0;
-}
-
-.inbox-answer-quiet {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-  padding-inline: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
+/* The Inbox's answer box draws the same card, field, and foot
+   (`inbox-answer-box.tsx`): the note line on its own over the foot, the +
+   at the foot's left, and the microphone and Send at its right, which
+   never give way, since nothing else stands in the row. */
 .inbox-answer-actions {
   display: flex;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: none;
   align-items: center;
   gap: var(--luke-space-4);
-}
-
-.inbox-answer-quiet [data-inbox-quiet] {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* What a send found the answer lacking reads in the attention ink, as the
-   item's own mark does, until it is filled. */
-.inbox-answer-quiet [data-wanting] {
-  color: var(--luke-color-attention);
-}
-
-/* A box answered in words alone holds its round Send at the field's end
-   once the card is narrow, so the field keeps to one line and the thread
-   above it keeps its room. */
-.inbox-answer {
-  position: relative;
-}
-
-@container composer (max-width: 299px) {
-  .inbox-answer-foot .inbox-answer-quiet,
-  .inbox-answer .dictate-button,
-  .inbox-answer:not([data-named-send]) .inbox-answer-tools {
-    display: none;
-  }
-
-  .inbox-answer:not([data-named-send]) .agent-composer-input {
-    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
-      var(--luke-space-12) var(--luke-space-12);
-  }
-
-  .inbox-answer:not([data-named-send]) .agent-composer-placeholder {
-    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
-      var(--luke-space-12);
-  }
-
-  .inbox-answer:not([data-named-send]) > .inbox-answer-foot {
-    position: absolute;
-    right: var(--luke-space-6);
-    bottom: var(--luke-space-6);
-    padding: 0;
-  }
 }
 
 /* A dictation standing in place of the card's foot: the voice's bars
@@ -5838,6 +5858,24 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   align-items: center;
   gap: var(--luke-control-gap);
   color: var(--luke-color-text-muted);
+}
+
+/* A clip still being read as a call begins shares the foot with the call's
+   controls (`agent-composer.tsx`): side by side where the card has room for
+   the strip's words, and the controls on a line of their own under it where
+   it has not, so Cancel and End call both stay within the card. */
+.prompt-input-footer:has(> .dictation-strip + .agent-call-controls) {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-4);
+}
+
+.prompt-input-footer > .dictation-strip:has(+ .agent-call-controls) {
+  /* Room for the strip's spinner, its word, and Cancel. */
+  flex-basis: 160px;
+}
+
+.prompt-input-footer > .dictation-strip + .agent-call-controls {
+  margin-inline-start: auto;
 }
 
 .dictation-wave {
@@ -6193,8 +6231,8 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
-/* A text file's lines fill the card under its header and scroll there
-   (code-lines.tsx), on the code's ground. */
+/* A text file fills the card under its header and scrolls there, drawn
+   as every code is (whole-file.tsx), on the code's ground. */
 .attachment-viewer-lines {
   display: flex;
   flex-direction: column;
@@ -7098,7 +7136,7 @@ button.subagent-line:hover {
   margin: 0;
 }
 
-/* The pictures a comment on an Inbox thread carried, after its words
+/* The pictures a comment on an Inbox thread carried, over its words
    (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
    in, its room around it the comment's own gap between what it holds. */
 .inbox-comment-body > .transcript-pictures {
@@ -7924,9 +7962,9 @@ button.picture-frame {
   padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
-/* The files a sent comment carries, under its words, level with them. */
+/* The files a sent comment carries, over its words, level with them. */
 .comment-files {
-  margin: var(--luke-space-6) 0 0 var(--comment-indent);
+  margin: var(--luke-space-4) 0 var(--luke-space-6) var(--comment-indent);
 }
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
@@ -7934,6 +7972,7 @@ button.picture-frame {
    its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
    which holds the list's own padded element). */
 .comments-tab {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -8010,4 +8049,23 @@ button.picture-frame {
 .tool-sent-note {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+}
+
+/* Who pays for an agent, under its box (`plan-label.tsx`): "Using ChatGPT
+   plan · Manage usage", or in the attention colour why the plan cannot
+   serve it, set in from the card's edge as the box's note is. */
+.agent-composer-payer {
+  padding-left: var(--luke-space-4);
+}
+
+.agent-plan-label[data-state="attention"] {
+  color: var(--luke-color-attention);
+}
+
+/* One of an agent's log's rows (`agent-tab.tsx`, drawn only near the view
+   by `ConversationRows`): a message with what stands with it, a call's
+   divider, the lines said ahead of it, a replay's card, a step apart as the
+   log's own lines are. */
+.agent-log-row > :not(:last-child) {
+  margin-block-end: var(--luke-space-12);
 }

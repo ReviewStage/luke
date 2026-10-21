@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -40,6 +40,7 @@ import {
 } from "../testing/composer.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { commandKeyshortcuts } from "../tooltip.js";
@@ -133,7 +134,7 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** Each agent with no task's inbox as the service answers a read of it. */
+/** Each agent with no task's inbox as main pushes it. */
 const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
 
 /** The tasks holding items, and those of them with an item waiting, as main reads the account. */
@@ -184,18 +185,12 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
+  // The host pushes each task's inbox, and each agent's with no task, as it is followed.
+  const host = followedInboxes(({ kind, id }) => ({
+    items: (kind === INBOX_SCOPE_KIND.PLAN ? INBOXES : AGENT_INBOXES).get(id) ?? [],
+  }));
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
-      const value: CodingAgentInboxAnswerView = {
-        items: AGENT_INBOXES.get(agentId) ?? [],
-        cursor: "1",
-      };
-      return Promise.resolve(value);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
-      return Promise.resolve(value);
-    },
+    ...host.procedures,
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId ?? "");
@@ -213,12 +208,11 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-luke-profile");
 });
 
-/** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
+/** A task the composer started: its name, repository, workspace, the agent it asked for, and the brief it handed on. */
 interface Started {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
-  readonly planning: boolean;
   readonly agent: NewTaskAgent | undefined;
   readonly brief: string | undefined;
 }
@@ -239,12 +233,11 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
     workspaceId: LISTED_WORKSPACE,
     repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
     readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
-    start: (name, repository, workspaceId, planning, from) => {
+    start: (name, repository, workspaceId, from) => {
       started.push({
         name,
         repository,
         workspaceId,
-        planning,
         agent: from?.handed,
         brief: from?.brief,
       });
@@ -279,7 +272,6 @@ function mount(
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     ...overrides,
@@ -664,7 +656,7 @@ test("Home's composer leaves the caret in a field the developer is typing in as 
   assert.ok(document.activeElement === field, "the field keeps the caret");
 });
 
-test("Agent mode: Return in Home's composer starts the task in the workspace Home lists, without planning, and an agent on the words with the chip's model", async () => {
+test("Return in Home's composer starts the task in the workspace Home lists, without planning, and an agent on the words with the chip's model", async () => {
   const { page, opened } = mount();
   await settle();
   typeInComposer(page, "Make the sidebar keep its folds.");
@@ -677,7 +669,6 @@ test("Agent mode: Return in Home's composer starts the task in the workspace Hom
     name: "",
     repository: "acme/relay",
     workspaceId: LISTED_WORKSPACE,
-    planning: false,
     brief: undefined,
   });
   assert.deepEqual(handed, {
@@ -688,26 +679,6 @@ test("Agent mode: Return in Home's composer starts the task in the workspace Hom
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
   assert.equal(opened.started.length, 1);
   assert.equal(opened.newTasks, 0, "no dialog is asked for");
-});
-
-test("Plan mode: Shift+Tab in Home's composer turns it on, and Return starts the plan and its call in the workspace Home lists, Untitled, handing Luke the words as its brief, with no agent", async () => {
-  const { page, opened } = mount();
-  await settle();
-  pressInComposer(page, "Tab", { shiftKey: true });
-  typeInComposer(page, "Rethink automations");
-  pressInComposer(page, "Enter");
-  await settle();
-
-  assert.deepEqual(opened.started, [
-    {
-      name: "",
-      repository: "acme/relay",
-      workspaceId: LISTED_WORKSPACE,
-      planning: true,
-      agent: undefined,
-      brief: "Rethink automations",
-    },
-  ]);
 });
 
 test("words typed in the composer while the task list is read are still there once it lands", async () => {
@@ -1071,23 +1042,6 @@ async function mountUnderDialog() {
     },
   };
 }
-
-test("Plan turned on in the dialog over Home and the dialog put away, Home's composer is in Plan mode too, and starts the plan and its call", async () => {
-  const page = await mountUnderDialog();
-  pressInComposer(page.dialog(), "Tab", { shiftKey: true });
-  await page.closeDialog();
-
-  const toggle = page.home().querySelector('button[aria-label="Plan with Luke first"]');
-  assert.equal(toggle?.getAttribute("aria-pressed"), "true", "Home's card shows Plan mode");
-  typeInComposer(page.home(), "Rethink automations");
-  pressInComposer(page.home(), "Enter");
-  await settle();
-
-  assert.deepEqual(
-    page.started.map(({ planning, agent }) => ({ planning, agent })),
-    [{ planning: true, agent: undefined }],
-  );
-});
 
 test("Home's composer is drawn as the dialog's: New task's title with the repository chip after it in the head row over the box, and no chip in the box's foot", async () => {
   const page = await mountUnderDialog();

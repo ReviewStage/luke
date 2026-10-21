@@ -7,10 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import {
-  inColumn,
-  isPinnable,
   type OpenTask,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -77,6 +74,44 @@ function launch(stood: Stood) {
     },
   };
 }
+
+test("the Chat stands opened on a task with no channel yet and once its channel is held, never while Chat is off, and again as it was left once Chat is back on", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ chat }: { chat: boolean | undefined }) {
+    control = useSidePanel(
+      undefined,
+      { id: TASK, holds: { ...usedTask(TASK).holds, [SIDE_PANEL_TAB.CHAT]: chat } },
+      [],
+      [],
+      [],
+      [],
+      [],
+    );
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (chat: boolean | undefined) =>
+    act(() => root.render(createElement(Probe, { chat })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  // Chat on and no channel yet: the Chat stands only once opened, on its empty state.
+  render(undefined);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "no channel opens no Chat by itself");
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CHAT));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(false);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat off draws no Chat tab");
+  assert.notEqual(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.ok(panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat back on draws it again");
+});
 
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
@@ -414,6 +449,7 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
     SIDE_PANEL_TAB.PLAN,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
+    SIDE_PANEL_TAB.CHAT,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -495,7 +531,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
 });
 
-test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin opening the Call in the task's column", () => {
+test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin let go too", () => {
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({
@@ -510,14 +546,17 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.COMMENTS],
+    [
+      SIDE_PANEL_TAB.PLAN,
+      SIDE_PANEL_TAB.BOARD,
+      SIDE_PANEL_TAB.CODE,
+      SIDE_PANEL_TAB.COMMENTS,
+      SIDE_PANEL_TAB.CHAT,
+    ],
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
-  assert.deepEqual(
-    panel.control().pins.map(({ tab }) => [tab, isPinnable(tab) && inColumn(tab)]),
-    [[MAIN_TAB.CALL, true]],
-  );
+  assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
 test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {

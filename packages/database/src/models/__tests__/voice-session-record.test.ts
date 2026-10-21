@@ -5,6 +5,7 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { voiceTranscriptSegments } from "../../schemas/voice.js";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, startTask } from "../../testing/index.js";
 import { VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
@@ -32,7 +33,7 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** An agent on the task, started blank under the account. */
-const startAgent = (userId: string, taskId: string) =>
+const startAgent = (userId: string, taskId: string, runtime?: ConversationRuntime) =>
   Effect.map(
     createCodingAgent(userId, {
       taskId,
@@ -42,6 +43,7 @@ const startAgent = (userId: string, taskId: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      runtime,
     }),
     (started) => Option.getOrThrow(started).agent,
   );
@@ -102,6 +104,7 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           agentId: agent.id,
           taskId: task.id,
           archived: false,
+          runtime: CONVERSATION_RUNTIME.EVE,
           conversation: { userId: starter, conversationId: agent.conversationId },
         };
         assert.deepEqual(yield* record.heldAgent({ userId: starter, agentId: agent.id }), held);
@@ -114,6 +117,18 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           true,
         );
       }),
+  );
+
+  it.effect("an agent on a native harness is held with its runtime, so a call can refuse it", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      const task = yield* startTask(userId, { name: "Billing export" });
+      const native = yield* startAgent(userId, task.id, CONVERSATION_RUNTIME.CLAUDE_CODE);
+      assert.equal(
+        (yield* record.heldAgent({ userId, agentId: native.id }))?.runtime,
+        CONVERSATION_RUNTIME.CLAUDE_CODE,
+      );
+    }),
   );
 
   it.effect("the session's row names its agent, and a re-attach reads it back", () =>
@@ -130,6 +145,44 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
   );
 
   it.effect(
+    "a call into an agent with no task is held, registered with no task, and read back by its agent alone",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const stranger = yield* openAccount;
+        const { workspaceId } = yield* startTask(userId, { name: "Billing export" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: null,
+          organizationId: workspaceId,
+          planSnapshot: null,
+          prompt: "Triage the overnight failures.",
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: null,
+        });
+        const agent = Option.getOrThrow(started).agent;
+        assert.equal((yield* record.heldAgent({ userId, agentId: agent.id }))?.taskId, null);
+        assert.equal(yield* record.heldAgent({ userId: stranger, agentId: agent.id }), undefined);
+
+        const sessionId = `live-${randomUUID()}`;
+        const voiceSessionId = yield* record.register({
+          userId,
+          sessionId,
+          agentId: agent.id,
+          attachId: randomUUID(),
+          model: "gpt-live",
+        });
+        assert.ok(voiceSessionId);
+        assert.deepEqual(yield* record.owned({ userId, sessionId }), {
+          voiceSessionId,
+          taskId: undefined,
+          agentId: agent.id,
+        });
+      }),
+  );
+
+  it.effect(
     "a new call into an agent reads back its own calls alone, and its transcript is those calls, never a sibling agent's or the task's own",
     () =>
       Effect.gen(function* () {
@@ -142,13 +195,11 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
         yield* callWith(userId, task.id, sibling.id, ["Fix the flaky test.", "On it."]);
         yield* callWith(userId, task.id, undefined, ["What is left?", "The export."]);
 
-        const earlier = yield* record.earlierCalls({ userId, taskId: task.id, agentId: agent.id });
+        const earlier = yield* record.earlierCalls({ agentId: agent.id });
         assert.deepEqual(
           earlier.map((line) => line.text),
           ["Ship the CSV first.", "Starting on it."],
         );
-        // A call about the task alone still reads back every call about it.
-        assert.equal((yield* record.earlierCalls({ userId, taskId: task.id })).length, 6);
 
         const transcript = Option.getOrThrow(yield* readAgentTranscript(userId, agent.id));
         assert.deepEqual(

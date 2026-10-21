@@ -39,8 +39,8 @@ function service(answers: Array<() => Response>) {
 }
 
 /** What an admin outside the native-agents cohort may open, and what nobody may. */
-const ADMIN: AppAccessSlice = { admin: true, nativeAgents: false };
-const NOTHING: AppAccessSlice = { admin: false, nativeAgents: false };
+const ADMIN: AppAccessSlice = { admin: true };
+const NOTHING: AppAccessSlice = { admin: false };
 
 function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
   return new AccountAccessClient({
@@ -216,12 +216,10 @@ it.effect("nobody signed in asks the service nothing", () =>
 );
 
 it.effect(
-  "an account in the native-agents cohort reads as one, and a service that names no cohort reads as outside it",
+  "an older service that still names the native-agents cohort reads as its admin flag alone",
   () =>
     Effect.gen(function* () {
-      const { client: cohort } = service([json({ admin: false, nativeAgents: true })]);
-      assert.deepEqual(yield* cohort.readAccess(), { admin: false, nativeAgents: true });
-      const { client: older } = service([json({ admin: true })]);
+      const { client: older } = service([json({ admin: true, nativeAgents: false })]);
       assert.deepEqual(yield* older.readAccess(), ADMIN);
     }),
 );

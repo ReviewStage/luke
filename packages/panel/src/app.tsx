@@ -20,10 +20,11 @@ import {
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
-import { callBarTaskId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { callBarAgentId, callCard, callCardShown } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
+import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
@@ -51,8 +52,10 @@ import { DesktopShell } from "./desktop/desktop-shell.js";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs.js";
 import { ListedAutomations } from "./desktop/listed-automations.js";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse.js";
+import { TabSwitcher } from "./desktop/tab-switcher.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
+import { stepTitle } from "./history-titles.js";
 import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
 import { LinkMenu } from "./link-menu.js";
@@ -64,6 +67,7 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
+import { SHELL_ROOM } from "./shell-room.js";
 import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatOn } from "./tasks/chat-gate.js";
@@ -87,16 +91,11 @@ import {
   useExperiment,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
-import { useCaptionPresentation } from "./use-caption-presentation.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
-import {
-  FIXTURE_SPEAKING_CAPTIONS,
-  fixtureVoice,
-  useCallTranscript,
-  useVoiceView,
-} from "./use-voice-view.js";
+import { useVoiceNotice } from "./use-voice-notice.js";
+import { fixtureVoice, useCallTranscript, useVoiceView } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
 
@@ -342,30 +341,10 @@ function AppWindow(): React.JSX.Element {
     setFeedbackKind(FEEDBACK_KIND.PROMPT);
   });
 
-  /**
-   * Moves the talk key, or resets it when no chord is named. The key the row
-   * shows is not taken from this reply — the main process announces the one
-   * that actually registered, the same way it always has — so the reply
-   * carries only the stored choice and any refusal.
-   */
-  const changeVoiceHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
-    [],
-  );
-
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
   useWindowZoom(useAppSlice(ZOOM), (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
   useWindowFullScreen(useAppSlice(FULL_SCREEN));
-
-  // The stop key, under the same rule: the key the row shows follows the main
-  // process's own announcement of what actually registered.
-  const changeStopHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
-    [],
-  );
 
   const signOut = useCallback(async () => {
     await act(ACT_KIND.ACCOUNT_SIGN_OUT);
@@ -383,18 +362,6 @@ function AppWindow(): React.JSX.Element {
       };
     }
   }, [act]);
-
-  // True while a settings row is recording a chord. Both Luke keys stay
-  // registered through a recording — the recording is how one gets replaced —
-  // so a press of a current chord landing then is held here rather than
-  // opening the microphone under the field being typed into.
-  const shortcutCapture = useRef(false);
-  const changeShortcutCapture = useCallback((capturing: boolean) => {
-    shortcutCapture.current = capturing;
-    // The talk and stop keys are routed by the main process to a window that
-    // is not this one, so the recording is reported there to be honored.
-    appPlatform().setShortcutCapturing(capturing);
-  }, []);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -414,14 +381,9 @@ function AppWindow(): React.JSX.Element {
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
-  // A capture run always draws the fixture's words: the voice window that
-  // otherwise decides the captions does not stand in one.
-  const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
-  const developerCaptions = fixtureSpeaking ? undefined : voiceView.developerCaptions;
-
-  // The hint rides Luke's caption, and only over a silence the helper
+  // The hint asks while Luke speaks, and only over a silence the helper
   // actually reported. "Got it" quiets it for this stretch of silence and any
-  // that follows too soon; the captions above it stay either way.
+  // that follows too soon.
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
@@ -547,36 +509,24 @@ function AppWindow(): React.JSX.Element {
     [],
   );
   useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
-  // The call card's way back: the Tasks tab, on the call's task's document,
-  // opening it where another task, or none, is open.
-  const showTask = useRef(tasks.onShowTask);
-  showTask.current = tasks.onShowTask;
-  useEffect(
-    () =>
-      appBridge().onShowTask(({ taskId }) =>
-        guardLeave(() => {
-          changeTab(PANEL_TAB.TASKS);
-          showTask.current(taskId);
-        })(),
-      ),
-    [changeTab, guardLeave],
-  );
   // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another task, the home page, Settings, or the task itself
-  // under its version history, the Inbox, an agent's page, or a side panel filling the window.
+  // on screen: another agent's tab or none, the home page, Settings, or the
+  // agent's own task under its version history, the Inbox, an agent's page,
+  // or a side panel filling the window.
   const focused = useWindowFocused();
-  const taskShown = callBarTaskId({
+  const columnTab = tasks.mainTabs.tab;
+  const agentShown = callBarAgentId({
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
     historyOpen: tasks.history.open,
     inboxOpen: tasks.inboxView.open || tasks.chatView.open,
     agentPageOpen: tasks.agentView.agentId !== undefined,
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
-    activeTaskId: planning?.activeTaskId,
+    columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
   });
   const callVideo = useCallCardVideo();
   const call: CallCardInput | undefined =
-    !accountGated && callCardShown({ view: voiceView, focused, taskShown: taskShown })
+    !accountGated && callCardShown({ view: voiceView, focused, agentShown })
       ? {
           card: callCard({ view: voiceView, tasks: planning ?? IDLE_TASKS_VIEW }),
           speakerMuted: voiceView.speakerMuted,
@@ -640,6 +590,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
+    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,
@@ -659,13 +610,12 @@ function AppWindow(): React.JSX.Element {
   // stage has, which on the desktop is the window's.
   const sidebar = useSidebarCollapse(run?.fixtureMode === true, stage.compact);
 
-  const caption = useCaptionPresentation({
-    lukeCaptions,
-    developerCaptions,
+  const notice = useVoiceNotice({
     voiceError,
     voiceNotice,
     speakers,
     fixtureSpeaking,
+    volumeHint: { wanted: volumeHintWanted, text: volumeHintText(outputAudio) },
   });
 
   // Rings and keyboard-only hints follow focus the keyboard actually moved.
@@ -695,9 +645,9 @@ function AppWindow(): React.JSX.Element {
   }, [outputAudio]);
 
   /**
-   * The hint's own button. It quiets the hint, never the captions: the words
-   * stay for as long as the silence does, because they are what "got it"
-   * leaves the user reading Luke by.
+   * The hint's own button. It quiets the hint for this stretch of silence;
+   * Luke's words go on streaming into the transcript, which is what "got
+   * it" leaves the user reading him by.
    */
   const dismissVolumeHint = useCallback(() => {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
@@ -797,9 +747,6 @@ function AppWindow(): React.JSX.Element {
     onSignOut: signOut,
     onDeleteAccount: deleteAccount,
     onRequestMicrophone: requestMicrophoneAccess,
-    onVoiceHotkeyChange: changeVoiceHotkey,
-    onStopHotkeyChange: changeStopHotkey,
-    onShortcutCapture: changeShortcutCapture,
     workspace,
   };
 
@@ -841,7 +788,7 @@ function AppWindow(): React.JSX.Element {
                         // lays it out.
                         data-surface="desktop"
                         // The sidebar's width lays out the shell and Settings' page list, and
-                        // places the captions over the work column beside it.
+                        // places the voice's notice line over the work column beside it.
                         style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
                       >
                         {/* The window's content. */}
@@ -878,14 +825,7 @@ function AppWindow(): React.JSX.Element {
                                   onList: history.lists.settings,
                                 }}
                                 call={call}
-                                captions={{
-                                  caption,
-                                  volumeHint: {
-                                    wanted: volumeHintWanted,
-                                    text: volumeHintText(outputAudio),
-                                    onDismiss: dismissVolumeHint,
-                                  },
-                                }}
+                                notice={{ notice, onDismissHint: dismissVolumeHint }}
                                 doors={settingsDoors}
                               />
                             </ThreadRevealProvider>
@@ -919,6 +859,13 @@ function AppWindow(): React.JSX.Element {
                           readFiles={(taskId) =>
                             act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
                           }
+                        />
+                        {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
+                        <TabSwitcher
+                          available={!accountGated}
+                          tab={tab}
+                          onTabChange={changeTab}
+                          tasks={tasks}
                         />
                       </div>
                     </ListedAutomations>

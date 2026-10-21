@@ -4,6 +4,11 @@ export type {
   AccountSourceSeam,
 } from "../account-source.js";
 export { hostAssemblyLayer } from "../compose-host.js";
+export type {
+  OpenTerminalSocket,
+  TerminalSocketArrival,
+  TerminalSocketOpening,
+} from "../compose-terminals.js";
 export { DuplicateGatewayMethod } from "../composer.js";
 export {
   type CookieSessionDoor,

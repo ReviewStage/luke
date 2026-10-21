@@ -20,7 +20,7 @@ export {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
-export type { LiveRecord, SpokenAskAttach } from "./live-record.js";
+export type { LiveRecord, SpokenAskAttach, TypedRowWrite } from "./live-record.js";
 export {
   AVATAR_START_BOUND,
   LIVE_AVATAR_END,

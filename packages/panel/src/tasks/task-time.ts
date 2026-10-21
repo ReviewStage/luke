@@ -120,6 +120,11 @@ export function dayAndTimeText(at: number): string {
   return DAY_AND_TIME.format(at);
 }
 
+/** A moment on the clock, as a chat message's byline says it: "10:42 AM" on `now`'s own day, "Oct 11, 2:14 PM" on another. */
+export function clockText(at: number, now: number): string {
+  return midnightOf(at) === midnightOf(now) ? TIME_OF_DAY.format(at) : DAY_AND_TIME.format(at);
+}
+
 /** A day alone, with its year: "Oct 11, 2026". */
 export function dayText(at: number): string {
   return DAY_WITH_YEAR.format(at);

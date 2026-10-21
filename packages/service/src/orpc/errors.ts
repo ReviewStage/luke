@@ -47,6 +47,7 @@ const isHostedRefusal = Schema.is(
     error: Schema.Literals(REFUSAL_SLUGS),
     unreached: Schema.optionalKey(repositoryUnreachedSchema),
     upstreamStatus: Schema.optionalKey(Schema.Int),
+    resetsAt: Schema.optionalKey(Schema.Number),
   }),
 );
 

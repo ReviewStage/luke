@@ -12,7 +12,12 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
-import { sameIssueChoice, type TaskIssueChoice, taskIssueChoiceSchema } from "./task-issue-wire.js";
+import {
+  sameIssueChoice,
+  type TaskIssueChoice,
+  taskIssueChoiceSchema,
+  taskIssueTagSchema,
+} from "./task-issue-wire.js";
 
 /**
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
@@ -173,7 +178,7 @@ export const PLAN_FIELD = {
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 
 /** The one saved document of a task, replaced whole by every save. */
-export const planDocumentSchema = EffectSchema.Struct({
+const planDocumentSchema = EffectSchema.Struct({
   /** The plan's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
   assumptions: EffectSchema.Array(planAssumptionSchema).check(
@@ -353,6 +358,18 @@ export const repositoryPinsAnswerSchema = EffectSchema.Struct({
   pins: EffectSchema.Array(repositoryPinSchema),
 });
 
+/**
+ * A pin's answer (PUT): the pins as they then stand, and the transaction
+ * that wrote them, which a follower of the sidebar waits for before it draws
+ * the pin as done; absent where the pin changed no row.
+ */
+export const repositoryPinsWrittenSchema = EffectSchema.Struct({
+  ...repositoryPinsAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type RepositoryPinsWritten = typeof repositoryPinsWrittenSchema.Type;
+
 /** Pinning a repository, or unpinning it (PUT): asking twice for either moves nothing, and a pin keeps the instant it was first made. */
 export const repositoryPinRequestSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
@@ -372,6 +389,37 @@ export const TASK_LIST_QUERY = {
 export const TASK_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
+
+/**
+ * Who wrote a revision of a plan: the developer, the notetaker on a call
+ * (whom the developer knows as Luke), a coding agent, or, for the one
+ * revision a plan from before history starts with, nobody the service can
+ * name.
+ */
+export const PLAN_ACTOR = {
+  DEVELOPER: "developer",
+  NOTETAKER: "notetaker",
+  AGENT: "agent",
+  EARLIER: "earlier",
+} as const;
+
+export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
+
+/** Who made a task: its member by hand, Luke on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
+export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
+
+/**
+ * Who made a task where its member did not make it by hand: Luke on their
+ * call, or a coding agent acting for them, by the agent's id while its row
+ * stands, which the window reads its title, harness, automation, and task
+ * from among the agents it already lists.
+ */
+const taskOriginSchema = EffectSchema.Struct({
+  actor: EffectSchema.Literals([PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+});
+
+export type TaskOrigin = typeof taskOriginSchema.Type;
 
 const taskSummaryFields = {
   id: wireUuidSchema,
@@ -409,8 +457,20 @@ const taskSummaryFields = {
    * service before it was sent.
    */
   createdBy: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * Who made the task for `createdBy`, where they did not make it by hand:
+   * Luke on their call, or a coding agent; absent for a task its member made
+   * by hand, and from a service before it was sent.
+   */
+  origin: EffectSchema.optionalKey(taskOriginSchema),
   /** Where the task stands; absent from a service before tasks had one. */
   status: EffectSchema.optionalKey(taskStatusSchema),
+  /**
+   * Epoch milliseconds the task's status last moved to Done or Canceled;
+   * absent while it stands in any other, and from a service before this was
+   * kept, where a settled task counts as finished at `updatedAt`.
+   */
+  completedAt: EffectSchema.optionalKey(countedNumber),
   /** How much the task matters; absent from a service before tasks had one. */
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   /** The task's number in its workspace, which its key is drawn from with the workspace's prefix; absent from a service before tasks had one. */
@@ -436,6 +496,8 @@ const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
+  /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
+  personaName: EffectSchema.optionalKey(EffectSchema.String),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
@@ -503,13 +565,18 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
 
 /**
- * One row of the task list: everything but the document, and what its
- * coding agents are doing, which only the list answers, and only for a task
- * with an agent.
+ * One row of the task list: everything but the document, what its coding
+ * agents are doing, which only the list answers, and only for a task with
+ * an agent, and the issues it links, oldest linked first, which only the
+ * list answers too, and only for a task that links one.
  */
 export const taskSummarySchema = EffectSchema.Struct({
   ...taskSummaryFields,
   agents: EffectSchema.optionalKey(taskAgentsSummarySchema),
+  /** Absent for a task that links no issue, and from a service before the list named them. */
+  issues: EffectSchema.optionalKey(
+    EffectSchema.Array(taskIssueTagSchema).check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES)),
+  ),
 });
 
 export type TaskSummary = typeof taskSummarySchema.Type;
@@ -525,21 +592,6 @@ const agentEditLineSchema = EffectSchema.Struct({
   /** Epoch milliseconds of the save. */
   at: countedNumber,
 });
-
-/**
- * Who wrote a revision of a plan: the developer, the notetaker on a call
- * (whom the developer knows as Luke), a coding agent, or, for the one
- * revision a plan from before history starts with, nobody the service can
- * name.
- */
-export const PLAN_ACTOR = {
-  DEVELOPER: "developer",
-  NOTETAKER: "notetaker",
-  AGENT: "agent",
-  EARLIER: "earlier",
-} as const;
-
-export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
 
 /**
  * The member a revision names: the developer whose edit or restore it is, or
@@ -582,7 +634,7 @@ export const PLAN_SECTION_BOUNDS = {
  * heading's words, and a heading renamed with nothing beneath it changed
  * keeps the revision that last changed them.
  */
-export const planSectionEditSchema = EffectSchema.Struct({
+const planSectionEditSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(
     EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
   ),
@@ -624,8 +676,30 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
-/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
-export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
+/**
+ * The id of the transaction a write committed in, as Postgres counts it, in
+ * decimal: present where the write changed a row, so the desktop following
+ * the task list waits for it to arrive before it confirms the write, and
+ * absent where nothing changed, as Neon's mutations guide says.
+ */
+const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
+export const taskAnswerSchema = EffectSchema.Struct({
+  plan: taskSchema,
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
+
+/**
+ * A restored revision (POST): the plan as it now stands, and the id of the
+ * transaction the restore's revision was written in, which a reader
+ * following the history over Neon Realtime waits for; none where the
+ * restore changed nothing.
+ */
+export const taskRestoreAnswerSchema = EffectSchema.Struct({
+  ...taskAnswerSchema.fields,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
 
 /**
  * Why the agent a start asked for was not started beside the task it made,
@@ -633,7 +707,11 @@ export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
  * Note that it carries no `unreached`, because the start confirmed the
  * repository reachable as it made the task.
  */
-const taskAgentRefusalSchema = EffectSchema.Struct({ error: EffectSchema.String });
+/** Why the agent a start asked for was refused, and when a plan's reached limit resets where that is why and the provider said. */
+const taskAgentRefusalSchema = EffectSchema.Struct({
+  error: EffectSchema.String,
+  resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+});
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
 
@@ -647,12 +725,19 @@ export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(codingAgentSummarySchema),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
 });
 
 export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
-export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+export const taskDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(taskTxidSchema),
+});
+
+/** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
+export const UNKNOWN_AGENT_LABEL = "a coding agent";
 
 /** How a plan's history is read: the newest revisions first, a page at a time. */
 export const PLAN_HISTORY_BOUNDS = {
@@ -834,7 +919,7 @@ export function isSecretFile(path: string): boolean {
   return SECRET_FILE.test(path);
 }
 
-export const TASK_FILE_BOUNDS = {
+const TASK_FILE_BOUNDS = {
   /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,
   /** The longest text a raw read carries: the service reads a file of a megabyte at most, and its text, a character to a byte at least, is no longer. */
@@ -896,7 +981,7 @@ export type TaskFileRequest = typeof taskFileRequestSchema.Type;
  * many lines the whole file has, and the lines, each cut as `show_code`
  * cuts it. A window past the file's end carries no lines.
  */
-const taskFileWindowSchema = EffectSchema.Struct({
+export const taskFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
@@ -907,8 +992,6 @@ const taskFileWindowSchema = EffectSchema.Struct({
     EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
   ).check(EffectSchema.isMaxLength(TASK_FILE_BOUNDS.WINDOW_LINES)),
 });
-
-export type TaskFileWindow = typeof taskFileWindowSchema.Type;
 
 /**
  * Why the File tab's file is not shown, and, where GitHub found nothing at

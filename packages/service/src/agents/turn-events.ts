@@ -25,7 +25,6 @@ import {
 } from "../tasks/queue-question.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "../tasks/show-code.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 
 /**
  * One turn's run seams as the voice session hears them while the turn runs:
@@ -94,11 +93,8 @@ function replyTextOf(parts: readonly JournalPart[]): string {
   return parts.flatMap((part) => (part.type === UI_PART_TYPE.TEXT ? [part.text] : [])).join("\n");
 }
 
-/** The calls that run a shell command in a checkout: the brain's read of the task's repository, and an agent's own shell. */
-const SLOW_STEP_TOOLS: ReadonlySet<string> = new Set([
-  RUN_IN_REPOSITORY_TOOL.name,
-  AGENT_TOOL.BASH,
-]);
+/** The calls that run a shell command in a checkout: an agent's own shell. */
+const SLOW_STEP_TOOLS: ReadonlySet<string> = new Set([AGENT_TOOL.BASH]);
 
 /**
  * What one call tells while the turn runs: a question a brain call queued

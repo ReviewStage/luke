@@ -60,6 +60,12 @@ interface PanelManagerOptions {
    * lays itself out by (`windowFactsFor`).
    */
   onFullScreenChanged?: () => void;
+  /**
+   * Follows a window from its creation until it closes, for each stretch
+   * its page stops answering (`renderer-health.ts`); handed every window
+   * this opens.
+   */
+  followResponsiveness?: (window: BrowserWindow) => void;
 }
 
 /**
@@ -114,6 +120,7 @@ export class PanelManager {
   readonly #zoomFactor: () => number;
   readonly #onAllClosed: (() => void) | undefined;
   readonly #onFullScreenChanged: (() => void) | undefined;
+  readonly #followResponsiveness: ((window: BrowserWindow) => void) | undefined;
   readonly #placementPath: string | undefined;
   readonly #closing: () => boolean;
   /** The window, keyed by the display it was opened against. */
@@ -147,6 +154,7 @@ export class PanelManager {
     this.#zoomFactor = options.zoomFactor;
     this.#onAllClosed = options.onAllClosed;
     this.#onFullScreenChanged = options.onFullScreenChanged;
+    this.#followResponsiveness = options.followResponsiveness;
     this.#placementPath = options.placementPath;
     this.#closing = options.closing;
   }
@@ -426,6 +434,10 @@ export class PanelManager {
 
     refuseForeignNavigation(window, this.#rendererUrl);
     this.#followVisibility(window);
+    // A page that stops answering is reported once per stretch, as it answers
+    // again or the window closes on it; unlike the voice window's, it is not
+    // replaced, since the panel holds what the developer was doing.
+    this.#followResponsiveness?.(window);
     // Each page the window loads, a reload's included, is handed the avatar's
     // grant standing, since the renderer it replaced ran the session and the
     // voice window stays muted while the avatar reads as up. Note that the

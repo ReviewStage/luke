@@ -9,7 +9,12 @@ import { PAGE_SHOWER, type PageShower } from "@luke/features/page-wire";
 import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../core.js";
-import { type PageToolBinding, runShowPage, SHOW_PAGE_REFUSAL } from "./page-tool.js";
+import {
+  CODER_SHOW_PAGE_TOOL,
+  type PageToolBinding,
+  runShowPage,
+  SHOW_PAGE_REFUSAL,
+} from "./page-tool.js";
 
 /**
  * `show_page`, every agent's one tool for a page, through its public
@@ -56,10 +61,10 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
   return { sandbox, reads };
 }
 
-/** Luke, who shows a page from a call. */
-const LUKE: PageShower = { kind: PAGE_SHOWER.LUKE };
+const AGENT: PageShower = { kind: PAGE_SHOWER.AGENT, agentId: randomUUID() };
 
-const show = (binding: PageToolBinding, input: WireBoundaryInput, shownBy: PageShower = LUKE) =>
+/** A call as an agent makes it, whose `show_page` takes `path` alone. */
+const show = (binding: PageToolBinding, input: WireBoundaryInput, shownBy: PageShower = AGENT) =>
   runShowPage(binding, unparsedWire(input), shownBy);
 
 const readAccepted = Schema.decodeUnknownSync(
@@ -76,17 +81,21 @@ const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, re
 
 it.layer(getTestDB())("show_page", (it) => {
   it.effect(
-    "inline HTML makes a page, named again it takes the next version, each kept as shown by who showed it, and the answer carries the mention the page is named by and never the HTML",
+    "a file makes a page, named again it takes the next version, each kept as shown by who showed it, and the answer carries the mention the page is named by and never the HTML",
     () =>
       Effect.gen(function* () {
-        const task = yield* openTask;
-        const first = yield* show(task, { title: "Invite funnel", html: FUNNEL });
+        const { sandbox } = sandboxWith({
+          [`${CHECKOUT}/funnel.html`]: FUNNEL,
+          [`${CHECKOUT}/weekly.html`]: `${FUNNEL}<p>v2</p>`,
+        });
+        const task = { ...(yield* openTask), sandbox };
+        const first = yield* show(task, { title: "Invite funnel", path: "funnel.html" });
         const page = shownPage(first);
         const agent: PageShower = { kind: PAGE_SHOWER.AGENT, agentId: randomUUID() };
         const second = shownPage(
           yield* show(
             task,
-            { title: "Invite funnel, by week", html: `${FUNNEL}<p>v2</p>`, page: page.id },
+            { title: "Invite funnel, by week", path: "weekly.html", page: page.id },
             agent,
           ),
         );
@@ -112,8 +121,25 @@ it.layer(getTestDB())("show_page", (it) => {
         const stored = Option.getOrThrow(
           yield* readPageVersion(task.userId, task.taskId, page.id, 1),
         );
-        assert.deepEqual([stored.html, stored.shownBy], [FUNNEL, LUKE]);
+        assert.deepEqual([stored.html, stored.shownBy], [FUNNEL, AGENT]);
       }),
+  );
+
+  it.effect("show_page reads a page from its path and takes no html", () =>
+    Effect.gen(function* () {
+      const task = yield* openTask;
+      const { sandbox } = sandboxWith({ [`${CHECKOUT}/funnel.html`]: FUNNEL });
+      const agent = { ...task, sandbox };
+
+      const shown = shownPage(yield* show(agent, { title: "Funnel", path: "funnel.html" }));
+      assert.equal(shown.version, 1);
+      assert.deepEqual(
+        yield* show(agent, { title: "Inline", html: FUNNEL }),
+        refused(SHOW_PAGE_REFUSAL.UNREADABLE_PATH),
+      );
+      assert.equal((yield* listPages(task.userId, task.taskId)).length, 1);
+      assert.ok(!("html" in CODER_SHOW_PAGE_TOOL.inputSchema.fields));
+    }),
   );
 
   it.effect("a secret file in the sandbox is never read into a page", () =>
@@ -142,8 +168,12 @@ it.layer(getTestDB())("show_page", (it) => {
 
       assert.deepEqual(
         yield* show(
-          { userId: other.userId, taskId: task.taskId },
-          { title: "Funnel", html: FUNNEL },
+          {
+            userId: other.userId,
+            taskId: task.taskId,
+            sandbox: sandboxWith({ [`${CHECKOUT}/funnel.html`]: FUNNEL }).sandbox,
+          },
+          { title: "Funnel", path: "funnel.html" },
         ),
         refused(SHOW_PAGE_REFUSAL.NO_TASK),
       );

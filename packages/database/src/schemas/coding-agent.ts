@@ -237,6 +237,8 @@ export const codingAgent = pgTable(
     startBranch: text("start_branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
+    /** The human name the agent was given as it was created, a first name no other agent of its task wears (`@luke/features/agent-persona`); null for an agent from before names were given, named by its title. */
+    personaName: text("persona_name"),
     /** The newest model step of the agent's own conversation; null before its first. */
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
     /** When eve last compacted the agent's own conversation; null where it never has. */
@@ -257,6 +259,13 @@ export const codingAgent = pgTable(
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
     payer: text("payer").$type<CodingAgentPayer>(),
+    /**
+     * The digest of the bearer the agent's runner presents at Luke's MCP server and its events
+     * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
+     * than its conversation's, because a launch writes it while a message's hand-over holds the
+     * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
+     */
+    runnerTokenHash: text("runner_token_hash"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
@@ -265,6 +274,9 @@ export const codingAgent = pgTable(
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one task's agents in the order they were started.
     index("coding_agent_task_created").on(table.taskId, table.createdAt),
+    // Every Luke tool call, runner event, and session route finds the agent its conversation is;
+    // one agent per conversation, since an agent is started on a conversation of its own.
+    uniqueIndex("coding_agent_conversation").on(table.conversationId),
     // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
     // The agents with no task, which the sidebar lists across the account's workspaces, are read
@@ -274,6 +286,11 @@ export const codingAgent = pgTable(
       .where(sql`${table.taskId} is null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
+    // Luke's MCP server and the events route find the agent a runner's bearer stands for by the
+    // bearer's digest, on every call; one digest names one agent.
+    uniqueIndex("coding_agent_runner_token_hash")
+      .on(table.runnerTokenHash)
+      .where(sql`${table.runnerTokenHash} is not null`),
   ],
 );
 

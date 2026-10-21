@@ -115,7 +115,7 @@ const transcriptCallSchema = EffectSchema.Struct({
 export type TranscriptCall = typeof transcriptCallSchema.Type;
 
 /** A task's transcript: its calls oldest first, and whether older words were left out of the read. */
-export const taskTranscriptSchema = EffectSchema.Struct({
+const taskTranscriptSchema = EffectSchema.Struct({
   calls: EffectSchema.Array(transcriptCallSchema),
   earlierOmitted: EffectSchema.Boolean,
 });
@@ -124,6 +124,3 @@ export type TaskTranscript = typeof taskTranscriptSchema.Type;
 
 /** A transcript read (GET). */
 export const taskTranscriptAnswerSchema = EffectSchema.Struct({ transcript: taskTranscriptSchema });
-
-/** The transcript of a task no call has been made about. */
-export const EMPTY_TRANSCRIPT: TaskTranscript = { calls: [], earlierOmitted: false };

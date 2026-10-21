@@ -75,8 +75,8 @@ export {
  * of the app names a person, an agent, or a task's Luke: by its mention
  * link (`mention-link.ts`), `[@Ada Lovelace](…/person/<userId>)`, an agent's
  * under its task or its workspace, a Luke's under his task, which a post
- * addresses a member by, a `to` names a DM by, and a reader is named by;
- * the handle each member was minted is no longer read. A channel is the workspace's
+ * addresses a member by, a `to` names a DM by, and a reader is named by.
+ * A channel is the workspace's
  * `#general`, a plan's own channel where its agents post by default, a
  * topic channel a member opened, or a DM between two members; a thread is
  * a reply to a root message. Messages are records of their own, addressed
@@ -156,10 +156,8 @@ export const CHAT_BOUNDS = {
   MAX_STEERS_PER_POST: 3,
   /** The most topic channels a workspace keeps open beside its general and plan channels. */
   MAX_TOPIC_CHANNELS: 12,
-  /** The most posts one agent's turn may make. */
-  MAX_POSTS_PER_TURN: 20,
-  /** The most characters a handle may spell. */
-  MAX_HANDLE_CHARS: 40,
+  /** The most posts one agent's turn may make: a coding agent's whole run is one turn, and it is told to keep its team posted throughout. */
+  MAX_POSTS_PER_TURN: 50,
   /** The most characters a `to` may spell: a channel's `#name`, or a member's mention link, whose label is a name and whose address an agent's task and id make long. */
   MAX_TARGET_CHARS: 512,
   /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
@@ -192,21 +190,17 @@ export const MEMBER_KIND = {
   HUMAN: "human",
   /** A coding agent started on one of the workspace's plans. */
   AGENT: "agent",
-  /** A plan's Luke, one per plan, named by his task's `…/plan/<taskId>/luke` link. */
-  LUKE: "planner",
 } as const;
 
 /** @public */
 export type MemberKind = (typeof MEMBER_KIND)[keyof typeof MEMBER_KIND];
 
 /**
- * What a member is called where no mention link can be written of it, or no
- * name is known: a task's Luke is Luke, and an agent whose coding agent is
- * gone, or a person whose account is, a former one.
+ * What a member is called where no name is known: an agent whose coding
+ * agent is gone, or a person whose account is, a former one.
  * @public
  */
 export const CHAT_MEMBER_LABEL = {
-  LUKE: "Luke",
   FORMER_AGENT: "Former agent",
   FORMER_PERSON: "Former member",
 } as const;
@@ -234,12 +228,6 @@ export type ChannelKind = (typeof CHANNEL_KIND)[keyof typeof CHANNEL_KIND];
  * @public
  */
 export const GENERAL_CHANNEL = "general";
-
-/**
- * The handle every plan's planner answers to, told apart by the plan.
- * @public
- */
-export const LUKE_HANDLE = "luke";
 
 /**
  * How a `to` names a channel, and how the window's composer opens a member's mention.
@@ -301,22 +289,12 @@ export function chatNoticeWords(text: string): string {
   return words.join("\n\n").trim();
 }
 
-/** A handle's grammar: a slug opening on a letter. */
-const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
-
 /** A channel's name, without its `#`: the same grammar as a key. */
 export const chatChannelNameSchema = inboxKeySchema;
 
 /** What a topic channel says it is for: one line of words, with no line break in it. */
 const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS).check(
   EffectSchema.isPattern(/^[^\r\n]*$/u),
-);
-
-/** A member's handle, without its `@`. */
-export const chatHandleSchema = EffectSchema.String.check(
-  EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_HANDLE_CHARS),
-  EffectSchema.isPattern(HANDLE_GRAMMAR),
 );
 
 /** A channel as a `to` names it: `#name`, within a key's grammar and bound. */
@@ -545,21 +523,18 @@ export const editChannelInputSchema = EffectSchema.Struct({
 });
 
 /**
- * A member as a reader sees one: its handle and kind, and what it stands
- * for by kind, a person's account, an agent, or a plan's planner; and
- * whether it has left, an archived agent or plan, which is still named in
- * the messages it wrote.
+ * A member as a reader sees one: its kind, what it is called, and what it
+ * stands for by kind, a person's account or an agent; and whether it has
+ * left, an archived agent, which is still named in the messages it wrote.
  */
-const chatMemberSchema = EffectSchema.Struct({
+export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
-  /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
-  handle: EffectSchema.optionalKey(EffectSchema.String),
-  /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a Luke, always Luke, and for a member whose account or agent is gone. */
+  /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a member whose account or agent is gone. */
   name: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** The plan a planner is Luke on, or the plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
+  /** The plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
   planId: EffectSchema.optionalKey(wireUuidSchema),
   left: EffectSchema.Boolean,
 });
@@ -568,7 +543,7 @@ const chatMemberSchema = EffectSchema.Struct({
 export type ChatMember = typeof chatMemberSchema.Type;
 
 /** A channel as a reader sees one: its kind, its name, the plan it is of, the two members of a DM, and whether it is archived. */
-const chatChannelSchema = EffectSchema.Struct({
+export const chatChannelSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(CHANNEL_KIND)),
   name: EffectSchema.optionalKey(EffectSchema.String),
@@ -588,7 +563,7 @@ const chatChannelSchema = EffectSchema.Struct({
 export type ChatChannel = typeof chatChannelSchema.Type;
 
 /** An ask as a message carries it: its key and revision, where it stands, what it asks, the answer and its answerer, and why its poster resolved it. */
-const chatMessageAskSchema = EffectSchema.Struct({
+export const chatMessageAskSchema = EffectSchema.Struct({
   key: EffectSchema.String,
   revision: countedNumber,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
@@ -606,7 +581,7 @@ const chatMessageAskSchema = EffectSchema.Struct({
  * thread root it replies to, its author, its body, the members it mentions,
  * when it was posted, and the ask it carries.
  */
-const chatMessageSchema = EffectSchema.Struct({
+export const chatMessageSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   seq: countedNumber,
   touchedSeq: countedNumber,
@@ -856,6 +831,19 @@ export const chatWriteRequestSchema = EffectSchema.Union([
 /** @public */
 export type ChatWriteRequest = typeof chatWriteRequestSchema.Type;
 
+/**
+ * A person joining a workspace's chat from the window (POST): their own
+ * member of it and its `#general` made where they are not yet, the one
+ * write a reader makes before it reads, so no read writes.
+ */
+export const chatJoinRequestSchema = EffectSchema.Struct({ join: EffectSchema.Literal(true) });
+
+/** What a join answers: the person's own member of the workspace's chat. */
+export const chatJoinAnswerSchema = EffectSchema.Struct({ self: wireUuidSchema });
+
+/** @public */
+export type ChatJoinAnswer = typeof chatJoinAnswerSchema.Type;
+
 /** Who a post came to, each member by its mention link or a plain name where none can be written: told now, held for their next read, left, and the labels of the links its words write that name no member. */
 const chatReceiptSchema = EffectSchema.Struct({
   told: EffectSchema.Array(EffectSchema.String),
@@ -863,6 +851,13 @@ const chatReceiptSchema = EffectSchema.Struct({
   left: EffectSchema.Array(EffectSchema.String),
   unresolved: EffectSchema.Array(EffectSchema.String),
 });
+
+/**
+ * The transaction a write committed in, as Neon's mutations guide returns
+ * it, which a follower of the chat waits for on its live query; left out
+ * where the write changed no row.
+ */
+const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
 
 /**
  * What a write to the chat answers, one key for each kind of write: a post,
@@ -874,14 +869,15 @@ const chatReceiptSchema = EffectSchema.Struct({
  * channel opened or edited, the channel as it then stands.
  */
 export const chatWriteAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema }),
-  EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean }),
-  EffectSchema.Struct({ resolved: chatMessageSchema }),
+  EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema, ...writtenIn }),
+  EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean, ...writtenIn }),
+  EffectSchema.Struct({ resolved: chatMessageSchema, ...writtenIn }),
   EffectSchema.Struct({
     readSeq: countedNumber,
     reads: EffectSchema.optionalKey(EffectSchema.Array(chatChannelReadSchema)),
+    ...writtenIn,
   }),
-  EffectSchema.Struct({ channel: chatChannelSchema }),
+  EffectSchema.Struct({ channel: chatChannelSchema, ...writtenIn }),
 ]);
 
 /** @public */

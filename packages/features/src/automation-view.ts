@@ -2,6 +2,7 @@ import { Schema as EffectSchema, Struct } from "effect";
 import {
   automationChangeRequestSchema,
   automationCreateRequestSchema,
+  automationDeletedAnswerSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
@@ -92,6 +93,7 @@ export const automationViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
     automation: automationSummarySchema,
     webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
+    txid: automationDeletedAnswerSchema.fields.txid,
   }),
   failed,
 ]);
@@ -100,7 +102,10 @@ export type AutomationView = typeof automationViewSchema.Type;
 
 /** A deletion as the window hears it. */
 export const automationDeletedViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ deleted: EffectSchema.Literal(true) }),
+  EffectSchema.Struct({
+    deleted: EffectSchema.Literal(true),
+    txid: automationDeletedAnswerSchema.fields.txid,
+  }),
   failed,
 ]);
 
@@ -115,3 +120,36 @@ export type AutomationRunView = typeof automationRunViewSchema.Type;
 export const automationRunsViewSchema = EffectSchema.Union([automationRunsAnswerSchema, failed]);
 
 export type AutomationRunsView = typeof automationRunsViewSchema.Type;
+
+/** What a window follows of the automations: one workspace's list, or one automation's runs. */
+export const AUTOMATION_FOLLOW = {
+  WORKSPACE: "workspace",
+  RUNS: "runs",
+} as const;
+
+const workspaceFollowSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(AUTOMATION_FOLLOW.WORKSPACE),
+  id: EffectSchema.NonEmptyString,
+});
+
+const runsFollowSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(AUTOMATION_FOLLOW.RUNS),
+  id: wireUuidSchema,
+});
+
+/** One followed list or history, by what it is of. */
+export const automationFollowSchema = EffectSchema.Union([workspaceFollowSchema, runsFollowSchema]);
+
+export type AutomationFollow = typeof automationFollowSchema.Type;
+
+/**
+ * A followed list or history as it now stands, told to the windows that
+ * follow it each time it moves: a workspace's automations, or an
+ * automation's runs, or why there are none.
+ */
+export const automationFollowedSchema = EffectSchema.Union([
+  EffectSchema.Struct({ scope: workspaceFollowSchema, view: automationListViewSchema }),
+  EffectSchema.Struct({ scope: runsFollowSchema, view: automationRunsViewSchema }),
+]);
+
+export type AutomationFollowed = typeof automationFollowedSchema.Type;

@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@luke/database/core/query";
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Ref } from "effect";
@@ -34,7 +35,9 @@ import { type EveReach, eveFor } from "./coder-host/stop.js";
  * conversation is cleared, and its sandbox is deleted on the queue all the
  * same (`session-sandboxes.ts`). The one exception is a delete that cannot
  * name its caller to eve at all, which `retiringReach` refuses before it
- * changes anything.
+ * changes anything. Only a coding agent's session is asked: a task's own
+ * Luke's, from before every turn was an agent's, ran under an eve service
+ * that stands no more, and its sandbox is left to the sweep.
  */
 
 const RETIRE_SESSIONS = {
@@ -55,7 +58,11 @@ const RETIRE_SESSIONS = {
 /** How a caller reaches eve under one mount: the delete's own caller's client, typed to retire a session and nothing else, or the refusal that there is none. */
 export type EveAt = (
   mount: EveMount,
-) => Effect.Effect<Pick<AgentSessions, "reset">, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<
+  Pick<AgentSessions, "reset">,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+>;
 
 /**
  * How a delete's caller reaches eve to retire what it deletes, settled
@@ -64,33 +71,27 @@ export type EveAt = (
  * session cookie reaches eve only as the deployment, and a deployment that
  * cannot compose that caller, with no secret or no eve origin, would retire
  * nothing and still answer the delete done with every session standing; so
- * a cookie's delete composes eve under both mounts first, and is refused as
- * unavailable where it cannot.
+ * a cookie's delete composes eve first, and is refused as unavailable where
+ * it cannot.
  */
 export const retiringReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   request: Request,
   account: string,
-): Effect.fn.Return<EveAt, HostedRefusal, HttpClient.HttpClient> {
+): Effect.fn.Return<EveAt, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
   if (hostedCarriesBearer(request)) return (mount) => eveFor(reach, request, account, mount);
   const composed = {
     [EVE_MOUNT.CODER]: yield* eveFor(reach, request, account, EVE_MOUNT.CODER),
-    [EVE_MOUNT.TASKS]: yield* eveFor(reach, request, account, EVE_MOUNT.TASKS),
   } satisfies Readonly<Record<EveMount, Pick<AgentSessions, "reset">>>;
   return (mount) => Effect.succeed(composed[mount]);
 });
-
-/** The eve service a conversation's session runs under: a coding agent's under the coder mount, every other under the brain's. */
-function mountOf(session: StandingSession): EveMount {
-  return session.kind === CONVERSATION_KIND.CODING_AGENT ? EVE_MOUNT.CODER : EVE_MOUNT.TASKS;
-}
 
 /** One session retired, or why not, written down by its outcome alone. */
 const retireOne = (
   eveAt: EveAt,
   session: StandingSession,
-): Effect.Effect<void, never, HttpClient.HttpClient> =>
-  eveAt(mountOf(session)).pipe(
+): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> =>
+  eveAt(EVE_MOUNT.CODER).pipe(
     Effect.flatMap((eve) => eve.reset(session.sessionId)),
     Effect.timeoutOption(RETIRE_SESSIONS.TIMEOUT),
     Effect.flatMap((answered) => {
@@ -111,19 +112,20 @@ const retireOne = (
   );
 
 /**
- * Retires every session named, a few at a time, for as long as the budget
- * lasts; never fails, whatever eve answered. A retire still waiting when the
+ * Retires every coding agent's session named, a few at a time, for as long
+ * as the budget lasts; never fails, whatever eve answered. A retire still waiting when the
  * budget ends is interrupted, and it and every one not yet asked are logged
  * by their count and left to the sandbox sweep, as one eve never answered is.
  */
 export function retireSessions(
   eveAt: EveAt,
   sessions: readonly StandingSession[],
-): Effect.Effect<void, never, HttpClient.HttpClient> {
+): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> {
   return Effect.gen(function* () {
     const settled = yield* Ref.make(0);
+    const agents = sessions.filter((session) => session.kind === CONVERSATION_KIND.CODING_AGENT);
     const all = Effect.forEach(
-      sessions,
+      agents,
       (session) =>
         Effect.andThen(
           retireOne(eveAt, session),
@@ -133,9 +135,9 @@ export function retireSessions(
     );
     const finished = yield* Effect.timeoutOption(all, RETIRE_SESSIONS.BUDGET);
     if (Option.isSome(finished)) return;
-    const skipped = sessions.length - (yield* Ref.get(settled));
+    const skipped = agents.length - (yield* Ref.get(settled));
     yield* Effect.logWarning(
-      `eve did not retire ${skipped} of ${sessions.length} sessions within the delete's budget`,
+      `eve did not retire ${skipped} of ${agents.length} sessions within the delete's budget`,
     );
   });
 }

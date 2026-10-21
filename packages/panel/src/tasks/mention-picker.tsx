@@ -63,9 +63,10 @@ import {
 } from "./date-picker.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { PullRequestMark } from "./pull-request-mark.js";
-import { AgentMark } from "./tab-look.js";
+import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { NO_TASK } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
+import { useTaskStatus } from "./use-known-names.js";
 
 /**
  * mention-picker.tsx -- the list an `@` opens: the task's repository's files and folders, the plan's sections, and the task, grouped by kind, narrowed as the word is typed, the pick written as its mention.
@@ -252,9 +253,6 @@ const PER_GROUP = 4;
 
 /** The most rows a list narrowed to one kind lists. */
 const PER_KIND = 50;
-
-/** The least of cmdk's scores the list counts as a match, as ⌘K counts one. */
-const LEAST_SCORE = 0.01;
 
 /** The list's own name, which its listbox is read by. */
 const MENU_LABEL = "Mention";
@@ -491,21 +489,6 @@ function agentDetail(agent: MentionableAgent, taskId: string): string {
   return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
 }
 
-/** Luke's row's name, and what it says of him, where a comment's list offers him first among the agents. */
-const LUKE_NAME = "Luke";
-const LUKE_DETAIL = "Thinks about the task";
-
-/** Luke's row, on the task the list stands on: a comment's mention of him sends him its thread. */
-function lukeRow(taskId: string): MentionRow {
-  return {
-    mention: { kind: MENTION_KIND.LUKE, taskId },
-    name: LUKE_NAME,
-    detail: LUKE_DETAIL,
-    terms: `${LUKE_NAME} ${LUKE_DETAIL}`,
-    actor: LUKE_ACTOR,
-  };
-}
-
 /**
  * Each agent's row, by its tab's name, wearing its tile, labelled and found
  * by its task: the plan's own agents first, then the workspace's others in
@@ -665,7 +648,7 @@ function best(rows: readonly MentionRow[], query: string, most: number): readonl
   if (query.trim() === "") return rows.slice(0, most);
   return rows
     .map((row) => ({ row, score: defaultFilter(row.terms, query) }))
-    .filter((each) => each.score >= LEAST_SCORE)
+    .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
     .map((each) => each.row);
@@ -804,6 +787,8 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
 
 /** A row's glyph, as its chip wears it. */
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
+  const planned = "mention" in row && row.mention.kind === MENTION_KIND.TASK;
+  const taskStatus = useTaskStatus(planned ? row.mention.taskId : undefined);
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
   if ("from" in row) return <KindGlyph kind={row.from} />;
   if ("picksDate" in row) return <CalendarIcon aria-hidden="true" />;
@@ -817,7 +802,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
     case MENTION_KIND.TASK:
-      return <DocumentIcon />;
+      return <PlanGlyph status={taskStatus} />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
@@ -1149,7 +1134,6 @@ export function useMentionPicker({
   room,
   side,
   onChoose,
-  luke = false,
 }: {
   source: MentionSource | undefined;
   /** The agent whose box the list stands in, which it does not offer; none for the plan's own words. */
@@ -1162,8 +1146,6 @@ export function useMentionPicker({
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
-  /** Whether Luke is offered first among the agents, as a comment's list offers him, whom its mention sends the thread. */
-  luke?: boolean;
 }): MentionPicker {
   const { act } = useAct();
   const { members, readerId } = useMemberDirectory();
@@ -1280,7 +1262,6 @@ export function useMentionPicker({
             plan: taskRows(taskId, source.taskName, source.text()),
             pages: pageRows(taskId, source.pages ?? NO_PAGES),
             agents: [
-              ...(luke && taskId !== NO_TASK ? [lukeRow(taskId)] : []),
               ...agentRows(
                 taskId,
                 source.agents ?? NO_AGENTS,
@@ -1434,8 +1415,9 @@ export function useMentionPicker({
   ];
 
   // The list stands by the word's line, on the side asked, inside the room's width.
+  // Note that the room is measured only while the list is shown, since a measure in a draw lays out the whole window.
   const box = room.current;
-  const placed = box?.getBoundingClientRect();
+  const placed = shown ? box?.getBoundingClientRect() : undefined;
   const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): MenuPlace => {
     const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
     return side === MENTION_MENU_SIDE.BELOW

@@ -15,7 +15,7 @@ const decodeManifest = Schema.decodeUnknownSync(
  * its declaration fails the deploy rather than any local check.
  */
 describe("the agents' external dependencies", () => {
-  for (const manifestPath of ["../../luke/package.json", "../../dev/package.json"]) {
+  for (const manifestPath of ["../../dev/package.json"]) {
     it(`are each declared by ${manifestPath}`, () => {
       const manifest = decodeManifest(readFileSync(new URL(manifestPath, import.meta.url), "utf8"));
       const undeclared = AGENT_EXTERNAL_DEPENDENCIES.filter(

@@ -27,7 +27,7 @@ import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
-import { linksFull, standingWords } from "./task-issue-links-model.js";
+import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
 import { useOpenLink } from "./use-open-link.js";
 import { useTaskIssueLinks } from "./use-task-issue-links.js";
 import type { TasksControl } from "./use-tasks-tab.js";
@@ -56,18 +56,11 @@ import type { TasksControl } from "./use-tasks-tab.js";
 const LINKS_WORDS = {
   HEADING: "Linked issues",
   LINK: "Link issue",
-  RELATION: "Which keyword its pull requests write",
   [TASK_ISSUE_RELATION.CLOSES]: "Closes",
   [TASK_ISSUE_RELATION.PART_OF]: "Part of",
   UNLINK: "Unlink",
   RETRY: "Try again",
 } as const;
-
-/** What each keyword does, under its name in a chip's menu. */
-const RELATION_DETAIL = {
-  [TASK_ISSUE_RELATION.CLOSES]: "Merging closes the issue",
-  [TASK_ISSUE_RELATION.PART_OF]: "Names the issue, leaves it open",
-} as const satisfies Record<TaskIssueRelation, string>;
 
 const RELATIONS = [TASK_ISSUE_RELATION.CLOSES, TASK_ISSUE_RELATION.PART_OF] as const;
 

@@ -1,9 +1,10 @@
 import { INBOX_ASK, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BADGE_TONE,
+  Badge,
   BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
@@ -14,10 +15,12 @@ import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
   IconButton,
+  INLINE_REF_LOOK,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
@@ -26,10 +29,11 @@ import {
   ListRow,
   SCROLL_FADE,
   ScrollArea,
+  SearchField,
+  SearchIcon,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TaskStatusMark as TaskStatusGlyph,
   useMenu,
 } from "@luke/ui";
 import {
@@ -48,6 +52,7 @@ import {
   CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
+  CircleIcon,
   ClockArrowDownIcon,
   ClockArrowUpIcon,
   FactoryIcon,
@@ -62,10 +67,11 @@ import {
   Rows2Icon,
   SlidersHorizontalIcon,
   SquareCheckIcon,
+  SquareIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -83,14 +89,17 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
+import { TaskKeyChip } from "../desktop/task-card.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
+import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { useAppState } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
+import { TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -130,8 +139,10 @@ import {
   inboxLineKind,
   inboxMedia,
   inboxPreview,
+  inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
+  isDone,
   isUnread,
   listedItems,
   NEEDS_YOU,
@@ -146,9 +157,11 @@ import {
 } from "./inbox-row-media.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
+import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
+import { useOpenPlace } from "./use-open-link.js";
 
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
@@ -177,7 +190,10 @@ import { cardTitle, plainWords } from "./tool-call-model.js";
  * since the developer last read it, or they marked it so: the blue dot in
  * a gutter before its tile, its title in the unread weight; opening it
  * reads it, and its row, its menu, U, and Mark all as read in the view's
- * menu mark it read or unread (`use-inbox-read-marks.ts`). A folded task
+ * menu mark it read or unread (`use-inbox-read-marks.ts`). An item settled
+ * and read is done with (`isDone`), and its row stands back, gray, with no
+ * word saying so: the chosen row To do keeps once it is answered or read,
+ * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers the view's
  * menu: first what the list holds, To do, the developer's own items they are
@@ -437,7 +453,7 @@ function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | 
     if (archivedHolder(holder)) return ARCHIVED_WORDS;
     return starter === undefined ? "Waiting" : waitingOn(starter);
   }
-  return item.status === INBOX_STATUS.ANSWERED ? "Answered" : "Closed";
+  return inboxSettledStanding(item);
 }
 
 /**
@@ -482,15 +498,17 @@ function InboxItemCard({
   const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-row-card="">
-      <HolderChips holder={holder} />
+      <HolderLine holder={holder} />
       <HoverCardHead
         name={cardTitle(item.title)}
+        sub={
+          <>
+            {needsYou ? <AttentionMark /> : null}
+            <span>{standingWords(listed, needsYou, starter)}</span>
+          </>
+        }
         corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
       />
-      <span className="inbox-card-standing" data-needs-you={needsYou ? "true" : undefined}>
-        {needsYou ? <AttentionMark /> : null}
-        {standingWords(listed, needsYou, starter)}
-      </span>
       {thread.ask === undefined ? (
         settled === undefined ? null : (
           <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
@@ -518,31 +536,74 @@ function InboxItemCard({
   );
 }
 
-/** What holds an item, as its card leads with it: a task by its key and its status and name, an automation, or the agents no automation names, by its glyph and name. */
-function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
+/**
+ * What holds an item, as its card leads with it, on one line: a task by its
+ * key, as the task's own card leads with it (`TaskKeyChip`), and by its chip
+ * as a mention of it is drawn (`HolderRef`); an automation, or the agents no
+ * automation names, by their chip alone.
+ */
+function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const workspaces = useAppState()?.tasks?.workspaces;
+  const workspaceName =
+    holder.kind === INBOX_HOLDER.TASK
+      ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name
+      : undefined;
+  return (
+    <div className="task-card-standing" data-line="one">
+      {holder.kind === INBOX_HOLDER.TASK ? (
+        <TaskKeyChip task={holder.task} workspaceName={workspaceName} />
+      ) : null}
+      <HolderRef holder={holder} />
+    </div>
+  );
+}
+
+/**
+ * What holds an item, named as a mention of it is (`mention-chip.tsx`): a
+ * pill of its glyph and its name, cut at its end where the card is too
+ * narrow for it. A task's hangs the task's card and opens the task, as a
+ * mention of the task does; an automation's hangs its card where the window
+ * reads it; the agents no automation names hang their name alone.
+ */
+function HolderRef({ holder }: { holder: InboxHolder }): React.JSX.Element {
+  const openPlace = useOpenPlace();
+  const known = useAutomation(
+    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
+  );
+  const glyph = <HolderGlyph holder={holder} />;
+  const name = holderName(holder);
   if (holder.kind !== INBOX_HOLDER.TASK) {
     return (
-      <div className="task-card-standing">
-        <span className="task-card-chip">
-          <HolderGlyph holder={holder} />
-          {holderName(holder)}
-        </span>
-      </div>
+      <InlineRef
+        look={INLINE_REF_LOOK.PILL}
+        glyph={glyph}
+        label={name}
+        card={known === undefined ? undefined : <AutomationCard {...known} />}
+        data-holder-ref=""
+        data-kind={holder.kind}
+      />
     );
   }
   const { task } = holder;
-  const workspaceName = workspaces?.find((each) => each.id === task.workspaceId)?.name;
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={glyph} name={name} />
+    </HoverCard>
+  );
   return (
-    <div className="task-card-standing">
-      {task.number === undefined || workspaceName === undefined ? null : (
-        <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
-      )}
-      <span className="task-card-chip">
-        {task.status === undefined ? <DocumentIcon /> : <TaskStatusGlyph status={task.status} />}
-        {task.name}
-      </span>
-    </div>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={glyph}
+      label={name}
+      card={<TaskChipCard taskId={task.id} fallback={fallback} />}
+      onPress={
+        openPlace === undefined
+          ? undefined
+          : () => openPlace({ kind: LINK_PLACE.TASK, planId: task.id })
+      }
+      data-holder-ref=""
+      data-kind={holder.kind}
+    />
   );
 }
 
@@ -560,27 +621,40 @@ function CardAsk({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return (
-        <ul className="inbox-card-options" aria-label="Options">
+        <HoverCardList label="Options">
           {ask.options.map((option) => (
             <li key={option.label}>
-              <span className="inbox-card-option">{option.label}</span>
-              {option.label === ask.recommended ? (
-                <span className="inbox-card-recommended">{RECOMMENDED}</span>
-              ) : null}
+              <HoverCardRow
+                glyph={<CircleIcon aria-hidden="true" />}
+                label={option.label}
+                end={
+                  option.label === ask.recommended ? (
+                    <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
+                  ) : undefined
+                }
+              />
             </li>
           ))}
-        </ul>
+        </HoverCardList>
       );
     case INBOX_ASK.DO:
       return (
-        <ul className="inbox-card-steps" aria-label="Steps">
+        <HoverCardList label="Steps">
           {(ask.steps.length === 0 ? [title] : ask.steps).map((step, at) => (
             <li key={at} data-done={ticked.includes(at) ? "true" : undefined}>
-              <SquareCheckIcon aria-hidden="true" />
-              {plainWords(step)}
+              <HoverCardRow
+                glyph={
+                  ticked.includes(at) ? (
+                    <SquareCheckIcon aria-hidden="true" />
+                  ) : (
+                    <SquareIcon aria-hidden="true" />
+                  )
+                }
+                label={plainWords(step)}
+              />
             </li>
           ))}
-        </ul>
+        </HoverCardList>
       );
     case INBOX_ASK.ANSWER:
       return (
@@ -664,6 +738,7 @@ export function InboxItemRow({
   face = true,
   chip = false,
   line = true,
+  muted = false,
   media,
   ref,
   onChoose,
@@ -685,6 +760,8 @@ export function InboxItemRow({
   chip?: boolean;
   /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
   line?: boolean;
+  /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
+  muted?: boolean;
   /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
   media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
@@ -860,6 +937,7 @@ export function InboxItemRow({
           }
           current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={unread}
+          muted={muted}
           hint={{ Hint: RowHint, label: title }}
           onPress={() => onChoose(listed)}
           contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
@@ -874,7 +952,7 @@ export function InboxItemRow({
 }
 
 /**
- * A holder's glyph as a row's chip draws it: a task's document, an
+ * A holder's glyph as a row's chip draws it: a task's status's mark, an
  * automation's clock tile, and the Factory's glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
@@ -882,7 +960,7 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
-  if (holder.kind === INBOX_HOLDER.TASK) return <DocumentIcon />;
+  if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
   if (holder.automationId === null) return <FactoryIcon />;
   return (
     <ActorMark
@@ -896,7 +974,7 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
 }
 
 /**
- * A holder's group header: a task's document glyph and name; an
+ * A holder's group header: a task's status's mark and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
  * sidebar's row listing every agent, for the agents no automation names,
@@ -919,7 +997,13 @@ function HolderHeader({
   );
   const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
   if (holder.kind === INBOX_HOLDER.TASK) {
-    return <SidebarGroupHeader glyph={<DocumentIcon />} name={holder.task.name} {...shared} />;
+    return (
+      <SidebarGroupHeader
+        glyph={<PlanGlyph status={holder.task.status} />}
+        name={holder.task.name}
+        {...shared}
+      />
+    );
   }
   if (holder.automationId === null) {
     return (
@@ -1324,6 +1408,72 @@ export function InboxListSkeleton({
   );
 }
 
+/** The words naming the list's search, on its magnifier and its field alike. */
+const SEARCH_INBOX = "Search inbox";
+
+/**
+ * The list's search as its head draws it: a magnifier beside the view's
+ * menu, which a press opens into a field standing in the head's name, the
+ * caret in it. The field narrows the list as it is typed in, standing open
+ * while it holds words; Escape empties and folds it, and so does the focus
+ * leaving it empty, the keyboard then handed back to the magnifier where
+ * Escape folded it.
+ */
+function useListSearch(search: InboxSearchHead | undefined) {
+  const [asked, setAsked] = useState(false);
+  const open = search !== undefined && (asked || search.query !== "");
+  const field = useRef<HTMLInputElement | null>(null);
+  const magnifier = useRef<HTMLButtonElement | null>(null);
+  const backToMagnifier = useRef(false);
+  useEffect(() => {
+    if (open) {
+      field.current?.focus();
+      return;
+    }
+    if (!backToMagnifier.current) return;
+    backToMagnifier.current = false;
+    magnifier.current?.focus();
+  }, [open]);
+  const fold = (handBack: boolean) => {
+    backToMagnifier.current = handBack;
+    search?.onQuery("");
+    setAsked(false);
+  };
+  const button =
+    search === undefined || open ? null : (
+      <Tooltip label={SEARCH_INBOX}>
+        <IconButton
+          ref={magnifier}
+          icon={<SearchIcon />}
+          label={SEARCH_INBOX}
+          onClick={() => setAsked(true)}
+        />
+      </Tooltip>
+    );
+  const fieldDrawn =
+    search === undefined || !open ? null : (
+      <search
+        className="inbox-search"
+        onBlur={(event) => {
+          // Note that a press on the field's own clear moves the focus within it, which folds nothing.
+          if (event.currentTarget.contains(event.relatedTarget)) return;
+          if (search.query === "") fold(false);
+        }}
+      >
+        <SearchField
+          ref={field}
+          label={SEARCH_INBOX}
+          placeholder={SEARCH_INBOX}
+          value={search.query}
+          onChange={search.onQuery}
+          onClear={() => search.onQuery("")}
+          onEscape={() => fold(true)}
+        />
+      </search>
+    );
+  return { button, field: fieldDrawn };
+}
+
 /**
  * The list's head: the Inbox's name, the scope after it where that is not
  * To do, and the view's menu at the list's top right, which chooses the
@@ -1331,7 +1481,10 @@ export function InboxListSkeleton({
  * Inbox lists one task's items in one run, so its menu offers its scopes
  * alone. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the button keeping to the list's edge.
+ * sidebar's toggle, and the button keeping to the list's edge. Where the
+ * list offers a search, its magnifier stands before the menu, and its field
+ * in the name's place while it is open (`useListSearch`), in the sidebar's
+ * head as on the page.
  */
 function ListHead({
   head,
@@ -1344,25 +1497,33 @@ function ListHead({
 }): React.JSX.Element {
   const { shown, show, scopes, view } = head;
   const title = inboxTitle(show.show);
+  const search = useListSearch(head.search);
   const options = (
-    <ViewOptions
-      shown={shown}
-      show={show}
-      scopes={scopes}
-      choices={view?.choices}
-      readerId={readerId}
-      readAll={head.readAll}
-    />
+    <>
+      {search.button}
+      <ViewOptions
+        shown={shown}
+        show={show}
+        scopes={scopes}
+        choices={view?.choices}
+        readerId={readerId}
+        readAll={head.readAll}
+      />
+    </>
   );
+  const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   return (
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
-      {placement === INBOX_LIST_PLACEMENT.SIDEBAR ? (
-        <SidebarSectionHead name={title}>{options}</SidebarSectionHead>
+      {sidebar ? (
+        // Note that the field stands in the name's place in one head, so View options stays mounted as the field gives way.
+        <SidebarSectionHead name={title} field={search.field}>
+          {options}
+        </SidebarSectionHead>
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">{title}</h1>
+            {search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
           </div>
           <div className="desktop-toolbar-actions">{options}</div>
         </header>
@@ -1370,6 +1531,11 @@ function ListHead({
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
+}
+
+/** What a list its search left empty says. */
+function noMatch(searched: string): string {
+  return `No items match “${searched.trim()}”.`;
 }
 
 /** What the list says where a task's read did not answer. */
@@ -1385,6 +1551,7 @@ export function InboxListNote({
   counts,
   onList,
   onRetry,
+  searched,
 }: {
   failed: boolean;
   reading: boolean;
@@ -1398,6 +1565,8 @@ export function InboxListNote({
   /** Asks for the list, so the scope its empty state shows leaves it standing. */
   onList: () => void;
   onRetry: () => void;
+  /** The words the list's search narrows it by, where it narrows it, which an empty list says found nothing. */
+  searched?: string | undefined;
 }): React.JSX.Element | null {
   if (failed) {
     return (
@@ -1408,6 +1577,7 @@ export function InboxListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
+  if (searched !== undefined) return <p className="sidebar-note">{noMatch(searched)}</p>;
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
@@ -1435,6 +1605,14 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
+  /** The list's search, which its head's magnifier opens; none where the list offers none, as a task's own Inbox does. */
+  readonly search?: InboxSearchHead | undefined;
+}
+
+/** The words a list's search holds, and the change that narrows the list to them. */
+interface InboxSearchHead {
+  readonly query: string;
+  readonly onQuery: (query: string) => void;
 }
 
 /** Mark all as read as the view's menu offers it: whether any item is unread, filtered out or not, and the mark. */
@@ -1537,6 +1715,7 @@ export function InboxList({
   });
   const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
+  // A row whose item is done with is drawn gray, the chosen row kept on To do and every such row on All alike.
   const row = (listed: InboxListed) => (
     <InboxItemRow
       key={listed.item.id}
@@ -1549,6 +1728,7 @@ export function InboxList({
       face={view.grouping !== INBOX_GROUPING.PERSON}
       chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
       line={head.view?.choices.secondLine !== false}
+      muted={isDone(listed.item)}
       media={media}
       ref={rows.hold(listed.item.id)}
       onChoose={onChoose}

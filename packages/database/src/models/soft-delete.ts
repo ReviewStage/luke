@@ -9,9 +9,9 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 
 /**
  * The purge that follows a soft delete. Nothing is erased at the stamp: a
- * deleted task's conversation is stamped `deleted_at` (`task-store.ts`), so
- * the reads — which skip a stamped row — show nothing of it from the call
- * after, while the rows stand until the purge. There is no archive, no
+ * deleted task's agents' conversations are stamped `deleted_at`
+ * (`task-store.ts`), so the reads — which skip a stamped row — show nothing
+ * of them from the call after, while the rows stand until the purge. There is no archive, no
  * registry, and no cutoff: the stamp is the whole record, and the cron's
  * purge removes the stamped conversations thirty days on, their messages,
  * turns, and events going with them by the schema's own cascade. Deleting

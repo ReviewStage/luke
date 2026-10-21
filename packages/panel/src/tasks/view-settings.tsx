@@ -217,10 +217,19 @@ export type ViewSettingsScope =
       /** Whether the diff is wide enough to split, which the layout row says where it is not. */
       readonly roomy: boolean;
     }
-  | { readonly kind: typeof VIEW_SETTINGS_SCOPE.LINES };
+  | {
+      readonly kind: typeof VIEW_SETTINGS_SCOPE.LINES;
+      /** Whether the lines carry notes, as a File tab's carry Luke's, which Minimize inline comments puts away; a page's source carries none. */
+      readonly notes: boolean;
+    };
 
-/** The two settings every run of lines follows, a File tab's and a diff's alike. */
-function LinesRows(): React.JSX.Element {
+/**
+ * The settings every run of lines follows, a File tab's and a diff's alike:
+ * wrap and numbers, and, where the lines carry notes, whether those notes
+ * stand put away behind a chip at the end of their line, a review thread in
+ * Files changed and Luke's note in a File tab alike.
+ */
+function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
@@ -239,6 +248,22 @@ function LinesRows(): React.JSX.Element {
         changed={changed("lineNumbers")}
         onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
       />
+      {notes ? (
+        <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label="Minimize inline comments"
+          detail={
+            <>
+              <span className="shortcut-hint">
+                Or press <Shortcut chord={MINIMIZE_CHORD} spoken /> over the code
+              </span>
+            </>
+          }
+          checked={settings.diffMinimizeComments}
+          changed={changed("diffMinimizeComments")}
+          onChange={(diffMinimizeComments) => change("diffMinimizeComments", diffMinimizeComments)}
+        />
+      ) : null}
     </>
   );
 }
@@ -371,21 +396,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
         />
       </SettingsGroup>
       <SettingsGroup title={GROUP_TITLE.LINES}>
-        <LinesRows />
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Minimize inline comments"
-          detail={
-            <>
-              <span className="shortcut-hint">
-                Or press <Shortcut chord={MINIMIZE_CHORD} spoken /> in the list
-              </span>
-            </>
-          }
-          checked={settings.diffMinimizeComments}
-          changed={changed("diffMinimizeComments")}
-          onChange={(diffMinimizeComments) => change("diffMinimizeComments", diffMinimizeComments)}
-        />
+        <LinesRows notes />
       </SettingsGroup>
       <SettingsGroup title={GROUP_TITLE.TEXT}>
         <ThemeRows />
@@ -422,7 +433,7 @@ function ViewSettingsPopover({
       ) : (
         <>
           <SettingsGroup title={GROUP_TITLE.LINES}>
-            <LinesRows />
+            <LinesRows notes={scope.notes} />
           </SettingsGroup>
           <SettingsGroup title={GROUP_TITLE.TEXT}>
             <ThemeRows />

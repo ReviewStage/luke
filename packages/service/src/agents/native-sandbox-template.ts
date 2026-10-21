@@ -32,8 +32,8 @@
  * deleted and built again at once.
  *
  * The scheduled sweep reads the template too, so a build finishes and is
- * snapshotted whether or not a launch is waiting on it, and, where native
- * agents are admitted at all, a new image's template is built before its
+ * snapshotted whether or not a launch is waiting on it, and, where some
+ * account connected a plan, a new image's template is built before its
  * first launch asks. It also deletes the templates of every other key, once
  * they are old enough that a Preview of another image is done with its own.
  */
@@ -312,13 +312,16 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
 
 /**
  * The template as a launch waits on it: read every `POLL` while it is
- * being prepared, for at most `WAIT`, and answered as it then stands.
+ * being prepared, for at most `wait` (`WAIT` unless the caller names less),
+ * and answered as it then stands.
  */
-export const awaitTemplate = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+export const awaitTemplate = (
+  api: VercelSandboxApi,
+  build: ImageBuild,
+  wait: Duration.Duration = NATIVE_TEMPLATE.WAIT,
+): TemplateRead =>
   Effect.gen(function* () {
-    const reads = Math.floor(
-      Duration.toMillis(NATIVE_TEMPLATE.WAIT) / Duration.toMillis(NATIVE_TEMPLATE.POLL),
-    );
+    const reads = Math.floor(Duration.toMillis(wait) / Duration.toMillis(NATIVE_TEMPLATE.POLL));
     let read = yield* advanceTemplate(api, build);
     for (let waited = 0; read.state === TEMPLATE_STATE.PREPARING && waited < reads; waited += 1) {
       yield* Effect.sleep(NATIVE_TEMPLATE.POLL);

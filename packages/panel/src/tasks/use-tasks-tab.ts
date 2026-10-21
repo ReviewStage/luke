@@ -35,6 +35,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
+  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -47,6 +48,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import type { ChatShown } from "@luke/host/contract";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -82,10 +84,6 @@ import {
 import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
-  archivedTasksNote,
-  archiveTasksFailedNote,
-  type CallStatus,
-  callStatus,
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
@@ -101,6 +99,7 @@ import {
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
+  type PendingStatuses,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
   pendingMark,
@@ -111,43 +110,45 @@ import {
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
+  type SettledStatus,
+  STATUS_RESTORE_FAILED_NOTE,
+  type StatusChange,
+  settleChanges,
+  settledNote,
+  settleFailedNote,
   sidebarTasks,
   startFailureNote,
+  statusedView,
   TASK_MARK,
   TASKS_PAGE,
   type TaskMark,
   type TasksPage,
   tasksPage,
+  undoStillDue,
   unsettledAgentPins,
   unsettledMarks,
   unsettledPinPositions,
   unsettledRenames,
   unsettledRepositoryPins,
+  unsettledStatuses,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import {
-  type HeardCall,
-  heardCalls,
-  type TranscriptRegion,
-  transcriptRegion,
-} from "@luke/voice/transcript-model";
-import {
-  callInProgress,
-  VOICE_COMMAND,
-  type VoiceCallTranscript,
-  type VoiceView,
-} from "@luke/voice/voice-view";
+import { callInProgress, type VoiceCallTranscript, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
+import type { AgentCallDoors } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -157,6 +158,7 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "./closed-tabs.js";
+import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentTabLabel,
@@ -164,16 +166,15 @@ import {
 } from "./coding-agent-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { SectionReveal } from "./plan-body.js";
-import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model.js";
+import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
-import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
+import { type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
 import { usePanelArrivals } from "./use-panel-arrivals.js";
 import {
   type HistorySpot,
@@ -194,9 +195,8 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
-import { useWorkspaceChat } from "./use-workspace-chat.js";
+import { chatFollowerOf, useWorkspaceChat } from "./use-workspace-chat.js";
 import { sayRestored } from "./version-view.js";
-import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model.js";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {
@@ -235,12 +235,6 @@ interface PendingSectionWrite {
  * task opens, and a version restored through the service is answered with
  * the window's toast. The side panel stands as it was behind it.
  */
-
-/** A call or a turn the open task's side panel is asked to bring into view, on the task it was asked of. */
-interface SourceReveal {
-  readonly taskId: string;
-  readonly source: Exclude<RevisionSource, { kind: typeof REVISION_SOURCE.AGENT }>;
-}
 
 /** The item chosen in the window's Inbox, and the task it belongs to. */
 /** The item chosen in the window's Inbox, by the task it stands on, or, for an agent with no task, by its agent. */
@@ -288,10 +282,8 @@ interface InboxViewControl {
   readonly single?: boolean;
   /** Says whether the Inbox shows one column. */
   readonly onSingle?: (single: boolean) => void;
-  /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
+  /** The pages of the chosen item's task as they move, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
-  /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
-  readonly onRereadPages: () => void;
   /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
   readonly onTaskAgents: (taskId: string, agentIds: readonly string[]) => void;
 }
@@ -442,7 +434,7 @@ interface AutomationsViewControl {
  * Inbox does and on the same terms: the workspace's channels in a rail of
  * their own, and For you or the channel chosen beside it. It gives way to
  * the Inbox, an agent's page, Factory, and the Automations page, and they to it. A live run reads
- * the listed workspace's chat from the service (`use-workspace-chat.ts`) while
+ * the listed workspace's chat, followed and pushed (`use-workspace-chat.ts`), while
  * the account has Chat on; a fixture run stages its own.
  */
 interface ChatViewControl {
@@ -514,11 +506,11 @@ export interface NewTaskPreset {
 }
 
 /**
- * What a start comes from beyond its name, repository, workspace, and
- * planning: the Linear and GitHub issues it links, each with its relation,
- * the agent New task's composer starts on its words in the task's own start
- * (`handed`), the words Plan mode hands Luke as the task's brief
- * (`brief`), trimmed and none where blank, and where it starts (`status`).
+ * What a start comes from beyond its name, repository, and workspace: the
+ * Linear and GitHub issues it links, each with its relation, the agent New
+ * task's composer starts on its words in the task's own start (`handed`),
+ * the words File for later keeps as the task's brief (`brief`), trimmed and
+ * none where blank, and where it starts (`status`).
  */
 export interface NewTaskStart {
   readonly issues?: readonly TaskIssueChoice[];
@@ -596,16 +588,11 @@ export interface TasksControl {
   copy: { onPress: () => void };
   /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
   edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
-  microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
-  /** Silences Luke's voice on this Mac for the open task's call, or plays it again; offered with the stop. */
-  speaker: { muted: boolean; onPress: () => void };
-  /** Ends the open task's call at once, offered only while that call is in progress. */
-  stop: { shown: boolean; onPress: () => void };
-  /** The open task's call status beside the microphone, absent while none stands. */
-  status: CallStatus | undefined;
-  /** Whether the open task's call is in progress, so the plan is still being written. */
+  /** What the open task's agents' tabs take calls through; none where the window has no voice, as the web's has none. */
+  calls: AgentCallDoors | undefined;
+  /** Whether a call into one of the open task's agents is in progress, so the plan may still be written. */
   live: boolean;
-  /** The task's column's tabs: the task's own, then its agents' and its draft's, and which is shown. */
+  /** The task's column's tabs: its agents' and its draft's, and its Chat, and which is shown. */
   mainTabs: MainTabsControl;
   /** The side panel beside the open task's column: shown or not, its tab, and its width. */
   sidePanel: SidePanelControl;
@@ -613,35 +600,14 @@ export interface TasksControl {
   unreadTabs: readonly StripTab[];
   /** The open task's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
-  /** Every code Luke showed on the open task, oldest first: what the service keeps, and each a call shows as it shows it. */
+  /** Every code the open task's agents showed, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
-  /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
-  workFailed: boolean;
-  /** Reads the open task's work and code again after a read that did not land. */
-  onRetryWork: () => void;
+  /** Whether the last read of the open task's code did not land, what is held still drawn. */
+  codeFailed: boolean;
+  /** Reads the open task's code again after a read that did not land. */
+  onRetryCode: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
-  /** What was said on the open task's calls, the call standing now included, and the retry of a read that failed. */
-  transcript: {
-    region: TranscriptRegion;
-    onRetry: () => void;
-    /** The call the tab is asked to bring into view, by its key, and the word that it has; what a version's Open asks. */
-    reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
-  };
-  /**
-   * What Luke's brain wrote and ran on the open task's calls, the turn the
-   * page before the oldest drawn
-   * is read before where an older one stands, and that read.
-   */
-  work: {
-    /** The open task's conversation with the brain as an agent's transcript is read; none before the first read lands. */
-    conversation: TasksView["conversation"];
-    onLoadEarlier: () => Promise<void>;
-    /** Reads the brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
-    readWorker: TranscriptReader;
-    /** The moment whose turn the tab is asked to bring into view, and the word that it has; what a version's Open asks. */
-    reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
-  };
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
@@ -652,9 +618,13 @@ export interface TasksControl {
   onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a notification's click asks. */
   onShowAgent: (taskId: string, agentId: string) => void;
-  /** Leaves the version history for the place that wrote a version: its agent's tab, its call in the Transcript, or its turn in Work. */
+  /** Opens a task on a tab of its column, as it last stood: what ⌃Tab's card asks (`tab-switcher.tsx`). */
+  onShowColumnTab: (taskId: string, tab: MainTab) => void;
+  /** Opens a task on a tab of its side panel, opening the panel where it was shut: what ⌃Tab's card asks. */
+  onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
+  /** Leaves the version history for the place that wrote a version: its agent's tab. */
   onShowSource: (taskId: string, source: RevisionSource) => void;
-  /** The question a Talk press or a start asks before it ends the call standing about another task. */
+  /** The question an agent's Call press asks before it ends the call standing into another agent. */
   secondCall: { confirm: DialogConfirm; question: DialogQuestion };
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
@@ -713,8 +683,8 @@ export interface TasksControl {
   automationsView: AutomationsViewControl;
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
   boardView: BoardViewControl;
-  /** The task the call in progress on this Mac is about, or none: what Factory marks as being planned. */
-  callTaskId: string | undefined;
+  /** The task of the agent a call in progress on this Mac speaks into, or none: what Factory marks as talked through. */
+  talkingTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
   chatView: ChatViewControl;
   /** Opens a task's file in its side panel at the commit named, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
@@ -768,20 +738,18 @@ export interface TasksControl {
     /** The repository chip's list for a workspace, as the dialog chooses which the task starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
     /**
-     * Starts the plan on the repository given, or none, in the workspace
-     * given, with its planning phase or without it, from the Linear issue
-     * given where one was picked, with the brief Plan mode hands Luke where
-     * words were written, which closes the dialog and opens the plan; with
-     * an agent handed over it opens the task on a draft
-     * agent's tab holding the agent's prompt, files, and model, which starts
-     * the agent at once; answers why the task did not start, or nothing once
-     * it has.
+     * Starts the task on the repository given, or none, in the workspace
+     * given, with an empty plan and no call, linking the issues picked, with
+     * the brief File for later keeps where words were written, which closes
+     * the dialog and opens the task; with an agent handed over it opens the
+     * task on a draft agent's tab holding the agent's prompt, files, and
+     * model, which starts the agent at once; answers why the task did not
+     * start, or nothing once it has.
      */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
-      planning: boolean,
       from?: NewTaskStart,
     ) => Promise<string | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
@@ -841,11 +809,12 @@ export interface TasksControl {
    */
   onMarkTask: (taskId: string, mark: TaskMark) => void;
   /**
-   * Archives several tasks at once, as a repository's Archive tasks asks:
-   * each drawn archived at once, and one toast for them all once the
-   * service answered, whose Undo brings back every task it kept.
+   * Sets one task or several at Done or Canceled, as Mark done, Cancel task,
+   * and a group's Mark tasks done ask: each drawn there at once, and one
+   * toast for them all once the service answered, whose Undo puts back the
+   * status each stood at. A task already there is left as it stands.
    */
-  onArchiveTasks: (taskIds: readonly string[]) => void;
+  onSettleTasks: (taskIds: readonly string[], status: SettledStatus) => void;
   /** The repositories the account pinned in the sidebar, newest pinned first, whose groups stand above the rest. */
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
@@ -1108,7 +1077,7 @@ function rememberedChoice(
 function secondCallQuestion(taskName: string): DialogQuestion {
   return {
     title: `End your call on ${taskName} and start one here?`,
-    body: "What was said on that call stays in its transcript.",
+    body: "What was said on that call stays in its agent's transcript.",
     verb: "Start new call",
     running: "Starting",
     tone: DIALOG_TONE.PRIMARY,
@@ -1117,14 +1086,20 @@ function secondCallQuestion(taskName: string): DialogQuestion {
 
 /**
  * What the open task holds of each fixed tab's kind, each unknown until its
- * read lands: its plan always, and of its Inbox whether it may draw one, an
- * agent held, an archived one among them, or an item waiting (`inbox`).
+ * read lands: its plan always, of its Inbox whether it may draw one, an
+ * agent held, an archived one among them, or an item waiting (`inbox`), and
+ * of its Chat whether the chat read holds its channel (`chat`).
  */
-function taskHolds(view: Pick<TasksView, "board" | "shownCode">, inbox: boolean): TaskHolds {
+function taskHolds(
+  view: Pick<TasksView, "board" | "shownCode">,
+  inbox: boolean,
+  chat: boolean | undefined,
+): TaskHolds {
   const { board, shownCode } = view;
   return {
     [SIDE_PANEL_TAB.PLAN]: true,
     [SIDE_PANEL_TAB.INBOX]: inbox,
+    [SIDE_PANEL_TAB.CHAT]: chat,
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
         ? undefined
@@ -1166,7 +1141,7 @@ export function useTasksTab(input: {
   };
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Coding agents page, where the developer's API keys are. */
+  /** Opens Settings on its Agents page, where the developer's API keys are. */
   onOpenApiKeys: () => void;
   /** Opens Settings at the place the link names. */
   onOpenSettings: (link: SettingsLink) => void;
@@ -1242,7 +1217,6 @@ export function useTasksTab(input: {
   const [fileFor, setFileFor] = useState<
     { readonly taskId: string; readonly ref: CodeRef; readonly commit: string } | undefined
   >(undefined);
-  const [reveal, setReveal] = useState<SourceReveal | undefined>(undefined);
   const [sectionReveal, setSectionReveal] = useState<TasksControl["sectionReveal"]>(undefined);
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
   const [commentReveal, setCommentReveal] = useState<TasksControl["commentReveal"]>(undefined);
@@ -1280,6 +1254,9 @@ export function useTasksTab(input: {
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  // A status given here stands until main's view carries it, apart from the pins and archives.
+  const [statuses, setStatuses] = useState<PendingStatuses>(new Map());
+  useEffect(() => setStatuses((held) => unsettledStatuses(held, viewed)), [viewed]);
   // A repository's pin given here stands until main's view carries it, as a
   // task's does. Note that a sign-out lets every one go, because a pin names
   // a repository rather than a row of this account's own, so one left
@@ -1338,7 +1315,10 @@ export function useTasksTab(input: {
   }, [accountSignedIn, setClosedTabs]);
   const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
-  const marked = useMemo(() => markedView(drafted, marks), [drafted, marks]);
+  const marked = useMemo(
+    () => statusedView(markedView(drafted, marks), statuses),
+    [drafted, marks, statuses],
+  );
   const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
   // else that finds a task, the palette, the inbox, and the history, finds
@@ -1416,7 +1396,7 @@ export function useTasksTab(input: {
       !(standIn.listed && input.room === SHELL_ROOM.NARROW)
         ? standIn.place.channelId
         : tabReading,
-    readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
+    followChat: chatFollowerOf(act),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
     readPicture: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, params),
   });
@@ -1497,71 +1477,6 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });
-  // The calls heard on the open task, each held past its end until the
-  // record's copy catches up; a fixture's open task is drawn with its own
-  // call's words.
-  const reported =
-    tasksFixture === undefined || fixture === undefined
-      ? {
-          voiceStatus: voice.view.voiceStatus,
-          callTaskId: voice.view.callTaskId,
-          callTranscript: voice.callTranscript,
-        }
-      : tasksFixture.FIXTURE_TASKS_CALL;
-  const [heard, setHeard] = useState<readonly HeardCall[]>([]);
-  useEffect(() => {
-    setHeard((held) =>
-      heardCalls({
-        held,
-        voice: { callTaskId: reported.callTaskId, callTranscript: reported.callTranscript },
-        taskId: viewed.activeTaskId,
-        now: Date.now(),
-      }),
-    );
-  }, [reported.callTaskId, reported.callTranscript, viewed.activeTaskId]);
-  const transcript = transcriptRegion({
-    transcript: viewed.transcript,
-    heard,
-    lukeEndedCall: voice.view.lukeEndedCall,
-    readerId: input.accountId,
-  });
-  // A subagent's tab is held to the task's work as an agent's is to its agents.
-  const workers = useMemo(
-    () => workerCallIds(workRowsOf(viewed.conversation)),
-    [viewed.conversation],
-  );
-  // An agent Luke started, archived, or brought back in the call moves in
-  // the work before it moves in the list, so the list is read again as the
-  // call answers, and the tab appears or leaves as it does after a Start or
-  // an Archive; a call already in the work when the plan opens is read with
-  // the plan.
-  const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
-  const startsSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
-    taskId: undefined,
-    ids: new Set(),
-  });
-  const readAgents = agents.onRetryList;
-  useEffect(() => {
-    const seen = startsSeen.current;
-    const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && startedByLuke.some((callId) => !seen.ids.has(callId));
-    startsSeen.current = { taskId, ids: new Set(startedByLuke) };
-    if (landed) readAgents();
-  }, [startedByLuke, viewed.activeTaskId, readAgents]);
-  // A call of Luke's that made a new task, or made, deleted, or filled a section, changes the
-  // sidebar only once the tasks are read again, as one lands in the work of the task it was made on.
-  const sidebarByLuke = useMemo(() => sidebarCallIds(viewed.conversation), [viewed.conversation]);
-  const sidebarSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
-    taskId: undefined,
-    ids: new Set(),
-  });
-  useEffect(() => {
-    const seen = sidebarSeen.current;
-    const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && sidebarByLuke.some((callId) => !seen.ids.has(callId));
-    sidebarSeen.current = { taskId, ids: new Set(sidebarByLuke) };
-    if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [sidebarByLuke, viewed.activeTaskId, tell]);
   // An Untitled task takes its first agent's title on the service, and the
   // window hears no push for a task's row, so the tasks are read again as an
   // agent of the open task first holds a title while it stands Untitled.
@@ -1601,6 +1516,18 @@ export function useTasksTab(input: {
     (agents.heldIds?.length ?? 0) > 0 ||
     input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
+  // A task whose column shows no tab once its agents are read opens a new
+  // agent's draft, which the column then shows (`use-main-tabs.ts`), so a
+  // task with no agent, or whose last tab closed, lands in a composer. Note
+  // that nothing reaches the service until the draft is sent or called.
+  const openDraftNow = useRef(agents.onNewDraft);
+  openDraftNow.current = agents.onNewDraft;
+  const draftWanted =
+    mainTabs.tab === undefined && agents.agentIds !== undefined && agents.onUnarchive === undefined;
+  const draftTask = viewed.activeTaskId;
+  useEffect(() => {
+    if (draftWanted && draftTask !== undefined) openDraftNow.current();
+  }, [draftWanted, draftTask]);
   // A page's tab is held to the pages agents wrote for the task.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
@@ -1636,15 +1563,33 @@ export function useTasksTab(input: {
     [inboxAgent],
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
+  // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
+  const cloudTaskId =
+    inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
+  const cloudListed = useCloudBrowserTabs(cloudTaskId, useExperiment(EXPERIMENT.BROWSER));
+  // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
+  const cloudBrowsers = useMemo(
+    () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
+    [cloudTaskId, cloudListed],
+  );
+  // The task's Chat stands in the side panel once Chat is on and its read holds the task's channel, and
+  // opened where it holds none yet, which the tab says; it stands nowhere while Chat is off (`drawnFixed`).
+  const taskChatHeld = !(liveRun ? input.signedIn && chatOn : chat !== undefined)
+    ? false
+    : shownChat?.answer.channels.some(
+          (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
+        ) === true
+      ? true
+      : undefined;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
       ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
+        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld, taskChatHeld) }
         : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
-    inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
+    NO_IDS,
     inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
     inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
     // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by (`use-inbox-task-agents.ts`).
@@ -1654,7 +1599,32 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.agentIds),
     input.room,
+    cloudBrowsers,
   );
+  // A task whose column shows no tab stands on its plan: the side panel is
+  // shown on its Plan tab, once for each task as it comes to show none, so a
+  // tab chosen in the panel since is left where it was. Note that this waits
+  // on the agents' read, because a task opened on an agent's tab shows none
+  // until its agents are read; and a room that draws the panel only over the
+  // whole window leaves it shut.
+  const planShownFor = useRef<string | undefined>(undefined);
+  const noColumnTab =
+    inboxView === undefined &&
+    pageAgents === undefined &&
+    mainTabs.tab === undefined &&
+    agents.agentIds !== undefined &&
+    region.kind === DOCUMENT_REGION.READY;
+  const plannedTask = noColumnTab ? viewed.activeTaskId : undefined;
+  const { onShow: showSidePanelOn, fullScreenOnly: panelOnlyFull } = sidePanel;
+  useEffect(() => {
+    if (plannedTask === undefined) {
+      planShownFor.current = undefined;
+      return;
+    }
+    if (planShownFor.current === plannedTask || panelOnlyFull) return;
+    planShownFor.current = plannedTask;
+    showSidePanelOn(plannedTask, SIDE_PANEL_TAB.PLAN);
+  }, [plannedTask, panelOnlyFull, showSidePanelOn]);
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
   // pull request was read, or before a rename, catches up while its task is open.
@@ -1695,19 +1665,25 @@ export function useTasksTab(input: {
     standIn === undefined &&
     fixture === undefined &&
     !sidePanel.fullScreen;
-  // The task's Chat tab on screen is its plan channel read, as the window's Chat on a channel is.
-  const tabChannel =
-    columnShown && mainTabs.tab === MAIN_TAB.CHAT
-      ? liveChat.chat?.channels.find(
-          (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
-        )?.id
-      : undefined;
+  // The task's Chat on screen in the side panel is its plan channel read, as the window's Chat on a channel is.
+  const taskChatShown =
+    shown &&
+    historyFor === undefined &&
+    standIn === undefined &&
+    fixture === undefined &&
+    sidePanel.open &&
+    sidePanel.tab === SIDE_PANEL_TAB.CHAT;
+  const tabChannel = taskChatShown
+    ? liveChat.chat?.channels.find(
+        (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
+      )?.id
+    : undefined;
   if (tabChannel !== tabReading) setTabReading(tabChannel);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   const shownAgent =
     shown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
-      : columnShown && isAgentTab(mainTabs.tab)
+      : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
         ? mainTabs.tab.agent
         : null;
   // The task's Inbox is the side panel's, on screen while the panel shows it beside the task.
@@ -1732,7 +1708,7 @@ export function useTasksTab(input: {
       ? null
       : standIn?.kind === STAND_IN.CHAT
         ? { workspaceId: listedWorkspace.id, taskId: null }
-        : columnShown && mainTabs.tab === MAIN_TAB.CHAT && viewed.activeTaskId !== undefined
+        : taskChatShown && viewed.activeTaskId !== undefined
           ? { workspaceId: listedWorkspace.id, taskId: viewed.activeTaskId }
           : null;
   const chatShownWorkspace = chatShown?.workspaceId ?? null;
@@ -1805,10 +1781,6 @@ export function useTasksTab(input: {
     historyFor !== undefined &&
     historyFor.taskId === boundFor &&
     region.kind !== DOCUMENT_REGION.MISSING;
-  // A reveal is the open task's, so another task opening drops it, and
-  // coming back asks nothing of the visit after.
-  if (reveal !== undefined && reveal.taskId !== boundFor) setReveal(undefined);
-  const revealing = reveal !== undefined && reveal.taskId === boundFor ? reveal.source : undefined;
   // A pin stays chosen while its task stays open, whichever of its tabs is
   // shown: once its task opens it is held there, and any other task opening
   // lets it go. Note that this reads the task open rather than the one asked
@@ -1816,8 +1788,6 @@ export function useTasksTab(input: {
   if (chosen !== undefined && openTaskId !== chosen.over) {
     setChosen(openTaskId === chosen.pin.task ? { pin: chosen.pin, over: openTaskId } : undefined);
   }
-  // An answer clears the ask it answers, never one made since.
-  const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
   const listedId = listedWorkspace?.id;
   const tasksNow = tasks.tasks;
   const workspacesNow = viewed.workspaces;
@@ -1829,6 +1799,24 @@ export function useTasksTab(input: {
       lastOpenIn.current.set(openWorkspaceId, openTaskId);
     }
   }, [openTaskId, openWorkspaceId]);
+  // The task last asked to open, until its document is drawn ready: a later
+  // ask replaces it, and one refused, or left for another, ends untimed.
+  const opening = useRef<{ readonly taskId: string; readonly startedAt: number } | undefined>(
+    undefined,
+  );
+  const readyTask = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
+  useEffect(() => {
+    const timed = opening.current;
+    if (timed === undefined || readyTask?.id !== timed.taskId) return;
+    opening.current = undefined;
+    const planChars = readyTask.document.body.length;
+    recordPanelSpan({
+      name: PANEL_SPAN.TASK_OPEN,
+      startedAt: timed.startedAt,
+      endedAt: Date.now(),
+      attributes: () => ({ [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: planChars }),
+    });
+  }, [readyTask]);
   // Opening a task, or leaving one, is leaving the window's Inbox for it.
   // Note that `onOpened` runs only once the task opened, because a task that
   // would not open must not leave the sidebar on another workspace, this
@@ -1837,8 +1825,13 @@ export function useTasksTab(input: {
     (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
       setStandIn(undefined);
       const ask = { taskId, over: openTaskId };
+      // Another task asked for is timed to its document drawn ready; the one
+      // open already has nothing to wait on.
+      const timed = { taskId, startedAt: Date.now() };
+      opening.current = taskId === openTaskId ? undefined : timed;
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
+        if (opening.current === timed) opening.current = undefined;
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
@@ -1855,6 +1848,7 @@ export function useTasksTab(input: {
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
     setStandIn(undefined);
+    opening.current = undefined;
     if (fixture !== undefined) return;
     const ask = { taskId: undefined, over: openTaskId };
     setAsked(ask);
@@ -2187,61 +2181,108 @@ export function useTasksTab(input: {
     }
   };
 
-  // Several tasks archived at once answer with one toast rather than one
-  // each, so its Undo brings back every task the service kept, and opens
-  // again the open task where the archive left it. A task the service
-  // refused goes back where it was, and the toast counts it. Note that the
-  // tasks share one stamp, because they were archived by one press, so they
-  // stand under Archived in the order they were listed rather than in an
-  // order set by whether the clock ticked between two of them.
-  const archiveTasks = (taskIds: readonly string[]) => {
-    if (fixture !== undefined || taskIds.length === 0) return;
-    const at = Date.now();
-    const asked = taskIds.map((taskId) => ({
-      taskId,
-      next: { ...marks.get(taskId), ...pendingMark(TASK_MARK.ARCHIVE, at) },
-    }));
-    setMarks(
+  // Each task's status choices made here so far, counted as each is sent,
+  // so an Undo can tell a choice made after its press, answered or not.
+  const statusChoices = useRef(new Map<string, number>());
+  const chooseStatus = (taskId: string) =>
+    statusChoices.current.set(taskId, (statusChoices.current.get(taskId) ?? 0) + 1);
+  // The tasks as the list holds them, or the open document where the list does not hold one yet.
+  const standingTasksOf = (taskIds: readonly string[]) => {
+    const held = tasks.document.task;
+    return taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
+      const task = tasks.tasks.find((each) => each.id === taskId);
+      if (task !== undefined) return [task];
+      return held?.id === taskId ? [held] : [];
+    });
+  };
+  // Each status change is drawn at once and sent, and a refused one goes
+  // back where it was only while no later press replaced it. Answers which
+  // tasks the service kept and how many it refused.
+  const sendStatuses = (changes: readonly StatusChange[]) => {
+    for (const { taskId } of changes) chooseStatus(taskId);
+    const asked = changes.map(({ taskId, status }) => ({ taskId, next: { status } }));
+    setStatuses(
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
-    const answers = asked.map(({ taskId }) =>
-      act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: true }).catch(() => false),
+    const answers = asked.map(({ taskId, next }) =>
+      act(ACT_KIND.TASKS_SET_STANDING, { taskId, status: next.status }).catch(() => false),
     );
-    Promise.all(answers).then((changed) => {
+    return Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
-      const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
-      setMarks(
+      setStatuses(
         (held) =>
           new Map(
-            [...held].filter(([pending, mark]) =>
-              refused.every((each) => each.taskId !== pending || each.next !== mark),
+            [...held].filter(([pending, status]) =>
+              refused.every((each) => each.taskId !== pending || each.next !== status),
             ),
           ),
       );
+      const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
+      return { landed, refused: refused.length };
+    });
+  };
+
+  // Tasks settled by one press answer with one toast rather than one each,
+  // so its Undo puts back the status of every task the service kept, and
+  // says so only where the service refuses that too. The open task stays
+  // open, since a task done or canceled is still read and worked on.
+  const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
+    if (fixture !== undefined) return;
+    const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
+    if (asked.length === 0) return;
+    const sent = sendStatuses(asked);
+    // The status choice each task stood at once this press was sent, which a later choice moves on.
+    const choices = new Map(asked.map(({ taskId }) => [taskId, statusChoices.current.get(taskId)]));
+    sent.then(({ landed, refused }) => {
       if (landed.length === 0) {
         toast({
-          words: archiveTasksFailedNote(refused.length),
+          words: settleFailedNote(status, refused),
           tone: TOAST_TONE.FAILED,
           hold: TOAST_HOLD.FAILED,
         });
         return;
       }
-      const left = landed.find((taskId) => taskId === openNow.current);
-      if (left !== undefined) leaveTask();
       toast({
-        words: archivedTasksNote(landed.length, refused.length),
+        words: settledNote(status, landed.length, refused),
         tone: TOAST_TONE.DONE,
         action: {
           label: UNDO_LABEL,
-          onPress: () => {
-            for (const taskId of landed) {
-              markNow.current(taskId, TASK_MARK.UNARCHIVE, { reopen: taskId === left });
-            }
-          },
+          onPress: () =>
+            restoreNow.current(
+              undo.filter(
+                ({ taskId }) =>
+                  landed.includes(taskId) &&
+                  statusChoices.current.get(taskId) === choices.get(taskId),
+              ),
+              status,
+            ),
         },
       });
     });
   };
+  // Note that an Undo puts back only the tasks given no status since its
+  // press, here or still in flight, and still at the status it undoes, so a
+  // status chosen since, on the Board, the task's chip, or another Mac,
+  // stands.
+  const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
+    const due = undoStillDue(
+      changes,
+      settled,
+      standingTasksOf(changes.map(({ taskId }) => taskId)),
+    );
+    if (due.length === 0) return;
+    sendStatuses(due).then(({ refused }) => {
+      if (refused === 0) return;
+      toast({
+        words: STATUS_RESTORE_FAILED_NOTE,
+        tone: TOAST_TONE.FAILED,
+        hold: TOAST_HOLD.FAILED,
+      });
+    });
+  };
+  // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
+  const restoreNow = useRef(restoreStatuses);
+  restoreNow.current = restoreStatuses;
   // An Undo is pressed renders after its archive landed, so it marks, and
   // opens, through the tab as it stands then rather than as it stood.
   const markNow = useRef(markTask);
@@ -2265,63 +2306,70 @@ export function useTasksTab(input: {
     copyWithToast(planMarkdown(region.task), TASK_COPIED_NOTE);
   };
 
-  const microphone = microphoneButton({
-    voiceAvailable: input.voiceAvailable,
-    microphoneStatus: input.microphoneStatus,
-    activeTaskId: tasks.activeTaskId,
-    archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
-    listening: voice.listening,
-    callTaskId: voice.view.callTaskId,
-    voiceStatus: voice.view.voiceStatus,
-  });
-  const live = callInProgress(voice.view) && voice.view.callTaskId === tasks.activeTaskId;
-  // A press that would open a call here while one stands about another task
-  // ends that call, so it asks first; the answer is the same Talk press, and
-  // Cancel leaves the call standing as it was. The talk key never asks: it
-  // speaks into the call standing, whatever task is open. The question is the
-  // task's it was asked on, so it goes the moment another task opens (the
-  // press would talk about whichever task the host has open), and its surface
-  // is the task's page, which a version history covers.
-  const callElsewhere = callInProgress(voice.view) && voice.view.callTaskId !== tasks.activeTaskId;
-  const [askedFor, setAskedFor] = useState<string>();
-  const secondCallFor = callElsewhere && askedFor !== undefined ? askedFor : undefined;
+  // A platform with no voice, the web's, takes no calls.
+  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
+  // A call into one of the open task's agents is in progress, so the plan may still be written.
+  const live = callInProgress(voice.view) && voice.view.call?.taskId === tasks.activeTaskId;
+  // A Call press that would open a call into one agent while another's call
+  // stands ends that call, so it asks first; the answer is the same press,
+  // and Cancel leaves the call standing as it was. The question is the
+  // agent's it was asked for on the task open, so it goes the moment another
+  // task opens, and its surface is the task's page, which a version history
+  // covers.
+  const [askedFor, setAskedFor] = useState<{ taskId: string; agentId: string }>();
+  const otherCall = (agentId: string) =>
+    callInProgress(voice.view) && voice.view.call?.agentId !== agentId;
+  const secondCallFor =
+    askedFor !== undefined && otherCall(askedFor.agentId) ? askedFor : undefined;
   const secondCall = useConfirmDialog(
-    { subject: secondCallFor === tasks.activeTaskId, surfaceOpen: shown && !historyOpen },
+    { subject: secondCallFor?.taskId === tasks.activeTaskId, surfaceOpen: shown && !historyOpen },
     () =>
-      act(ACT_KIND.TASKS_TALK).then(
-        (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-        (refused: Error): ActionResult => ({
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: refused.message,
-        }),
-      ),
+      secondCallFor === undefined
+        ? Promise.resolve<ActionResult>({ status: ACTION_RESULT_STATUS.ACCEPTED })
+        : act(ACT_KIND.TASKS_TALK, { agentId: secondCallFor.agentId }).then(
+            (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+            (refused: Error): ActionResult => ({
+              status: ACTION_RESULT_STATUS.REJECTED,
+              reason: refused.message,
+            }),
+          ),
   );
-  // A started task asks once it is the task open, which the host may say
-  // only after the start's own answer has come back.
-  const askOnOpen = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (askOnOpen.current === undefined || askOnOpen.current !== secondCallFor) return;
-    if (secondCallFor !== tasks.activeTaskId) return;
-    askOnOpen.current = undefined;
-    secondCall.ask();
-  });
-  const callingNow = useRef(callElsewhere);
-  callingNow.current = callElsewhere;
-  // The press names no task: main reads the one the host has open, and the
-  // voice window, which owns the call, opens it about that task or toggles it.
-  const pressMicrophone = () => {
-    if (microphone.press === MICROPHONE_PRESS.ASK_ACCESS) voice.requestMicrophoneAccess();
-    if (microphone.press === MICROPHONE_PRESS.OPEN_SETTINGS)
-      tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
-    if (microphone.press === MICROPHONE_PRESS.TALK) {
-      if (!callElsewhere) tell(ACT_KIND.TASKS_TALK);
-      else {
-        setAskedFor(tasks.activeTaskId);
-        secondCall.ask();
-      }
+  // The press names its agent and no task: main reads the one the host has
+  // open, and the voice window, which owns the call, opens it into the agent
+  // or toggles it. It is read off the document as the press lands, so a door
+  // handed down once answers for the voice as it stands.
+  const pressCall = (agentId: string) => {
+    const now = voiceNow.current;
+    const button = microphoneButton({
+      voiceAvailable: input.voiceAvailable,
+      microphoneStatus: input.microphoneStatus,
+      agentId,
+      archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
+      listening: now.listening,
+      call: now.view.call,
+      voiceStatus: now.view.voiceStatus,
+    });
+    if (button.press === MICROPHONE_PRESS.ASK_ACCESS) now.requestMicrophoneAccess();
+    if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
+    if (button.press !== MICROPHONE_PRESS.TALK || tasks.activeTaskId === undefined) return;
+    if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, { agentId });
+    else {
+      setAskedFor({ taskId: tasks.activeTaskId, agentId });
+      secondCall.ask();
     }
   };
+  const voiceNow = useRef(voice);
+  voiceNow.current = voice;
+  const pressCallNow = useRef(pressCall);
+  pressCallNow.current = pressCall;
+  // The doors an agent's tab takes calls through, the same from draw to draw; none where the window has no voice.
+  const callDoors = useMemo<AgentCallDoors>(
+    () => ({ onPress: (agentId) => pressCallNow.current(agentId) }),
+    [],
+  );
 
+  // Code shown on a call lands as a card the diff bundle draws, so the bundle loads as the call stands.
+  usePrefetchDiffBundle(live);
   // A fixture's staged task has nothing arriving on it, and code arrives
   // only on a call, since what a task opens with it already held.
   const arrivedTabs = usePanelArrivals({
@@ -2432,8 +2480,16 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
+  // A status chosen here supersedes one a press drew and main's view has
+  // yet to carry, which is let go so the view's answer is drawn.
   const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
+    if (standing.status !== undefined) {
+      chooseStatus(taskId);
+      setStatuses((held) =>
+        held.has(taskId) ? new Map([...held].filter(([pending]) => pending !== taskId)) : held,
+      );
+    }
     return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
   };
 
@@ -2493,6 +2549,24 @@ export function useTasksTab(input: {
           taskId,
           ...(before === undefined ? undefined : { before }),
         }),
+      followNewest: (taskId, take) => {
+        let live = true;
+        let stream: AsyncIteratorObject<TasksRevisionsAnswer> | undefined;
+        act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId })
+          .then(async (opened) => {
+            stream = opened;
+            if (!live) {
+              await opened.return?.(undefined);
+              return;
+            }
+            for await (const answer of opened) if (live) take(answer);
+          })
+          .catch(() => undefined);
+        return () => {
+          live = false;
+          void stream?.return?.(undefined);
+        };
+      },
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
@@ -2521,14 +2595,10 @@ export function useTasksTab(input: {
   // plan since; a refusal hides it again where it stood hidden.
   // It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
-  // sent, and the plan stands as Untitled. A start opens its
-  // task's call at once, except over a call standing about another task,
-  // which main leaves for this question to end or keep. A start without
-  // planning opens no call, so it asks nothing about the one standing; it
-  // names its planning only where it is off, so a request with planning is
-  // the one every service has read. New task's Plan mode hands its words
-  // over as the task's brief, which Luke reads beside the plan, and a blank
-  // brief is not sent. New task's Agent mode starts the task
+  // sent, and the plan stands as Untitled. A start opens no call, and
+  // names no planning, so the task opens on an empty plan rather than the
+  // template. File for later hands its words over as the task's brief, and a
+  // blank brief is not sent. New task starts the task
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
@@ -2539,7 +2609,6 @@ export function useTasksTab(input: {
     name: string,
     repository: string | null,
     workspaceId: string | undefined,
-    planning: boolean,
     from: NewTaskStart = {},
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
@@ -2557,7 +2626,7 @@ export function useTasksTab(input: {
         : { issues: from.issues }),
       ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
       ...(from.status === undefined ? undefined : { status: from.status }),
-      ...(planning ? undefined : { planning }),
+      planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
       (answer) => {
@@ -2565,10 +2634,6 @@ export function useTasksTab(input: {
         setNewTaskAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
-        if (planning && callingNow.current) {
-          askOnOpen.current = answer.planId;
-          setAskedFor(answer.planId);
-        }
         if (from.handed !== undefined) {
           openAgent(answer.planId, from.handed, answer.agentStart);
         }
@@ -2672,16 +2737,9 @@ export function useTasksTab(input: {
     return home?.id ?? listedWorkspace?.id;
   };
 
-  // A version's Open lands where its writer wrote it: an agent's tab as a
-  // notification opens it, or the task's Call tab, asked to
-  // bring the call or the turn into view once it draws.
+  // A version's Open lands where its writer wrote it: an agent's tab, as a notification opens it.
   const showSource = (taskId: string, source: RevisionSource) => {
-    if (source.kind === REVISION_SOURCE.AGENT) {
-      showColumnTab(taskId, { agent: source.agentId });
-      return;
-    }
-    setReveal({ taskId, source });
-    showColumnTab(taskId, MAIN_TAB.CALL);
+    showColumnTab(taskId, { agent: source.agentId });
   };
 
   // Each ask is its own, so the same section asked twice scrolls twice.
@@ -2732,18 +2790,16 @@ export function useTasksTab(input: {
       case LINK_PLACE.PAGE:
         showPanelTab(place.planId, { page: place.pageId });
         return;
-      case LINK_PLACE.CALL:
-        if (place.callId === undefined) showColumnTab(place.planId, MAIN_TAB.CALL);
-        else showSource(place.planId, { kind: REVISION_SOURCE.CALL, callId: place.callId });
-        return;
+      // A turn of Luke's own work on the task is drawn nowhere now, so its link opens the task's plan.
       case LINK_PLACE.TURN:
-        showSource(place.planId, { kind: REVISION_SOURCE.WORK, at: place.at });
+        showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
         return;
       // Note that an agent's worker's tab is opened with no task words, since a link carries none; its own rows name its task once they land.
       // An agent's worker is drawn only while its agent's tab is open, so the agent's tab opens with it.
       case LINK_PLACE.WORKER:
+        // A task's own Luke's worker is drawn nowhere now, so its link opens the task's plan.
         if (place.agentId === undefined) {
-          showPanelTab(place.planId, { subagent: place.callId });
+          showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
           return;
         }
         showColumnTab(place.planId, { agent: place.agentId });
@@ -2896,29 +2952,15 @@ export function useTasksTab(input: {
   }, [fileFor, tasks.activeTaskId, onOpenFile]);
 
   // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
-  // which lets its draft go, and the Call's while it stands alone, which
-  // does not close. Note that a tab's place is counted among those after the
-  // Call's, which stand there whether or not the Call's tab is open.
+  // which lets its draft go.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
-  // The brain's worker's tab reads its session as an agent's worker's tab does, the task standing in the agent's place.
-  const readWorker = useCallback<TranscriptReader>(
-    ({ agentId, after, callId }) =>
-      act(ACT_KIND.TASKS_MESSAGES, {
-        taskId: agentId,
-        after,
-        ...(callId === undefined ? undefined : { callId }),
-      }),
-    [act],
-  );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
-      const after = openTabs.filter((each) => each !== MAIN_TAB.CALL);
-      const at = after.findIndex((each) => sameTab(each, tab));
-      const closes = tab === MAIN_TAB.CALL ? openTabs.includes(tab) && after.length > 0 : at >= 0;
+      const at = openTabs.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && closes && !isDraftTab(tab)) {
-        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: Math.max(0, at) };
+      if (task !== undefined && at >= 0 && !isDraftTab(tab)) {
+        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closeMainTab(tab);
@@ -2956,7 +2998,7 @@ export function useTasksTab(input: {
       return held === undefined || held.length > 0 || waiting;
     }
     if (isSubagentTab(tab))
-      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: workers });
+      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agentIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
@@ -3107,58 +3149,17 @@ export function useTasksTab(input: {
     region,
     copy: { onPress: pressCopy },
     edit,
-    microphone: {
-      label: microphone.label,
-      enabled: microphone.press !== MICROPHONE_PRESS.NONE,
-      muted: microphone.muted,
-      onPress: pressMicrophone,
-    },
-    // The speaker is the voice window's to silence, since it plays Luke.
-    speaker: {
-      muted: voice.view.speakerMuted,
-      onPress: () =>
-        tell(ACT_KIND.VOICE_COMMAND, {
-          command: voice.view.speakerMuted
-            ? VOICE_COMMAND.UNMUTE_SPEAKER
-            : VOICE_COMMAND.MUTE_SPEAKER,
-        }),
-    },
-    // The stop is the voice window's to carry out, as every voice command is:
-    // it holds the call, and ends whichever one stands.
-    stop: {
-      shown: live,
-      onPress: () => tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.END_CALL }),
-    },
-    // A fixture's open task is drawn on a call with Luke working, read from
-    // the fixture's own call rather than a voice window that holds none.
-    status: callStatus(reported, tasks),
+    // An agent's tab takes calls where the window has a voice to call with; the web's has none.
+    calls: voiceOffered ? callDoors : undefined,
     live,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
-    workFailed: tasks.workStatus === TASKS_READ.FAILED,
-    onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
+    codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
+    onRetryCode: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
-    transcript: {
-      region: transcript,
-      onRetry: () => tell(ACT_KIND.TASKS_REFRESH),
-      reveal:
-        revealing?.kind === REVISION_SOURCE.CALL
-          ? { call: revealing.callId, onRevealed: revealed }
-          : undefined,
-    },
-    // A fixture's open task is drawn mid-call, as its status and transcript are.
-    work: {
-      conversation: tasks.conversation,
-      onLoadEarlier: () => act(ACT_KIND.TASKS_CONVERSATION_EARLIER),
-      readWorker,
-      reveal:
-        revealing?.kind === REVISION_SOURCE.WORK
-          ? { at: revealing.at, onRevealed: revealed }
-          : undefined,
-    },
     agents,
     history: {
       ...history,
@@ -3186,6 +3187,8 @@ export function useTasksTab(input: {
     onShowAgent: guard((taskId: string, agentId: string) =>
       showColumnTab(taskId, { agent: agentId }),
     ),
+    onShowColumnTab: guard(showColumnTab),
+    onShowPanelTab: guard(showPanelTab),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     chatShown,
@@ -3229,7 +3232,6 @@ export function useTasksTab(input: {
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
       pages: inboxPages.pages,
-      onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,
     },
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
@@ -3343,7 +3345,7 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
+    talkingTaskId: callInProgress(voice.view) ? voice.view.call?.taskId : undefined,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the task's Call tab, asked to
@@ -3370,7 +3372,7 @@ export function useTasksTab(input: {
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
-    onShowChat: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.CHAT)),
+    onShowChat: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.CHAT)),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: PinnedTab) => {
       const { tab } = pin;
@@ -3439,7 +3441,7 @@ export function useTasksTab(input: {
     onRenameTask: renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
-    onArchiveTasks: archiveTasks,
+    onSettleTasks: settleTasks,
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
     onPinRepository: pinRepository,
     taskSections,

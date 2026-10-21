@@ -112,9 +112,6 @@ export function resultPageWord(page: SettingsView): string {
   return settingsPageOf(page).title;
 }
 
-/** The words every shortcut row can be found by, beside its own name. */
-const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
-
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
@@ -203,20 +200,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Microphone", "permission access allow privacy system settings"],
         }
       : undefined,
-    // The two keys, which are rows but not stored settings: what each is
-    // set to lives with the registrar, and the rows are always drawn.
-    {
-      id: SETTINGS_SEARCH_ROW.TALK_KEY,
-      label: "Talk to Luke",
-      page: SETTINGS_VIEW.VOICE,
-      haystack: ["Talk to Luke", SHORTCUT_WORDS, "talk speak hold microphone hold to talk"],
-    },
-    {
-      id: SETTINGS_SEARCH_ROW.STOP_KEY,
-      label: "Stop Luke",
-      page: SETTINGS_VIEW.VOICE,
-      haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
-    },
     // The account's plan template, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
@@ -266,26 +249,26 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The account's own provider keys, which are the account's on the service: drawn once an account is signed in.
+    // The harnesses' rows, each holding the account's plan and API key for it on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
-          label: "Anthropic API key",
+          label: "Claude Code",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
-            "Anthropic API key",
-            "api keys byok own key claude billing provider credential",
+            "Claude Code",
+            "anthropic api key byok own key claude plan subscription setup-token max pro billing provider credential",
           ],
         }
       : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
-          label: "OpenAI API key",
+          label: "Codex",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
-            "OpenAI API key",
-            "api keys byok own key gpt codex billing provider credential",
+            "Codex",
+            "openai api key byok own key gpt chatgpt plan subscription billing provider credential",
           ],
         }
       : undefined,

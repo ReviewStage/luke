@@ -32,6 +32,8 @@ export interface FakeSandbox {
   tags: Record<string, string>;
   snapshotId: string;
   deleted: boolean;
+  /** Whether the snapshot the sandbox resumes from expired, so a resume is answered 410 as Vercel answers it. */
+  snapshotExpired?: boolean;
 }
 
 export interface FakeCommand {
@@ -135,7 +137,11 @@ export function runnerSandboxApi() {
         sandbox.deleted = true;
         return Response.json({});
       }
-      if (parsed.searchParams.get("resume") === "true" && sandbox.status === "stopped") {
+      const resuming = parsed.searchParams.get("resume") === "true";
+      if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
+        return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
+      }
+      if (resuming && sandbox.status === "stopped") {
         sandbox.status = "running";
         sandbox.currentSessionId = id("sbs");
       }

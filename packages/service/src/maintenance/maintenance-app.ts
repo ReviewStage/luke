@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
+import { anyPlanConnected } from "@luke/database/models/provider-key-store";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
@@ -9,6 +10,7 @@ import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
@@ -21,7 +23,6 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { createLiveUpstream } from "../voice/openai.js";
 import {
   NOTHING_ORPHANED,
@@ -31,6 +32,7 @@ import {
 } from "../voice/orphan-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
+import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -71,9 +73,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     deploymentEveOrigin(),
     EVE_MOUNT.CODER,
   );
+  const httpClient = yield* HttpClient.HttpClient;
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
-    Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
+    Layer.succeed(HttpClient.HttpClient, httpClient),
   );
   const voiceUpstream = environment.openAiKey
     ? createLiveUpstream({
@@ -90,12 +93,16 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     purgeDeletedTaskCalls: (now) =>
       hostedStore().retention.purgeDeletedTaskCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
     sweepAbandonedTurns: (now) =>
-      Effect.flatMap(storeWriter({ tools: HOSTED_TOOL_SET }), (writer) =>
+      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
+    sweepNativeSandboxes: (now) =>
+      sweepNativeSandboxes(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
@@ -104,10 +111,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
         Effect.provideContext(startContext),
       ),
-    // The template is built ahead of a launch only where some account may launch a native agent.
+    // The template is built ahead of a launch only where some account connected a plan to launch a native agent on.
     sweepImageTemplates: () =>
-      sweepNativeTemplates(environment.nativeAgentAccounts.length > 0).pipe(
-        Effect.provideContext(startContext),
+      Effect.flatMap(anyPlanConnected(), (advance) =>
+        sweepNativeTemplates(advance).pipe(Effect.provideContext(startContext)),
       ),
     sweepVoice: (now) =>
       voiceUpstream === undefined

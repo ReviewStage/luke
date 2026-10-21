@@ -1,5 +1,6 @@
 import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
 import {
+  MESSAGE_ROLE,
   type MessageRole,
   type StoredMessageMetadata,
   TURN_STATUS,
@@ -7,7 +8,7 @@ import {
   type TurnStatus,
 } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
-import { sql } from "drizzle-orm";
+import { type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
@@ -89,7 +90,7 @@ export const conversations = pgTable(
     runtime: text("runtime").$type<ConversationRuntime>(),
     /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on eve's and before the harness answers one. */
     nativeSession: text("native_session"),
-    /** The digest of the bearer the conversation's runner presents at Luke's MCP server, never the bearer itself; null where no runner holds one. */
+    /** Unused since the digest moved to the agent's row (`coding_agent.runner_token_hash`), so a launch never waits on the conversation's lock a message's hand-over holds; neither written nor read, and kept for a later cleanup to drop with its index. */
     runnerTokenHash: text("runner_token_hash"),
     /** The number of the last runner event projected into the conversation, so a batch the runner posts again applies nothing twice; null before a runner's first event. */
     nativeSequence: bigint("native_sequence", { mode: "number" }),
@@ -117,13 +118,28 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
-    // Luke's MCP server finds the conversation a runner's bearer stands for by the bearer's digest,
-    // on every tool call; one digest names one conversation.
+    // Unused, as the column above is: kept for the later cleanup that drops both.
     uniqueIndex("conversations_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),
   ],
 );
+
+/**
+ * That a row of `messages` is a user line no turn owns yet: the rows the
+ * awaiting-line reads look among (`message-reads.ts`'s
+ * `newestAwaitingLineAt`), and the predicate of the partial index they are
+ * read through. The role is inlined rather than bound, because an index
+ * predicate is DDL, which takes no bound parameter, and a read that bound it
+ * would match the index only in a plan made for that one value, never in the
+ * generic plan of a statement prepared once and run again.
+ */
+export function turnlessUserLine(table: {
+  readonly role: SQLWrapper;
+  readonly turnId: SQLWrapper;
+}): SQL {
+  return sql`(${table.role} = ${sql.raw(`'${MESSAGE_ROLE.USER}'`)} and ${table.turnId} is null)`;
+}
 
 /**
  * One `UIMessage` per row. A message in flight is mutable until
@@ -210,6 +226,11 @@ export const messages = pgTable(
     index("messages_conversation_revision")
       .on(table.conversationId, table.revision)
       .where(sql`${table.revision} is not null`),
+    // The awaiting-line reads find a conversation's user lines no turn owns, a few among its every
+    // row, which a scan of the conversation's sequence would read through to the last.
+    index("messages_awaiting_line")
+      .on(table.conversationId, table.seq)
+      .where(turnlessUserLine(table)),
   ],
 );
 

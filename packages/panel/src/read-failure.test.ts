@@ -6,7 +6,6 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
 } from "@luke/features/coding-agent-view";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -18,12 +17,13 @@ import { DesktopInbox } from "./desktop/desktop-inbox.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse.js";
 import { PANEL_TAB } from "./panel-tabs.js";
-import { ApiKeysSection } from "./settings/api-keys-section.js";
+import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { followedInboxes } from "./testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /**
@@ -49,6 +49,9 @@ const TASK: TaskSummary = {
 /** Whether the service answers a read, rather than failing it, as a Retry finds it once it is back. */
 let answering = false;
 
+/** The host's inbox streams: a followed inbox could not be read until the service answers again, then holds nothing. */
+const host = followedInboxes(() => (answering ? { items: [] } : UNANSWERED));
+
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   answering = false;
@@ -60,11 +63,8 @@ beforeEach(() => {
   });
   fakeAppBridge({});
   fakeActPort({
-    // A read past the cursor is held open while nothing changes, as the service holds it; every read fails until the service answers again, then answers with nothing in it.
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ after }) =>
-      after !== INBOX_CURSOR_START
-        ? new Promise(() => undefined)
-        : Promise.resolve(answering ? { items: [], cursor: "1" } : UNANSWERED),
+    // Every followed inbox could not be read until the service answers again, then holds nothing.
+    ...host.procedures,
     [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });
@@ -135,7 +135,14 @@ test("the sidebar's plans that could not be read say so, and Retry reads the lis
         onResize: ignore,
         staged: false,
       },
-      history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
+      history: {
+        canGoBack: false,
+        canGoForward: false,
+        onBack: ignore,
+        onForward: ignore,
+        steps: { back: [], forward: [] },
+        onGoTo: ignore,
+      },
       tasks: tasksControl({
         listFailed: true,
         onRetryList: () => {
@@ -189,7 +196,6 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           listed: false,
           onListed: ignore,
           pages: undefined,
-          onRereadPages: () => undefined,
           onTaskAgents: () => undefined,
         },
       }),
@@ -226,7 +232,7 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
 });
 
 test("Settings says a page's failed read alike in its card's place, the keys and the workspaces both, and Retry reads again", async () => {
-  const keys = await mount(createElement(ApiKeysSection, { signedIn: true, onKeys: ignore }));
+  const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
   const keysFailure = readFailure(keys);
   assertSaidAlike(keysFailure, "Your keys could not be read.");
   answering = true;

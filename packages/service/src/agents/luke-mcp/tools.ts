@@ -16,8 +16,10 @@
  * Left out, beside the harness's own shell, files, todos, waiting,
  * subagents, skills, and web reads: the spoken-turn tools
  * (`queue_question`, `withdraw_question`, `end_call`), which only a spoken
- * turn of eve's offers, and the integrations' `connection_search` and
- * `connection_execute`, which are eve's own and have no door of Luke's yet.
+ * turn of eve's offers. The integrations' `connection_search` and
+ * `connection_execute` are eve's own built-in tools rather than tool files;
+ * here they keep eve's names, words, and schemas, and run through Luke's own
+ * door over the same grants (`../../integrations/connection-door.ts`).
  *
  * Two things eve's tool files keep in the session's own state have none
  * here, since the server keeps no session: a call's id, which the agent
@@ -31,13 +33,28 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@luke/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  type UnparsedWireValue,
+  type WireValue,
+  WireValueSchema,
+} from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { type Effect, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
+import {
+  CONNECTION_EXECUTE_TOOL,
+  CONNECTION_SEARCH_TOOL,
+  runConnectionExecute,
+  runConnectionSearch,
+} from "../../integrations/connection-door.js";
+import type {
+  IntegrationConnect,
+  WorkspaceLinearConnect,
+} from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
 import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
@@ -48,7 +65,7 @@ import {
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
-import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
@@ -101,6 +118,7 @@ export type LukeMcpServices =
   | GitHubApp
   | ModelCatalog
   | WorkspaceLinearConnect
+  | IntegrationConnect
   | HostedEnvironment;
 
 /** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
@@ -111,10 +129,10 @@ interface LukeMcpCallContext {
   readonly seams: AgentDoorSeams;
 }
 
-/** One block of an MCP tool result: text, or an image as base64 with its type. */
+/** One block of an MCP tool result: text, or an image or a sound as base64 with its type. */
 export type McpContent =
   | { readonly type: "text"; readonly text: string }
-  | { readonly type: "image"; readonly data: string; readonly mimeType: string };
+  | { readonly type: "image" | "audio"; readonly data: string; readonly mimeType: string };
 
 /** One tool as the server offers and runs it. */
 export interface LukeMcpTool {
@@ -143,13 +161,23 @@ function entry(
   run: LukeMcpTool["run"],
   content?: LukeMcpTool["content"],
 ): readonly [string, LukeMcpTool] {
+  return entryOf(spec.name, spec.description, emitJsonSchema(spec.inputSchema), run, content);
+}
+
+function entryOf(
+  name: string,
+  description: string,
+  inputSchema: object,
+  run: LukeMcpTool["run"],
+  content?: LukeMcpTool["content"],
+): readonly [string, LukeMcpTool] {
   const tool: LukeMcpTool = {
-    description: spec.description,
-    inputSchema: emitJsonSchema(spec.inputSchema),
+    description,
+    inputSchema,
     run,
     ...(content === undefined ? {} : { content }),
   };
-  return [spec.name, tool];
+  return [name, tool];
 }
 
 /** A tool about the workspace's agents and tasks, run through their one door. */
@@ -181,26 +209,78 @@ const isBoardLooked = Schema.is(
 /** The type the whiteboard's image is drawn in (`../../tasks/board-look.ts`). */
 const BOARD_IMAGE_TYPE = "image/png";
 
-/** What the agent is shown of a look at the whiteboard: its image, as an image, where it looked; its JSON otherwise. */
+/**
+ * A look's text block where it looked: its status alone, as JSON. Note that
+ * the transcript keeps a Luke tool's text blocks alone
+ * (`../native-events/claude-code-moments.ts`), so this is what a look is
+ * stored as, the same as eve's relay stores one (`storedPictureLookOutput`).
+ */
+const LOOKED_TEXT: McpContent = {
+  type: "text",
+  text: JSON.stringify({ status: PICTURE_LOOK_STATUS.LOOKED }),
+};
+
+/** What the agent is shown of a look at the whiteboard: its status and its image, as an image, where it looked; its JSON otherwise. */
 function lookedBoardContent(result: LukeMcpToolResult): readonly McpContent[] {
   if (isBoardLooked(result)) {
-    return [
-      { type: "text", text: "The task's whiteboard, as the developer sees it:" },
-      { type: "image", data: result.image, mimeType: BOARD_IMAGE_TYPE },
-    ];
+    return [LOOKED_TEXT, { type: "image", data: result.image, mimeType: BOARD_IMAGE_TYPE }];
   }
   return [{ type: "text", text: JSON.stringify(result) }];
 }
 
-/** What the agent is shown of a look: the picture itself, as an image, where it looked; its JSON otherwise. */
+/** What the agent is shown of a look: its status and the picture itself, as an image, where it looked; its JSON otherwise. */
 function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
   if (isLooked(result)) {
-    return [
-      { type: "text", text: "The picture you asked to see:" },
-      { type: "image", data: result.image, mimeType: result.mediaType },
-    ];
+    return [LOOKED_TEXT, { type: "image", data: result.image, mimeType: result.mediaType }];
   }
   return [{ type: "text", text: JSON.stringify(result) }];
+}
+
+/** A connection call that ran, its tool's output kept as eve reads it. */
+const isExecuted = Schema.is(
+  Schema.Struct({ status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED), output: WireValueSchema }),
+);
+
+/** One block of a provider tool's result as the agent is shown it, as eve's model output shows it: a text, a picture, or a sound, and a resource as its words. */
+function remoteBlock(block: WireValue): readonly McpContent[] {
+  if (!isRecord(block)) return [];
+  const { type, text, data, mimeType } = block;
+  if (type === "text" && typeof text === "string") return [{ type, text }];
+  if ((type === "image" || type === "audio") && typeof data === "string") {
+    return typeof mimeType === "string" ? [{ type, data, mimeType }] : [];
+  }
+  if (type === "resource" && isRecord(block.resource)) {
+    const { uri, text: words, blob, mimeType: blobType } = block.resource;
+    const named = typeof uri === "string" ? uri : undefined;
+    if (typeof words === "string") {
+      return [{ type: "text", text: named === undefined ? words : `${named}\n${words}` }];
+    }
+    if (typeof blob !== "string") return [];
+    // Note that a picture or a sound a resource carries is shown as one, and any other bytes are named, so none is dropped unsaid.
+    const kind = typeof blobType === "string" ? blobType : "application/octet-stream";
+    if (kind.startsWith("image/")) return [{ type: "image", data: blob, mimeType: kind }];
+    if (kind.startsWith("audio/")) return [{ type: "audio", data: blob, mimeType: kind }];
+    return [
+      { type: "text", text: `Resource: ${named ?? "resource"} (${kind}, binary, not shown)` },
+    ];
+  }
+  if (type === "resource_link") {
+    const name = typeof block.name === "string" ? block.name : "resource";
+    const uri = typeof block.uri === "string" ? block.uri : "";
+    return [{ type: "text", text: `Resource link: ${name} ${uri}`.trim() }];
+  }
+  return [];
+}
+
+/** What the agent is shown of a connection call: the tool's own content blocks where any is no text, its text, or its JSON; the refusal's JSON otherwise. */
+function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
+  if (!isExecuted(result)) return [{ type: "text", text: JSON.stringify(result) }];
+  const { output } = result;
+  if (Array.isArray(output)) {
+    const blocks = output.flatMap(remoteBlock);
+    if (blocks.some((block) => block.type !== "text")) return blocks;
+  }
+  return [{ type: "text", text: typeof output === "string" ? output : JSON.stringify(output) }];
 }
 
 /** The tools served, by name, in the order `tools/list` names them. */
@@ -228,7 +308,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   entry(SHOW_IMAGE_TOOL, (admitted, input, { sandbox }) =>
     runAgentShowImage(admitted, input, sandbox),
   ),
-  entry(SHOW_PAGE_TOOL, (admitted, input, { sandbox }) =>
+  entry(CODER_SHOW_PAGE_TOOL, (admitted, input, { sandbox }) =>
     runAgentShowPage(admitted, input, sandbox),
   ),
   agentTool(READ_PAGE_TOOL),
@@ -285,6 +365,20 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   commentTool(REOPEN_THREAD_TOOL),
   // The developer's Mac.
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target.userId, input)),
+  // The integrations.
+  entryOf(
+    CONNECTION_SEARCH_TOOL.name,
+    CONNECTION_SEARCH_TOOL.description,
+    CONNECTION_SEARCH_TOOL.inputSchema,
+    (admitted, input) => runConnectionSearch(admitted, input),
+  ),
+  entryOf(
+    CONNECTION_EXECUTE_TOOL.name,
+    CONNECTION_EXECUTE_TOOL.description,
+    CONNECTION_EXECUTE_TOOL.inputSchema,
+    (admitted, input) => runConnectionExecute(admitted, input),
+    executedContent,
+  ),
 ]);
 
 /** The prefix of every status a door answers for a call it did not carry out (`not-run`, `not-looked`, `not-saved`, …). */

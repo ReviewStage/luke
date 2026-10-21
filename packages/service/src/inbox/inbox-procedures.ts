@@ -25,7 +25,6 @@ import {
   INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxAnswers,
-  type InboxItem,
   type InboxReply,
   inboxAnswerHeard,
   inboxAnswerMessage,
@@ -56,12 +55,14 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
   answerInboxAsk,
   answerInboxItem,
   closeInboxItemAsMember,
   INBOX_ASK_ANSWER,
   INBOX_MESSAGE_OUTCOME,
+  type InboxItemWritten,
   inboxItemArchived,
   markInboxItemRead,
   markInboxItemUnread,
@@ -108,7 +109,9 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   },
 ) {
   const { item, answerKey } = stored;
-  if (answerKey === asked.clientKey) return item;
+  // Taken by an earlier send, so this one wrote nothing to wait for.
+  const standing: InboxItemWritten = item;
+  if (answerKey === asked.clientKey) return standing;
   if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;
   if (inboxReplyRefusal(item, asked.reply, asked.attachments) !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -123,7 +126,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
       asked.attachments,
     ),
   );
-  return Option.getOrUndefined<InboxItem>(answered);
+  return Option.getOrUndefined<InboxItemWritten>(answered);
 });
 
 /**
@@ -170,16 +173,19 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
     stored.value.answerKey === clientKey
       ? Effect.void
       : recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
-  const taken = yield* takenAnswer(userId, stored.value, asked);
-  if (taken === undefined) {
+  const written = yield* takenAnswer(userId, stored.value, asked);
+  if (written === undefined) {
     // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
     const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return { item: now.value.item, taken: now.value.answerKey === clientKey };
   }
+  const { txid, ...taken } = written;
+  const writtenIn = txid === undefined ? {} : { txid };
   if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer, taken.answerFiles)) {
     yield* counted;
-    return { item: taken, taken: true };
+    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    return { item: taken, taken: true, ...writtenIn };
   }
   const answer = taken.answer;
   const handedOver = Effect.gen(function* () {
@@ -204,7 +210,10 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
-  return { item: taken, taken: true };
+  // The question settled may have finished the task's work, asked once the agent was told, so one
+  // woken by the answer reads as running (`tasks/task-finish.ts`).
+  yield* settleAgentTaskIfFinished(userId, taken.agentId);
+  return { item: taken, taken: true, ...writtenIn };
 });
 
 /**
@@ -247,7 +256,8 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     answerInboxAsk(userId, itemId, { answers, text, clientKey, files: attachments }),
   );
   if (Option.isNone(answered)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { item, outcome } = answered.value;
+  const { item, outcome, txid } = answered.value;
+  const writtenIn = txid === undefined ? {} : { txid };
   if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
@@ -259,7 +269,8 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   const reply = inboxAnswersReply(answers, text);
   if (!inboxAnswerHeard(item, reply, attachments)) {
     yield* counted;
-    return { item };
+    yield* settleAgentTaskIfFinished(userId, item.agentId);
+    return { item, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
@@ -283,7 +294,8 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
-  return { item };
+  yield* settleAgentTaskIfFinished(userId, item.agentId);
+  return { item, ...writtenIn };
 });
 
 /**
@@ -323,7 +335,8 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
     item.status === INBOX_STATUS.CLOSED &&
     item.closedReason === undefined &&
     item.revision === revision;
-  const taken = retried
+  // A close sent again wrote nothing this time, so there is no transaction to wait for.
+  const written: InboxItemWritten | undefined = retried
     ? item
     : item.status !== INBOX_STATUS.OPEN || item.revision !== revision
       ? undefined
@@ -332,13 +345,18 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
             closeInboxItemAsMember(userId, itemId, revision, clientKey),
           ),
         );
-  if (taken === undefined) {
+  if (written === undefined) {
     // Not taken: the item moved on, or an answer or a close settled it; it is answered as it now stands.
     const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return { item: now.value.item, taken: false };
   }
-  if (!taken.needsReply) return { item: taken, taken: true };
+  const { txid, ...taken } = written;
+  const writtenIn = txid === undefined ? {} : { txid };
+  if (!taken.needsReply) {
+    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    return { item: taken, taken: true, ...writtenIn };
+  }
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
@@ -359,7 +377,8 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     ),
   );
-  return { item: taken, taken: true };
+  yield* settleAgentTaskIfFinished(userId, taken.agentId);
+  return { item: taken, taken: true, ...writtenIn };
 });
 
 /**
@@ -509,23 +528,20 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }),
     markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
       const itemId = yield* rowIdOf(input.id);
-      const found = yield* hostedStoreOrUnavailable(markInboxItemRead(context.userId, itemId));
-      if (!found) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { id: itemId, unread: false };
+      const marked = yield* hostedStoreOrUnavailable(markInboxItemRead(context.userId, itemId));
+      if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { id: itemId, unread: false, ...marked };
     }),
     markItemUnread: signedIn.markItemUnread.effect(function* ({ input, context }) {
       const itemId = yield* rowIdOf(input.id);
-      const found = yield* hostedStoreOrUnavailable(markInboxItemUnread(context.userId, itemId));
-      if (!found) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { id: itemId, unread: true };
+      const marked = yield* hostedStoreOrUnavailable(markInboxItemUnread(context.userId, itemId));
+      if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { id: itemId, unread: true, ...marked };
     }),
     markAllRead: hosted.inbox
       .use(accountMiddleware(seams.resolveUserId))
       .markAllRead.effect(function* ({ input, context }) {
-        const marked = yield* hostedStoreOrUnavailable(
-          markInboxRead(context.userId, input.workspaceId),
-        );
-        return { marked };
+        return yield* hostedStoreOrUnavailable(markInboxRead(context.userId, input.workspaceId));
       }),
   };
 }

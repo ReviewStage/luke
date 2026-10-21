@@ -2,11 +2,10 @@
  * account-access-client.ts -- what the signed-in account may open in the app, as the service answers it, held for the account it was read for.
  *
  * Today that is whether the account is an admin, which a window reads to
- * offer the admin dashboard, and whether it is in the native-agents cohort,
- * which draws the plan sign-ins in Settings. It draws by it and authorizes nothing: the
+ * offer the admin dashboard. It draws by it and authorizes nothing: the
  * dashboard's own gate decides every admin read on the service. A read
  * that fails, or an answer that is not the shape the wire declares, is
- * read as nothing opened, so a doubt never offers the dashboard or a plan sign-in.
+ * read as nothing opened, so a doubt never offers the dashboard.
  */
 import type { CallCredential } from "@luke/features";
 import { askHosted, type HostedClient, hostedClient } from "@luke/features/hosted-link";
@@ -40,12 +39,7 @@ export class AccountAccessClient {
   /** What the signed-in account may open; nothing for any failure. */
   readAccess(): Effect.Effect<AppAccessSlice> {
     return askHosted(this.#hosted.account.access, undefined).pipe(
-      Effect.map(
-        (answer): AppAccessSlice => ({
-          admin: answer.admin,
-          nativeAgents: answer.nativeAgents === true,
-        }),
-      ),
+      Effect.map((answer): AppAccessSlice => ({ admin: answer.admin })),
       Effect.orElseSucceed(() => NO_ACCESS),
       Effect.provide(this.#client),
     );

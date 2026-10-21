@@ -25,13 +25,14 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { isMacTerminalTab } from "@luke/ui/tab-strip-model";
+import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -57,7 +58,12 @@ import {
   QUIET_PANEL,
 } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, stateWith } from "../testing/app-state.js";
-import { editorBundleLanded, installEditorLayout, typeInComposer } from "../testing/composer.js";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -68,6 +74,7 @@ import { ToastHost } from "../toast.js";
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks.
 import "../tasks/agent-pull-request-tab.js";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**
@@ -77,6 +84,9 @@ import { DesktopAgentPage } from "./desktop-agent-page.js";
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** The agent a Continue or a Fork on the page starts. */
+const STARTED_ID = "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
 
 const PAGE: CodingAgentPage = {
   id: AGENT_ID,
@@ -279,6 +289,12 @@ beforeEach(() => {
         const value = held === undefined ? null : { number, author: "octo-dev", ...held };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
+      if (request.kind === ACT_KIND.CODING_AGENTS_START) {
+        const value = {
+          agent: { ...PAGE, id: STARTED_ID, status: CODING_AGENT_STATUS.STARTING },
+        };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
       }
@@ -305,10 +321,14 @@ afterEach(() => {
 });
 
 /** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
-function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
+function mount(
+  tasks: TasksControl = tasksControl({}),
+  openLink?: (link: ReadLink) => void,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID });
   act(() =>
     root?.render(
       onRegistry(
@@ -316,7 +336,9 @@ function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
         createElement(
           Fragment,
           null,
-          createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
+          openLink === undefined
+            ? page
+            : createElement(OpenLinkProvider, { value: openLink, children: page }),
           createElement(ToastHost),
         ),
       ),
@@ -366,6 +388,129 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
   assert.equal(offered, true);
   assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
   assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+});
+
+test("Fork to new agent on the page's agent opens the page's draft in its place, which starts the fork where that agent is, naming no task, and the new agent opens on its own page", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const opened: string[] = [];
+  const agentView = {
+    agentId: AGENT_ID,
+    onOpen: (id: string) => opened.push(id),
+    onClose: () => undefined,
+  };
+  const page = mount(tasksControl({ agentView }));
+  await settle();
+
+  const fork =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Fork to new agent"]') ??
+    assert.fail("the agent's message offers Fork to new agent");
+  act(() => fork.click());
+  await settle();
+  const draft =
+    page.querySelector<HTMLElement>(
+      `.desktop-agent section[aria-label="${TAB_WORDS.NEW_AGENT}"]`,
+    ) ?? assert.fail("the draft stands in the agent's place");
+  pressInComposer(draft, "Enter");
+  await settle();
+
+  const starts = told.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_START);
+  assert.equal(starts.length, 1);
+  const payload = starts[0]?.payload;
+  assert.ok(payload !== undefined && !("taskId" in payload), "the Start names no task");
+  assert.deepEqual(payload.from, { agentId: AGENT_ID, messageId: "answer" });
+  assert.deepEqual(opened, [STARTED_ID]);
+});
+
+test("a fork's draft on the page names its source's message, whose press opens it and leaves the draft for the agent's transcript", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const links: ReadLink[] = [];
+  const page = mount(tasksControl({}), (link) => links.push(link));
+  await settle();
+  const fork =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Fork to new agent"]') ??
+    assert.fail("the agent's message offers Fork to new agent");
+  act(() => fork.click());
+  await settle();
+
+  const quote =
+    page.querySelector<HTMLButtonElement>(".draft-fork-quote button") ??
+    assert.fail("the draft names the message it forks, which opens");
+  act(() => quote.click());
+  await settle();
+
+  assert.deepEqual(
+    links.map((link) => link.place),
+    [{ kind: LINK_PLACE.MESSAGE, agentId: AGENT_ID, messageId: "answer" }],
+  );
+  assert.equal(
+    page.querySelector(`.desktop-agent section[aria-label="${TAB_WORDS.NEW_AGENT}"]`),
+    null,
+    "the draft gives way to the agent",
+  );
+});
+
+test("an agent forked at one of its messages names the fork under it, which opens the fork's own page", async () => {
+  pages = [
+    {
+      agent: {
+        ...PAGE,
+        continuedBy: [
+          { agentId: STARTED_ID, title: "Try the cron", forked: true, messageId: "answer" },
+        ],
+      },
+    },
+  ];
+  transcript = {
+    messages: [
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const opened: string[] = [];
+  const agentView = {
+    agentId: AGENT_ID,
+    onOpen: (id: string) => opened.push(id),
+    onClose: () => undefined,
+  };
+  const page = mount(tasksControl({ agentView }));
+  await settle();
+
+  const chip =
+    page.querySelector<HTMLElement>("[data-forked-to] [data-actor-ref]") ??
+    assert.fail("the message names its fork");
+  assert.match(chip.textContent ?? "", /Try the cron/u);
+  act(() => chip.click());
+  assert.deepEqual(opened, [STARTED_ID]);
 });
 
 /** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
@@ -1164,7 +1309,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal and Run, Copy link, the transcript's two copies, and Archive agent", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, and Archive agent, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1177,7 +1322,6 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
   assert.deepEqual(offered, [
     "Rename",
     "Open terminal⌘J",
-    "Run",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
@@ -1237,16 +1381,41 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   assert.deepEqual(chosen, []);
 });
 
-test("Run on the page's ⋯ runs the agent's branch on this Mac in the side panel, from its own repository", async () => {
-  const { page, chosen } = mountHearingPanel();
+test("Run in the header of the agent's Pull request tab runs its branch on this Mac in the side panel, from its own repository", async () => {
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  const container = await mountPanelPage();
   await settle();
-  const run = pageMenuItem(page, "Run");
+  const row =
+    container.querySelector<HTMLButtonElement>(
+      '.agent-tab-foot [aria-label="Pull request"] li > button',
+    ) ?? assert.fail("the pull request's row stands over the box");
+  act(() => row.click());
+  await settle();
+
+  const run =
+    container.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the Pull request tab's header offers Run");
+  assert.equal(run.textContent, "Run");
   act(() => run.click());
   await settle();
 
-  const [tab] = chosen;
+  const tab = drawnPanel?.tab;
   assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
-  assert.equal(chosen.length, 1);
   assert.equal(tab.macTerminal, AGENT_ID);
   assert.equal(tab.repository, PAGE.repository);
 });

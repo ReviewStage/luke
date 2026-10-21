@@ -76,16 +76,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 /** The task open in the window, holding a board, so its panel has a tab to show. */
@@ -150,15 +140,17 @@ function Window(): React.JSX.Element {
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
       onLeaveVersionHistory: ignore,
     },
     sidebar,
     room,
     settingsStep: { listed: true, onList: ignore },
     call: undefined,
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings: SETTINGS,
   });

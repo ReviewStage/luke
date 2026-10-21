@@ -3,6 +3,7 @@ import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF, type AvatarState } from "@luke/voice/avatar";
 import {
+  callInProgress,
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   type VoiceCallTranscript,
@@ -37,20 +38,6 @@ const RUN_PROFILES: ReadonlySet<string> = new Set(Object.values(RUN_PROFILE));
 function isRunProfile(profile: string): profile is RunProfile {
   return RUN_PROFILES.has(profile);
 }
-
-/**
- * What the speaking evidence run captions the reply with. A capture run never
- * opens a call, so there are no words to draw unless the fixture supplies
- * them — and it must, or the caption strip ships unphotographed. Synthetic,
- * like every fixture, and shaped like a reply of several messages: the first
- * long enough to wrap, and two more behind it, so the strip reads them as one
- * run and its older lines leave through the faded top edge in the frame.
- */
-export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
-  "The plan now says the parser keeps its own cache, the migration runs once at launch, and the old reader stays until every install has moved over.",
-  "Two questions are still open in the plan.",
-  "Say the word and we can settle the first one now.",
-];
 
 /** What the profile stages, or nothing for the idle run and any word this build does not know. */
 export function fixtureVoice(profile: string): FixtureVoice | undefined {
@@ -90,9 +77,9 @@ const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
 );
 
 /**
- * The failure drawn in the same strip the captions use. A fault is worth
- * reading where the words it interrupted would have landed — just above the
- * call bar that asked — not on a settings page nobody is looking at. It yields to either speaker being heard, because words being
+ * The failure drawn on the voice's notice line. A fault is worth reading
+ * where the call is steered from — just above the composer that holds the
+ * call — not on a settings page nobody is looking at. It yields to either speaker being heard, because words being
  * said are the thing to read over words that already failed, and a capture
  * run never draws one: a fixture has no call to fail.
  */
@@ -108,11 +95,10 @@ export function voiceErrorToShow(input: {
 }
 
 /**
- * The notice drawn in the same strip, yielding only to Luke's own voice — his
- * words own the box whether or not the captions draw them. The developer
- * being heard is no reason to hide it: an open microphone draws nothing on
- * the strip, and a refusal answered during it is exactly what the strip
- * should answer with.
+ * The notice drawn on the same line, yielding only to Luke's own voice, which
+ * is the thing to listen to while it lasts. The developer being heard is no
+ * reason to hide it: a refusal answered while they speak is exactly what the
+ * line should answer with.
  */
 export function voiceNoticeToShow(input: {
   fixtureSpeaking: boolean;
@@ -167,12 +153,27 @@ export function useVoiceView(): VoiceViewState {
   };
 }
 
+/** The voice as the voice window last reported it, read alone: a surface that draws the call and offers none of its chords. */
+export function useStandingVoiceView(): VoiceView {
+  return useAppSlice(voiceViewAtom);
+}
+
+/** The agent a call is in progress into, which redraws its reader only as it moves; none while no call stands. */
+const callingAgentAtom: Atom.Atom<string | undefined> = Atom.map(voiceViewAtom, (view) =>
+  callInProgress(view) ? view.call?.agentId : undefined,
+);
+
+/** The agent a call is in progress into, whose tab wears the live mark and draws the call; none while no call stands. */
+export function useCallingAgent(): string | undefined {
+  return useAppSlice(callingAgentAtom);
+}
+
 /** Luke's avatar on the standing call, or none, as main holds it for every window. */
 export function useVoiceAvatar(): AvatarState {
   return useAppSlice(voiceAvatarAtom);
 }
 
-/** What was said on the standing call so far, which the Tasks tab's live transcript draws; none for no call. */
+/** What was said on the standing call so far, which its agent's tab's live transcript draws; none for no call. */
 export function useCallTranscript(): VoiceCallTranscript | undefined {
   return useAppSlice(callTranscriptAtom);
 }

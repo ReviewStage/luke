@@ -123,11 +123,11 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
-  /* Where the work column begins, which floating captions centre on, and the
-     width they are drawn at over it: no wider than the call bar draws them. */
+  /* Where the work column begins, which the floating notice line centres on,
+     and the most it is drawn at over it. */
   --work-left: var(--sidebar-width);
-  --caption-width-max: 560px;
-  --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
+  --notice-width-max: 560px;
+  --notice-width: min(var(--notice-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   /* The stage stands over what is seen of the window: from where a phone
      panned it to, down to where the on-screen keyboard begins, so what
@@ -695,6 +695,38 @@ body,
 .actor-mark[data-left="true"] > * {
   filter: grayscale(1);
   opacity: 0.8;
+}
+
+/* The member Luke, an agent, or an automation acted for, on the corner of
+   its square: their face at a share of the mark's edge, cut from the ground
+   by a ring of it, so a task one of them made reads as theirs and its
+   member's at once. The face is drawn at the smallest size and scaled, so
+   a letter keeps its weight at every size the mark is. */
+.actor-mark-for {
+  position: absolute;
+  right: -22%;
+  bottom: -18%;
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
+  transform: scale(0.6);
+  transform-origin: bottom right;
+}
+
+.actor-mark[data-size="inline"] .actor-mark-for {
+  transform: scale(0.68);
+}
+
+.actor-mark:is([data-size="row"], [data-size="account"]) .actor-mark-for {
+  transform: scale(0.8);
+}
+
+.actor-mark:is([data-size="card"], [data-size="page"]) .actor-mark-for {
+  right: -8%;
+  bottom: -8%;
+  transform: scale(1);
 }
 
 /* A line that names an actor: its words and the actor in one row centred on
@@ -1633,17 +1665,6 @@ ul.actor-stack {
   padding-right: var(--column-inset);
 }
 
-/* A pane sliding in finds the work column already narrowed for it, so the
-   column's bars draw on past both its sides, beneath everything else, and
-   no gap opens between the column and a pane still on its way. */
-.desktop-call-bar::before {
-  position: absolute;
-  z-index: -1;
-  right: -100vw;
-  left: -100vw;
-  content: "";
-}
-
 /* The plan's toolbar leads with its tab rather than a title, so it starts
    the tab's pill a row's inset in, as the side panel's row starts its own;
    the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
@@ -2189,7 +2210,7 @@ ul.actor-stack {
    first makes it scroll. This is the block inside it. */
 .desktop-document .plan-document-body {
   padding: var(--luke-page-inset);
-  /* Room for the last line to scroll clear of the captions over the call bar. */
+  /* Room for the last line to scroll clear of what floats over the column's foot. */
   padding-bottom: 140px; /* off-scale */
 }
 
@@ -2282,69 +2303,146 @@ ul.actor-stack {
   }
 }
 
-/* The call bar ------------------------------------------------------------- */
+/* The call's room --------------------------------------------------------- */
 
-/* It answers the column's width, so a narrow column gives the call bar and
-   the captions above it the room the summary's rail reserves. */
-.desktop-call-bar {
-  container: plan-call-bar / inline-size;
+/* While a call into an agent stands, its tab's foot holds the call: Luke's
+   video in a room of its own between the transcript and the composer, which
+   the transcript ends above, so no word is ever drawn under the video. The
+   room goes as video goes off or the call ends. The voice's notice line
+   floats just over the room's top edge, over the transcript's foot, so it
+   never stands on the video; it takes no pointer but its own button, so the
+   transcript under it scrolls. */
+.agent-call-foot {
   position: relative;
-  flex: 0 0 auto;
-  padding: var(--luke-space-12) calc(var(--luke-page-inset) + var(--summary-room))
-    var(--luke-space-12) var(--luke-page-inset);
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
 }
 
-.desktop-call-bar::before {
-  top: -1px;
-  bottom: 0;
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
+.agent-call-notice {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 0;
+  pointer-events: none;
 }
 
-/* The live captions stand just above the call bar, centred on its row, so
-   they cover neither the call's controls nor the side panel beside the
-   column. */
-.desktop-call-bar .voice-caption {
-  bottom: calc(100% + var(--luke-space-12));
-  left: calc(50% - var(--summary-room) / 2);
-  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset) - var(--summary-room));
+.agent-call-notice > .voice-notice {
+  bottom: var(--luke-space-8);
+  width: max-content;
+  max-width: min(var(--notice-width-max), calc(100% - 2 * var(--luke-space-32)));
 }
 
-/* Too narrow a column to keep the rail's room: the bar, which stands under
-   the rail rather than beside it, runs to the page's inset at its right,
-   and the captions span the column to its insets, centred on it, their
-   volume hint wrapping rather than cut. */
-@container plan-call-bar (max-width: 359px) {
-  .desktop-call-bar > .call-bar {
-    margin-right: calc(-1 * var(--summary-room));
+/* The video's room: the video centred in it, as tall as the developer left
+   it (`use-call-video-size.ts`) and as wide as its own picture's aspect makes
+   that, never wider than the tab nor taller than two fifths of the stage, so
+   a short window keeps the transcript readable. */
+.agent-call-video {
+  display: flex;
+  justify-content: center;
+  padding: var(--luke-space-8) var(--luke-space-16);
+}
+
+.agent-call-video-frame {
+  position: relative;
+  width: min(
+    100%,
+    calc(var(--call-video-height) * var(--call-video-aspect)),
+    calc(var(--luke-stage-height) * 0.4 * var(--call-video-aspect))
+  );
+  aspect-ratio: var(--call-video-aspect);
+}
+
+/* The tile fills the frame, which stands at the picture's own aspect, so
+   the picture fills the tile whole and needs no blurred fill beside it. */
+.agent-call-video-frame > .call-video-tile {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  aspect-ratio: auto;
+}
+
+.agent-call-video .call-video-frame {
+  object-fit: cover;
+}
+
+.agent-call-video .call-video-fill {
+  display: none;
+}
+
+.agent-call-video .call-video-face {
+  width: 40%;
+  max-width: 56px;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+/* How the video resizes, brought out while the pointer is over it, a drag
+   is under way, or the keyboard is on one of them (`AgentCallVideo`): a
+   bracket on each top corner, since the video grows upward. */
+.agent-call-video-corner {
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.agent-call-video[data-reveal="true"] .agent-call-video-corner,
+.agent-call-video:focus-within .agent-call-video-corner {
+  opacity: 1;
+}
+
+/* A touch screen has no hover to bring them out, so there they always stand. */
+@media (hover: none) {
+  .agent-call-video .agent-call-video-corner {
+    opacity: 1;
   }
-
-  .desktop-call-bar .voice-caption {
-    left: 50%;
-    width: calc(100% - 2 * var(--column-inset));
-  }
-
-  .desktop-call-bar .volume-hint-text {
-    white-space: normal;
-  }
 }
 
-/* Anywhere no call bar is drawn (Settings, the home page, a panel
-   filling the window) they float at the window's foot over the work column. */
-.desktop-shell > .voice-caption {
+.agent-call-video-corner {
+  position: absolute;
+  z-index: 1;
+  top: calc(-1 * var(--luke-space-6));
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+  box-sizing: border-box;
+  border-top: 2px solid var(--luke-color-border-strong);
+  outline: none; /* no ring: the bracket lights in the focus colour */
+  touch-action: none;
+}
+
+.agent-call-video-corner[data-corner="left"] {
+  left: calc(-1 * var(--luke-space-6));
+  border-left: 2px solid var(--luke-color-border-strong);
+  border-top-left-radius: var(--luke-radius-6);
+  cursor: nwse-resize;
+}
+
+.agent-call-video-corner[data-corner="right"] {
+  right: calc(-1 * var(--luke-space-6));
+  border-right: 2px solid var(--luke-color-border-strong);
+  border-top-right-radius: var(--luke-radius-6);
+  cursor: nesw-resize;
+}
+
+.agent-call-video-corner:is(:hover, :active, :focus-visible) {
+  border-color: var(--luke-color-accent);
+}
+
+/* Anywhere no call's tab is drawn (Settings, the home page, a panel
+   filling the window) the notice line floats at the window's foot over the
+   work column. */
+.desktop-shell > .voice-notice {
   bottom: var(--luke-space-24);
   left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
-  width: var(--caption-width);
+  width: max-content;
+  max-width: var(--notice-width);
 }
 
-/* On a phone they float just above whatever docks at the column's foot, a
-   composer first of all (`column-dock.ts`), rather than over it, and span the
-   screen less a step at each side. However tall the dock grows, they keep
+/* On a phone it floats just above whatever docks at the column's foot, a
+   composer first of all (`column-dock.ts`), rather than over it, and spans the
+   screen less a step at each side. However tall the dock grows, it keeps
    three controls' height of what is seen above it to stand in. The stage already keeps off the
    notch and the home indicator. */
-.desktop-shell[data-room="narrow"] > .voice-caption {
+.desktop-shell[data-room="narrow"] > .voice-notice {
   bottom: calc(
     max(
       0px,
@@ -2354,6 +2452,7 @@ ul.actor-stack {
   );
   left: 50%;
   width: calc(100% - 2 * var(--luke-space-16));
+  max-width: none;
 }
 
 /* The call bar's own row, laid out as a voice composer's controls are: at
@@ -3002,6 +3101,13 @@ ul.actor-stack {
   border-right: 1px solid var(--luke-color-border);
 }
 
+/* The list's search, open, stands in its head's name and takes the room the
+   name had, on the page's bar and in the sidebar's head alike. */
+.inbox-search {
+  min-width: 0;
+  flex: 1;
+}
+
 /* Its buttons end as far in from the list's edge as the side panel's toggle
    stands from the window's. */
 .inbox-tasks-bar {
@@ -3170,8 +3276,22 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
+/* An Inbox row's card leads with what holds the item on one line, its key
+   and then its task's chip (`InlineRef`'s pill), the chip shrinking to what
+   is left of the card, its name cut at its end, rather than dropping under
+   the key. */
+.task-card-standing[data-line="one"] {
+  flex-wrap: nowrap;
+  align-items: center;
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A chip is never wider than the card. */
 .task-card-chip {
   display: inline-flex;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-6);
@@ -3188,87 +3308,12 @@ ul.actor-stack {
   height: var(--luke-type-caption-size);
 }
 
+/* A key is short and read whole; the chip beside it gives way instead. */
 .task-card-key {
+  flex-shrink: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
   font-variant-numeric: tabular-nums;
-}
-
-/* An Inbox row's card, the thread's (`inbox-list.tsx`): where the item
-   stands in a caption, the attention ink while it waits on the reader; a
-   choice's options as quiet boxes, the recommended one tagged; a to-do's
-   steps, the ticked struck through. */
-.inbox-card-standing {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-card-standing[data-needs-you="true"] {
-  color: var(--luke-color-attention);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.inbox-card-options,
-.inbox-card-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-card-options > li {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text);
-}
-
-.inbox-card-option {
-  min-width: 0;
-  flex: 1;
-}
-
-.inbox-card-recommended {
-  flex: none;
-  padding: 0 var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-attention-tint);
-  color: var(--luke-color-attention);
-}
-
-.inbox-card-steps > li {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-text);
-}
-
-.inbox-card-steps > li > svg {
-  flex: none;
-  width: var(--luke-type-caption-size);
-  height: var(--luke-type-caption-size);
-  margin-top: 0.15em;
-  color: var(--luke-color-text-subtle);
-}
-
-.inbox-card-steps > li[data-done="true"] {
-  color: var(--luke-color-text-subtle);
-  text-decoration: line-through;
-}
-
-.inbox-card-steps > li[data-done="true"] > svg {
-  color: var(--luke-color-complete);
 }
 
 /* An item's second line (`inbox-list.tsx`): what it asks, led by its ask's
@@ -3376,11 +3421,15 @@ ul.actor-stack {
 }
 
 /* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
-   its writer's face in a column of its own, a list row's 20px, then its
-   name and when on one line and its words under it, and a line down from
-   the face to the next comment's, as an issue's timeline joins them. */
+   its writer's chip, their face and name as one target, and when on one
+   line, and its words under it, indented past a gutter a list row's 20px
+   wide. The chip stands out into the gutter, its 16px face centred on the
+   line that runs down through every comment's face, as an issue's
+   timeline joins them, so the face is the gutter's and is drawn once. */
 .inbox-thread {
   --inbox-face: 20px;
+  /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
+  --inbox-mark: 16px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -3390,9 +3439,10 @@ ul.actor-stack {
 
 .inbox-comment {
   position: relative;
-  display: grid;
-  grid-template-columns: var(--inbox-face) minmax(0, 1fr);
-  column-gap: var(--luke-space-12);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
   padding-bottom: var(--luke-space-20);
 }
 
@@ -3400,20 +3450,22 @@ ul.actor-stack {
   padding-bottom: 0;
 }
 
+/* The line runs from the comment's face down to the next one's, under it,
+   since each face's head stands over the line in a ring of the ground that
+   cuts the line short of the face. */
 .inbox-comment:not(:last-child)::before {
   position: absolute;
-  top: calc(var(--inbox-face) + var(--luke-space-6));
-  bottom: var(--luke-space-6);
+  top: calc(var(--inbox-face) / 2);
+  bottom: calc(var(--inbox-face) / -2);
   left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
-  border-radius: 1px;
   background: var(--luke-color-border);
   content: "";
 }
 
 /* Where a thread read is cut to its latest messages, a muted line in the
    comments' column says the earlier ones stand in the agent's tab, the line
-   down from the faces running on past it. */
+   down through the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
   padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-space-12));
@@ -3424,60 +3476,90 @@ ul.actor-stack {
 .inbox-thread-earlier::before {
   position: absolute;
   top: 0;
-  bottom: var(--luke-space-6);
-  left: 9px;
+  bottom: calc(var(--inbox-face) / -2);
+  left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
-  border-radius: 1px;
   background: var(--luke-color-border);
   content: "";
 }
 
-.inbox-comment-face {
-  display: flex;
-  height: var(--inbox-face);
-}
-
-.inbox-comment-main {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-}
-
+/* The head starts where its chip's face stands centred on the gutter's
+   line, and stands over the line the comment before draws into it. It
+   keeps to one row, so nothing after the chip wraps under it onto the
+   line: a narrow pane cuts the writer's name short first, and what is said
+   of when wraps beside the chip only once the name can give no more. */
 .inbox-comment-head {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: var(--inbox-face);
-  flex-wrap: wrap;
   align-items: center;
   column-gap: var(--luke-space-6);
+  margin-left: calc((var(--inbox-face) - var(--inbox-mark)) / 2);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
-/* The writer is named by name alone in the thread's own ink, since their
-   face already stands in the column beside it. */
+/* The writer is named by their chip in the thread's own ink, cut short
+   rather than run past a narrow pane. */
 .inbox-comment-name {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
   font-weight: var(--luke-weight-medium);
 }
 
+/* The chip's face masks the line running through it with a ring of the
+   ground, as a facepile's faces are cut from it, so the line reads as
+   joining the faces. A bare square, or someone's outline, is filled with
+   the ground too, so the line never shows through its glyph; a member who
+   left keeps their own tile. */
+.inbox-comment-name .actor-mark {
+  box-shadow: 0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+.inbox-comment-name .actor-mark:not([data-left="true"]) {
+  background: var(--luke-color-ground);
+}
+
+.inbox-comment-name .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+/* Under the pointer the chip's wash runs on over the face's ring, so the
+   ring reads as the wash's own rather than a halo of the ground in it. */
+.inbox-comment-name .luke-inline-ref:hover .actor-mark {
+  box-shadow:
+    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
+.inbox-comment-name .luke-inline-ref:hover .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+}
+
 .inbox-comment-when {
   display: inline-flex;
-  min-width: 0;
+  min-width: min-content;
   flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--luke-space-4);
 }
 
-/* A comment's words are set as a message's are, and clip what runs past
-   them as a message does, though not the keyboard's ring on an option laid
-   edge to edge in them. */
+/* A comment's words are set as a message's are, indented past the gutter
+   under the chip's name, and clip what runs past them as a message does,
+   though not the keyboard's ring on an option laid edge to edge in them. */
 .inbox-comment-body {
   display: flex;
+  margin-left: calc(var(--inbox-face) + var(--luke-space-12));
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-8);
@@ -3725,6 +3807,25 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-4);
 }
 
+/* A replaced ask keeps its controls in the agent's message as it offered
+   them, nothing picked and taking nothing, dimmed so they read as what it
+   used to ask rather than something to answer, over the pill saying what
+   replaced it. */
+.inbox-ask-replaced {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.inbox-ask-replaced-controls {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  opacity: 0.55;
+}
+
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
    complete ink; a replaced ask with the same pill saying so, in the muted
@@ -3808,16 +3909,15 @@ ul.actor-stack {
   padding: 0;
 }
 
-/* The open question's controls at the top of the draft's card, over its
-   note, with no head of their own, since the agent's message says what it
-   asks; a hairline between them and the note. */
+/* The open question's controls as the draft's card's body, over its foot,
+   with no card, border, or head of their own, since the agent's message
+   says what it asks. */
 .inbox-draft-ask {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-4);
 }
 
 /* Put away with its task, the question stands in the agent's message as a
@@ -3826,14 +3926,6 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-overlay);
-}
-
-/* A thread's Reply names its chord after its words, in its own ink a step
-   quieter, since the button's fill is the text's own colour. */
-.inbox-answer-actions .luke-button .shortcut {
-  margin-left: var(--luke-space-6);
-
-  --shortcut-ink: color-mix(in srgb, currentColor 60%, transparent);
 }
 
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
@@ -4786,6 +4878,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   text-overflow: ellipsis;
 }
 
+/* A narrow room's row says when it runs next in the line under its name,
+   a failure's mark leading the line as it leads an agent's end line. */
+.automation-group .luke-list-row-description > .failed-mark {
+  margin-right: var(--luke-space-4);
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
+}
+
 /* The suggested automations, each a card of its own in a grid that wraps
    as more are suggested: the glyph of what fires it on a tile, a plus at
    its corner, its name, and what it does, read whole. The whole card is one
@@ -4981,6 +5080,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   max-width: 100%;
 }
 
+/* The site's pickers stand at their words' width rather than in a column,
+   so a schedule's time stands at a time's width beside them, not a cron's. */
+[data-luke-profile="web"] .automation-time-field {
+  width: calc(10ch + 2 * var(--luke-control-inset)); /* off-scale: "12:00 PM" and its insets */
+}
+
 /* A webhook's address or its shown secret, a little wider to show more of it. */
 .automation-webhook-field {
   width: 240px;
@@ -5102,10 +5207,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* A place's glyph (#, @, a document) stands at the size an actor's row
-   mark does beside it, as a menu's glyph does. */
+   mark does beside it, as a menu's glyph does, in the muted ink. A task's
+   status mark keeps the colour its status gives it. */
 .chat-rail .inbox-row-mark > svg {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
+}
+
+.chat-rail .inbox-row-mark > svg:not(.luke-task-status-mark) {
   color: var(--luke-color-text-muted);
 }
 
@@ -5161,64 +5270,115 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-16) var(--column-inset);
 }
 
-/* The stream and its composer keep to the page's measure, as the Inbox's
-   thread and an agent's transcript do. */
+/* The stream runs the pane's whole width, left-aligned, as Slack's does. */
 .chat-messages,
 .chat-replies {
-  max-width: var(--luke-page-measure);
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* A message is laid out as an Inbox comment is (`.inbox-comment`): its
-   author's face in a column of its own at a list row's 20px, then their
-   name and when on one line in the caption's muted ink, and the words under
-   it at the reading measure's leading. */
+/* A message is laid out as Slack's is: its author's face in a column of its
+   own at a card's 32px, a rounded square for everyone, then their name in
+   bold and the clock time in the caption's muted ink on one line, and the
+   words under it. Rows sit tight and light up while hovered. */
 .chat-message,
 .chat-reply {
-  --chat-face: 20px;
+  --chat-face: 32px;
 
+  position: relative;
   display: grid;
   grid-template-columns: var(--chat-face) minmax(0, 1fr);
-  column-gap: var(--luke-space-12);
-  padding: var(--luke-space-12) 0;
+  column-gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-8);
+  margin: 0 calc(-1 * var(--luke-space-8));
+  border-radius: var(--luke-menu-row-radius);
+  transition: background-color var(--duration-hover) ease;
 }
 
-.chat-reply {
-  padding: var(--luke-space-8) 0;
+/* A message continuing its author's run sits right under the one before. */
+.chat-message[data-continued="true"] {
+  padding-top: var(--luke-space-2);
+  padding-bottom: var(--luke-space-2);
+}
+
+@media (hover: hover) {
+  .chat-message:hover,
+  .chat-reply:hover {
+    background: var(--luke-color-fill-hover);
+  }
 }
 
 .chat-face {
   display: flex;
-  height: var(--chat-face);
+  padding-top: var(--luke-space-2);
+}
+
+/* A continued message's time stands in its face's column, shown only while
+   the row is hovered. */
+.chat-face[data-continued="true"] {
+  justify-content: flex-end;
+  padding-top: 0;
+  color: var(--luke-color-text-muted);
+  font-size: 10px;
+  line-height: var(--luke-type-body-leading);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.chat-message:focus-within .chat-face[data-continued="true"] {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .chat-message:hover .chat-face[data-continued="true"] {
+    opacity: 1;
+  }
 }
 
 .chat-message-body {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-space-2);
 }
 
 .chat-byline {
   display: flex;
   min-width: 0;
-  min-height: var(--chat-face);
-  align-items: center;
-  column-gap: var(--luke-space-6);
+  align-items: baseline;
+  column-gap: var(--luke-space-8);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
-/* The author is named by name alone in the stream's own ink, their face
-   already standing beside it, as an Inbox comment's writer is. */
+/* A continued message's line holds its press alone, at the row's top end,
+   over the row while a pointer hovers it; on a touch screen, where the press
+   always shows, it takes a line of its own so it never covers the words. */
+.chat-byline[data-continued="true"] {
+  position: absolute;
+  top: var(--luke-space-2);
+  right: var(--luke-space-8);
+}
+
+@media (hover: none) {
+  .chat-byline[data-continued="true"] {
+    position: static;
+    justify-content: flex-end;
+  }
+}
+
+/* The author is named in bold in the stream's own ink, as Slack names them. */
 .chat-byline-name {
   display: flex;
   min-width: 0;
   color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
+}
+
+.chat-byline-name :is(.luke-inline-ref, .luke-inline-ref-label) {
+  font-weight: inherit;
 }
 
 .chat-byline-where {
@@ -5309,7 +5469,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .chat-composer {
   position: relative;
   width: calc(100% - 2 * var(--column-inset));
-  max-width: var(--luke-page-measure);
   margin: var(--luke-space-12) auto var(--luke-space-16);
 }
 
@@ -5317,7 +5476,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
    between two others), its foot says why, where the box would stand. */
 .chat-closed-foot {
   width: calc(100% - 2 * var(--column-inset));
-  max-width: var(--luke-page-measure);
   margin: var(--luke-space-12) auto var(--luke-space-16);
   text-align: center;
 }
@@ -6335,6 +6493,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   -webkit-app-region: drag;
 }
 
+/* A bar inside the panel, an Inbox item's, draws its own hairline and no
+   more: the toolbar's hairline running past both sides (shell.css) is the
+   work column's, for a pane sliding in beside it, and from the panel it
+   would run on across the column's transcript at the item bar's height. */
+.side-panel .desktop-toolbar::before {
+  content: none;
+}
+
 /* Full screen with the sidebar folded, the row starts where the plan's
    toolbar would: clear of the traffic lights and the sidebar toggle. */
 .desktop-shell[data-sidebar-collapsed="true"] .side-panel[data-full-screen="true"] .side-panel-bar {
@@ -7318,6 +7484,173 @@ polygon.factory-campus-edge[data-edge="selected"] {
   }
 }
 
+/* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
+   as a row of cards over the window, drawn as ⌘K's palette is, its ground,
+   edge, corner, shadow, and scrim, and stood in the middle of the stage, as
+   ⌘Tab's are. A card is its preview over its glyph and name, its task and
+   strip under them; the card chosen is lit as a menu's row is, its edge
+   drawn in the selected border, and the card of the stop here is dimmed. A
+   preview is a still of the tab, or its glyph large until it has one, and
+   the session recording leaves it out by its class (`ph-no-capture`). */
+.tab-switcher-backdrop {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  inset: 0;
+  background: var(--luke-color-scrim);
+  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+}
+
+.tab-switcher {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) / 2);
+  left: 50%;
+  display: flex;
+  max-width: calc(100vw - 2 * var(--luke-space-24));
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-dialog-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  color: var(--luke-color-text);
+  overflow: clip;
+  transform: translate(-50%, -50%);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    tab-switcher-rise var(--duration-fast) var(--spring-fast) backwards;
+}
+
+[data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher-cards {
+  display: flex;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  overflow-x: auto;
+}
+
+.tab-switcher-card {
+  display: flex;
+  width: 176px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6);
+  border: 1px solid transparent;
+  border-radius: var(--luke-radius-10);
+  cursor: default;
+}
+
+.tab-switcher-card[aria-selected="true"] {
+  border-color: var(--luke-color-border-selected);
+  background: var(--luke-color-fill-strong);
+}
+
+.tab-switcher-preview {
+  display: flex;
+  height: 110px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-surface);
+  overflow: hidden;
+}
+
+.tab-switcher-card[data-here="true"] .tab-switcher-preview {
+  opacity: 0.55;
+}
+
+/* A still fills the preview from its top left, as the tab it was taken of stands. */
+.tab-switcher-still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+/* A stop with no still yet wears its glyph, large and quiet, in the preview's middle. */
+.tab-switcher-glyph {
+  display: inline-flex;
+  --state-glyph-size: 28px;
+  color: var(--luke-color-text-subtle);
+}
+
+.tab-switcher-glyph :is(svg, img, .state-glyph) {
+  width: 28px;
+  height: 28px;
+}
+
+.tab-switcher-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-2);
+  white-space: nowrap;
+}
+
+/* The glyph keeps its own ink, a task's status mark's among them, as the tab's does. */
+.tab-switcher-name > :is(svg, img, .state-glyph) {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  --state-glyph-size: var(--luke-menu-glyph);
+}
+
+.tab-switcher-name > .luke-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The task and strip under the name, inset to the name's words; the line stands empty where a place has none, so every card is one height. */
+.tab-switcher-detail {
+  display: flex;
+  min-height: calc(var(--luke-type-caption-size) * 1.4);
+  padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
+  white-space: nowrap;
+}
+
+.tab-switcher-detail > .luke-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The keys' hints along the foot, as ⌘K's foot has them. */
+.tab-switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-16);
+  height: 36px;
+  padding: 0 var(--luke-space-16);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.tab-switcher-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+.tab-switcher-footer .shortcut {
+  --shortcut-ink: var(--luke-color-text-muted);
+}
+
+@keyframes tab-switcher-rise {
+  from {
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
 /* Start ------------------------------------------------------------------ */
 
 /* The toolbar's Start, a shared SplitButton, and the note beside it. */
@@ -7708,8 +8041,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* New task's composer (`new-task-composer.tsx`): the agent box's own card
-   on the dialog's inset rather than a tab's foot, the reason Agent mode's
-   Start is held under it. */
+   on the dialog's inset rather than a tab's foot, the reason its Start is
+   held under it. */
 .new-task-composer {
   display: flex;
   min-width: 0;
@@ -7761,18 +8094,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
-:is(
-  .new-task-plan-toggle,
-  .new-task-composer .issue-picker-chip,
-  .new-task-composer .agent-model-chip
-) {
+:is(.new-task-composer .issue-picker-chip, .new-task-composer .agent-model-chip) {
   display: flex;
   flex-shrink: 0;
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: the Plan toggle and File for later draw
-   their marks alone (`new-task-composer.tsx`), the model chip's words are
+   round Start at the row's end: File for later draws its mark alone
+   (`new-task-composer.tsx`), the model chip's words are
    what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
 @container composer (max-width: 399px) {
@@ -8384,6 +8713,20 @@ button.tasks-board-card-press:focus-visible::after {
 
 .tasks-board-face {
   display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* Who made a card's task where its member did not by hand, Luke or an
+   agent, named muted before their square, cut short rather than pushing
+   the key aside. */
+.tasks-board-maker {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--luke-color-text-subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* A card's name stands whole under its line, in the label's weight,
@@ -8410,6 +8753,24 @@ button.tasks-board-card-press:focus-visible::after {
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
+}
+
+/* The issues a card's task links, a tag each, in a row under its name
+   that wraps where the column is too narrow for them. It stands over the
+   card's press as the foot does, which lets the pointer through between
+   the tags. */
+.tasks-board-tags {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  pointer-events: none;
+}
+
+.tasks-board-tags > * {
+  pointer-events: auto;
 }
 
 /* A card's foot: its priority's and its status's chips, which change them
@@ -8827,6 +9188,14 @@ button.tasks-list-press:focus-visible::after {
 .tasks-list-glyph > .repository-picture {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
+}
+
+/* Who made a row's task where its member did not by hand, Luke or an
+   agent, named before their square, as a Board card names them. */
+.tasks-list-maker {
+  overflow: hidden;
+  max-width: 16ch;
+  text-overflow: ellipsis;
 }
 
 .tasks-list-repository {

@@ -56,6 +56,7 @@ import {
   UserIcon,
   VideoIcon,
   VideoOffIcon,
+  WaveformIcon,
   WingFace,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -123,6 +124,7 @@ const GLYPHS = Object.entries({
   UserIcon,
   VideoIcon,
   VideoOffIcon,
+  WaveformIcon,
 });
 
 function Artwork(): React.JSX.Element {

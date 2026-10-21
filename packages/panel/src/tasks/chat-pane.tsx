@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type ChatReadBlock,
   knownBlock,
+  MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
@@ -22,7 +23,7 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
-import { ACTOR_KIND, type Actor, distinctActors } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -36,6 +37,7 @@ import {
   chatKeywords,
   chatTargets,
   chatWho,
+  continuesRun,
   type ForYouEntry,
   forYou,
   placeChannel,
@@ -48,6 +50,7 @@ import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
+import { Tooltip } from "../tooltip.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
@@ -55,14 +58,14 @@ import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
 import { FileRef } from "./file-ref.js";
 import { LinkBlock } from "./inbox-pane.js";
-import { RelativeTime } from "./relative-time.js";
+import { clockText, momentText } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * chat-pane.tsx -- one place of the window's Chat at reading size: For you, or a channel's messages with their threads.
  *
  * A message is a row led by its author's mark, an agent's own glyph as its
- * tab wears it, Luke's initial in his blue, a person's initial, then a line
+ * tab wears it, or a person's photo or initial, then a line
  * naming the author and when it was posted, and under it the
  * blocks it carries: Markdown as the transcript draws it, a link by its
  * label, a code block by the file and lines it points at as a transcript
@@ -208,7 +211,8 @@ interface MessageContext {
   readonly chat: ChatAnswer;
   readonly names: ChatNames;
   readonly now: number;
-  readonly targets: readonly ChatTarget[];
+  /** What a composer posting in the channel offers to name: the members a post there reaches, and the channels. */
+  readonly targetsIn: (channelId: string) => readonly ChatTarget[];
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
@@ -220,6 +224,27 @@ interface MessageContext {
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
+/**
+ * A message's blocks in the order they are drawn, each with its place in
+ * the message: a person's pictures first, over their words, as the box held
+ * them and as every message's files stand; an agent's and Luke's in the
+ * order they wrote them, since a picture of theirs may stand between words
+ * that speak of it.
+ */
+function drawnBlocks(
+  message: ChatMessage,
+  chat: ChatAnswer,
+): readonly { readonly block: ChatReadBlock; readonly index: number }[] {
+  const placed = message.blocks.map((block, index) => ({ block, index }));
+  const author = chat.members.find((member) => member.id === message.authorId);
+  if (author?.kind !== MEMBER_KIND.HUMAN) return placed;
+  const picture = (block: ChatReadBlock) => knownBlock(block) && block.type === CHAT_BLOCK.IMAGE;
+  return [
+    ...placed.filter(({ block }) => picture(block)),
+    ...placed.filter(({ block }) => !picture(block)),
+  ];
+}
+
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */
 function Body({
   message,
@@ -228,8 +253,8 @@ function Body({
   message: ChatMessage;
   context: MessageContext;
 }): React.JSX.Element {
-  const blocks = message.blocks.map((block, index) => (
-    // Blocks have no key of their own and are never reordered.
+  const blocks = drawnBlocks(message, context.chat).map(({ block, index }) => (
+    // Blocks have no key of their own, so each keeps its place in the message as its key.
     <Block key={index} messageId={message.id} block={block} context={context} />
   ));
   const { ask } = message;
@@ -248,13 +273,25 @@ function Body({
   );
 }
 
-/** The line over a message's words, as an Inbox comment's head is: its author by name, their card on it, where it was said, and when. */
+/** When a message was posted, on the clock as Slack says it ("10:42 AM"), the full moment on hover. */
+function ClockTime({ at, now }: { at: number; now: number }): React.JSX.Element {
+  return (
+    <Tooltip label={momentText(at)}>
+      <time className="chat-time" dateTime={new Date(at).toISOString()}>
+        {clockText(at, now)}
+      </time>
+    </Tooltip>
+  );
+}
+
+/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and when on the clock. */
 function Byline({
   actor,
   at,
   where,
   now,
   action,
+  continued = false,
 }: {
   actor: Actor;
   at: number;
@@ -262,7 +299,18 @@ function Byline({
   now: number;
   /** A press at the line's end, shown while the message is hovered or the press has the keyboard. */
   action?: React.ReactNode;
+  /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
+  continued?: boolean;
 }): React.JSX.Element {
+  if (continued) {
+    // The author stays named for a screen reader, which may land on this message alone.
+    return (
+      <div className="chat-byline" data-continued="true">
+        <span className="visually-hidden">{actorName(actor)}</span>
+        {action}
+      </div>
+    );
+  }
   return (
     <div className="chat-byline">
       <span className="chat-byline-name">
@@ -273,17 +321,39 @@ function Byline({
         )}
       </span>
       {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
-      <RelativeTime at={at} now={now} />
+      <ClockTime at={at} now={now} />
       {action}
     </div>
   );
 }
 
-/** The face a message leads with, in a column of its own: the author's photo, Luke, or the agent's harness, as a list row draws them. */
-function Face({ actor }: { actor: Actor }): React.JSX.Element {
+/**
+ * The face a message leads with, in a column of its own at a card's size: the
+ * person's photo or initial, as a circle, or the agent's own mark, as a rounded square. A message continuing its
+ * author's run leads with its time instead, shown while it is hovered, as
+ * Slack's grouped messages do.
+ */
+function Face({
+  actor,
+  continued = false,
+  at,
+  now,
+}: {
+  actor: Actor;
+  continued?: boolean;
+  at: number;
+  now: number;
+}): React.JSX.Element {
+  if (continued) {
+    return (
+      <span className="chat-face" data-continued="true">
+        <ClockTime at={at} now={now} />
+      </span>
+    );
+  }
   return (
     <span className="chat-face">
-      <ActorMark actor={actor} size={ACTOR_SIZE.ROW} />
+      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
     </span>
   );
 }
@@ -293,7 +363,7 @@ function Reply({ message, context }: { message: ChatMessage; context: MessageCon
   const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
-      <Face actor={actor} />
+      <Face actor={actor} at={message.postedAt} now={context.now} />
       <div className="chat-message-body">
         <Byline actor={actor} at={message.postedAt} where={undefined} now={context.now} />
         <Body message={message} context={context} />
@@ -307,10 +377,13 @@ function ThreadRow({
   thread,
   where,
   context,
+  continued = false,
 }: {
   thread: ChatThread;
   where: string | undefined;
   context: MessageContext;
+  /** Whether the root continues its author's run, drawn under the name the run began with (`continuesRun`). */
+  continued?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const { message, replies } = thread;
@@ -334,24 +407,31 @@ function ThreadRow({
   const quiet = replies.length === 0 && !open;
   if (quiet && !canReply) {
     return (
-      <li className="chat-message" data-seq={message.seq}>
-        <Face actor={actor} />
+      <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
+        <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
         <div className="chat-message-body">
-          <Byline actor={actor} at={message.postedAt} where={where} now={context.now} />
+          <Byline
+            actor={actor}
+            at={message.postedAt}
+            where={where}
+            now={context.now}
+            continued={continued}
+          />
           <Body message={message} context={context} />
         </div>
       </li>
     );
   }
   return (
-    <li className="chat-message" data-seq={message.seq}>
-      <Face actor={actor} />
+    <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
+      <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
       <div className="chat-message-body">
         <Byline
           actor={actor}
           at={message.postedAt}
           where={where}
           now={context.now}
+          continued={continued}
           action={quiet ? <span className="chat-byline-action">{toggle}</span> : undefined}
         />
         <Body message={message} context={context} />
@@ -368,7 +448,7 @@ function ThreadRow({
             {open && canReply ? (
               <ChatComposer
                 label="Reply in thread"
-                targets={context.targets}
+                targets={context.targetsIn(message.channelId)}
                 keywords={context.keywords}
                 compact
                 onSend={(text, attachments) =>
@@ -501,7 +581,14 @@ export function ChatPane({
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
 }): React.JSX.Element {
-  const targets = chatTargets(chat, names, mentionPlace);
+  // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
+  const targetsIn = (channelId: string) =>
+    chatTargets(
+      chat,
+      names,
+      mentionPlace,
+      chat.channels.find((each) => each.id === channelId),
+    );
   const keywords = chatKeywords(chat, names);
   const actorOf = useChatActor(chat, names);
   const context: MessageContext = {
@@ -509,7 +596,7 @@ export function ChatPane({
     chat,
     names,
     now,
-    targets,
+    targetsIn,
     keywords,
     openLink,
     onPost,
@@ -561,12 +648,13 @@ export function ChatPane({
         <ScrollArea>
           <div className="chat-stream-body">
             <ol className="chat-messages">
-              {threads.map((thread) => (
+              {threads.map((thread, index) => (
                 <ThreadRow
                   key={thread.message.id}
                   thread={thread}
                   where={undefined}
                   context={context}
+                  continued={continuesRun(threads[index - 1], thread)}
                 />
               ))}
             </ol>
@@ -578,7 +666,7 @@ export function ChatPane({
         <ChatComposer
           key={channel.id}
           label={composerLabel(chat, names, channel)}
-          targets={targets}
+          targets={targetsIn(channel.id)}
           keywords={keywords}
           onSend={(text, attachments) =>
             onPost({ ...postOf(text, attachments), channelId: channel.id })

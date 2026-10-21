@@ -8,6 +8,8 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_PAYER,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
@@ -16,14 +18,18 @@ import {
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentPartCut,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentRuntime,
   type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSummary,
   type CodingAgentTodos,
   type CodingAgentUsage,
   type ContextWindow,
+  PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
@@ -59,6 +65,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type ChatNoticeMetadata,
@@ -74,6 +81,8 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
+import { drawnCall } from "./native-tool-calls.js";
+import { dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
   remoteCallOf,
@@ -118,17 +127,28 @@ function dollars(costUsd: number): string {
   return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
 }
 
+/** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
+const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT plan",
+};
+
 /**
  * What the agent has cost, for the model menu's foot: "This agent: 1.2M
  * tokens · $0.42", the dollars left off where the service could not price
- * every step; nothing before a turn settled. Note that this is the one
- * place the window draws a price, and it is the whole run's, the agent's
+ * every step; nothing before a turn settled. An agent paid for by a plan
+ * says the plan in the dollars' place, "This agent: 1.2M tokens · Claude
+ * plan", since a subscription has no bill per token. Note that this is the
+ * one place the window draws a price, and it is the whole run's, the agent's
  * own turns and its workers', at the catalog's list prices.
  */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
   const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
-  return `This agent: ${usage.costUsd === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${dollars(usage.costUsd)}`}`;
+  const paid =
+    (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
+    (usage.costUsd === undefined ? undefined : dollars(usage.costUsd));
+  return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
 }
 
 /**
@@ -228,6 +248,11 @@ export function subagentActor(model: string | undefined, state: GlyphState, name
     provider: model === undefined ? undefined : providerOf(model),
     state: ACTOR_STATE_OF_GLYPH[state],
   };
+}
+
+/** Where an agent's work stands, as its tile wears it, read off its status. */
+export function agentActorState(status: CodingAgentStatus): ActorState {
+  return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
 }
 
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
@@ -385,7 +410,22 @@ const SHARED_FAILURE_NOTE = {
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
   [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
+  // Said once the panel stopped asking again (`image-preparing.ts`).
+  [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
+    "The agent's image is taking too long to prepare. Try again in a few minutes.",
+  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent can't be reached from here yet.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
+    "The plan's provider didn't answer. Try again in a moment.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
+    "The plan paying for this agent has reached its usage limit. It waits until the limit resets.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+    "The plan paying for this agent isn't eligible to run it.",
 } as const;
+
+/** What a Start, or a message, says while the agent's image is still being prepared and the panel asks again. */
+export const PREPARING_IMAGE = "Preparing the agent's image…";
 
 /** What a Start from an agent whose session has ended says. */
 const START_RETIRED = "This agent has ended. Start a new one.";
@@ -491,6 +531,12 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -530,17 +576,70 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
-/** A refused start or message as the view hears it: why, and why the repository is out of reach where it is and the service said. */
+/** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, and when a plan's reached limit resets where it is that and the provider said. */
 export interface RefusedCall {
   readonly failure: CodingAgentCallFailure;
   readonly unreached?: RepositoryUnreached | undefined;
+  readonly resetsAt?: number | undefined;
+}
+
+/**
+ * The plan that pays for an agent on a provider's own harness, which only
+ * its plan runs (`agent-runtime-choice.ts`); none for an agent on eve,
+ * which a key pays for.
+ */
+export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgentPayer | undefined {
+  if (runtime === CODING_AGENT_RUNTIME.CLAUDE_CODE) return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+  if (runtime === CODING_AGENT_RUNTIME.CODEX) return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+  return undefined;
+}
+
+/** What a message refused by the Claude plan that pays for its agent says. */
+export const CLAUDE_PLAN_REFUSAL = {
+  SIGNED_OUT: "Your Claude plan needs reconnecting in Settings.",
+  LIMIT_REACHED: "Your Claude plan has reached its usage limit. It waits until the limit resets.",
+} as const;
+
+/** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
+function limitResetsWords(payer: CodingAgentPayer | undefined, resetsAt: number): string {
+  const whose =
+    payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+      ? "Your Claude plan has"
+      : "The plan paying for this agent has";
+  return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
+}
+
+/**
+ * The words of a refusal by the plan that pays for the agent, by its plan
+ * where the words say which, and with when a reached limit resets where
+ * the provider said; none for any other refusal. The agent waits on its
+ * plan, never turning to another payer.
+ */
+function planRefusalWords(
+  refused: RefusedCall,
+  payer: CodingAgentPayer | undefined,
+): string | undefined {
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
+    if (refused.resetsAt !== undefined) return limitResetsWords(payer, refused.resetsAt);
+    return payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+      ? CLAUDE_PLAN_REFUSAL.LIMIT_REACHED
+      : undefined;
+  }
+  if (
+    refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT &&
+    payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+  ) {
+    return CLAUDE_PLAN_REFUSAL.SIGNED_OUT;
+  }
+  return undefined;
 }
 
 /** What a Start that did not start says beside the button, and what mends it. */
-export function startFailureNote(refused: RefusedCall, taskId: string): Failure {
-  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
-    ? unreachedFailure(refused.unreached, taskId)
-    : callFailure(startFailureWords(refused.failure));
+export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
+    return unreachedFailure(refused.unreached, taskId);
+  }
+  return callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure));
 }
 
 /** A refused call's words, which trying again mends. */
@@ -651,18 +750,28 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
 
 /** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
-export function messageFailureNote(refused: RefusedCall, taskId: string | null): Failure {
+export function messageFailureNote(
+  refused: RefusedCall,
+  taskId: string | null,
+  payer?: CodingAgentPayer | undefined,
+): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
-  return callFailure(messageFailureWords(refused.failure));
+  return callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure));
 }
 
 /** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */
@@ -685,6 +794,12 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -825,6 +940,11 @@ export interface OfferedModel {
 /** The id a fast version's id is the fast version of, or nothing for an id without the suffix. */
 function baseIdOf(id: string): string | undefined {
   return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
+}
+
+/** Whether a catalog id names a model's fast version. */
+export function isFastModelId(id: string): boolean {
+  return baseIdOf(id) !== undefined;
 }
 
 /**
@@ -1126,19 +1246,29 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
+/** A part its page carried cut (`cutParts`): its two ends and its whole size, and the message and index it is fetched whole by. */
+export type AgentPartCut = Omit<CodingAgentPartCut, "field"> & { readonly messageId: string };
+
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
-  | { readonly kind: typeof AGENT_PART.REASONING; readonly text: string }
+  | {
+      readonly kind: typeof AGENT_PART.REASONING;
+      /** Empty on a thought its page carried cut, whose words `cut` holds the ends of. */
+      readonly text: string;
+      readonly cut?: AgentPartCut;
+    }
   | {
       readonly kind: typeof AGENT_PART.TOOL;
       readonly tool: string;
       readonly callId: string;
       readonly state: ToolState;
       readonly input: WireValue | undefined;
+      /** None while the call has not answered, and on a call whose answer its page carried cut, which `cut` holds the ends of. */
       readonly output: WireValue | undefined;
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
+      readonly cut?: AgentPartCut;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER }
@@ -1157,7 +1287,7 @@ function toolState(value: WireValue | undefined): ToolState {
  * reasoning part without its words, and any kind this build does not know,
  * draws nothing rather than refusing the message.
  */
-function agentPart(part: WireValue): AgentPart {
+export function agentPart(part: WireValue): AgentPart {
   if (!isRecord(part) || !isWireString(part.type)) return { kind: AGENT_PART.OTHER };
   if (part.type === AGENT_PART.TEXT || part.type === AGENT_PART.REASONING) {
     return isWireString(part.text)
@@ -1166,13 +1296,17 @@ function agentPart(part: WireValue): AgentPart {
   }
   if (part.type === AGENT_PART.STEP_START) return { kind: AGENT_PART.STEP_START };
   if (part.type.startsWith(TOOL_PART_TYPE_PREFIX)) {
-    return {
-      kind: AGENT_PART.TOOL,
+    // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
+    const call = drawnCall({
       tool: part.type.slice(TOOL_PART_TYPE_PREFIX.length),
-      callId: isWireString(part.toolCallId) ? part.toolCallId : "",
-      state: toolState(part.state),
       input: part.input,
       output: part.output,
+    });
+    return {
+      kind: AGENT_PART.TOOL,
+      ...call,
+      callId: isWireString(part.toolCallId) ? part.toolCallId : "",
+      state: toolState(part.state),
       errorText: isWireString(part.errorText) ? part.errorText : undefined,
     };
   }
@@ -1196,11 +1330,30 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
   return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
 }
 
-/** The parts of a message as the tab draws them, in the row's order. */
+/**
+ * A part its page carried cut, as the tab draws it: a thought with no words
+ * of its own, or a call with no answer of its own, each with the ends it was
+ * cut to; a part that is neither draws as it reads.
+ */
+function cutAgentPart(part: WireValue, cut: CodingAgentPartCut, messageId: string): AgentPart {
+  const { field: _field, ...ends } = cut;
+  const marked = { ...ends, messageId };
+  if (cut.field === PART_CUT_FIELD.TEXT) {
+    return { kind: AGENT_PART.REASONING, text: "", cut: marked };
+  }
+  const read = agentPart(part);
+  return read.kind === AGENT_PART.TOOL ? { ...read, cut: marked } : read;
+}
+
+/** The parts of a message as the tab draws them, in the row's order, each its page carried cut marked so. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   const read = partsRead.get(message);
   if (read !== undefined) return read;
-  const parts = message.parts.map(agentPart);
+  const cuts = new Map((message.cutParts ?? []).map((cut) => [cut.index, cut]));
+  const parts = message.parts.map((part, index) => {
+    const cut = cuts.get(index);
+    return cut === undefined ? agentPart(part) : cutAgentPart(part, cut, message.id);
+  });
   partsRead.set(message, parts);
   return parts;
 }
@@ -1300,13 +1453,18 @@ export interface StandingTodos {
  * streams the list before it is still the one standing.
  */
 export function newestTodos(messages: readonly CodingAgentMessage[]): StandingTodos | undefined {
-  const writes = messages.flatMap(agentParts).flatMap((part) => {
-    const todos = isTodos(part) ? todosView(part.input) : undefined;
-    return todos === undefined || part.kind !== AGENT_PART.TOOL
-      ? []
-      : [{ callId: part.callId, todos }];
-  });
-  return writes.at(-1);
+  // Note that the messages are read from the newest back, so a page is read only as far as its newest list.
+  for (let at = messages.length - 1; at >= 0; at -= 1) {
+    const message = messages[at];
+    const parts = message === undefined ? [] : agentParts(message);
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const part = parts[index];
+      if (part === undefined || part.kind !== AGENT_PART.TOOL || !isTodos(part)) continue;
+      const todos = todosView(part.input);
+      if (todos !== undefined) return { callId: part.callId, todos };
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -1352,8 +1510,8 @@ interface AgentTurnPlace {
   readonly newestTodos?: string | undefined;
   /** Where each call's subagent stands as its own session says, which its row draws over the call's own state, since a call may settle the moment its worker is under way. */
   readonly workers?: ReadonlyMap<string, ToolState>;
-  /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
-  readonly said?: boolean;
+  /** How much of the turn the voice read aloud on a call, which folds that much of a finished turn: all of it, its lines standing ahead of it, or the work after a call's ask joined it, its lines standing among `arrived`; none where nothing was. */
+  readonly said?: TurnRead | undefined;
   /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
   readonly arrived?: readonly CodingAgentMessage[];
 }
@@ -1473,9 +1631,9 @@ function drawnParts(
   return drawn;
 }
 
-/** The steps of its turn a line arrived after; none for a line no turn took in under way. */
+/** The steps of its turn a line arrived after, or a line the voice said answering a call's ask that joined it under way was read after; none for a line no turn took in under way. */
 function afterStepOf(line: CodingAgentMessage): number {
-  return line.arrivedIn?.afterStep ?? 0;
+  return line.arrivedIn?.afterStep ?? line.readFrom?.afterStep ?? 0;
 }
 
 /**
@@ -1495,9 +1653,13 @@ function afterStepOf(line: CodingAgentMessage): number {
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  { newestTodos, workers = NO_WORKERS, said = false, arrived = [] }: AgentTurnPlace = {},
+  { newestTodos, workers = NO_WORKERS, said, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
   const parts = drawnParts(message, arrived);
+  // Note that what the voice read from a join on starts after its first line among the parts, the work it answered.
+  const joined = parts.findIndex(
+    (part) => part.kind === AGENT_PART.ARRIVED && part.line.readFrom?.afterStep !== undefined,
+  );
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
@@ -1513,7 +1675,8 @@ export function agentRows(
     key: message.id,
     moving,
     done: !moving,
-    said,
+    ...(said === TURN_READ.WHOLE ? { said: true } : undefined),
+    ...(said === TURN_READ.FROM_JOIN && joined >= 0 ? { saidFrom: joined + 1 } : undefined),
   });
 }
 
@@ -1545,6 +1708,160 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
     const journal = message.arrivedIn?.journalId;
     if (journal !== undefined && journals.has(journal)) return [];
     return [{ message, arrived: arrived.get(message.id) ?? [] }];
+  });
+}
+
+/** How much of a turn the voice read aloud on a call, which folds that much of it once it has finished. */
+export const TURN_READ = {
+  /** All of it, answering an ask that was the whole turn's: the voice's lines stand ahead of the turn. */
+  WHOLE: "whole",
+  /** The work after a call's ask joined the turn under way: the voice's lines stand where the ask arrived, the work before it as it was. */
+  FROM_JOIN: "from-join",
+} as const;
+
+export type TurnRead = (typeof TURN_READ)[keyof typeof TURN_READ];
+
+/**
+ * A line the voice said on a call into the agent, and what a service older
+ * than `readFrom` named of the turn it read aloud: the turn's journal, by
+ * its message id (`read_from`), written only on a reply said within moments
+ * of the turn settling.
+ */
+const SpokenLineSchema = Schema.Struct({
+  author: Schema.Literal(MESSAGE_AUTHOR.VOICE_MODEL),
+  channel: Schema.Literal(MESSAGE_CHANNEL.VOICE),
+  read_from: Schema.optionalKey(Schema.String),
+});
+
+const decodeSpokenLine = Schema.decodeUnknownOption(SpokenLineSchema);
+
+/** Each message's spoken line as last decoded, by the message, which is never changed in place: a transcript is placed again on every page, and a page touches only its own messages. */
+const spokenRead = new WeakMap<CodingAgentMessage, ReturnType<typeof decodeSpokenLine>>();
+
+/** The line the voice said that a message is, decoded once for the message. */
+function spokenLineOf(message: CodingAgentMessage): ReturnType<typeof decodeSpokenLine> {
+  const read = spokenRead.get(message);
+  if (read !== undefined) return read;
+  const line = decodeSpokenLine(message.metadata);
+  spokenRead.set(message, line);
+  return line;
+}
+
+/** Whether a row is a line the voice said on a call, which reads a turn aloud rather than being one. */
+function isSpokenLine(message: CodingAgentMessage): boolean {
+  return message.role === MESSAGE_ROLE.ASSISTANT && Option.isSome(spokenLineOf(message));
+}
+
+/** Where among the rows a line the voice said names the turn it read aloud: the turn's journal, and where the call's ask joined that turn under way, the steps begun before it. */
+interface ReadAloudPlace {
+  readonly journalId: string;
+  readonly afterStep?: number | undefined;
+}
+
+/**
+ * The journal of the turn a line the voice said answers, among the rows by
+ * their turn: the turn the service names it read from (`readFrom`), or from
+ * a service older than that, the journal its metadata names (`read_from`);
+ * none for any other row.
+ */
+function readAloudPlaceOf(
+  message: CodingAgentMessage,
+  journals: ReadonlyMap<string, string>,
+): ReadAloudPlace | undefined {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  return Option.getOrUndefined(
+    Option.flatMap(spokenLineOf(message), (line) => {
+      if (message.readFrom === undefined) {
+        return Option.fromUndefinedOr(line.read_from).pipe(
+          Option.map((journalId) => ({ journalId })),
+        );
+      }
+      const { afterStep } = message.readFrom;
+      return Option.fromUndefinedOr(journals.get(message.readFrom.turnId)).pipe(
+        Option.map((journalId) => ({ journalId, afterStep })),
+      );
+    }),
+  );
+}
+
+/** A row the voice read nothing aloud of. */
+const NOTHING_SAID: readonly CodingAgentMessage[] = [];
+
+/** One of a transcript's rows as the tab draws it, with what the voice said of it on a call. */
+export interface SpokenMessage extends PlacedMessage {
+  /** The lines the voice said on a call reading this whole turn aloud, in the order the transcript holds them, which the tab draws ahead of the turn, its work folded behind them; none on any other row. */
+  readonly said: readonly CodingAgentMessage[];
+  /** How much of this turn the voice read aloud on a call, which folds that much of it once finished; none where it read nothing of it. */
+  readonly read?: TurnRead | undefined;
+}
+
+/**
+ * A transcript's rows with each line the voice said reading a turn aloud
+ * moved to that turn, so on a call the tab reads as a conversation: what
+ * was said, then the work behind it folded under it, rather than the
+ * turn's own answer and then the voice saying it again, however long after
+ * the turn ended the line was said. A line answering an ask that was the
+ * whole turn's stands ahead of the turn, which folds whole. The lines said
+ * or typed on the call that reached such a turn while it ran are drawn ahead
+ * of what the voice said, each a row of its own, since the voice answered
+ * them too, so no question stands under its answer; any other line that
+ * reached it, as GitHub's, stays where it arrived among the turn's work. A
+ * line answering a call's ask that joined a turn under way, as a call into
+ * a busy agent does, stands among the turn's work right after the ask,
+ * and only the work from there on folds under it, the turn's earlier work
+ * drawn as it was; the lines from that join on stay where they arrived. A
+ * line whose turn is not among the rows, and a line the service names no
+ * turn for, stand where the order puts them, so a transcript with no call
+ * reads as it did.
+ */
+export function spokenMessages(placed: readonly PlacedMessage[]): readonly SpokenMessage[] {
+  const journals = new Map(
+    placed.flatMap(({ message }) =>
+      message.role === MESSAGE_ROLE.ASSISTANT && !isSpokenLine(message)
+        ? [[message.turnId ?? message.id, message.id] as const]
+        : [],
+    ),
+  );
+  const turns = new Set(journals.values());
+  const said = new Map<string, CodingAgentMessage[]>();
+  const joined = new Map<string, CodingAgentMessage[]>();
+  const moved = new Set<string>();
+  for (const { message } of placed) {
+    const place = readAloudPlaceOf(message, journals);
+    if (place === undefined || !turns.has(place.journalId)) continue;
+    const lines = place.afterStep === undefined ? said : joined;
+    lines.set(place.journalId, [...(lines.get(place.journalId) ?? []), message]);
+    moved.add(message.id);
+  }
+  return placed.flatMap((row) => {
+    if (moved.has(row.message.id)) return [];
+    const lines = said.get(row.message.id);
+    const answers = joined.get(row.message.id) ?? NOTHING_SAID;
+    // Note that the answers are merged among the lines by when each began, because two asks may join at one step, each answered before the next was asked.
+    const arrived =
+      answers.length === 0
+        ? row.arrived
+        : [...row.arrived, ...answers].toSorted((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
+    if (lines === undefined) {
+      return [
+        {
+          message: row.message,
+          arrived,
+          said: NOTHING_SAID,
+          read: answers.length === 0 ? undefined : TURN_READ.FROM_JOIN,
+        },
+      ];
+    }
+    // Note that only a line said or typed on a call before any join is lifted, because a line from anywhere else, as GitHub's, is no ask the voice answered, and one from a join on has its answer beside it.
+    const join = Math.min(...answers.map(afterStepOf));
+    const asked = row.arrived.filter(
+      (line) => callOfLine(line) !== undefined && afterStepOf(line) < join,
+    );
+    const kept = arrived.filter((line) => !asked.includes(line));
+    return [
+      ...asked.map((line) => ({ message: line, arrived: NOTHING_SAID, said: NOTHING_SAID })),
+      { message: row.message, arrived: kept, said: lines, read: TURN_READ.WHOLE },
+    ];
   });
 }
 

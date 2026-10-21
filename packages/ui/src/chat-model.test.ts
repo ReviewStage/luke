@@ -12,6 +12,7 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
+  CHAT_RUN_SPAN,
   type ChatNames,
   channelLabel,
   channelThreads,
@@ -19,16 +20,18 @@ import {
   chatRail,
   chatTargets,
   chatWho,
+  continuesRun,
   FOR_YOU_REASON,
   forYou,
   postsIn,
+  reachedIn,
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const AGENT = "00000000-0000-4000-8000-0000000000a2";
-const LUKE = "00000000-0000-4000-8000-0000000000a3";
+const HELPER = "00000000-0000-4000-8000-0000000000a3";
 const MARIA = "00000000-0000-4000-8000-0000000000a4";
 const AGENT_ID = "00000000-0000-4000-8000-0000000000b1";
 const TASK_ID = "00000000-0000-4000-8000-0000000000c1";
@@ -125,7 +128,6 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", userId: "user-dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, agentId: AGENT_ID, left: false },
-      { id: LUKE, kind: MEMBER_KIND.LUKE, planId: TASK_ID, left: false },
       { id: MARIA, kind: MEMBER_KIND.HUMAN, name: "Maria Chen", userId: "user-maria", left: false },
     ],
     channels: [WITH_AGENT, TOPIC, OLD, TASK_CHANNEL, WITH_MARIA, GENERAL],
@@ -137,12 +139,12 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
 test("For you lists every open ask someone else posted, the oldest first, then each unread direct message and mention of the reader, the oldest first", () => {
   const chat = chatOf(5, [
     message(9, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
-    message(8, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
+    message(8, HELPER, TASK_CHANNEL.id, { mentions: [ME] }),
     message(7, AGENT, WITH_AGENT.id),
     message(6, AGENT, TASK_CHANNEL.id),
     // Read already, so neither the direct message nor the mention waits.
     message(4, AGENT, WITH_AGENT.id),
-    message(3, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
+    message(3, HELPER, TASK_CHANNEL.id, { mentions: [ME] }),
     // An ask waits until it is answered, read or not, and the reader's own never does.
     message(2, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
     message(10, ME, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
@@ -239,7 +241,7 @@ test("a channel reads as its roots in the order posted, each with its thread's r
     message(3, MARIA, TASK_CHANNEL.id, { parentId: "m1" }),
     message(1, AGENT, TASK_CHANNEL.id),
     message(4, AGENT, TASK_CHANNEL.id, { parentId: "m-unread" }),
-    message(2, LUKE, TASK_CHANNEL.id),
+    message(2, HELPER, TASK_CHANNEL.id),
     message(5, AGENT, TASK_CHANNEL.id, { parentId: "m1" }),
     message(6, AGENT, GENERAL.id),
   ]);
@@ -256,29 +258,66 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
-test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, a person by theirs, and one whose agent or account is gone as former", () => {
+test("a root continues its author's run within five minutes of their last one, and a different author, a longer gap, or a thread between breaks it", () => {
+  const root = (
+    seq: number,
+    authorId: string,
+    postedAt: number,
+    replies: readonly ChatMessage[] = [],
+  ) => ({
+    message: message(seq, authorId, TASK_CHANNEL.id, { postedAt }),
+    replies,
+  });
+  const first = root(1, AGENT, 0);
+  assert.equal(continuesRun(undefined, first), false);
+  assert.equal(continuesRun(first, root(2, AGENT, CHAT_RUN_SPAN)), true);
+  assert.equal(continuesRun(first, root(2, AGENT, CHAT_RUN_SPAN + 1)), false);
+  assert.equal(continuesRun(first, root(2, MARIA, 1)), false);
+  const threaded = root(1, AGENT, 0, [message(3, MARIA, TASK_CHANNEL.id, { parentId: "m1" })]);
+  assert.equal(continuesRun(threaded, root(2, AGENT, 1)), false);
+});
+
+test("a line names an agent by its title, or by the name the read gave it, with its task, the reader by their own name, a person by theirs, and one whose agent or account is gone as former", () => {
   const chat = {
     ...chatOf(0, []),
     members: [
       ...chatOf(0, []).members,
+      {
+        id: HELPER,
+        kind: MEMBER_KIND.AGENT,
+        name: "Fix the flaky test",
+        agentId: "00000000-0000-4000-8000-0000000000b3",
+        planId: TASK_ID,
+        left: false,
+      },
       { id: "gone-agent", kind: MEMBER_KIND.AGENT, left: true },
       { id: "gone-person", kind: MEMBER_KIND.HUMAN, left: true },
     ],
   };
   assert.deepEqual(
-    [AGENT, LUKE, ME, MARIA, "gone-agent", "gone-person"].map((id) => {
+    [AGENT, HELPER, ME, MARIA, "gone-agent", "gone-person"].map((id) => {
       const who = chatWho(chat, NAMES, id);
       return [who.name, who.taskName];
     }),
     [
       ["Invite emails", undefined],
-      ["Luke", "Teammate invitations"],
+      ["Fix the flaky test", "Teammate invitations"],
       ["Dean Stratakos", undefined],
       ["Maria Chen", undefined],
       ["Former agent", undefined],
       ["Former member", undefined],
     ],
   );
+});
+
+test("an agent given a human name is named by it ahead of its title", () => {
+  const line = NAMES.agents.get(AGENT_ID);
+  assert.ok(line);
+  const names: ChatNames = {
+    ...NAMES,
+    agents: new Map([[AGENT_ID, { ...line, personaName: "Maya Chen" }]]),
+  };
+  assert.equal(chatWho(chatOf(0, []), names, AGENT).name, "Maya Chen");
 });
 
 test("the reader posts in a standing channel and in a direct message of their own, never in an archived channel or a direct message between two others, which is named by both", () => {
@@ -340,7 +379,7 @@ test("a dictation in the chat listens for every person still here by name, each 
   assert.equal(new Set(words).size, words.length, "each word once");
 });
 
-test("every member is offered by name as the link their chip writes, an agent and a Luke under their task, and none before the workspace is known", () => {
+test("every member is offered by name as the link their chip writes, an agent under its task, and none before the workspace is known", () => {
   const chat = {
     ...chatOf(0, []),
     members: chatOf(0, []).members.map((member) =>
@@ -357,7 +396,6 @@ test("every member is offered by name as the link their chip writes, an agent an
         "Teammate invitations",
         `[@Invite emails](https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID})`,
       ],
-      ["Luke", "Teammate invitations", `[@Luke](https://tryluke.dev/acme/plan/${TASK_ID}/luke)`],
       ["Maria Chen", undefined, "[@Maria Chen](https://tryluke.dev/acme/person/user-maria)"],
     ],
   );
@@ -366,6 +404,30 @@ test("every member is offered by name as the link their chip writes, an agent an
     [],
     "a member is written as a link alone, so none is offered before the workspace is known",
   );
+});
+
+test("a composer offers only the members a post in its channel reaches: its task's agent in the task's channel, people alone in the general one and a topic, and a DM's own two", () => {
+  const chat = {
+    ...chatOf(0, []),
+    members: chatOf(0, []).members.map((member) =>
+      member.id === AGENT ? { ...member, planId: TASK_ID } : member,
+    ),
+  };
+  const place = { workspace: "acme", repository: null };
+  const offered = (channel: ChatChannel) =>
+    chatTargets(chat, NAMES, place, channel)
+      .filter((target) => target.sigil === "@")
+      .map((target) => target.name);
+  assert.deepEqual(offered(TASK_CHANNEL), ["Invite emails", "Maria Chen"]);
+  assert.deepEqual(offered(GENERAL), ["Maria Chen"]);
+  assert.deepEqual(offered(TOPIC), ["Maria Chen"]);
+  assert.deepEqual(offered(WITH_AGENT), ["Invite emails"]);
+  // An agent on no task is reached in the general channel, where it talks.
+  const taskless = chat.members.find((member) => member.id === AGENT);
+  assert.ok(taskless !== undefined);
+  const { planId: _planId, ...noTask } = taskless;
+  assert.equal(reachedIn(noTask, GENERAL), true);
+  assert.equal(reachedIn(noTask, TASK_CHANNEL), false);
 });
 
 test("a topic's name is written as a channel's, and refused where it breaks the grammar or another channel, general among them, holds it", () => {

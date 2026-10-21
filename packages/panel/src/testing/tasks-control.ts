@@ -2,6 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptPage,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
@@ -10,12 +11,10 @@ import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
@@ -27,6 +26,14 @@ import {
 const ignore = () => undefined;
 
 /** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
+/** A page as the host pushes it: caught up where it came back with nothing on it, unless it says otherwise. */
+export function pushedPage(
+  page: CodingAgentMessagesAnswerView | CodingAgentTranscriptPage,
+): CodingAgentTranscriptPage {
+  if ("failure" in page || "caughtUp" in page) return page;
+  return { ...page, caughtUp: page.messages.length === 0 };
+}
+
 /**
  * A follower that answers each follow as the host would: the pages `pagesOf`
  * names for the transcript, pushed to the window in turn, at once; or, where
@@ -34,17 +41,19 @@ const ignore = () => undefined;
  * lands.
  */
 export function pushedTranscripts(
-  pagesOf: (transcript: CodingAgentTranscriptKey) => readonly CodingAgentMessagesAnswerView[],
+  pagesOf: (
+    transcript: CodingAgentTranscriptKey,
+  ) => readonly (CodingAgentMessagesAnswerView | CodingAgentTranscriptPage)[],
   held?: { readonly page: number; readonly release: Promise<void> },
 ): TranscriptFollower {
   return (transcript, hear) => {
     let stopped = false;
     const pages = pagesOf(transcript);
     const cut = held?.page ?? pages.length;
-    for (const page of pages.slice(0, cut)) hear(page);
+    for (const page of pages.slice(0, cut)) hear(pushedPage(page));
     void held?.release.then(() => {
       if (stopped) return;
-      for (const page of pages.slice(cut)) hear(page);
+      for (const page of pages.slice(cut)) hear(pushedPage(page));
     });
     return () => {
       stopped = true;
@@ -135,6 +144,7 @@ export function codingAgentsControl(
     onUnarchive: undefined,
     continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
+    startCall: undefined,
     onStop: () => Promise.resolve(),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -153,6 +163,7 @@ export function codingAgentsControl(
     onStatus: ignore,
     onTitle: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readCalls: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     transcripts: pushedTranscripts(() => []),
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
@@ -169,7 +180,7 @@ export function codingAgentsControl(
       Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readPullRequestViewed: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
-    readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    inboxFollower: { follow: () => () => undefined },
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     messageInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -217,14 +228,11 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-    microphone: { label: "Talk about this task", enabled: true, muted: false, onPress: ignore },
-    speaker: { muted: false, onPress: ignore },
-    stop: { shown: false, onPress: ignore },
-    status: undefined,
+    calls: undefined,
     live: false,
     mainTabs: {
-      tabs: [MAIN_TAB.CALL],
-      tab: MAIN_TAB.CALL,
+      tabs: [],
+      tab: undefined,
       openAgents: undefined,
       newTabAsked: false,
       onChoose: ignore,
@@ -283,20 +291,16 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     unreadTabs: [],
     board: undefined,
     shownCode: undefined,
-    workFailed: false,
-    onRetryWork: ignore,
+    codeFailed: false,
+    onRetryCode: ignore,
     pages: undefined,
-    transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
-    work: {
-      conversation: undefined,
-      onLoadEarlier: () => Promise.resolve(),
-      readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
-    },
     agents: codingAgentsControl(),
     history: versionHistoryControl(),
     onSelect: ignore,
     onRestoreTask: ignore,
     onShowAgent: ignore,
+    onShowColumnTab: ignore,
+    onShowPanelTab: ignore,
     onShowSource: ignore,
     onShowTask: ignore,
     onShowMention: ignore,
@@ -337,7 +341,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       listed: false,
       onListed: ignore,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
@@ -360,7 +363,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onRuns: ignore,
       onClose: ignore,
     },
-    callTaskId: undefined,
+    talkingTaskId: undefined,
     chatView: {
       open: false,
       available: false,
@@ -414,7 +417,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRenameTask: () => Promise.resolve(true),
     onDraftName: ignore,
     onMarkTask: ignore,
-    onArchiveTasks: ignore,
+    onSettleTasks: ignore,
     pinnedRepositories: [],
     onPinRepository: ignore,
     taskSections: NO_TASK_SECTIONS,

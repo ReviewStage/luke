@@ -53,3 +53,14 @@ test("an inbox post opens the sandbox only where its body draws a picture from a
   assert.equal(opens("Write `![alt](shot.png)` for a picture."), false);
   assert.equal(opens("[a link](shots/landing.png)"), false);
 });
+
+test("a browser call opens the sandbox its browser runs in, so a turn of browser calls alone stops it at its end", () => {
+  assert.equal(
+    opensSandbox(
+      requested(CODER_TOOL.BROWSER, {
+        actions: [{ action: "open", url: "http://localhost:3000/" }],
+      }),
+    ),
+    true,
+  );
+});

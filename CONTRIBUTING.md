@@ -43,9 +43,7 @@ Each instance has its own profile under `~/Library/Application Support/Luke Dev
 <name>/` (sign-in, settings, window place, single-instance lock), its own
 `Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
 `.build/traces/<name>/`. Its windows' titles end in `(<name>)`, and its app menu
-says "Quit Luke Dev <name>". The system-wide talk and stop keys are held by
-one Luke only, so a named instance leaves them to the plain one and registers
-none (a call starts from the panel instead). No development run claims the
+says "Quit Luke Dev <name>". No development run claims the
 `tryluke:` links, named or not.
 Agents' commands for this Mac go to whichever signed-in instance of the account
 reads them first, once each, and every instance runs them in the same login
@@ -67,7 +65,6 @@ again only when it opens or reloads a window.
 apps/
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
   dev/            the coding agent's eve app
-  luke/           Luke, the orchestrator: the planner's eve app
   web/            the site, the Vercel function routes (server/routes/), and the deployment shell
 packages/
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry

@@ -4,7 +4,7 @@ import {
   taskBoardLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
 
 /**
  * board-follow.ts -- where the open task's whiteboard stands, followed by the host over a Neon Realtime subscription, so the board is read again the moment it moves.
@@ -31,6 +31,8 @@ export interface BoardFollowDependencies {
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
+  /** Handed a wait on a save's transaction once the board is followed over Realtime, and `undefined` once it is let go or polled (`liveRows`). */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** The board's mark as one comparable value, its rows in order of the task they name. */
@@ -60,6 +62,7 @@ export function boardMoves(
       reseal: dependencies.seal,
       poll: dependencies.poll,
       now: dependencies.now,
+      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
     },
     first,
   ).pipe(

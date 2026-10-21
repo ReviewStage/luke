@@ -2,6 +2,7 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { sentLineId } from "@luke/database/models/ids";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
@@ -15,7 +16,6 @@ import {
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
@@ -506,6 +506,11 @@ export class VoiceService {
       // the relay is about to pipe. The socket is paused since the attach, so a
       // frame the session spoke while the exchange stood is read once both
       // consumers listen, by both, in order.
+      // Every frame of the service's own about the call names its agent, and the agent's task where it has one.
+      const subject = {
+        ...(opened.taskId === undefined ? undefined : { planId: opened.taskId }),
+        agentId: opened.agentId,
+      };
       const standing = yield* this.#attachExchange({
         accountId,
         sessionId,
@@ -519,29 +524,19 @@ export class VoiceService {
         onActivity: (activity) => {
           const frame: TaskActivityFrame = {
             type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-            planId: opened.taskId,
+            ...subject,
             ...activity,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Code Luke is about to talk about, with its lines as the brain
-        // read them from the task's repository, sent the same way, so
-        // the Tasks tab's code pane draws it as he says it.
+        // Code Luke is about to talk about, with its lines as the agent
+        // read them from its checkout, sent the same way, so the Tasks
+        // tab's code pane draws it as he says it.
         onCode: (shown) => {
           const frame: TaskCodeFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CODE,
-            planId: opened.taskId,
             ...shown,
-          };
-          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
-        },
-        // Each brain turn's work, sent the same way, so the Tasks tab's
-        // Work tab reads what Luke's brain wrote and ran as it goes.
-        onWork: (turn) => {
-          const frame: TaskWorkFrame = {
-            type: VOICE_SERVICE_FRAME.TASK_WORK,
-            planId: opened.taskId,
-            turn,
+            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
@@ -552,7 +547,7 @@ export class VoiceService {
           this.#log({ event: LOG_EVENT.CALL_ENDING });
           const frame: TaskCallEndingFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
-            planId: opened.taskId,
+            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
@@ -617,8 +612,10 @@ export class VoiceService {
             }),
           ),
         // The device's reports reach the exchange: its idle, which the
-        // exchange decides the idle close on; and its stop, which the exchange
-        // answers with the one instruction it appends itself. With no exchange
+        // exchange decides the idle close on; its stop, which the exchange
+        // answers with the one instruction it appends itself; and a line the
+        // developer typed into the call, which the exchange hands the agent
+        // and whose reply it speaks. With no exchange
         // standing a report is read and goes nowhere.
         onDeviceReport:
           exchange === undefined
@@ -630,6 +627,10 @@ export class VoiceService {
                     return;
                   case VOICE_SERVICE_FRAME.SESSION_STOP:
                     exchange.service.stopSpeaking();
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_TYPED:
+                    // Under the id a steer of the same send would write, so a Retry, by either path, is one line.
+                    exchange.service.typeLine(report.text, sentLineId(report.clientKey));
                     return;
                 }
               },

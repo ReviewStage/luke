@@ -49,6 +49,8 @@ const RUN: TasklessAgent = {
 let standing: TasklessAgent = RUN;
 /** Every archive or Unarchive asked, in order. */
 let archives: { agentId: string; archived: boolean }[] = [];
+/** Every agent marked read by hand in main, in order. */
+let seen: string[] = [];
 /** Every rename asked, in order. */
 let renames: { agentId: string; title: string }[] = [];
 let root: Root | undefined;
@@ -57,12 +59,18 @@ beforeEach(() => {
   standing = RUN;
   archives = [];
   renames = [];
+  seen = [];
+  window.localStorage.clear();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         const { automationId, activityAt: _at, ...agent } = standing;
         const value = { agent: { ...agent, automationId } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_SEEN) {
+        seen.push(request.payload.agentId);
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
@@ -79,6 +87,7 @@ afterEach(() => {
 function mount(
   agent: TasklessAgent,
   pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  unread = false,
 ): HTMLElement {
   const agents = codingAgentsControl({
     pullRequests,
@@ -102,7 +111,7 @@ function mount(
           agent,
           agents,
           current: false,
-          unread: false,
+          unread,
           now: 3,
           at: agent.activityAt,
           shown: true,
@@ -133,7 +142,10 @@ function rightClick(row: HTMLElement): HTMLButtonElement[] {
 
 /** The item under `label` among those offered, or a failure saying it is not offered. */
 function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonElement {
-  return items.find((each) => each.textContent === label) ?? assert.fail(`offers ${label}`);
+  return (
+    items.find((each) => each.textContent === label) ??
+    assert.fail(`offers ${label}: ${JSON.stringify(items.map((each) => each.textContent))}`)
+  );
 }
 
 test("an agent at rest is archived from its row's right-click at once, once its own page reads it at rest too", async () => {
@@ -302,4 +314,64 @@ test("the row's card shows a pull request read since the list was, before the li
 
   const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
   assert.match(corner?.textContent ?? "", /^#43/u);
+});
+
+/** Presses `label` in the row's right-click menu. */
+async function choose(row: HTMLElement, label: string): Promise<void> {
+  const pick = item(rightClick(row), label);
+  await act(async () => pick.click());
+}
+
+/** What a reader of the screen hears the row say, which names it unread. */
+function heard(row: HTMLElement): string {
+  return row.textContent ?? "";
+}
+
+test("an agent's row offers Mark as unread after Copy link and before Rename, and the mark by hand reads it unread, as a task's row does", async () => {
+  const row = mount(RUN);
+  const labels = rightClick(row).map((each) => each.textContent);
+  assert.ok(labels.indexOf("Mark as unread") > labels.indexOf("Copy link"));
+  assert.ok(labels.indexOf("Mark as unread") < labels.indexOf("Rename"));
+  assert.ok(!heard(row).includes("(unread)"));
+
+  await choose(row, "Mark as unread");
+
+  assert.ok(heard(row).includes("(unread)"), "the row reads unread");
+  assert.deepEqual(seen, [], "nothing is cleared in main for a mark unread");
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
+    [AGENT_ID]: { unread: true },
+  });
+  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as read"));
+});
+
+test("Mark as read on an agent marked unread by hand reads it again, in the store a task's marks are kept in", async () => {
+  const row = mount(RUN);
+  await choose(row, "Mark as unread");
+  assert.ok(heard(row).includes("(unread)"));
+
+  await choose(row, "Mark as read");
+
+  assert.ok(!heard(row).includes("(unread)"), "the row reads again");
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
+    [AGENT_ID]: RUN.activityAt,
+  });
+  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
+});
+
+test("an agent whose turn ended unseen offers Mark as read, which clears main's unseen dot and moves the mark to its row's time", async () => {
+  const row = mount(RUN, new Map(), true);
+  assert.ok(heard(row).includes("(unread)"));
+
+  await choose(row, "Mark as read");
+  await settle();
+
+  assert.deepEqual(seen, [AGENT_ID]);
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
+    [AGENT_ID]: RUN.activityAt,
+  });
+});
+
+test("an archived agent's row offers the read mark too, as an archived task's does", () => {
+  const row = mount({ ...RUN, archivedAt: 3 });
+  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
 });

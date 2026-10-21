@@ -2,18 +2,29 @@ import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   readCodingAgentOfConversation,
+  readCodingAgentRouting,
   recordCodingAgentCompaction,
   recordCodingAgentNativeSession,
+  takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import {
   type NativeProjectionRow,
   withNativeProjection,
 } from "@luke/database/models/native-projection-store";
+import { setPlanStatus } from "@luke/database/models/provider-key-store";
 import {
   type ConversationTarget,
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  type ProviderKeyKind,
+  type ProviderKeyProvider,
+} from "@luke/features/provider-key-wire";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
@@ -22,7 +33,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
+import { BRAIN_RUN_EVENT, type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -35,17 +46,22 @@ import {
   readBodyBytesEffect,
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
+import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { claudeCodeMoments, type HeldCallName } from "./claude-code-moments.js";
-import type { NativeMoment } from "./native-moments.js";
+import { keepAliveDue } from "../sandbox-keep-alive.js";
+import { keepSessionSandboxAlive } from "../session-sandboxes.js";
+import { claudeCodeMoments } from "./claude-code-moments.js";
+import { codexMoments } from "./codex-moments.js";
+import type { NativeHeld, NativeMoment } from "./native-moments.js";
 import {
   heldProjection,
   NATIVE_WRITE,
   type NativeProjection,
   type NativeWrite,
   projectMoments,
+  withTurnServers,
 } from "./native-projection.js";
 
 /**
@@ -56,15 +72,20 @@ import {
  * posts a batch again until Luke takes it. A bearer no standing coding
  * agent's conversation holds, a retired one's among them, is refused before
  * the body is read (`../luke-mcp/bearer.ts`). The batch is read as moments
- * (`claude-code-moments.ts`; Codex's notifications are read beside it by a
- * reader of their own), folded into the store writer's events
+ * by the reader of the harness the conversation runs on
+ * (`claude-code-moments.ts`, `codex-moments.ts`), folded into the store
+ * writer's events
  * (`native-projection.ts`), and written under the conversation's lock in
  * one transaction with the number of the last event applied, so an event
  * already applied is passed over: a batch posted again, or two posts
  * racing, write nothing twice. A write the writer refuses is said in the
  * log and passed over, as eve's relay passes one over, since the runner
  * posting the batch again would be refused again. The answer names the last
- * event applied, which a relaunch numbers its events after.
+ * event applied, which a relaunch numbers its events after. A runner posting
+ * is a run under way, so a batch that applied events keeps its sandbox alive
+ * past its short timeout, at most every keep-alive interval
+ * (`../sandbox-keep-alive.ts`), stamped in the projection under the same
+ * lock, unless the batch ends the launch, whose sandbox is stopped instead.
  */
 
 /** The path a runner posts its events to. */
@@ -89,11 +110,9 @@ const readBatch = Schema.decodeUnknownOption(RunnerEventBatchSchema);
 
 /**
  * How a harness's messages are read: one message, as its runner posted it,
- * as the moments of the run, with the calls the projection holds by name.
- * Claude Code's is the one reader yet; Codex's notifications are read by
- * another of the same shape.
+ * as the moments of the run, with what the projection holds as it is read.
  */
-type NativeReader = (message: WireValue, heldCallName: HeldCallName) => readonly NativeMoment[];
+type NativeReader = (message: WireValue, held: NativeHeld) => readonly NativeMoment[];
 
 /** What the batch is applied for: the conversation, its agent, and what that agent runs on. */
 interface Applying {
@@ -103,12 +122,37 @@ interface Applying {
   readonly reasoningEffort: string;
   readonly writer: StoreWriter;
   readonly read: NativeReader;
+  /** Who pays for the agent, as recorded as it started; none for an agent from before payers. */
+  readonly payer: CodingAgentPayer | undefined;
 }
+
+/** The row each plan is kept in, which a turn's word on the plan is written to; a key's payer has none. */
+const PLAN_ROW: Partial<
+  Record<
+    CodingAgentPayer,
+    { readonly provider: ProviderKeyProvider; readonly kind: ProviderKeyKind }
+  >
+> = {
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+  },
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+  },
+};
 
 /** What one post applied: how many events, and the number of the last event the conversation has applied. */
 interface Applied {
   readonly applied: number;
   readonly sequence: number | null;
+}
+
+/** A run whose sandbox a batch keeps alive: the conversation, and the session its sandbox is tagged with. */
+export interface RunnerAlive {
+  readonly target: ConversationTarget;
+  readonly sessionId: string | undefined;
 }
 
 /** A launch's end the batch applied: the conversation, the session it ran under, and the number of its END event. */
@@ -120,7 +164,7 @@ export interface RunnerEnded {
 
 /** What the route reads a batch with and tells of a launch's end. */
 export interface RunnerEventsOptions {
-  /** How the conversation's harness's messages are read; Claude Code's where left out. */
+  /** How every conversation's messages are read; by the harness each conversation runs on where left out. */
   readonly read?: NativeReader;
   /**
    * Told once a batch that holds a launch's END has landed, after its
@@ -128,6 +172,22 @@ export interface RunnerEventsOptions {
    * stops nothing for a launch since replaced. Nothing where left out.
    */
   readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
+  /**
+   * Told once a batch due a keep-alive has landed, after its transaction:
+   * the run's sandbox kept alive (`sandboxKeptAlive`). Nothing where left out.
+   */
+  readonly alive?: (alive: RunnerAlive) => Effect.Effect<void, never, DatabaseServices>;
+}
+
+/**
+ * A run's sandbox kept alive as a batch of its runner's events lands
+ * (`../session-sandboxes.ts`'s `keepSessionSandboxAlive`), which logs a
+ * keep-alive Vercel did not confirm, since the next due batch tries again.
+ */
+export function sandboxKeptAlive(alive: RunnerAlive): Effect.Effect<void> {
+  const { sessionId } = alive;
+  if (sessionId === undefined) return Effect.void;
+  return keepSessionSandboxAlive(sessionId).pipe(Effect.provide(FetchHttpClient.layer));
 }
 
 /**
@@ -151,6 +211,23 @@ export function sandboxAtRunnerEnd(
       ),
     ),
   );
+}
+
+/** Which of the batch's writes moved a turn: one started, one ended, or both, as the task follows them. */
+interface TurnsMoved {
+  readonly started: boolean;
+  readonly ended: boolean;
+}
+
+/** Whether the writes start a turn, and whether they end one, by the events they carry. */
+function turnsMovedBy(writes: readonly NativeWrite[]): TurnsMoved {
+  const kinds = new Set(
+    writes.flatMap((write) => (write.kind === NATIVE_WRITE.EVENT ? [write.event.kind] : [])),
+  );
+  return {
+    started: kinds.has(BRAIN_RUN_EVENT.TURN_STARTED),
+    ended: kinds.has(BRAIN_RUN_EVENT.TURN_ENDED),
+  };
 }
 
 /** The numbers of the events that end a launch, by the runner's own END. */
@@ -206,6 +283,8 @@ function landWrite(
       return Effect.flatMap(
         writer.enqueueTurn(target, {
           turnId: write.turnId,
+          // A native turn's id is the one a Stop names it by (`coder-host/stop.ts`), since no runtime mints another.
+          eveTurnId: write.turnId,
           origin: TURN_ORIGIN.TYPED,
           model: applying.model,
           reasoningEffort: applying.reasoningEffort,
@@ -223,6 +302,20 @@ function landWrite(
       );
     case NATIVE_WRITE.COMPACTED:
       return recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now));
+    case NATIVE_WRITE.PLAN_STATUS: {
+      // Note that the plan's row is the starter's, whose plan pays, and an agent a key pays for writes none.
+      const row = applying.payer === undefined ? undefined : PLAN_ROW[applying.payer];
+      if (row === undefined) return Effect.void;
+      return setPlanStatus(
+        target.userId,
+        row.provider,
+        row.kind,
+        write.status,
+        write.resetsAt === undefined ? undefined : new Date(write.resetsAt),
+        new Date(write.turnOpenedAt ?? now),
+        new Date(now),
+      );
+    }
   }
 }
 
@@ -256,7 +349,12 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     const writes: NativeWrite[] = [];
     const reports: string[] = [];
     for (const { sequence, message } of events) {
-      const moments = applying.read(message, (callId) => state.turn?.calls[callId]);
+      const held: NativeHeld = {
+        callName: (callId) => state.turn?.calls[callId],
+        session: state.session,
+        sequence,
+      };
+      const moments = applying.read(message, held);
       const projected = projectMoments(state, moments, {
         conversationId: applying.target.conversationId,
         sequence,
@@ -267,13 +365,33 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       });
       state = projected.state;
       writes.push(...projected.writes);
+      // A turn starting takes the servers mentioned to the agent since its last turn started, as
+      // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at Luke's
+      // MCP server, which hands them whatever the switches say (`integrations/connection-door.ts`).
+      // They are taken event by event, so a turn that starts and ends within one batch takes its
+      // own, never the next turn's.
+      for (const write of projected.writes) {
+        if (write.kind !== NATIVE_WRITE.ENQUEUE) continue;
+        const taken = yield* takeCodingAgentMentionedServers(
+          applying.target.userId,
+          applying.target.conversationId,
+        );
+        state = withTurnServers(state, write.turnId, taken);
+      }
     }
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
     yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
+    const ends = endsOf(batch, held.sequence);
+    // A batch that ends the launch keeps nothing alive: its sandbox is stopped once it lands.
+    const keepsAlive =
+      last !== undefined && ends.length === 0 && keepAliveDue(state.keptAliveAt, now);
+    if (keepsAlive) state = { ...state, keptAliveAt: now };
     const result = {
       applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,
-      ends: endsOf(batch, held.sequence),
+      ends,
+      turns: turnsMovedBy(writes),
+      keepsAlive,
     };
     return last === undefined
       ? { result }
@@ -283,8 +401,9 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
 
 /** POST: one batch of a runner's events, admitted by its bearer and applied once. */
 const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* (
-  read: NativeReader,
+  read: NativeReader | undefined,
   ended: RunnerEventsOptions["ended"],
+  alive: RunnerEventsOptions["alive"],
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
@@ -304,6 +423,13 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     readCodingAgentOfConversation(target.userId, target.conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const routing = yield* hostedStoreOrUnavailable(
+    readCodingAgentRouting(target.userId, agent.value.id),
+  );
+  const runtime = Option.map(routing, (row) => row.runtime);
+  const reader =
+    read ??
+    (Option.contains(runtime, CONVERSATION_RUNTIME.CODEX) ? codexMoments : claudeCodeMoments);
   const body = yield* readBodyBytesEffect(MAX_BODY_BYTES);
   const batch = readBatch(yield* parseJsonBytes(body));
   if (Option.isNone(batch)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -314,7 +440,8 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     model: agent.value.model,
     reasoningEffort: agent.value.effort,
     writer,
-    read,
+    read: reader,
+    payer: Option.getOrUndefined(routing)?.payer ?? undefined,
   };
   const applied = yield* hostedStoreOrUnavailable(
     withNativeProjection(target, runnerTokenDigest(bearer), (held) =>
@@ -323,6 +450,18 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   );
   // Note that a conversation cleared, or a bearer retired, since the bearer was read takes nothing more.
   if (Option.isNone(applied)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  // The task follows the turns the batch moved, once their rows are written: a turn starting takes
+  // it up, and a turn's end may have finished its work (`tasks/task-finish.ts`).
+  const { taskId } = agent.value;
+  if (taskId !== null && applied.value.turns.started) {
+    yield* reopenTaskForWork(target.userId, taskId);
+  }
+  if (taskId !== null && applied.value.turns.ended) {
+    yield* settleTaskIfFinished(target.userId, taskId);
+  }
+  if (alive !== undefined && applied.value.keepsAlive) {
+    yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
+  }
   if (ended !== undefined) {
     for (const sequence of applied.value.ends) {
       yield* ended({ target, sessionId: admitted.value.runtimeSessionId, sequence });
@@ -331,9 +470,9 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, applied.value.applied);
 });
 
-/** The group: the one events path, read as Claude Code's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
+/** The group: the one events path, read as the conversation's harness's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
 export function runnerEventsApp(options: RunnerEventsOptions = {}): WebRoutes<DatabaseServices> {
-  const endpoint = runnerEventsEndpoint(options.read ?? claudeCodeMoments, options.ended);
+  const endpoint = runnerEventsEndpoint(options.read, options.ended, options.alive);
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, RUNNER_EVENTS_PATH, hostedRefusing(endpoint)),
     hostedNotFoundRoute,

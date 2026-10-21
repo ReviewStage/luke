@@ -7,10 +7,12 @@
  * every client reads as unanswered, so a test states only what it reads.
  * The session is the browser's cookie in a real tab: here it is whatever the
  * test last set, read on every `get-session`, so "the cookie changed" is
- * one call; a test that holds the session read answers it when it lets go.
+ * one call; a test that holds the session read answers it when it lets go. The task list is followed as
+ * the tab follows it with Realtime off: polled, the listed task's row inline.
  */
 
 import type { LinkOpen } from "@luke/features/link-open";
+import { LIVE_POLL, LIVE_POLL_URL } from "@luke/features/live-wire";
 import type { WireValue } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import type { Layer } from "effect";
@@ -34,6 +36,48 @@ export const LISTED_TASK = {
   updatedAt: 1_760_000_000_000,
   repository: null,
 } as const;
+
+/** The rows each part of the task list delivers: the listed task, owned by the signed-in user, no agent, and no linked issue. */
+const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, readonly WireValue[]>([
+  [
+    "plans",
+    [
+      {
+        ...LISTED_TASK,
+        ownerId: "user-ada",
+        ownerName: "Ada Lovelace",
+        pinnedAt: null,
+        pinPosition: null,
+        archivedAt: null,
+        assigneeId: null,
+        assigneeName: null,
+        status: "todo",
+        priority: "none",
+        number: 1,
+      },
+    ],
+  ],
+  ["agents", []],
+  ["issues", []],
+]);
+
+/** Where the task list's rows stand, which never moves in the fake: each part's digest, in the parts' name order. */
+const LIVE_DIGEST = "1,1,1";
+
+/** The task list as a polled read answers it: each part's rows inline at the poll address, or only where they stand where they have not moved. */
+function polledTaskList(unchanged: boolean): WireValue {
+  const part = (name: string) => ({
+    capability: name,
+    queryFingerprint: name,
+    expiresAt: 4_000_000_000_000,
+    digest: "1",
+    ...(unchanged ? undefined : { rows: JSON.stringify(LIVE_ROWS.get(name) ?? []) }),
+  });
+  return {
+    url: LIVE_POLL_URL,
+    queries: { plans: part("plans"), agents: part("agents"), issues: part("issues") },
+  };
+}
 
 /** Where the fake sends a browser to sign in to Notion. */
 export const NOTION_SIGN_IN = "https://notion.example/oauth/authorize";
@@ -126,6 +170,12 @@ export function fakeService(options: FakeServiceOptions): FakeService {
       if (!signedIn) return json({ error: "unauthorized" }, 401);
       const linkOpen = options.linkOpen === undefined ? undefined : { linkOpen: options.linkOpen };
       return json({ preferences: {}, ...linkOpen });
+    }
+    if (pathname === "/api/live/tasks" && method === "GET") {
+      if (!signedIn) return json({ error: "unauthorized" }, 401);
+      // Realtime is off, so the list is answered polled, its rows inline; a poll past where they stand answers them unchanged.
+      const unchanged = new URL(url).searchParams.get(LIVE_POLL.AFTER) === LIVE_DIGEST;
+      return json(polledTaskList(unchanged));
     }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);

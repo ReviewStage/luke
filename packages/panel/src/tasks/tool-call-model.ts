@@ -1,4 +1,11 @@
-import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import {
+  AGENT_TOOL,
+  type AgentTool,
+  CLAUDE_CODE_TOOL,
+  CODEX_TOOL,
+  EVE_TOOL,
+  RETIRED_TOOL,
+} from "@luke/features/agent-tools";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_TODO_STATUS,
@@ -26,7 +33,13 @@ import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/task-wire";
-import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
+import {
+  browserCallWords,
+  CALL_KIND,
+  type CallKind,
+  commandDescription,
+  pageName,
+} from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
 import { fileRefText } from "@luke/voice/code-pane-model";
 import {
@@ -69,7 +82,7 @@ export interface ToolCallView {
   readonly kind: CallKind;
   /** The thing the call was done to, after its kind's verb. */
   readonly subject: string;
-  /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; absent where it said none. */
+  /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; for a browser call, what it did (`browserCallWords`); absent where there are none. */
   readonly description?: string;
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
@@ -160,6 +173,46 @@ const TIMED_OUT_NOTE = "(killed at its timeout)";
 
 /** The status `run_on_mac` answers with when the Mac ran nothing. */
 const MAC_COMMAND_NOT_RUN = "not-run";
+
+/** The status `browser` answers with when it ran nothing. */
+const BROWSER_NOT_RUN = "not-run";
+
+/** The actions a browser call named, by name, in the order its input lists them. */
+function browserActions(input: WireValue | undefined): readonly string[] {
+  const actions = isRecord(input) && Array.isArray(input.actions) ? input.actions : [];
+  return actions.flatMap((action: WireValue) => {
+    const name = stringAt(action, "action");
+    return name === undefined ? [] : [name];
+  });
+}
+
+/**
+ * The tab a browser call acted on last, as its row names it: by the title
+ * its answer gives the tab, or its page where it has none; while the call
+ * runs, by the page it opened or went to last; nothing where it named none.
+ */
+function browserTabName(
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): string | undefined {
+  const tabs = isRecord(output) && Array.isArray(output.tabs) ? output.tabs : [];
+  const last: WireValue | undefined = tabs.at(-1);
+  const title = stringAt(last, "title")?.trim();
+  if (title !== undefined && title !== "") return title;
+  const shown = stringAt(last, "url");
+  if (shown !== undefined && shown !== "") return pageName(shown);
+  if (output !== undefined) return undefined;
+  const actions = isRecord(input) && Array.isArray(input.actions) ? input.actions : [];
+  const opened = actions.flatMap((action: WireValue) => stringAt(action, "url") ?? []).at(-1);
+  return opened === undefined ? undefined : pageName(opened);
+}
+
+/** A browser call's answer: why it ran nothing where it ran nothing, and every step as its JSON otherwise. */
+function browserOutput(output: WireValue): ToolBlock {
+  return stringAt(output, "status") === BROWSER_NOT_RUN
+    ? textBlock(stringAt(output, "reason") ?? "")
+    : jsonBlock(output);
+}
 
 /** A command the Mac ran: as a terminal would have shown it, its timeout said where it was killed; or why it was not run. */
 function macCommandOutput(output: WireValue): ToolBlock {
@@ -503,7 +556,33 @@ function sleepOutput(output: WireValue): ToolBlock {
   return waited === undefined ? jsonBlock(output) : textBlock(`Waited ${spanText(waited)}.`);
 }
 
-/** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
+/**
+ * A native harness's subagent, whose inner work its transcript folds under
+ * the one call that started it (`claude-code-moments.ts`, `codex-moments.ts`): drawn as one call,
+ * named by the few words the agent gave it, or its task's first line, its
+ * task the call's input and the subagent's answer its output, as a copy of
+ * the transcript reads a delegation.
+ */
+function subagentCallView(
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const task = stringAt(input, "prompt") ?? "";
+  const named = stringAt(input, "description")?.trim();
+  return {
+    kind: CALL_KIND.WORKER,
+    subject: named === undefined || named === "" ? cardTitle(task) : named,
+    input: textBlock(task),
+    output:
+      output === undefined
+        ? undefined
+        : isWireString(output)
+          ? textBlock(output)
+          : jsonBlock(output),
+  };
+}
+
+/** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. A native harness's call reaches here as the eve call that does the same (`native-tool-calls.ts`), but for its subagent's. */
 function knownToolView(
   tool: string,
   input: WireValue | undefined,
@@ -530,6 +609,17 @@ function knownToolView(
         ...(description === undefined ? undefined : { description }),
         input: { kind: TOOL_BLOCK.COMMAND, text: command },
         output: output === undefined ? undefined : macCommandOutput(output),
+      };
+    }
+    case AGENT_TOOL.BROWSER: {
+      const tab = browserTabName(input, output);
+      const words = browserCallWords(browserActions(input), tab !== undefined);
+      return {
+        kind: CALL_KIND.BROWSER,
+        subject: words === undefined ? "" : (tab ?? ""),
+        ...(words === undefined ? undefined : { description: words }),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
+        output: output === undefined ? undefined : browserOutput(output),
       };
     }
     case AGENT_TOOL.READ_FILE:
@@ -632,6 +722,9 @@ function knownToolView(
     case AGENT_TOOL.READ_INBOX:
     case RETIRED_TOOL.REPLY_INBOX:
       return inboxToolView(tool, input, output);
+    case CLAUDE_CODE_TOOL.AGENT:
+    case CODEX_TOOL.SUBAGENT:
+      return subagentCallView(input, output);
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
       return {
@@ -644,13 +737,6 @@ function knownToolView(
     default:
       return undefined;
   }
-}
-
-/** A repository command's answer as the brain's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
-function repositoryOutput(output: WireValue): ToolBlock {
-  const reason = stringAt(output, "reason");
-  if (stringAt(output, "status") === "not-run" && reason !== undefined) return textBlock(reason);
-  return commandOutput(output);
 }
 
 /** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
@@ -798,17 +884,6 @@ function tasksToolView(
   jobs: WorkerJobs | undefined,
 ): ToolCallView | undefined {
   switch (tool) {
-    case AGENT_TOOL.RUN_IN_REPOSITORY: {
-      const command = stringAt(input, "command") ?? "";
-      const description = commandDescription(stringAt(input, "description"));
-      return {
-        kind: CALL_KIND.COMMAND,
-        subject: command,
-        ...(description === undefined ? undefined : { description }),
-        input: { kind: TOOL_BLOCK.COMMAND, text: command },
-        output: output === undefined ? undefined : repositoryOutput(output),
-      };
-    }
     case AGENT_TOOL.SHOW_CODE:
       return {
         ...namedCall(CALL_KIND.SHOW_CODE, input, output, undefined),

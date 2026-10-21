@@ -15,7 +15,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
+import { ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCopyToast } from "../copy-feedback.js";
@@ -84,8 +84,6 @@ export interface TabDoors {
   onRename?: (() => void) | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell, for an agent's where a panel takes the tab. */
   onOpenTerminal?: (() => void) | undefined;
-  /** Runs the agent's pushed branch in a terminal of this Mac in the side panel, for an agent's where a panel takes the tab and its task names a repository. */
-  onOpenOnMac?: (() => void) | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
@@ -107,11 +105,11 @@ interface ContentActions {
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, its Open terminal and Run, Copy link and a transcript's two copies,
+ * itself: an agent's Rename, its Open terminal, Copy link and a transcript's two copies,
  * and an agent's Archive, which takes the tab with it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, onOpenTerminal, onOpenOnMac, archive, copyLink } = doors;
+  const { onCopy, onRename, onOpenTerminal, archive, copyLink } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
@@ -126,9 +124,6 @@ function contentActions(doors: TabDoors): ContentActions {
               // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
               ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
             },
-            ...(onOpenOnMac === undefined
-              ? []
-              : [{ label: "Run", icon: <PlayIcon />, onSelect: onOpenOnMac }]),
           ],
     copies: [
       ...(copyLink === undefined ? [] : [copyLink]),
@@ -459,7 +454,7 @@ export function useTranscriptCopier(): TranscriptCopier {
   };
 }
 
-/** The transcripts the agents' and the delegated workers' tabs last drew, by agent and by the call that started each worker. */
+/** The transcripts the agents' and the delegated workers' tabs last drew, by agent and by the call that started each worker, read as a card is hung; the same value from page to page until a title it names moves. */
 export interface HeldTranscripts {
   agents: ReadonlyMap<string, HeldTranscript>;
   workers: ReadonlyMap<string, HeldTranscript>;
@@ -480,22 +475,59 @@ export interface TabViews {
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
 }
 
-/** What the agents' and the workers' tabs last drew and said, held for as long as the task's page is drawn. */
+/** Whether two readings name the same workers by the same titles. */
+function sameTitles(
+  a: ReadonlyMap<string, string> | undefined,
+  b: ReadonlyMap<string, string> | undefined,
+): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined || a.size !== b.size) return false;
+  for (const [key, title] of a) if (b.get(key) !== title) return false;
+  return true;
+}
+
+/**
+ * What the agents' and the workers' tabs last drew and said, held for as
+ * long as the task's page is drawn. Note that what a tab holds is kept in
+ * maps of the page's own rather than in its state, because a card reads it
+ * only as it is hung (`agentCardReading`), and a page landing in a tab would
+ * otherwise draw the whole task's page again, every tab's transcript among
+ * it. The held value is a new one only when a title it names moves, which a
+ * subagent's tab is labelled by as it is drawn (`drawnSubagent`).
+ */
 export function useTabViews(): TabViews {
   const [standings, setStandings] = useState<WorkerStandings>(() => new Map());
-  const [held, setHeld] = useState<HeldTranscripts>(() => ({
-    agents: new Map(),
-    workers: new Map(),
+  const [kept] = useState(() => ({
+    agents: new Map<string, HeldTranscript>(),
+    workers: new Map<string, HeldTranscript>(),
   }));
+  const [held, setHeld] = useState<HeldTranscripts>(() => ({
+    agents: kept.agents,
+    workers: kept.workers,
+  }));
+  const retitled = useCallback(
+    () => setHeld({ agents: kept.agents, workers: kept.workers }),
+    [kept],
+  );
   const onWorkerStatus = useCallback((callId: string, status: CodingAgentStatus) => {
     setStandings((was) => (was.get(callId) === status ? was : new Map(was).set(callId, status)));
   }, []);
-  const onAgentHeld = useCallback((agentId: string, transcript: HeldTranscript) => {
-    setHeld((was) => ({ ...was, agents: new Map(was.agents).set(agentId, transcript) }));
-  }, []);
-  const onWorkerHeld = useCallback((callId: string, transcript: HeldTranscript) => {
-    setHeld((was) => ({ ...was, workers: new Map(was.workers).set(callId, transcript) }));
-  }, []);
+  const onAgentHeld = useCallback(
+    (agentId: string, transcript: HeldTranscript) => {
+      const was = kept.agents.get(agentId);
+      kept.agents.set(agentId, transcript);
+      if (!sameTitles(was?.subagentTitles, transcript.subagentTitles)) retitled();
+    },
+    [kept, retitled],
+  );
+  const onWorkerHeld = useCallback(
+    (callId: string, transcript: HeldTranscript) => {
+      const was = kept.workers.get(callId);
+      kept.workers.set(callId, transcript);
+      if (was?.title !== transcript.title) retitled();
+    },
+    [kept, retitled],
+  );
   // The same views across draws while nothing held moves, so the panes they are handed to hold.
   return useMemo(
     () => ({ held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus }),

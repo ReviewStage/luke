@@ -9,7 +9,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
+import { readCodingAgentHeaderOfConversation } from "@luke/database/models/coding-agent-store";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { Effect, Option } from "effect";
 import type { UnparsedWireValue } from "../../core.js";
@@ -43,7 +43,7 @@ export function runAgentInbox(
   call: InboxCall,
 ): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* readCodingAgentOfConversation(
+    const found = yield* readCodingAgentHeaderOfConversation(
       admitted.target.userId,
       admitted.target.conversationId,
     );

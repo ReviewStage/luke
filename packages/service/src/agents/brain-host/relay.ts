@@ -43,11 +43,10 @@ import { isRemoteToolName, storedRemoteCall } from "../../integrations/connectio
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../tasks/board-look.js";
 import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
+import { BROWSER_TOOL, storedBrowserOutput } from "../browser/browser-tool.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-  isBrainHostTurn,
   RECEIVED_LINE,
   RELAY_TURN,
   type RelayTurn,
@@ -55,11 +54,11 @@ import {
 import { keptPictures } from "./relay-pictures.js";
 
 /**
- * The relay from eve's stream into the brain's own, which both eve services
- * share: every event eve records for a session is read here, after eve has
- * written it, and told again as the `BrainRunEvent` the store writer
- * consumes, so the writer stays the sole consumer and the only thing that
- * writes a message row. Both hosts compose it with the ask record, whose
+ * The relay from eve's stream into the brain's own: every event eve records
+ * for a session is read here, after eve has written it, and told again as
+ * the `BrainRunEvent` the store writer consumes, so the writer stays the sole
+ * consumer and the only thing that writes a message row. The coder host
+ * composes it with the ask record, whose
  * deliveries a turn's start binds and whose Stop it carries, on every turn,
  * since a line of either kind may join a turn of the other under way: a
  * call's spoken ask joins a coding agent's typed turn, and a line typed to
@@ -433,21 +432,6 @@ function turnIdOf(event: MessageStreamEvent): string | undefined {
   return Option.getOrUndefined(Option.map(readTurnOfEvent(event.data), (data) => data.turnId));
 }
 
-/**
- * The kind of turn an event's turn opened as, where the relay holds that
- * turn: what its start's request named, which a line of another kind joining
- * it under way leaves as it was, though eve moves the session's current auth
- * to that line's.
- */
-export function relayedTurnKind(
-  event: MessageStreamEvent,
-  state: RelayStateStore,
-): BrainHostTurn | undefined {
-  const eveTurnId = turnIdOf(event);
-  const kind = eveTurnId === undefined ? undefined : state.get().turns[eveTurnId]?.kind;
-  return kind !== undefined && isBrainHostTurn(kind) ? kind : undefined;
-}
-
 /** A step's draft as one of eve's text events grows it, and the step's finished words through it. */
 interface GrownDraft {
   readonly key: string;
@@ -677,9 +661,11 @@ function heldCallName(state: RelayState, eveTurnId: string, callId: string): str
 
 /**
  * A look's result as the conversation keeps it, a look at the board or at
- * one of the plan's pictures without the image; nothing for any other call.
- * Note that a look's image went to the model once and is not kept, because
- * it is no record of the plan.
+ * one of the plan's pictures without the image, and a browser call's
+ * without its screenshots; nothing for any other call. Note that a look's
+ * image went to the model once and is not kept, because it is no record of
+ * the plan, and that a page's screenshot is kept nowhere (the cloud
+ * browser's line in `AGENTS.md`).
  */
 function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireValue | undefined {
   switch (toolName) {
@@ -687,6 +673,8 @@ function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireVa
       return storedLookOutput(output);
     case LOOK_AT_PICTURE_TOOL.name:
       return storedPictureLookOutput(output);
+    case BROWSER_TOOL.name:
+      return storedBrowserOutput(output);
     default:
       return undefined;
   }

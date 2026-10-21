@@ -70,14 +70,13 @@ import { BRAIN_HOST_HEADER, type BRAIN_HOST_TURN, type BrainHostTurn } from "./b
  */
 
 /**
- * Where an eve service's routes stand under its origin: the brain's
- * at eve's own `/eve`, and the coding-agent service's at the named mount
- * `/eve/coder`, which the deployment's rewrite carries into that service and
- * whose own route transform turns back into `/eve/v1/*` before the door
- * reads it (`door.ts` spells the paths the door sees).
+ * Where the eve service's routes stand under its origin: the coding-agent
+ * service's at the named mount `/eve/coder`, which the deployment's rewrite
+ * carries into that service and whose own route transform turns back into
+ * `/eve/v1/*` before the door reads it (`door.ts` spells the paths the door
+ * sees).
  */
 export const EVE_MOUNT = {
-  TASKS: "/eve",
   CODER: "/eve/coder",
 } as const;
 
@@ -229,15 +228,37 @@ export const PLAN_REFUSAL = {
   SIGNED_OUT: "signed_out",
   UNREADABLE: "unreadable",
   UNREACHABLE: "unreachable",
+  /** The plan's usage limit refused its last turn and has not reset. */
+  LIMIT_REACHED: "limit_reached",
+  /** The provider said the account is not eligible to run on its plan. */
+  INELIGIBLE: "ineligible",
 } as const;
 
 export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
 
-/** A call that failed: the status for the operator, and the plan's refusal where that is why. */
+/**
+ * Why a coding agent's native runtime did not take a call, where that is
+ * why it failed: its conversation runs on a native harness that this
+ * function has no way to launch or write to, nor to relay to one that can, or
+ * whose sandbox image is still being prepared. eve never answers one;
+ * nothing falls through to eve in its place.
+ */
+export const RUNTIME_REFUSAL = {
+  NOT_HERE: "not_here",
+  /** The harness's sandbox image is still being prepared; the same call a little later is taken. */
+  IMAGE_PREPARING: "image_preparing",
+} as const;
+
+export type RuntimeRefusal = (typeof RUNTIME_REFUSAL)[keyof typeof RUNTIME_REFUSAL];
+
+/** A call that failed: the status for the operator, and the plan's or the runtime's refusal where that is why. */
 interface EveFailed {
   readonly outcome: typeof EVE_SEND_OUTCOME.FAILED;
   readonly status: number;
   readonly planRefusal?: PlanRefusal;
+  /** When the plan's reached limit resets, in epoch milliseconds, where the provider said. */
+  readonly planResetsAt?: number;
+  readonly runtimeRefusal?: RuntimeRefusal;
 }
 
 type EveOpened =
@@ -264,7 +285,11 @@ export const EVE_CANCEL_OUTCOME = {
 type EveCancelled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.ACCEPTED }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
-  | { readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED; readonly status: number };
+  | {
+      readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED;
+      readonly status: number;
+      readonly runtimeRefusal?: RuntimeRefusal;
+    };
 
 /** How eve answered a reset: the session retired now, one it no longer ran, or an answer this build cannot read as either. */
 export const EVE_RESET_OUTCOME = {
@@ -276,7 +301,11 @@ export const EVE_RESET_OUTCOME = {
 type EveReset =
   | { readonly outcome: typeof EVE_RESET_OUTCOME.RESET }
   | { readonly outcome: typeof EVE_RESET_OUTCOME.NO_ACTIVE_SESSION }
-  | { readonly outcome: typeof EVE_RESET_OUTCOME.FAILED; readonly status: number };
+  | {
+      readonly outcome: typeof EVE_RESET_OUTCOME.FAILED;
+      readonly status: number;
+      readonly runtimeRefusal?: RuntimeRefusal;
+    };
 
 export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;

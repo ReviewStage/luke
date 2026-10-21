@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { session, user } from "@luke/database/schemas/auth";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
+import { repositoryPinsWrittenSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { makeSignature } from "better-auth/crypto";
@@ -22,6 +22,7 @@ import { auth } from "./auth.js";
 import { SESSION_COOKIE_CACHE } from "./auth-policy.js";
 import {
   hostedUserId,
+  relayUserId,
   requestUserId,
   resolveHostedBearerUserId,
   resolveHostedUserId,
@@ -147,7 +148,7 @@ const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
     // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(body));
-    const answered = readEither(repositoryPinsAnswerSchema)(unparsedWire(body));
+    const answered = readEither(repositoryPinsWrittenSchema)(unparsedWire(body));
     if (Result.isFailure(answered))
       return assert.fail(`not the wire's: ${answered.failure.refusal}`);
     return answered.success.pins.map((pin) => pin.repository);
@@ -210,6 +211,28 @@ it.effect("a request with no Authorization is the account its browser session co
       "Ada's own session, signed under a secret the deployment never held",
     );
   }),
+);
+
+it.effect(
+  "a relay's upgrade names the account the desktop's bearer names, or the one a page's cookie names",
+  () =>
+    Effect.gen(function* () {
+      const { ada, grace, graceCookie, userInfo, plugin } = yield* openAccounts;
+      const named = (credential: Parameters<typeof relayUserId>[0]) =>
+        relayUserId(credential, userInfo, plugin.resolveSessionUserId);
+
+      assert.deepEqual(yield* named({ bearer: ADA_BEARER }), Option.some(ada));
+      assert.deepEqual(yield* named({ bearer: GRACE_BEARER }), Option.none());
+      assert.deepEqual(
+        yield* named({ page: new Headers({ cookie: graceCookie }) }),
+        Option.some(grace),
+      );
+      assert.deepEqual(
+        yield* named({ page: new Headers({ cookie: yield* signedElsewhere(graceCookie) }) }),
+        Option.none(),
+        "Grace's own session, signed under a secret the deployment never held",
+      );
+    }),
 );
 
 it.effect("a request with no cookie, or a blank one, asks the auth service for no session", () =>

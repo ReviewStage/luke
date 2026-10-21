@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentChatAnswerView,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -23,40 +26,37 @@ import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
-  TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
   type TaskCodeShowing,
   type TasksView,
-  type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
-import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
-  messageText,
-  TRANSCRIPT_REGION,
-  type TranscriptRegion,
-} from "@luke/voice/transcript-model";
+  DOCUMENT_REGION,
+  PIN_MOVE_FAILED_NOTE,
+  SETTLED_STATUS,
+  TASKS_PAGE,
+} from "@luke/ui/tasks-model";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   type VoiceCallTranscript,
-  type VoiceCallTranscriptChange,
   type VoiceCommand,
   type VoiceView,
-  withCallTranscriptChange,
 } from "@luke/voice/voice-view";
+import { AsyncIteratorClass } from "@orpc/client";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
@@ -70,9 +70,15 @@ import {
   useWindowHistory,
   type WindowHistoryLists,
 } from "../navigation-history.js";
+import {
+  installPanelSpanRecorder,
+  PANEL_SPAN,
+  PANEL_SPAN_ATTRIBUTE,
+  type PanelSpan,
+} from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -80,7 +86,6 @@ import { ToastHost } from "../toast.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -118,11 +123,6 @@ const readShown = Schema.decodeUnknownOption(
       ),
     ),
   }),
-);
-
-/** A start's planning, read back where it names one. */
-const readPlanningNamed = Schema.decodeUnknownOption(
-  Schema.Struct({ planning: Schema.optionalKey(Schema.Boolean) }),
 );
 
 /** A voice command's payload, read back as the act's own schema admits it. */
@@ -519,14 +519,14 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   await act(async () => {
     note = await tab
       .control()
-      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId, true);
+      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId);
   });
   assert.ok(note, "a refusal says why");
   assert.equal(tab.control().newTask.open, true, "a refusal keeps the dialog");
   await act(async () => {
     note = await tab
       .control()
-      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId, true);
+      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId);
   });
   assert.equal(note, undefined);
   assert.equal(tab.control().newTask.open, false, "a plan started closes the dialog");
@@ -550,9 +550,7 @@ test("a task started opens with the side panel shown on its plan, a refused star
   const send = () => {
     let note: Promise<string | undefined> = Promise.resolve(undefined);
     act(() => {
-      note = tab
-        .control()
-        .newTask.start("Dark mode", null, tab.control().newTask.workspaceId, true);
+      note = tab.control().newTask.start("Dark mode", null, tab.control().newTask.workspaceId);
     });
     return note;
   };
@@ -580,42 +578,6 @@ test("a task started opens with the side panel shown on its plan, a refused star
   assert.equal(panel().open, false, "the late answer leaves the panel the developer hid");
 });
 
-test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
-  const asked: unknown[] = [];
-  const page = {
-    messages: [],
-    cursor: "3:1",
-    status: CODING_AGENT_STATUS.RUNNING,
-    title: null,
-  };
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_MESSAGES]: (payload) => {
-        asked.push(payload);
-        return Promise.resolve(page);
-      },
-    },
-  );
-
-  const read = await tab.control().work.readWorker({
-    agentId: "plan-1",
-    after: "0:0",
-    callId: "call-0-0",
-  });
-
-  assert.deepEqual(asked, [{ taskId: "plan-1", after: "0:0", callId: "call-0-0" }]);
-  assert.deepEqual(read, page);
-});
-
-/** The words of every call the transcript draws, in order, with whether each call stands now. */
-function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
-  if (region.kind !== TRANSCRIPT_REGION.READY) return [];
-  return region.calls.map((call) => [call.live, call.messages.map(messageText)] as const);
-}
-
-const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
-
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
 function _drawnBoard(number: number): Board {
   return {
@@ -633,7 +595,7 @@ const CODE: TaskCode = {
   repository: "acme/relay",
   firstLine: 1,
   lineCount: 1,
-  lines: [[{ text: "export function accept() {}" }]],
+  lines: ["export function accept() {}"],
 };
 
 /** The code shown on the open task: one snippet, then a second of the same file. */
@@ -645,58 +607,11 @@ const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
   { callId: "show-2", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
 
-/** A call in progress about the open task, which is what puts code on screen. */
-const ON_CALL: VoiceView = {
-  ...IDLE_VOICE_VIEW,
-  callTaskId: TASK.id,
-  voiceStatus: LIVE_STATUS.LISTENING,
-};
-
 /** The panel as the developer sees it: shown or not, and on which tab. */
 function panelOf(tab: ReturnType<typeof mount>) {
   const { open, tab: shown } = tab.control().sidePanel;
   return { open, tab: shown };
 }
-
-/** One turn of Luke's brain on the open task. */
-const TURN: TaskWorkTurn = {
-  turnId: "turn-1",
-  startedAt: 1,
-  state: TASK_WORK_STATE.DONE,
-  earlierOmitted: false,
-  journal: [],
-  workers: [],
-};
-
-/** The open task's calls read back: none, and one with a line said on it. */
-const NO_CALLS: TasksView["transcript"] = {
-  status: TASKS_READ.READY,
-  transcript: { calls: [], earlierOmitted: false },
-};
-const _ONE_CALL: TasksView["transcript"] = {
-  status: TASKS_READ.READY,
-  transcript: {
-    calls: [
-      {
-        id: "5d7f9b1c-3e5a-4c7e-9a1b-3c5e7f9b1d3f",
-        startedAt: 1,
-        messages: [
-          { id: "0", role: "user", parts: [{ type: "text", text: "Invites should expire." }] },
-        ],
-      },
-    ],
-    earlierOmitted: false,
-  },
-};
-
-/** The open task read with nothing on it yet: an empty board, no code, no call, no work. */
-const _NOTHING_YET: TasksView = {
-  ...OPEN,
-  board: EMPTY_BOARD,
-  shownCode: [],
-  transcript: NO_CALLS,
-  work: [],
-};
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -715,28 +630,6 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-}
-
-/** Luke's start of a coding agent in the open task's work, as its call stands: still running, or answered. */
-function _startedAgent(
-  state: typeof TASK_WORK_STATE.RUNNING | typeof TASK_WORK_STATE.DONE,
-): TaskWorkTurn {
-  return {
-    ...TURN,
-    journal: [
-      {
-        type: "tool-start_coding_agent",
-        toolCallId: "call-start-1",
-        state: state === TASK_WORK_STATE.DONE ? "output-available" : "input-available",
-        input: {},
-      },
-    ],
-  };
-}
-
-/** How many times the task's agents were read. */
-function _listReads(tab: ReturnType<typeof mount>): number {
-  return tab.agentActs.filter((kind) => kind === ACT_KIND.CODING_AGENTS_LIST).length;
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
@@ -760,7 +653,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
     file,
   ];
   assert.deepEqual(panel().strip, strip);
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
 
   act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
@@ -772,7 +665,9 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
   ]);
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL]);
+  // The column with no tab left opens a new agent's draft in their place.
+  const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
+  assert.deepEqual(column().tabs, [draft]);
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panel().strip, [
@@ -789,7 +684,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   );
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, draft]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -798,7 +693,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("the Call's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
+test("a task none of whose tabs was viewed shows its strip's last, keeps the tab chosen across a launch, and opens a new agent's draft once its last tab closes", async () => {
   const listed = {
     [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
   };
@@ -806,42 +701,39 @@ test("the Call's tab closes beside another, stays closed across a launch until c
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, agent]);
-
-  act(() => column().onClose(MAIN_TAB.CALL));
   assert.deepEqual(column().tabs, [agent]);
-  assert.deepEqual(column().tab, agent, "the column shows the tab beside it");
-  act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, agent], "⇧⌘T opens it first again");
-  assert.equal(column().tab, MAIN_TAB.CALL);
-  act(() => column().onClose(MAIN_TAB.CALL));
+  assert.deepEqual(column().tab, agent, "a task never shown on an agent shows its last tab");
+  assert.equal(tab.control().agents.draft, undefined, "and opens no draft beside it");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+
+  act(() => column().onChoose(agent));
+  assert.deepEqual(column().tab, agent);
 
   const launched = mount({ shown: true, tasks: OPEN }, listed);
   await settle();
   const again = () => launched.control().mainTabs;
-  assert.deepEqual(again().tabs, [agent], "a launch keeps it closed");
+  assert.deepEqual(again().tab, agent, "a launch opens the task on the agent it last showed");
 
   act(() => again().onClose(agent));
-  assert.deepEqual(again().tabs, [MAIN_TAB.CALL]);
-  assert.equal(again().tab, MAIN_TAB.CALL, "a column with no other tab is back on the Call");
-  act(() => again().onClose(MAIN_TAB.CALL));
-  assert.deepEqual(again().tabs, [MAIN_TAB.CALL], "alone, it does not close");
-  act(() => again().onChoose(agent));
-  assert.deepEqual(again().tabs, [MAIN_TAB.CALL, agent], "it stays open beside a tab opened since");
+  await settle();
+  const draft = { draft: launched.control().agents.draft?.id ?? assert.fail("no draft opened") };
+  assert.deepEqual(again().tabs, [draft]);
+  assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
 });
 
-test("a column kept while the plan and the Inbox stood in it reads with both let go, its agents' order and the tab last viewed still standing", async () => {
+test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
   window.localStorage.setItem(
     "luke.mainTabs",
     JSON.stringify({
       closedAgents: [],
       tasks: {
         [TASK.id]: {
-          recent: ["plan", { agent: AGENT_ID }, "inbox"],
-          order: [{ agent: AGENT_ID }, "inbox"],
+          recent: ["plan", { agent: AGENT_ID }, "inbox", "call"],
+          order: ["call", { agent: AGENT_ID }, "inbox"],
           inboxOpen: true,
           inboxSeen: ["item-1"],
           planClosed: true,
+          callClosed: true,
         },
       },
     }),
@@ -852,11 +744,11 @@ test("a column kept while the plan and the Inbox stood in it reads with both let
   );
   await settle();
   const column = () => tab.control().mainTabs;
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 });
 
-test("a closed Call's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
+test("a column whose last agent is archived shows a new agent's draft standing alone", async () => {
   let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
@@ -871,15 +763,14 @@ test("a closed Call's tab that stands again because its last agent was archived 
   );
   await settle();
   const column = () => tab.control().mainTabs;
-  act(() => column().onClose(MAIN_TAB.CALL));
-  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+  act(() => column().onChoose({ agent: AGENT_ID }));
+  assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL]);
-  act(() => column().onChoose({ draft: tab.control().agents.onNewDraft() }));
-  assert.equal(column().tabs[0], MAIN_TAB.CALL, "the Call's tab stands beside the draft's");
-  assert.equal(column().tabs.length, 2);
+  const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
+  assert.deepEqual(column().tabs, [draft]);
+  assert.deepEqual(column().tab, draft);
 });
 
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
@@ -1302,7 +1193,7 @@ test("a Luke link whose slug names no workspace of the account's leaves the list
   assert.equal(tab.control().automationsView.open, true);
 });
 
-test("a Luke link to a task's version opens its version history on that version, and one to its call opens its Call tab", () => {
+test("a Luke link to a task's version opens its version history on that version, and one to a turn of Luke's work opens its plan", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -1318,13 +1209,13 @@ test("a Luke link to a task's version opens its version history on that version,
   act(() =>
     tab.control().onOpenLink({
       workspace: "acme",
-      place: { kind: LINK_PLACE.CALL, planId: TASK.id },
+      place: { kind: LINK_PLACE.TURN, planId: TASK.id, at: 7 },
     }),
   );
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.CALL);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
 });
 
 test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
@@ -1502,9 +1393,9 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
     tasks: tab.control().listed.tasks.map((task) => task.id),
     archived: tab.control().listed.archived.map((task) => task.id),
   };
-  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId, true);
+  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId);
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  await tab.control().newTask.start("Usage", "acme/relay", tab.control().newTask.workspaceId, true);
+  await tab.control().newTask.start("Usage", "acme/relay", tab.control().newTask.workspaceId);
 
   assert.deepEqual(personal, {
     workspace: PERSONAL.id,
@@ -2002,7 +1893,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
 test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the first one", async () => {
   const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
 
-  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId, true);
+  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId);
 
   assert.equal(tab.control().workspace, undefined);
   assert.deepEqual(
@@ -2012,28 +1903,14 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-test("New plan with Plan off asks for a task without planning, and with it on names no planning, as every start did before", async () => {
+test("a task started hands on the brief it was given beside its issue, starts with no planning, and a blank brief is not sent", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
-  await tab.control().newTask.start("Typo", null, tab.control().newTask.workspaceId, false);
-  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId, true);
-
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
-      .map((asked) => Option.getOrUndefined(readPlanningNamed(asked.payload))?.planning),
-    [false, undefined],
-  );
-});
-
-test("New plan hands Luke the brief it was given beside its issue, and a blank brief is not sent", async () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
-
-  await tab.control().newTask.start("", null, "workspace-acme", true, {
+  await tab.control().newTask.start("", null, "workspace-acme", {
     issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
     brief: "Keep the queue order stable.",
   });
-  await tab.control().newTask.start("", null, "workspace-acme", true, { brief: " \n " });
+  await tab.control().newTask.start("", null, "workspace-acme", { brief: " \n " });
 
   assert.deepEqual(
     tab.payloads
@@ -2044,8 +1921,9 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
         workspaceId: "workspace-acme",
         issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
         brief: "Keep the queue order stable.",
+        planning: false,
       },
-      { workspaceId: "workspace-acme" },
+      { workspaceId: "workspace-acme", planning: false },
     ],
   );
 });
@@ -2694,7 +2572,7 @@ test("a fixture run on the chat profile opens Chat at once and its staged chat l
     await settle();
     assert.ok(fixture.control().chatView.chat, "the staged chat landed");
   });
-  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 8);
+  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 7);
   const live = mount({ shown: true });
   await settle();
   assert.equal(live.control().chatView.open, false);
@@ -2714,18 +2592,47 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(tab.control().chatView.open, true);
 });
 
-test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
+/** A chat's stream as the host opens one: each chat pushed is handed to the reader in turn. */
+function chatStream() {
+  const queued: CodingAgentChatAnswerView[] = [];
+  const waiting: ((read: IteratorResult<CodingAgentChatAnswerView, void>) => void)[] = [];
+  const iterator = new AsyncIteratorClass<CodingAgentChatAnswerView, void>(
+    () => {
+      const chat = queued.shift();
+      if (chat !== undefined) return Promise.resolve({ done: false, value: chat });
+      return new Promise((resolve) => waiting.push(resolve));
+    },
+    () => Promise.resolve(),
+  );
+  return {
+    /** The act's answer: the stream, opened. */
+    open: () => Promise.resolve(iterator),
+    push: (chat: CodingAgentChatAnswerView) => {
+      const reader = waiting.shift();
+      if (reader === undefined) queued.push(chat);
+      else reader({ done: false, value: chat });
+    },
+  };
+}
+
+test("a live run follows the listed workspace's chat only while the account has Chat on", async () => {
   handState({});
   const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await settle();
-  assert.ok(!off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat off reads no chat");
+  assert.ok(
+    !off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW),
+    "Chat off follows no chat",
+  );
   assert.equal(off.control().chatView.available, false);
 
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await vi.waitFor(async () => {
     await settle();
-    assert.ok(on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat on reads its chat");
+    assert.ok(
+      on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW),
+      "Chat on follows its chat",
+    );
   });
 });
 
@@ -2768,18 +2675,14 @@ test("a chat notification's click, listing the workspace its message waits in an
   assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
 });
 
-test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
+test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
   await settle();
   act(() => on.control().onShowChat(TASK.id));
-  assert.ok(on.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
-
-  handState({});
-  const off = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
-  await settle();
-  act(() => off.control().onShowChat(TASK.id));
-  assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+  assert.equal(on.control().sidePanel.tab, SIDE_PANEL_TAB.CHAT);
+  assert.equal(on.control().sidePanel.open, true);
+  assert.deepEqual(on.control().mainTabs.tabs, []);
 });
 
 test("main is told a task's Chat tab on screen shows only its plan's channel, where the window's Chat shows the whole workspace's", async () => {
@@ -2806,7 +2709,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
   const answer = {
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: [
       { id: channelId, kind: CHANNEL_KIND.TASK, name: "invites", archived: false, planId: TASK.id },
     ],
@@ -2822,16 +2725,14 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
         postedAt: 1,
       },
     ],
-    cursor: "4",
+    cursor: "",
   };
-  let reads = 0;
+  const stream = chatStream();
+  stream.push(answer);
   const tab = mount(
     { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
     {
-      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
-        reads += 1;
-        return reads === 1 ? Promise.resolve(answer) : new Promise(() => undefined);
-      },
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
       [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
     },
     AtomRegistryModule.make(),
@@ -2856,7 +2757,7 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   const answerAt = (seq: number) => ({
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: [{ id: channelId, kind: CHANNEL_KIND.GENERAL, name: "general", archived: false }],
     messages: [
       {
@@ -2870,19 +2771,15 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
         postedAt: seq,
       },
     ],
-    cursor: String(seq),
+    cursor: "",
   });
-  // The second read waits for the test to post a message, as the service's long read waits for one.
-  const later = Promise.withResolvers<ReturnType<typeof answerAt>>();
-  let reads = 0;
+  // The next push waits for the test to post a message, as the host pushes one when it lands.
+  const stream = chatStream();
+  stream.push(answerAt(4));
   const tab = mount(
     { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] }, room: SHELL_ROOM.NARROW },
     {
-      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
-        reads += 1;
-        if (reads === 1) return Promise.resolve(answerAt(4));
-        return reads === 2 ? later.promise : new Promise(() => undefined);
-      },
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
       [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
     },
     AtomRegistryModule.make(),
@@ -2902,7 +2799,7 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   assert.deepEqual(readTo(), [mark(4)], "the channel on screen is read");
 
   act(() => tab.control().chatView.onList());
-  later.resolve(answerAt(5));
+  stream.push(answerAt(5));
   await settle();
   assert.deepEqual(readTo(), [mark(4)], "a message landing behind the rail stays unread");
 
@@ -2923,25 +2820,17 @@ test("a channel link the chat held before it was opened does not hold stands unt
   const answerOf = (cursor: number, ids: readonly string[]) => ({
     self: me,
     readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
     channels: ids.map((id) => ({ id, kind: CHANNEL_KIND.TOPIC, name: id, archived: false })),
     messages: [],
     cursor: String(cursor),
   });
-  // Each later read waits for the test, as the service's long read waits for a change.
-  const second = Promise.withResolvers<ReturnType<typeof answerOf>>();
-  const third = Promise.withResolvers<ReturnType<typeof answerOf>>();
-  let reads = 0;
+  // Each later push waits for the test, as the host pushes one when the chat changes.
+  const stream = chatStream();
+  stream.push(answerOf(1, [held]));
   const tab = mount(
     { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
-    {
-      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
-        reads += 1;
-        if (reads === 1) return Promise.resolve(answerOf(1, [held]));
-        if (reads === 2) return second.promise;
-        return reads === 3 ? third.promise : new Promise(() => undefined);
-      },
-    },
+    { [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open },
     AtomRegistryModule.make(),
   );
   await vi.waitFor(async () => {
@@ -2959,14 +2848,14 @@ test("a channel link the chat held before it was opened does not hold stands unt
   linkTo(fresh);
   await settle();
   assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "made since the read");
-  second.resolve(answerOf(2, [held, fresh]));
+  stream.push(answerOf(2, [held, fresh]));
   await settle();
   assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "and held by the next");
 
   linkTo(gone);
   await settle();
   assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: gone });
-  third.resolve(answerOf(3, [held, fresh]));
+  stream.push(answerOf(3, [held, fresh]));
   await vi.waitFor(async () => {
     await settle();
     assert.deepEqual(place(), FOR_YOU, "a read since that holds it not puts Chat on For you");
@@ -2980,7 +2869,7 @@ test("a task New task files for later asks the host to start it in the backlog, 
   );
   await settle();
   await act(async () => {
-    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", false, {
+    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", {
       status: TASK_STATUS.BACKLOG,
       brief: "Thirty a minute.",
     });
@@ -3031,7 +2920,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   act(() => tab.control().onNewTask());
   let note: string | undefined = "unanswered";
   await act(async () => {
-    note = await tab.control().newTask.start("", "acme/web", undefined, false, {
+    note = await tab.control().newTask.start("", "acme/web", undefined, {
       handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
     });
   });
@@ -3162,53 +3051,160 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   assert.equal(refreshes(named) - namedBefore, 0);
 });
 
-test("the live transcript draws the call's lines from the changes main splices into the document, and a panel opened mid-call draws the same", () => {
-  const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
-  const line = (rowId: string, speaker: "user" | "assistant", words: string) => ({
-    rowId,
-    speaker,
-    words,
-    startMs: 0,
-    endMs: 1_000,
+/** An agent of the open task's another's call speaks into. */
+const VOICE_CHAT_AGENT: CodingAgentSummary = {
+  ...RUNNING_AGENT,
+  id: "2f4a6c8e-0b1d-4e3f-a5c7-9e1b3d5f7a90",
+  status: CODING_AGENT_STATUS.STARTING,
+};
+
+/** The payload of every act of `kind` the tab asked, in order. */
+function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[] {
+  return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
+}
+
+test("a task with no agent opens on a new agent's draft once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().agents.draft, "the task holds a draft");
   });
-  // As the voice window reports them: a line once, then only the line still growing.
-  const changes: readonly VoiceCallTranscriptChange[] = [
-    { voiceSessionId: session, from: 0, lines: [line("row-1", "user", "Invites should expire.")] },
-    { voiceSessionId: session, from: 1, lines: [line("row-2", "assistant", "After how")] },
+  const draft = tab.control().agents.draft;
+  assert.ok(draft);
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its column shows it");
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
+
+  act(() => {
+    tab.control().mainTabs.onClose({ draft: draft.id });
+    tab.control().agents.onDiscardDraft(draft.id);
+  });
+  await settle();
+  const fresh = tab.control().agents.draft;
+  assert.ok(fresh);
+  assert.notEqual(fresh.id, draft.id, "the draft closed is let go");
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: fresh.id });
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), []);
+});
+
+test("a platform with no voice takes no calls", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.VOICE));
+  const web = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.equal(web.control().calls, undefined);
+});
+
+test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const otherCall: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    call: { taskId: TASK.id, agentId: VOICE_CHAT_AGENT.id },
+  };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
     {
-      voiceSessionId: session,
-      from: 1,
-      lines: [line("row-2", "assistant", "After how many days?")],
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined),
     },
-  ];
-  const tasks: TasksView = { ...OPEN, transcript: NO_CALLS };
-  const tab = mount({ shown: true, tasks, voice: ON_CALL });
-  let held: VoiceCallTranscript | undefined;
-  for (const change of changes) {
-    held = withCallTranscriptChange(held, change);
-    tab.stand({ callTranscript: held });
-  }
-  const live = [[true, ["Invites should expire.", "After how many days?"]]];
-  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
-  // The last report heard again changes nothing.
-  const last = changes.at(-1);
-  assert.ok(last);
-  tab.stand({ callTranscript: withCallTranscriptChange(held, last) });
-  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
-
-  const opened = mount({ shown: true, tasks, voice: ON_CALL, callTranscript: held });
-  assert.deepEqual(callsDrawn(opened.control().transcript.region), live);
-
-  // The call gone clears the slice, and its words stay drawn until the record has them.
-  tab.stand({
-    voice: IDLE_VOICE_VIEW,
-    callTranscript: withCallTranscriptChange(held, {
-      voiceSessionId: undefined,
-      from: 0,
-      lines: [],
-    }),
+    AtomRegistryModule.make(),
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().calls, "a desktop's agents take calls");
   });
-  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
-    [false, ["Invites should expire.", "After how many days?"]],
+  act(() => tab.control().calls?.onPress(AGENT_ID));
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
+
+  tab.stand({ voice: otherCall });
+  act(() => tab.control().calls?.onPress(AGENT_ID));
+  assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
+  assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
+  await act(async () => tab.control().secondCall.confirm.run());
+  await settle();
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
+    { agentId: AGENT_ID },
+    { agentId: AGENT_ID },
   ]);
+});
+
+test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(2_000_000);
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  let opens = true;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(opens) },
+  );
+
+  act(() => tab.control().onSelect(TASK.id));
+  vi.setSystemTime(2_000_650);
+  tab.stand({ tasks: OPEN });
+
+  // The task open already is no wait; another refused is no span.
+  act(() => tab.control().onSelect(TASK.id));
+  opens = false;
+  act(() => tab.control().onSelect(OTHER_TASK_ID));
+  await act(async () => undefined);
+  tab.stand({
+    tasks: {
+      ...OPEN,
+      activeTaskId: OTHER_TASK_ID,
+      document: { status: TASKS_READ.READY, task: { ...TASK, id: OTHER_TASK_ID } },
+    },
+  });
+  uninstall();
+  vi.useRealTimers();
+
+  assert.deepEqual(
+    spans.map((span) => ({
+      name: span.name,
+      waited: span.endedAt - span.startedAt,
+      attributes: span.attributes(),
+    })),
+    [
+      {
+        name: PANEL_SPAN.TASK_OPEN,
+        waited: 650,
+        attributes: { [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: TASK.document.body.length },
+      },
+    ],
+  );
+});
+
+/** A status write's payload, read back as the act's own schema admits it. */
+const readStanding = Schema.decodeUnknownOption(
+  Schema.Struct({ taskId: Schema.String, status: Schema.optionalKey(Schema.String) }),
+);
+
+test("Mark done's Undo leaves a status chosen since alone, though that choice is still unanswered", async () => {
+  const view: TasksView = {
+    ...IDLE_TASKS_VIEW,
+    listStatus: TASKS_READ.READY,
+    workspaces: [PERSONAL],
+    tasks: [{ ...row("notes", 4), status: TASK_STATUS.TODO }],
+  };
+  let answered = 0;
+  const tab = mount({ tasks: view }, {
+    // The Mark done is kept, and the status chosen after it waits on the service.
+    [ACT_KIND.TASKS_SET_STANDING]: () => {
+      answered += 1;
+      return answered === 1 ? Promise.resolve(true) : new Promise(() => undefined);
+    },
+  } as Parameters<typeof mount>[1]);
+
+  act(() => tab.control().onSettleTasks(["notes"], SETTLED_STATUS.DONE));
+  await settle();
+  void tab.control().onSetTaskStanding("notes", { status: TASK_STATUS.IN_PROGRESS });
+  act(() => _undoButton().click());
+  await settle();
+
+  const written = tab.payloads
+    .filter(({ kind }) => kind === ACT_KIND.TASKS_SET_STANDING)
+    .map(({ payload }) => Option.getOrUndefined(readStanding(payload))?.status);
+  assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });

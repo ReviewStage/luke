@@ -7,6 +7,7 @@ import {
   CHAT_ASK,
   CHAT_BOUNDS,
   CHAT_IMAGE_TYPE,
+  type ChatAnswer,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
@@ -184,7 +185,7 @@ function railRow(page: HTMLElement, name: string): HTMLButtonElement {
   return row;
 }
 
-test("Chat opens on For you, whose open asks come first, the oldest first, then the direct message and the mention waiting on the developer, beside a rail counting what each place holds unread", () => {
+test("Chat opens on For you, whose open asks come first, the oldest first, then the mentions waiting on the developer, beside a rail counting what each place holds unread", () => {
   const page = mount();
   assert.deepEqual(rail(page), [
     "▸ For you (4)",
@@ -195,16 +196,15 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "billing-export",
     "teammate-invitations •",
     "# Direct messages",
-    "Invite emails •",
-    "Luke",
     "Add teammate invitations",
+    "Invite emails",
     "Maria Chen",
   ]);
   assert.deepEqual(stream(page), [
     "Add teammate invitations in #teammate-invitations",
     "Invite emails in #teammate-invitations",
-    "Invite emails direct message",
-    "Luke in #teammate-invitations",
+    "Invite emails in #teammate-invitations",
+    "Add teammate invitations in #teammate-invitations",
   ]);
 });
 
@@ -214,10 +214,12 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   assert.equal(page.querySelector(".chat-head h2")?.textContent, "# teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
+    "Invite emails",
     "Add teammate invitations",
     "Invite emails",
     "Add teammate invitations",
-    "Luke",
+    "Invite emails",
+    "Add teammate invitations",
     "Invite emails",
     "Dean Stratakos",
   ]);
@@ -228,7 +230,8 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   assert.equal(toggle?.textContent, "2 replies");
   assert.equal(toggle?.querySelectorAll(".actor-stack .actor-mark").length, 2);
   act(() => toggle?.click());
-  assert.deepEqual(stream(page).slice(0, 4), [
+  assert.deepEqual(stream(page).slice(0, 5), [
+    "Invite emails",
     "Add teammate invitations",
     "Invite emails",
     "  ↳ Add teammate invitations",
@@ -236,15 +239,26 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   ]);
 });
 
+/** The id of the developer's DM with Invite emails, the fixture's second agent. */
+function dmWithInviteEmails(answer: ChatAnswer): string {
+  const agent = answer.members.find((member) => member.name === "Invite emails");
+  const dm = answer.channels.find(
+    (channel) => channel.kind === CHANNEL_KIND.DM && channel.members?.includes(agent?.id ?? ""),
+  );
+  return dm?.id ?? "";
+}
+
 test("an ask posted in a direct message is listed among For you's asks as a direct message, never as a channel", () => {
   const page = mount((chat) => ({
     ...chat,
     answer: {
       ...chat.answer,
+      // The developer opened a DM with the agent, which an agent answers in, so its ask stands there.
       messages: chat.answer.messages.map((message) =>
         message.seq === 47
           ? {
               ...message,
+              channelId: dmWithInviteEmails(chat.answer),
               ask: {
                 key: "take-invite-file",
                 revision: 1,
@@ -318,7 +332,16 @@ test("a channel's composer offers its members by name as an @ is typed, writes t
   await settle();
   assert.equal(boxWords(box), "");
   assert.equal(words(page).at(-1), "Invite emails hold the template until #214 lands");
-  assert.equal(stream(page).at(-1), "Dean Stratakos");
+  // The post continues the reader's own run, so it draws under the name the run began with.
+  assert.equal(stream(page).at(-1), "");
+  assert.equal(stream(page).filter(Boolean).at(-1), "Dean Stratakos");
+  // A screen reader landing on the continued message alone still hears who wrote it.
+  assert.equal(
+    [...page.querySelectorAll(".chat-message")]
+      .at(-1)
+      ?.querySelector(".chat-byline .visually-hidden")?.textContent,
+    "Dean Stratakos",
+  );
   const last = [...page.querySelectorAll(".chat-message")].at(-1);
   assert.ok(
     last?.querySelector(".chat-words [data-mention-ref]"),
@@ -852,6 +875,40 @@ test("words after an @ that read as a date offer it first, said as its chip says
   }
 });
 
+test("a date chip in the chat box opens its picker, and a day picked there names it anew in place", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "ship @tomorrow");
+    pressInComposer(box, "Enter");
+    act(() => box.querySelector<HTMLElement>('[data-kind="date"]')?.click());
+    await act(async () => undefined);
+    const dialog = box.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(dialog, "the picker is open");
+    const start = dialog.querySelector<HTMLInputElement>('input[aria-label="Start"]')?.value;
+    act(() =>
+      dialog.querySelector<HTMLElement>('button[aria-label="Friday, October 23, 2026"]')?.click(),
+    );
+    act(() =>
+      (dialog.contains(document.activeElement) ? document.activeElement : dialog)?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      ),
+    );
+    await act(async () => undefined);
+
+    assert.equal(start, "Oct 20, 2026");
+    assert.equal(box.querySelector('[role="dialog"]'), null);
+    assert.deepEqual(
+      [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent),
+      ["Friday"],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("an @ word that reads as a date lists it before the members it matches, and words after a name that name no date open no list", () => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   try {
@@ -914,7 +971,7 @@ function chipNames(box: HTMLElement): (string | null)[] {
   );
 }
 
-test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them under words or alone, each drawn in the channel and opened larger on a press", async () => {
+test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them with words or alone, each drawn in the channel over the words and opened larger on a press", async () => {
   const asked: string[] = [];
   const page = mount(
     (chat) => chat,
@@ -946,6 +1003,12 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   const drawn = under?.querySelector<HTMLImageElement>(".picture-block img");
   assert.equal(drawn?.getAttribute("src"), `data:${CHAT_IMAGE_TYPE.PNG};base64,${PNG_BASE64}`);
   assert.equal(drawn?.getAttribute("alt"), "invite-email.png");
+  const words = under?.querySelector(".chat-words");
+  assert.ok(drawn && words);
+  assert.ok(
+    drawn.compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "a person's pictures stand over their words",
+  );
 
   await handFiles(
     box,
@@ -1010,9 +1073,10 @@ test("an agent's line names it by its title alone, as every place of the window 
   const opened: ReadLink[] = [];
   const page = mount((chat) => chat, undefined, undefined, opened);
   act(() => railRow(page, "teammate-invitations").click());
-  const [byline] = [...page.querySelectorAll(".chat-message .chat-byline")];
+  const byline = [...page.querySelectorAll(".chat-message .chat-byline")].find(
+    (each) => each.querySelector(".chat-byline-name")?.textContent === "Add teammate invitations",
+  );
   assert.ok(byline);
-  assert.equal(byline.querySelector(".chat-byline-name")?.textContent, "Add teammate invitations");
   assert.doesNotMatch(byline.textContent ?? "", /@/u, "no handle beside it");
   const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
   assert.ok(name, "the agent's name is a press");
@@ -1086,4 +1150,23 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
   assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
+});
+
+test("the rail's rows draw in the sidebar's ink, and a message's face is the app's own mark, never tiled", () => {
+  const page = mount((chat) => chat);
+  const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
+  assert.ok(rows.length > 0, "the rail holds rows");
+  assert.deepEqual(
+    [...new Set(rows.map((each) => each.getAttribute("data-ink")))],
+    ["sidebar"],
+    "every rail row wears the sidebar's ink",
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const faces = [...page.querySelectorAll(".chat-face .actor-mark")];
+  assert.ok(faces.length > 0, "messages lead with faces");
+  assert.deepEqual(
+    faces.filter((each) => each.getAttribute("data-tiled") === "true"),
+    [],
+    "no face stands on a tile outside a pile",
+  );
 });

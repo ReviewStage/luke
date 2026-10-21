@@ -46,7 +46,7 @@ import {
 import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
-import { type LaunchContext, type LaunchOutcome, RunnerFailed } from "./launch.js";
+import { type LaunchContext, type LaunchOutcome, RunnerFailed, type RunnerSelf } from "./launch.js";
 import {
   type ClaudeCodeConfig,
   EFFORT,
@@ -95,6 +95,8 @@ type InFlight = Omit<RunnerWaiting, "type">;
 export interface RunnerInput {
   readonly lines: Stream.Stream<string>;
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** The runner's own bundle as a command, which Codex runs for its token. */
+  readonly self?: RunnerSelf | undefined;
 }
 
 const decodeConfig = Schema.decodeUnknownEffect(Schema.fromJsonString(RunnerConfigSchema));
@@ -131,6 +133,11 @@ function queryOptions(
       failIfUnavailable: true,
       autoAllowBashIfSandboxed: true,
       allowUnsandboxedCommands: false,
+      // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
+      // kernel refuses bubblewrap a fresh /proc and every command failed; the
+      // host /proc is bound instead, where another process's environ, the
+      // CLI's and its token included, is still refused, as under Codex.
+      enableWeakerNestedSandbox: true,
       network: { allowedDomains: [...config.allowedDomains] },
       credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     },
@@ -172,6 +179,8 @@ interface Launch {
   readonly unanswered: Ref.Ref<ReadonlySet<string>>;
   readonly stopping: Ref.Ref<boolean>;
   readonly ended: Deferred.Deferred<RunnerEnd>;
+  /** The launch's first event number, which a turn-scoped stop names. */
+  readonly firstSequence: number;
 }
 
 /** Calls one of the session's control requests, reporting a failure rather than ending the launch on it. */
@@ -202,6 +211,10 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
       return;
     }
     case INPUT_LINE.STOP: {
+      // A stop for another launch's turn is not this launch's to take.
+      if (value.launch !== undefined && value.launch !== launch.firstSequence) {
+        return yield* Effect.logWarning("agent-runner: skipped a stop for another launch");
+      }
       // A stop with no turn running has nothing to interrupt: the launch,
       // waiting or idle, ends here.
       if (!(yield* Ref.get(launch.turnRunning))) {
@@ -325,6 +338,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
     stopping: yield* Ref.make(false),
     ended: yield* Deferred.make<RunnerEnd>(),
+    firstSequence: config.firstSequence,
   };
 
   // Luke closing stdin ends the prompt stream, and the CLI ends once it has
@@ -398,7 +412,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     firstSequence: config.firstSequence,
     secrets,
   });
-  const context = { lines, env: input.env, bearer, sink };
+  const context = { lines, env: input.env, bearer, sink, self: input.self };
   const { end, failure } =
     config.harness === RUNNER_HARNESS.CODEX
       ? yield* runCodex({ ...context, config })

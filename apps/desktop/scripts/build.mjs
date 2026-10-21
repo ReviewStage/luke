@@ -6,6 +6,7 @@ import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import {
   EXCALIDRAW_UNUSED,
   EXCALIDRAW_UNUSED_MODULE,
+  excalidrawFontsLocal,
   excalidrawLeftOut,
   HIGHLIGHT_WORKER_BUILD,
   LUCIDE_WHOLE,
@@ -259,6 +260,7 @@ const rendererBuild = build({
     panelRedirects,
     lucideWholeOnDemand,
     excalidrawTrim,
+    excalidrawFontsLocal,
     sideStylesheetsLinked,
     ...sentryPlugins(),
   ],
@@ -299,6 +301,21 @@ await Promise.all([
       // the run answers to; see `@luke/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
+    sourcemap: "external",
+    logLevel: "info",
+  }),
+  // The code colouring process main forks with `utilityProcess`
+  // (`src/main/services/task-code-colouring.ts`), its own bundle so Shiki,
+  // its themes and its grammars ride in it alone and never in main's.
+  build({
+    entryPoints: [path.join(appRoot, "src/utility/task-code.ts")],
+    outfile: path.join(outputRoot, "task-code.js"),
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    target: "node22",
+    external: ["electron"],
+    plugins: sentryPlugins(),
     sourcemap: "external",
     logLevel: "info",
   }),

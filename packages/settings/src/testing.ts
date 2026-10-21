@@ -28,7 +28,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
     {
       ...APP_SETTING_DEFAULTS,
       voice: LIVE_VOICE.CEDAR,
-      voiceCaptions: false,
       duckOtherMedia: true,
       voiceAvailable: false,
       preferBuiltInMicrophone: false,

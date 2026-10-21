@@ -79,7 +79,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Coding agents", "Integrations", "Plan template", "Experimental"],
+    rows: ["Profile", "Agents", "Integrations", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -120,8 +120,7 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
 const HOMES = [
   { words: "Sign out", page: "Profile" },
   { words: "Delete account", page: "Profile" },
-  { words: "Talk to Luke", page: "Voice" },
-  { words: "Stop Luke", page: "Voice" },
+  { words: "Quiet Music and Spotify", page: "Voice" },
   { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
@@ -176,18 +175,6 @@ function settingsProps(
       onOpenLatest: ignore,
     },
     settings: settingsView({ voiceAvailable: true }),
-    shortcuts: {
-      voiceHotkey: "Alt+Space",
-      voiceHotkeyHeld: true,
-      voiceChosen: false,
-      voiceOff: false,
-      onVoiceHotkeyChange: accepted,
-      stopHotkey: "Alt+Escape",
-      stopChosen: false,
-      stopOff: false,
-      onStopHotkeyChange: accepted,
-      onCapture: ignore,
-    },
   } satisfies SettingsPanelProps;
 }
 
@@ -222,6 +209,8 @@ function SettingsHarness({
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
     },
     room: SHELL_ROOM.WIDE,
     step: { listed: true, onList: ignore },
@@ -395,7 +384,7 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   assert.equal(about.includes("Changelog"), true);
   assert.equal(about.includes("Check for updates"), false);
   for (const words of [
-    "Talk to Luke",
+    "Quiet Music and Spotify",
     "Notify me when a coding agent finishes or needs me",
     "Let agents run commands on this Mac",
     "Updates",
@@ -558,7 +547,7 @@ test("a page turned to opens at its top, not where the last page was scrolled", 
   const scroller = shownScroller(page);
   // Note that jsdom lays nothing out, so the scroll offset is held by hand.
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
-  openPage(page, "Coding agents");
+  openPage(page, "Agents");
   assert.equal(shownScroller(page).scrollTop, 0);
 });
 
@@ -756,7 +745,7 @@ test("the plan template's version history keeps a call's card at the foot of its
   const back = card.querySelector<HTMLButtonElement>('button[aria-label="Open Checkout redesign"]');
   assert.ok(back);
   act(() => back.click());
-  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
+  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_AGENT]);
 });
 
 test("the mouse's Back button from the plan template's version history goes back to the template page and cancels the browser's own, so a browser tab takes no second step", async () => {

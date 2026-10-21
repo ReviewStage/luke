@@ -6,9 +6,13 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB } from "../../testing/index.js";
-import { readNativeSequence, withNativeProjection } from "../native-projection-store.js";
+import { getTestDB, startTask } from "../../testing/index.js";
+import { createCodingAgent, recordCodingAgentRunnerToken } from "../coding-agent-store.js";
+import {
+  readNativeProjection,
+  readNativeSequence,
+  withNativeProjection,
+} from "../native-projection-store.js";
 
 /**
  * Where a native harness's projection keeps its place, over a real dialect:
@@ -20,15 +24,22 @@ import { readNativeSequence, withNativeProjection } from "../native-projection-s
 const openConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  // Note that each conversation's runner holds a digest of its own, which the store keeps unique.
+  // Note that each agent's runner holds a digest of its own, which the store keeps unique.
   const digest = randomUUID();
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const [row] = yield* db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT, runnerTokenHash: digest })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id, digest };
+  const task = yield* startTask(userId, { name: "Teammate invitations" });
+  const started = yield* createCodingAgent(userId, {
+    taskId: task.id,
+    idempotencyKey: randomUUID(),
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    repository: null,
+  });
+  const agent = Option.getOrThrow(started).agent;
+  assert.equal(yield* recordCodingAgentRunnerToken(userId, agent.id, digest), true);
+  return { userId, conversationId: agent.conversationId, agentId: agent.id, digest };
 });
 
 /** What the conversation's projection reads as now, saving nothing. */
@@ -50,6 +61,37 @@ it.layer(getTestDB())("the native projection's place", (it) => {
       assert.deepEqual(sequence, Option.some(3));
       assert.deepEqual(Option.getOrThrow(after), { sequence: 3, projection: { turn: "t1" } });
     }),
+  );
+
+  it.effect(
+    "the saved projection reads back to the account that holds the conversation, and to no other",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const stranger = yield* openConversation;
+        const before = yield* readNativeProjection(target);
+        yield* withNativeProjection(target, target.digest, () =>
+          Effect.succeed({
+            result: undefined,
+            saved: { sequence: 2, projection: { turn: { servers: ["linear"] } } },
+          }),
+        );
+
+        assert.equal(Option.isNone(before), true);
+        assert.deepEqual(
+          yield* readNativeProjection(target),
+          Option.some({ turn: { servers: ["linear"] } }),
+        );
+        assert.equal(
+          Option.isNone(
+            yield* readNativeProjection({
+              userId: stranger.userId,
+              conversationId: target.conversationId,
+            }),
+          ),
+          true,
+        );
+      }),
   );
 
   it.effect("an application that fails keeps nothing it wrote or asked to save", () =>
@@ -80,19 +122,12 @@ it.layer(getTestDB())("the native projection's place", (it) => {
 
   it.effect("a runner whose bearer was retired, or replaced, is never applied for", () =>
     Effect.gen(function* () {
-      const db = yield* Database;
       const target = yield* openConversation;
-      yield* db
-        .update(conversations)
-        .set({ runnerTokenHash: randomUUID() })
-        .where(eq(conversations.id, target.conversationId));
+      yield* recordCodingAgentRunnerToken(target.userId, target.agentId, randomUUID());
       const replaced = yield* withNativeProjection(target, target.digest, () =>
         Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
       );
-      yield* db
-        .update(conversations)
-        .set({ runnerTokenHash: null })
-        .where(eq(conversations.id, target.conversationId));
+      yield* recordCodingAgentRunnerToken(target.userId, target.agentId, null);
       const retired = yield* withNativeProjection(target, target.digest, () =>
         Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
       );

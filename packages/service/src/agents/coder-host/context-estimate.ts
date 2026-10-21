@@ -12,11 +12,11 @@ import {
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
 import { END_CALL_TOOL } from "../../tasks/end-call.js";
-import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
+import { BROWSER_TOOL } from "../browser/browser-tool.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -44,7 +44,7 @@ import { bashStartingIn } from "./shell.js";
 import { SHOW_IMAGE_TOOL } from "./show-image.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { TODOS_TOOL } from "./todos.js";
-import { CODER_TOOL, turnToolsOf } from "./tool-set.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 /**
  * context-estimate.ts -- what a coding agent's newest step read: the counts its provider gave, and estimates of the parts no provider counts apart.
@@ -197,8 +197,8 @@ const AUTHORED_TOOLS = {
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
-    description: SHOW_PAGE_TOOL.description,
-    inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+    description: CODER_SHOW_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(CODER_SHOW_PAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_COMMENTS]: {
     description: READ_COMMENTS_TOOL.description,
@@ -223,6 +223,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.RUN_ON_MAC]: {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
+  },
+  [CODER_TOOL.BROWSER]: {
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
   },
   [CODER_TOOL.SHOW_IMAGE]: {
     description: SHOW_IMAGE_TOOL.description,
@@ -258,11 +262,10 @@ const AUTHORED_TOOLS = {
 /** What a step's end says its provider counted; nothing where it counted nothing. */
 type StepUsage = Extract<MessageStreamEvent, { type: "step.completed" }>["data"]["usage"];
 
-/** What the step read beside the conversation: the instructions and the first message, as the service composed them, and the kind of turn it ran in, which the tools it was offered follow. */
+/** What the step read beside the conversation: the instructions and the first message, as the service composed them. */
 export interface StepText {
   readonly instructions: string;
   readonly brief: string;
-  readonly turn: BrainHostTurn | undefined;
 }
 
 /** The tokens of a value's JSON as eve's compaction estimates them: its bytes over four, rounded up. */
@@ -270,22 +273,10 @@ function estimatedTokens(json: string): number {
   return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
 }
 
-/** The definitions of the authored tools a turn of the kind is offered, the call's own on a spoken turn alone (`turnToolsOf`). */
-function definitionsOn(turn: BrainHostTurn | undefined): string {
-  const spokenOnly: ReadonlySet<string> = turnToolsOf(BRAIN_HOST_TURN.SPOKEN);
-  const offered: ReadonlySet<string> = turnToolsOf(turn);
-  return JSON.stringify(
-    Object.entries(AUTHORED_TOOLS)
-      .filter(([name]) => !spokenOnly.has(name) || offered.has(name))
-      .map(([name, tool]) => ({ name, ...tool })),
-  );
-}
-
-/** The definitions of the authored tools, estimated once for each kind of turn: the same for every agent. */
-const TOOL_DEFINITION_TOKENS = {
-  [BRAIN_HOST_TURN.TYPED]: estimatedTokens(definitionsOn(BRAIN_HOST_TURN.TYPED)),
-  [BRAIN_HOST_TURN.SPOKEN]: estimatedTokens(definitionsOn(BRAIN_HOST_TURN.SPOKEN)),
-} as const;
+/** The definitions of the authored tools, estimated once: the same for every agent and every turn. */
+const TOOL_DEFINITION_TOKENS = estimatedTokens(
+  JSON.stringify(Object.entries(AUTHORED_TOOLS).map(([name, tool]) => ({ name, ...tool }))),
+);
 
 /** The step as the agent's row keeps it, at the instant given; nothing for a step whose provider counted no input, which leaves the last one standing. */
 export function agentStepOf(
@@ -304,7 +295,7 @@ export function agentStepOf(
       ? undefined
       : { cacheWriteTokens: usage.cacheWriteTokens }),
     systemPromptTokens: estimatedTokens(JSON.stringify(text.instructions)),
-    toolDefinitionTokens: TOOL_DEFINITION_TOKENS[text.turn ?? BRAIN_HOST_TURN.TYPED],
+    toolDefinitionTokens: TOOL_DEFINITION_TOKENS,
     briefTokens: estimatedTokens(JSON.stringify(text.brief)),
     at,
   };

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -21,7 +22,11 @@ import { afterEach, test } from "vitest";
 import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
-import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
+import {
+  type CodingAgentsControl,
+  type DraftCallStart,
+  useCodingAgents,
+} from "./use-coding-agents.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -183,13 +188,14 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // The words, the choice, and the servers off are the draft's, held while another task opens a draft of its own.
+  // The words, the choice, the servers off, and the payer picked are the draft's, held while another task opens a draft of its own.
   const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
   act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
   act(() => tab.control().onDraftChange({ disabledServers }));
+  act(() => tab.control().onDraftChange({ payer: CODING_AGENT_PAYER.API_KEY }));
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft, undefined);
   let other = "";
@@ -204,6 +210,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
     attachments: [],
     choice,
     disabledServers,
+    payer: CODING_AGENT_PAYER.API_KEY,
   });
 
   let failed: Failure | undefined;
@@ -219,12 +226,21 @@ test("a draft asks nothing of the service, one per plan, until its first message
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
+    failed = await tab
+      .control()
+      .startPrompt(draft, prompt, undefined, [notes], disabledServers, CODING_AGENT_PAYER.API_KEY);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
     { taskId: TASK, idempotencyKey: draft, prompt, ...choice },
-    { taskId: TASK, idempotencyKey: draft, prompt, attachments: [notes], disabledServers },
+    {
+      taskId: TASK,
+      idempotencyKey: draft,
+      prompt,
+      attachments: [notes],
+      disabledServers,
+      payer: CODING_AGENT_PAYER.API_KEY,
+    },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
@@ -405,6 +421,59 @@ test("another agent named with no plan open holds nothing of the last, even wher
 
   assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
   assert.equal(tab.control().listFailed, true);
+});
+
+test("on an agent's own page, its agent is continued and forked through the page's draft, each Start naming no task so the service puts it where that agent is, and the agent started opens; a fork let go there lets its draft go", async () => {
+  const taskless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.COMPLETED };
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...taskless,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const continued = { ...taskless, id: "continued-1", status: CODING_AGENT_STATUS.STARTING };
+  const forked = { ...taskless, id: "forked-1", status: CODING_AGENT_STATUS.STARTING };
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: continued }, { agent: forked });
+  await tab.mount();
+
+  const control = tab.control();
+  assert.ok(control.continueAgent, "the page's agent is continued as a task's is");
+  let failed: Failure | undefined;
+  await act(async () => {
+    failed = await tab.control().continueAgent?.(AGENT, "Carry on with the clock.");
+  });
+  assert.equal(failed, undefined);
+
+  const fork = { agentId: AGENT, messageId: "message-1", opening: "Swept…" };
+  let draft = "";
+  act(() => {
+    draft = tab.control().onForkDraft(fork);
+  });
+  assert.equal(tab.control().draft?.fork, fork, "the page holds the fork's draft");
+  await act(async () => {
+    failed = await tab.control().startFork(draft, fork, "", undefined, [], []);
+  });
+  assert.equal(failed, undefined);
+  assert.equal(tab.control().draft, undefined, "a fork that started lets its draft go");
+
+  assert.deepEqual(startPayloads(tab.asked), [
+    { idempotencyKey: "key-1", from: { agentId: AGENT }, note: "Carry on with the clock." },
+    {
+      idempotencyKey: draft,
+      from: { agentId: AGENT, messageId: "message-1" },
+      disabledServers: [],
+    },
+  ]);
+  assert.deepEqual(tab.started, ["continued-1", "forked-1"]);
+
+  act(() => {
+    tab.control().onForkDraft(fork);
+  });
+  act(() => tab.control().onDropFork());
+  assert.equal(tab.control().draft, undefined, "nothing but a fork starts here, so its draft goes");
 });
 
 test("a read of an agent's changes keeps who its pull request names, by agent and with the pull request read, so its Changes card says them wherever it hangs; only the agent's newest read is kept, and a read naming no pull request drops them", async () => {
@@ -948,7 +1017,7 @@ test("a second continue of an agent once the first landed mints a key of its own
   assert.deepEqual(tab.started, [first.id, second.id, third.id]);
 });
 
-test("no continue is offered while no Start could run: an archived task, a task naming no repository, or an agent read with no task", async () => {
+test("no continue is offered while no Start could run: an archived task, or a task naming no repository", async () => {
   const archived = mount({ taskId: TASK, repository: "acme/relay", archived: true });
   archived.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await archived.mount();
@@ -958,9 +1027,47 @@ test("no continue is offered while no Start could run: an archived task, a task 
   bare.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await bare.mount();
   assert.equal(bare.control().continueAgent, undefined);
+});
 
-  const page = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  page.answer(ACT_KIND.CODING_AGENTS_PAGE, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  await page.mount();
-  assert.equal(page.control().continueAgent, undefined);
+test("a draft's Call starts an empty draft's agent blank under a key of its own, and a draft's words under the draft's key marked for a call, letting the draft go for the agent's tab", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] }, { agents: [] });
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: STARTED }, { agent: STARTED });
+  await tab.mount();
+
+  let empty = "";
+  act(() => {
+    empty = tab.control().onNewDraft();
+  });
+  const blank = tab.control().draft;
+  assert.ok(blank);
+  let answer: DraftCallStart | undefined;
+  await act(async () => {
+    answer = await tab.control().startCall?.(blank);
+  });
+  assert.deepEqual(answer, { agentId: STARTED.id });
+  assert.equal(tab.control().draft, undefined, "the draft gives way to the agent");
+  assert.deepEqual(tab.started, [STARTED.id]);
+
+  let worded = "";
+  act(() => {
+    worded = tab.control().onNewDraft();
+  });
+  const prompt = "Walk me through the invite flow.";
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  act(() => tab.control().onDraftChange({ prompt }));
+  act(() => tab.control().onDraftChange({ choice }));
+  const held = tab.control().draft;
+  assert.ok(held);
+  await act(async () => {
+    answer = await tab.control().startCall?.(held);
+  });
+  assert.deepEqual(answer, { agentId: STARTED.id });
+  assert.equal(tab.control().draft, undefined);
+
+  const [first, second] = startPayloads(tab.asked);
+  assert.equal(first?.blank, true, "an empty draft starts blank");
+  assert.equal(first?.prompt, undefined);
+  assert.notEqual(first?.idempotencyKey, empty, "under a key of the press's own");
+  assert.deepEqual(second, { taskId: TASK, idempotencyKey: worded, prompt, call: true, ...choice });
 });

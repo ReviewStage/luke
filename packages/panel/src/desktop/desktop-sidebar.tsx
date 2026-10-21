@@ -12,17 +12,17 @@ import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
-  ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   BUTTON_SIZE,
   Button,
   ComposeIcon,
-  ConfirmDialog,
+  dropBelowStart,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
   IconButton,
+  MarkDoneIcon,
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
@@ -36,8 +36,8 @@ import {
   Skeleton,
   SkeletonRegion,
   UnpinIcon,
-  useConfirmDialog,
   useMenu,
+  useTouchHold,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { forYou } from "@luke/ui/chat-model";
@@ -69,9 +69,14 @@ import {
   sectionOrder,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { archiveAsks, repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import {
+  repositoryPageUrl,
+  SETTLED_STATUS,
+  settleOffered,
+  TASK_MARK,
+  TASKS_PAGE,
+} from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   FactoryIcon,
   FolderPlusIcon,
@@ -92,7 +97,7 @@ import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import type { NavigationHistory } from "../navigation-history.js";
+import type { HistoryStep, NavigationHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -116,13 +121,9 @@ import { LukeIdentity } from "./luke-identity.js";
 import { FACTORY } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
-import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse.js";
+import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import {
-  archiveTasksQuestion,
-  type CountNoun,
-  SidebarGroupHeader,
-} from "./sidebar-group-header.js";
+import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
@@ -212,23 +213,132 @@ export function HistoryButtons({
   if (room === SHELL_ROOM.NARROW && window.matchMedia(BROWSER_DISPLAY).matches) return null;
   return (
     <div className="title-bar-controls" data-edge="column">
-      <Tooltip label="Back" command={APP_COMMAND.BACK}>
-        <IconButton
-          icon={<ArrowLeftIcon />}
-          label="Back"
-          disabled={!history.canGoBack}
-          onClick={history.onBack}
-        />
-      </Tooltip>
-      <Tooltip label="Forward" command={APP_COMMAND.FORWARD}>
-        <IconButton
-          icon={<ArrowRightIcon />}
-          label="Forward"
-          disabled={!history.canGoForward}
-          onClick={history.onForward}
-        />
-      </Tooltip>
+      <HistoryButton
+        label="Back"
+        command={APP_COMMAND.BACK}
+        icon={<ArrowLeftIcon />}
+        able={history.canGoBack}
+        onPress={history.onBack}
+        steps={history.steps.back}
+        onGoTo={history.onGoTo}
+      />
+      <HistoryButton
+        label="Forward"
+        command={APP_COMMAND.FORWARD}
+        icon={<ArrowRightIcon />}
+        able={history.canGoForward}
+        onPress={history.onForward}
+        steps={history.steps.forward}
+        onGoTo={history.onGoTo}
+      />
     </div>
+  );
+}
+
+/** The steps a list names a step by where nothing named it as the window stood on it. */
+const UNNAMED_STEP = "Earlier page";
+
+/**
+ * The steps along one way of the history as its button's menu lists them:
+ * the nearest first, a page's steps gathered together between rules, each
+ * named as the window called it there, with what it showed under it.
+ */
+function historyGroups(
+  steps: readonly HistoryStep[],
+  onGoTo: (at: number) => void,
+): (readonly MenuAction[])[] {
+  const groups: MenuAction[][] = [];
+  let page: string | undefined;
+  for (const step of steps) {
+    const item: MenuAction = {
+      label: step.title?.label ?? UNNAMED_STEP,
+      detail: step.title?.detail,
+      onSelect: () => onGoTo(step.at),
+    };
+    if (step.page === page) groups.at(-1)?.push(item);
+    else groups.push([item]);
+    page = step.page;
+  }
+  return groups;
+}
+
+/**
+ * Back or Forward: a press takes one step, and a press held (`useTouchHold`),
+ * or a right-click, lists the steps along that way, any of which it goes straight
+ * to, as a browser's Back and Forward do.
+ */
+function HistoryButton({
+  label,
+  command,
+  icon,
+  able,
+  onPress,
+  steps,
+  onGoTo,
+}: {
+  label: string;
+  command: typeof APP_COMMAND.BACK | typeof APP_COMMAND.FORWARD;
+  icon: React.JSX.Element;
+  able: boolean;
+  onPress: () => void;
+  steps: readonly HistoryStep[];
+  onGoTo: (at: number) => void;
+}): React.JSX.Element {
+  const menu = useMenu(able);
+  const button = useRef<HTMLButtonElement>(null);
+  // A press held, the mouse's as a touch's, opens the list, as a browser's Back does.
+  const hold = useTouchHold();
+  const openList = () => {
+    const element = button.current;
+    if (element !== null && steps.length > 0) menu.show(dropBelowStart(element), element);
+  };
+  return (
+    <span
+      className="title-bar-history"
+      // A long press here opens the list, so the tooltip's own hold for its hint leaves it be.
+      data-long-press=""
+      onPointerDown={(event) => {
+        if (able) hold.start(event, openList, { mouse: true });
+      }}
+      onTouchEnd={hold.touchEnd}
+      onClickCapture={(event) => {
+        if (!hold.held.current) return;
+        hold.held.current = false;
+        // Note that the release of a press that opened the list is no step as well, while a
+        // click in the list, drawn in a portal whose clicks still pass through here, is its own.
+        const target = event.target;
+        if (target instanceof Node && button.current?.contains(target)) event.stopPropagation();
+      }}
+    >
+      <Tooltip label={label} command={command}>
+        <IconButton
+          ref={button}
+          icon={icon}
+          label={label}
+          disabled={!able}
+          aria-haspopup="menu"
+          aria-expanded={menu.open !== undefined}
+          onClick={onPress}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            // Note that a list standing, as a hold opened it, is not opened twice, and Android's
+            // own contextmenu, which may come before the hold's timer, spends the hold, so the
+            // finger's lift takes no step as well.
+            if (hold.counting()) hold.claim();
+            if (menu.open !== undefined) return;
+            openList();
+          }}
+        />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={`${label} history`}
+          menu={menu.drawn}
+          groups={historyGroups(steps, onGoTo)}
+          onClose={menu.close}
+        />
+      )}
+    </span>
   );
 }
 
@@ -611,33 +721,37 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Archive tasks puts every task under the header away, and Open on
- * GitHub opens the repository's page, under GitHub's mark rather than the
- * owner's picture, since it is about GitHub. The tasks with no repository
- * have no pin, since they always stand last, and no page to open. A group of
- * archived plans offers no Archive, since its plans are already away, so the
- * plans with no repository offer nothing there.
- * Archive tasks runs through `onArchive`, which asks first where any of the
- * tasks has coding agents the archive would stop and archive with it.
+ * account, Mark tasks done sets every task under the header Done, which the
+ * sidebar's status filter then leaves out, and Open on GitHub opens the
+ * repository's page, under GitHub's mark rather than the owner's picture,
+ * since it is about GitHub. Mark tasks done asks nothing first, since it
+ * stops no agent. The tasks with no repository have no pin, since they
+ * always stand last, and no page to open. A group of archived plans, or of
+ * tasks all done already, offers no Mark tasks done, so the plans with no
+ * repository offer nothing there.
  */
 function repositoryActionGroups(
   group: RepositoryGroup,
   tasks: TasksControl,
   archived: boolean,
-  onArchive: () => void,
 ): MenuAction[][] {
   const { repository } = group;
-  const archive: MenuAction[] =
-    archived || groupTasks(group).length === 0
+  const listed = groupTasks(group);
+  const settle: MenuAction[] =
+    archived || !listed.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
       ? []
       : [
           {
-            label: "Archive tasks",
-            icon: <ArchiveIcon />,
-            onSelect: onArchive,
+            label: "Mark tasks done",
+            icon: <MarkDoneIcon />,
+            onSelect: () =>
+              tasks.onSettleTasks(
+                listed.map(({ id }) => id),
+                SETTLED_STATUS.DONE,
+              ),
           },
         ];
-  if (repository === null) return archive.length === 0 ? [] : [archive];
+  if (repository === null) return settle.length === 0 ? [] : [settle];
   const pin: MenuAction = tasks.pinnedRepositories.includes(repository)
     ? {
         label: "Unpin",
@@ -650,7 +764,7 @@ function repositoryActionGroups(
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => tasks.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [[pin, ...archive], [github]];
+  return [[pin, ...settle], [github]];
 }
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
@@ -699,19 +813,7 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const listed = groupTasks(group);
-  const archiveAll = () => context.tasks.onArchiveTasks(listed.map(({ id }) => id));
-  const archiving = useConfirmDialog(
-    { subject: listed.length > 0, surfaceOpen: context.tasks.shown },
-    () => {
-      archiveAll();
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-  );
-  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived, () => {
-    if (archiveAsks(listed)) archiving.ask();
-    else archiveAll();
-  });
+  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -775,7 +877,6 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, listed.length)} />
       {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
@@ -817,19 +918,8 @@ function CreatorSection({
   );
 }
 
-/** What the list says where its filters leave nothing: by who the tasks are assigned to where it names one, else by who created them. */
-function emptyFilterWords(
-  createdBy: string | undefined,
-  assignedTo: string | undefined,
-  readerId: string | undefined,
-): string {
-  if (assignedTo !== undefined) {
-    return assignedTo === readerId
-      ? "Nothing assigned to you here."
-      : "Nothing assigned to them here.";
-  }
-  return createdBy === readerId ? "None of your tasks here." : "None of their tasks here.";
-}
+/** What the list says where its filters leave nothing, as the Tasks page says it. */
+const NONE_MATCH = "No tasks match this view.";
 
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
 function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
@@ -1116,7 +1206,7 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
     { state: sidebar.overlay, onState: sidebar.onOverlay },
     { focusAt: sidebarFocus, stays: ".title-bar-controls" },
   );
-  return { ...pane, inSight: !sidebar.collapsed || pane.floating };
+  return { ...pane, inSight: sidebarInSight(sidebar) };
 }
 
 /**
@@ -1910,8 +2000,7 @@ function SidebarColumn({
                   tasks.listRead &&
                   !tasks.listFailed ? (
                     <p className="sidebar-note">
-                      {emptyFilterWords(createdBy, assignedTo, tasks.me)}{" "}
-                      <Button onClick={taskView.onEveryone}>Show all</Button>
+                      {NONE_MATCH} <Button onClick={taskView.onEveryone}>Show all</Button>
                     </p>
                   ) : null}
                   {tasks.listFailed ? (

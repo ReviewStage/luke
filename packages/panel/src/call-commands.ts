@@ -15,13 +15,13 @@ import { useAppCommand } from "./app-commands.js";
  * The call's two mute chords, offered while a call is in progress wherever
  * the panel stands, on another task, in Settings, or on the home page,
  * since the call outlives the call bar that draws their buttons. Each is the
- * voice window's to carry out on the call standing, so neither names the
- * open task. The microphone's waits on the system's permission, as the call
+ * voice window's to carry out on the call standing, so neither names its
+ * agent. The microphone's waits on the system's permission, as the call
  * bar's button does: a microphone macOS refuses is unmuted in System
  * Settings, not by a chord.
  */
 export function useCallCommands(
-  view: Pick<VoiceView, "voiceStatus" | "callTaskId" | "speakerMuted">,
+  view: Pick<VoiceView, "voiceStatus" | "call" | "speakerMuted">,
   microphoneGranted: boolean,
   send: (command: VoiceCommand) => void,
 ): void {

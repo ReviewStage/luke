@@ -217,6 +217,8 @@ export function RepositoryChip(props: {
   onChoose: (repository: string) => void;
   /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the chip's own to drop. */
   onUnreached?: (() => void) | undefined;
+  /** Hears the repositories each successful read lists, `owner/name`. */
+  onListed?: ((repositories: readonly string[]) => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
   place: ChipPlace;
@@ -229,7 +231,7 @@ export function RepositoryChip(props: {
   /** A form row's chip: whether the row says its value is refused. */
   invalid?: true | undefined;
 }): React.JSX.Element {
-  const { chooser, openRequest, onUnreached, value } = props;
+  const { chooser, openRequest, onUnreached, onListed, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -286,6 +288,9 @@ export function RepositoryChip(props: {
   useEffect(() => {
     if (unreached) onUnreached?.();
   }, [unreached, onUnreached]);
+  useEffect(() => {
+    if (listed !== undefined) onListed?.(listed.repositories.map((each) => each.fullName));
+  }, [listed, onListed]);
   // No GitHub connected is mended at the workspace's Integrations.
   const workspaceGitHub: SettingsLink = {
     page: SETTINGS_VIEW.WORKSPACE,

@@ -7,7 +7,7 @@
  * of pull requests, the runtimes a repository's checks are likely
  * to need, which the base image carries or `prepare` installs, and
  * Playwright with its Chromium, which an agent screenshots what it built
- * with, and GTK 3, the one library an Electron app needs beyond Chromium's,
+ * with and which the agent's own browser runs headful, and GTK 3, the one library an Electron app needs beyond Chromium's,
  * so an agent runs a desktop app under Xvfb the same way. Node is the
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
@@ -37,7 +37,8 @@
  *
  * What the role's policy (`role.ts`) does with the sandbox once open is
  * read here by the store hook that watches the session's stream: whether a
- * turn's end stops it, and whether a step renews the credential the
+ * turn's end stops it, whether a step keeps it alive past its short
+ * timeout, and whether a step renews the credential the
  * checkout set at its firewall, which a shallow checkout's deepen sets on
  * its first write and which stands only from then on. A member's own GitHub token is never
  * renewed, since it does not expire: a turn's end takes it off the firewall
@@ -49,8 +50,8 @@ import { createHash } from "node:crypto";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
-import { BRAIN_HOST } from "../brain-host/bounds.js";
 import { CODER } from "../coder-host/bounds.js";
+import { keepAliveDue } from "../sandbox-keep-alive.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 import { PREPARE_SCRIPT, prepareImage } from "./sandbox-image.js";
 
@@ -81,6 +82,8 @@ export interface SandboxRecord {
   readonly memberToken?: boolean;
   /** Whether a member's token may be off the firewall since a turn ended, for the next step to set again. */
   readonly credentialLapsed?: boolean;
+  /** The instant a step last kept the sandbox alive (`session-sandboxes.ts`'s `keepAliveFor`). */
+  readonly keptAliveAt?: number;
 }
 
 /** How many snapshots Vercel keeps of a sandbox, as a bounds module names it. */
@@ -107,6 +110,8 @@ interface SandboxLifecycle {
   readonly open: SessionOpen | undefined;
   readonly renewsCredential: boolean;
   readonly stopsAtTurnEnd: boolean;
+  /** Whether its steps keep the sandbox alive past its timeout; a worker's keep its parent's alive from the worker's own hook. */
+  readonly keepsAlive: boolean;
 }
 
 /** The bound as Vercel's create takes it, its expiration in milliseconds. */
@@ -115,22 +120,14 @@ function retentionOf(bound: SnapshotBound): Retention {
 }
 
 /**
- * The coding agent's sandbox lives the platform's maximum, so a long run is
- * never cut off mid-turn, and is stopped the moment a turn ends rather than
- * waiting that out. Its size is enough memory for the repository's own lint,
- * chosen at open, so a stopped sandbox resumes at it. A brain sandbox opens
- * at the defaults and is never stopped by Luke: Vercel stops it when eve's
- * default timeout of thirty minutes runs out, counted from its start or
- * resume whether it is busy or not, and it resumes from its snapshot with
- * the checkout intact. Every stop snapshots the sandbox, so each keeps its
- * newest snapshot alone.
+ * The coding agent's sandbox opens with a short timeout, which its steps
+ * keep moving on while a turn runs, so a long run is never cut off mid-turn
+ * and one nothing stopped bills an hour rather than a day; and it is stopped
+ * the moment a turn ends rather than waiting that out. Its size is enough memory for the repository's own lint,
+ * chosen at open, so a stopped sandbox resumes at it. Every stop snapshots
+ * the sandbox, so each keeps its newest snapshot alone.
  */
 const SANDBOX_LIFECYCLE = {
-  [SANDBOX_POLICY.READ_SHALLOW_LAZY]: {
-    open: { keepLastSnapshots: retentionOf(BRAIN_HOST.SANDBOX_SNAPSHOTS) },
-    renewsCredential: false,
-    stopsAtTurnEnd: false,
-  },
   [SANDBOX_POLICY.SHALLOW_THEN_DEEP]: {
     open: {
       timeout: CODER.SANDBOX_TIMEOUT_MS,
@@ -139,8 +136,14 @@ const SANDBOX_LIFECYCLE = {
     },
     renewsCredential: true,
     stopsAtTurnEnd: true,
+    keepsAlive: true,
   },
-  [SANDBOX_POLICY.PARENT]: { open: undefined, renewsCredential: false, stopsAtTurnEnd: false },
+  [SANDBOX_POLICY.PARENT]: {
+    open: undefined,
+    renewsCredential: false,
+    stopsAtTurnEnd: false,
+    keepsAlive: false,
+  },
 } as const satisfies { readonly [Policy in SandboxPolicy]: SandboxLifecycle };
 
 /** eve's event kinds for a turn's end, however it ended. */
@@ -247,6 +250,40 @@ export function renewsCredential(
     credentialStands(record) &&
     (record.credentialLapsed === true ||
       (record.memberToken !== true && credentialIsOld(record, now)))
+  );
+}
+
+/**
+ * Whether a step starting at the instant given keeps a sandbox alive: the
+ * first step a session's hook sees, and from then on the first one a
+ * keep-alive interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`) after the last, so
+ * the sandbox is looked up a few times an hour of a turn rather than at
+ * every step. A worker's hook asks this of its own record for its parent's
+ * sandbox, which the worker reads in.
+ */
+export function keepsAliveAt(
+  event: MessageStreamEvent,
+  keptAliveAt: number | undefined,
+  now: number,
+): boolean {
+  return event.type === "step.started" && keepAliveDue(keptAliveAt, now);
+}
+
+/**
+ * Whether the role's policy keeps its own sandbox alive at this event: a
+ * step due by `keepsAliveAt`, once a sandbox tool has opened the sandbox. A
+ * sandbox stopped since is not resumed by it, only found not running.
+ */
+export function keepsSandboxAlive(
+  role: AgentRole,
+  event: MessageStreamEvent,
+  record: SandboxRecord,
+  now: number,
+): boolean {
+  return (
+    lifecycleOf(role).keepsAlive &&
+    record.openedAt !== undefined &&
+    keepsAliveAt(event, record.keptAliveAt, now)
   );
 }
 

@@ -7,22 +7,38 @@ import {
   MENU_ITEM_MARK,
   TaskPriorityMark,
   TaskStatusMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TextButton,
   useMenu,
 } from "@luke/ui";
-import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  actorName,
+  creatorActor,
+  LUKE_ACTOR,
+  memberActor,
+} from "@luke/ui/actor-model";
 import {
   BOARD_GROUPINGS,
   BOARD_PROPERTIES,
   boardGrouping,
+  COMPLETED_WINDOW,
+  type CompletedWindow,
   clearedField,
   filteredFields,
   filterValues,
+  TASK_MAKER,
+  TASK_MAKER_ORDER,
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
   TASKS_FILTER_FIELD,
   TASKS_GROUPING,
   TASKS_ORDER,
+  type TaskMaker,
   type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
@@ -35,7 +51,9 @@ import {
 import {
   ArrowDownAZIcon,
   ArrowDownNarrowWideIcon,
+  BotIcon,
   CalendarPlusIcon,
+  CircleCheckIcon,
   CircleDotIcon,
   ClockIcon,
   EyeIcon,
@@ -72,9 +90,11 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
  * View options is the Inbox's and the sidebar's sliders: Group by and Order
  * by, each a submenu with its choice checked, the Board offered only the
  * groupings a dragged card can be sent; then the switches, the pins and
- * sections leading the List, empty groups, and the Done and the Canceled
- * tasks; then the properties a row or a card draws; and Reset view while the
- * view is not the one it started as.
+ * sections leading the List, and empty groups; Show completed, which of the
+ * Done and Canceled tasks stand by when each was finished; then the
+ * properties a row or a card draws; and Reset view while the view is not the
+ * one it started as. A settled group the window leaves older tasks out of
+ * ends on a muted "+ N older" line, which shows them all.
  */
 
 /** What both views are handed: the page's toolbar, its filter line's chips, and the filter and the view's display. */
@@ -84,6 +104,8 @@ export interface TasksViewFrame {
   readonly chips: ReactNode;
   readonly filter: TasksFilter;
   readonly display: TasksDisplay;
+  /** Changes the view's display, as the line under a settled group does. */
+  readonly onDisplay: (display: TasksDisplay) => void;
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */
@@ -95,6 +117,7 @@ const FIELD_WORDS = {
   [TASKS_FILTER_FIELD.STATUS]: "Status",
   [TASKS_FILTER_FIELD.PRIORITY]: "Priority",
   [TASKS_FILTER_FIELD.CREATOR]: "Creator",
+  [TASKS_FILTER_FIELD.MADE_BY]: "Made by",
   [TASKS_FILTER_FIELD.REPOSITORY]: "Repository",
 } as const satisfies Record<TasksFilterField, string>;
 
@@ -103,8 +126,39 @@ const FIELD_ICON = {
   [TASKS_FILTER_FIELD.STATUS]: <CircleDotIcon />,
   [TASKS_FILTER_FIELD.PRIORITY]: <SignalHighIcon />,
   [TASKS_FILTER_FIELD.CREATOR]: <UserIcon />,
+  [TASKS_FILTER_FIELD.MADE_BY]: <BotIcon />,
   [TASKS_FILTER_FIELD.REPOSITORY]: <FolderGitIcon />,
 } as const satisfies Record<TasksFilterField, React.JSX.Element>;
+
+/** What each completed window is called, in the order the menu lists them. */
+const COMPLETED_WORDS = {
+  [COMPLETED_WINDOW.NONE]: "None",
+  [COMPLETED_WINDOW.PAST_WEEK]: "Past week",
+  [COMPLETED_WINDOW.PAST_MONTH]: "Past month",
+  [COMPLETED_WINDOW.ALL]: "All",
+} as const satisfies Record<CompletedWindow, string>;
+
+/**
+ * What each maker is called in Made by, and the mark it wears there: a
+ * person's glyph, a coding agent's square on no harness, and Luke's face.
+ * Note that an agent an automation's run started makes its tasks as an
+ * agent, which the task names by the automation, so Agents says both.
+ */
+const MAKER_WORDS = {
+  [TASK_MAKER.PERSON]: "People",
+  [TASK_MAKER.AGENT]: "Agents and automations",
+  [TASK_MAKER.LUKE]: "Luke",
+} as const satisfies Record<TaskMaker, string>;
+
+const MAKER_ACTOR = {
+  [TASK_MAKER.AGENT]: {
+    kind: ACTOR_KIND.AGENT,
+    name: MAKER_WORDS[TASK_MAKER.AGENT],
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  },
+  [TASK_MAKER.LUKE]: LUKE_ACTOR,
+} as const satisfies Record<Exclude<TaskMaker, typeof TASK_MAKER.PERSON>, Actor>;
 
 /** What a grouping is called. */
 const GROUPING_WORDS = {
@@ -237,6 +291,17 @@ function fieldValues(
         ...(held.has(null) ? [{ value: null, words: NO_CREATOR, icon: <UserXIcon /> }] : []),
       ];
     }
+    case TASKS_FILTER_FIELD.MADE_BY:
+      return TASK_MAKER_ORDER.map((maker) => ({
+        value: maker,
+        words: MAKER_WORDS[maker],
+        icon:
+          maker === TASK_MAKER.PERSON ? (
+            <UserIcon />
+          ) : (
+            <ActorMark actor={MAKER_ACTOR[maker]} size={ACTOR_SIZE.INLINE} />
+          ),
+      }));
     case TASKS_FILTER_FIELD.REPOSITORY:
       return [
         ...[...held]
@@ -396,8 +461,7 @@ function sameDisplay(a: TasksDisplay, b: TasksDisplay): boolean {
     a.grouping === b.grouping &&
     a.order === b.order &&
     a.emptyGroups === b.emptyGroups &&
-    a.done === b.done &&
-    a.canceled === b.canceled &&
+    a.completed === b.completed &&
     a.pinnedFirst === b.pinnedFirst &&
     a.properties.length === b.properties.length &&
     a.properties.every((property) => b.properties.includes(property))
@@ -471,8 +535,17 @@ function displayEntries({
             }),
           ]
         : []),
-      toggle("Done tasks", display.done, { done: !display.done }),
-      toggle("Canceled tasks", display.canceled, { canceled: !display.canceled }),
+    ],
+    [
+      {
+        label: "Show completed",
+        icon: <CircleCheckIcon />,
+        items: Object.values(COMPLETED_WINDOW).map((each) => ({
+          label: COMPLETED_WORDS[each],
+          checked: display.completed === each,
+          onSelect: () => set({ completed: each }),
+        })),
+      },
     ],
     [
       {
@@ -538,5 +611,22 @@ export function TasksViewOptions({
         />
       )}
     </>
+  );
+}
+
+/** The muted line ending a settled group the completed window leaves older tasks out of, which shows them all; nothing where it leaves none. */
+export function OlderCompleted({
+  older,
+  onShow,
+}: {
+  older: number | undefined;
+  onShow: () => void;
+}): React.JSX.Element | null {
+  if (older === undefined) return null;
+  // Note that the line is the group's quiet caption, as its "No tasks" is, the words a press.
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      <TextButton onClick={onShow}>{`+ ${older} older`}</TextButton>
+    </Text>
   );
 }

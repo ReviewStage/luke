@@ -3,38 +3,69 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { highlightSnippet } from "@luke/host";
-import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
+import {
+  createActPortHandler,
+  type PlatformActProcedures,
+  terminalProcedures,
+} from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import {
   BrowserWindow,
   clipboard,
   dialog,
   ipcMain,
   MessageChannelMain,
+  nativeImage,
   type WebContents,
   webContents,
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createBrowserViews } from "../window/browser-views";
-import { HOTKEY_RANK } from "../window/hotkey-registrar";
 import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserProcedures } from "./browser-acts";
+import { browserLiveProcedures } from "./browser-live-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
+import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
-import { terminalProcedures, whenPageGone } from "./terminal-acts";
 import { updateProcedures } from "./update-acts";
 import { voiceRuntimeProcedures, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceProcedures, windowSurfaceReports } from "./window-surface";
+
+/** The widest a still of part of a panel is kept, in device pixels: a card's preview at twice its width, and no more. */
+const STILL_WIDTH = 480;
+
+/** The JPEG quality a still is kept at: a preview, never read for its words. */
+const STILL_QUALITY = 70;
+
+/**
+ * A still of part of a panel, as ⌃Tab's card previews the tab it left:
+ * taken while the window may be hidden, downscaled, and answered as a
+ * JPEG's data URL to that panel alone. Note that nothing here keeps it,
+ * writes it, or counts it, because it is a picture of the panel's words.
+ */
+async function windowStill(
+  sender: WebContents,
+  rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+): Promise<string | null> {
+  const image = await sender.capturePage(
+    { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+    { stayHidden: true, stayAwake: true },
+  );
+  if (image.isEmpty()) return null;
+  const scaled =
+    image.getSize().width > STILL_WIDTH
+      ? image.resize({ width: STILL_WIDTH, quality: "good" })
+      : image;
+  return `data:image/jpeg;base64,${scaled.toJPEG(STILL_QUALITY).toString("base64")}`;
+}
 
 /**
  * Every channel the sandboxed renderers reach this process through, composed
@@ -58,11 +89,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
     notices,
     testNotification,
     avatar,
+    colourCode,
     run,
     services: effectServices,
   } = services;
   const { launch } = config;
-  const { panels, voiceWindow, callWindow, hotkeys } = windows;
+  const { panels, voiceWindow, callWindow } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -74,7 +106,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     panels,
     voiceWindow,
     state,
-    setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),
     liveSession: operator.host,
@@ -83,6 +114,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
       void run(operator.host.recordAgentTrace(trace));
     },
   };
+
+  const browserExperimentOn = () =>
+    experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER);
 
   // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
   const browserViews = createBrowserViews({
@@ -96,10 +130,25 @@ export function registerDesktopIpc(services: DesktopServices): void {
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...avatarProcedures({ avatar }),
-    ...browserProcedures({
-      views: browserViews,
-      experimentOn: () =>
-        experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
+    ...browserProcedures({ views: browserViews, experimentOn: browserExperimentOn }),
+    ...browserLiveProcedures({
+      host: operator.host,
+      ports: {
+        open: (sender, ticket) => {
+          const { port1, port2 } = new MessageChannelMain();
+          sender.postMessage(BROWSER_LIVE_PORT_CHANNEL, ticket, [port2]);
+          port1.start();
+          return {
+            post: (message) => port1.postMessage(message),
+            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
+            close: () => port1.close(),
+          };
+        },
+        whenGone: whenPageGone,
+      },
+      experimentOn: browserExperimentOn,
+      createId: randomUUID,
+      run,
     }),
     ...macTerminalProcedures({
       host: operator.host,
@@ -123,7 +172,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
       start: startMacTerminal,
     }),
-    ...terminalProcedures({
+    ...terminalProcedures<WebContents>({
       host: operator.host,
       ports: {
         open: (sender, ticket) => {
@@ -139,7 +188,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         whenGone: whenPageGone,
       },
       createId: randomUUID,
-      run,
+      fork: (effect) => void run(effect),
     }),
     ...updateProcedures({ updates }),
     ...voiceRuntimeProcedures(voiceRuntime),
@@ -152,6 +201,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
       openExternal: config.openExternal,
       testNotification,
       copyText: (words) => clipboard.writeText(words),
+      copyImage: (png) => {
+        const image = nativeImage.createFromBuffer(Buffer.from(png, "base64"));
+        if (image.isEmpty()) return false;
+        clipboard.writeImage(image);
+        return true;
+      },
+      captureStill: (sender, rect) => windowStill(sender, rect),
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };
@@ -232,31 +288,20 @@ export function registerDesktopIpc(services: DesktopServices): void {
           },
           lastSettings: () => operator.settings(),
           sideEffects: clientSettingSideEffects({
-            hotkeys,
             applyLoginItem: windows.applyLoginItem,
             mediaDuck: native.mediaDuck,
           }),
-          stopChordHolder: (chord) =>
-            hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
         },
         tasks: {
           host: operator.host,
-          colourCode: highlightSnippet,
+          colourCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,
-          talkAboutTask: (taskId) => {
+          talkTo: (about) => {
             const voice = voiceWindow.current();
-            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, { taskId });
+            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, about);
           },
-          voiceReady: () => {
-            const snapshot = state.snapshot();
-            return (
-              snapshot.settings?.status.voiceAvailable === true &&
-              snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
-            );
-          },
-          callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         },
         taskIssues: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },

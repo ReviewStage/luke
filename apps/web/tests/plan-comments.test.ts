@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import {
@@ -33,6 +35,7 @@ import {
   type EveMessage,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
+import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -47,7 +50,17 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, type Context, Effect, Layer, Option, Queue, Result, Stream } from "effect";
+import {
+  Clock,
+  type Context,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Queue,
+  Result,
+  Stream,
+} from "effect";
 import { SqlClient } from "effect/sql";
 
 /**
@@ -173,6 +186,7 @@ const answer = (routes: "comments" | "plans", request: Request) =>
         resolveUserId,
         workspaces: yield* fakeWorkspaceSeams,
         eveOrigin: () => undefined,
+        sessionSandboxes: sessionSandboxesLayer,
       }),
     });
     const response = yield* Effect.promise(() => plans(request, services));
@@ -225,6 +239,36 @@ const openSharedTask = Effect.gen(function* () {
   yield* savePlanText(owner, taskId, PLAN_TEXT);
   return { owner, teammate, outsider, taskId };
 });
+
+/** A coding agent the owner started on the task, its session standing, which a comment's mention hands the thread. */
+const startAgent = (owner: string, taskId: string) =>
+  Effect.gen(function* () {
+    const { agent } = Option.getOrThrow(
+      yield* createCodingAgent(owner, {
+        taskId,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: null,
+        planSnapshot: null,
+        prompt: "Draft the invite email.",
+      }),
+    );
+    const claimed = yield* claimRuntimeSession(
+      { userId: owner, conversationId: agent.conversationId },
+      `wrun_${randomUUID()}`,
+      yield* DateTime.nowAsDate,
+    );
+    assert.ok(claimed, "the agent's session stands");
+    return agent.id;
+  });
+
+/** An agent's mention link, as a member's chip writes it. */
+const agentLink = (taskId: string, agentId: string) =>
+  `[@Invite email](https://tryluke.dev/acme/plan/${taskId}/agent/${agentId})`;
+
+/** A task's Luke's mention link, as a chip wrote it while a task had one. */
+const lukeLink = (taskId: string) => `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */
 function startBody(comment: string) {
@@ -360,12 +404,13 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
   );
 });
 
-it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) => {
+it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   it.effect(
-    "a thread started with Luke mentioned opens his planning turn on the thread, and the thread says who asked him",
+    "a thread started with an agent mentioned hands it the thread as the member's message, and the thread says who asked it",
     () =>
       Effect.gen(function* () {
-        const { teammate, taskId } = yield* openSharedTask;
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
         const before = opened.length;
 
         const thread = threadIn(
@@ -375,15 +420,13 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
               commentsPath(taskId),
               teammate,
               {},
-              startBody(
-                `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) is withdrawing in v1?`,
-              ),
+              startBody(`${agentLink(taskId, agentId)} is withdrawing in v1?`),
             ),
           ),
         );
 
         const [message] = opened.slice(before);
-        assert.ok(message, "Luke's planning turn was opened");
+        assert.ok(message, "the agent was handed the thread");
         // Note that the message is read as eve was handed it, its words wherever its parts hold them.
         const words = JSON.stringify(message.message);
         assert.ok(words.includes("Charles Pan sent you a comment thread"));
@@ -395,17 +438,63 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
           after?.entries.map((entry) => [entry.kind, entry.asked?.actor]),
           [
             [PLAN_COMMENT_ENTRY.COMMENT, undefined],
-            [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.LUKE],
+            [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.AGENT],
           ],
         );
       }),
   );
 
   it.effect(
-    "a reply that mentions Luke hands him the thread once, sent again or not, and one that mentions an agent not on the task asks no one",
+    "a thread started, or a reply, that mentions the task's Luke hands no one the thread and writes nothing as Luke, since no task has a Luke of its own",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
+        const before = opened.length;
+
+        const thread = threadIn(
+          yield* answer(
+            "comments",
+            request(
+              commentsPath(taskId),
+              teammate,
+              {},
+              startBody(`${lukeLink(taskId)} is withdrawing in v1?`),
+            ),
+          ),
+        );
+        const replied = threadIn(
+          yield* answer(
+            "comments",
+            request(
+              threadPath(taskId, thread.id),
+              owner,
+              {},
+              {
+                action: PLAN_COMMENT_ACTION.REPLY,
+                clientKey: randomUUID(),
+                words: `${lukeLink(taskId)} what do you think?`,
+              },
+            ),
+          ),
+        );
+
+        assert.equal(opened.length, before, "eve was asked nothing");
+        assert.deepEqual(
+          replied.entries.map((entry) => [entry.kind, entry.writer?.actor, entry.asked?.actor]),
+          [
+            [PLAN_COMMENT_ENTRY.COMMENT, PLAN_COMMENT_ACTOR.MEMBER, undefined],
+            [PLAN_COMMENT_ENTRY.COMMENT, PLAN_COMMENT_ACTOR.MEMBER, undefined],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a reply that mentions an agent hands it the thread once, sent again or not, and one that mentions an agent not on the task asks no one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
         const thread = threadIn(
           yield* answer(
             "comments",
@@ -424,7 +513,7 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
           );
         const before = opened.length;
         const key = randomUUID();
-        const words = `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) what do you think?`;
+        const words = `${agentLink(taskId, agentId)} what do you think?`;
 
         yield* reply(words, key);
         yield* reply(words, key);
@@ -435,23 +524,11 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
           ),
         );
 
-        assert.equal(opened.length - before, 1, "Luke was handed the thread once");
+        assert.equal(opened.length - before, 1, "the agent was handed the thread once");
         assert.ok(
           JSON.stringify(opened.at(-1)?.message).includes(
             "Dean Stratakos sent you a comment thread",
           ),
-        );
-        const [first] = threadsIn(
-          yield* answer("comments", request(commentsPath(taskId), owner, {})),
-        );
-        assert.deepEqual(
-          first?.entries.map((entry) => [entry.kind, entry.asked?.actor]),
-          [
-            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
-            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
-            [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.LUKE],
-            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
-          ],
         );
         assert.equal(
           elsewhere.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
@@ -462,10 +539,11 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
   );
 
   it.effect(
-    "a reply the store refuses hands no one the thread, though its words mention Luke",
+    "a reply the store refuses hands no one the thread, though its words mention an agent",
     () =>
       Effect.gen(function* () {
         const { owner, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
         const taken = randomUUID();
         yield* answer(
           "comments",
@@ -490,21 +568,22 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
             {
               action: PLAN_COMMENT_ACTION.REPLY,
               clientKey: taken,
-              words: `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) please answer`,
+              words: `${agentLink(taskId, agentId)} please answer`,
             },
           ),
         );
 
         assert.deepEqual(JSON.parse(refused.body), { refused: PLAN_COMMENT_REFUSAL.KEY_TAKEN });
-        assert.equal(opened.length, before, "Luke was handed nothing");
+        assert.equal(opened.length, before, "the agent was handed nothing");
       }),
   );
 
   it.effect(
-    "a reply sent again under its key with other words that mention Luke hands him nothing, since those words never posted",
+    "a reply sent again under its key with other words that mention an agent hands it nothing, since those words never posted",
     () =>
       Effect.gen(function* () {
         const { owner, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
         const thread = threadIn(
           yield* answer("comments", request(commentsPath(taskId), owner, {}, startBody("v1?"))),
         );
@@ -522,11 +601,9 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
         yield* reply("No action needed.");
         const before = opened.length;
 
-        const again = threadIn(
-          yield* reply(`[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) please answer`),
-        );
+        const again = threadIn(yield* reply(`${agentLink(taskId, agentId)} please answer`));
 
-        assert.equal(opened.length, before, "Luke was handed nothing");
+        assert.equal(opened.length, before, "the agent was handed nothing");
         assert.equal(
           again.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
           0,

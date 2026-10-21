@@ -1,3 +1,5 @@
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import {
   TASK_BOUNDS,
   TASK_STATUS,
@@ -9,7 +11,10 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
+  CHIP_SIZE,
   CHOICE_BAR_LOOK,
+  Chip,
+  ChipName,
   ChoiceBar,
   COLLECTION_STATE,
   CollectionPage,
@@ -22,6 +27,8 @@ import {
   InlineEdit,
   PAGE_FRAME,
   PAGE_WIDTH,
+  PROVIDER_MARK_SIZE,
+  ProviderMark,
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
@@ -32,10 +39,11 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { creatorActor } from "@luke/ui/actor-model";
+import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import {
+  COMPLETED_WINDOW,
   TASK_PROPERTY,
   TASKS_GROUP,
   type TaskProperty,
@@ -52,9 +60,12 @@ import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { RelativeTime } from "../tasks/relative-time.js";
+import { issueTagWords } from "../tasks/task-issue-links-model.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
+import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { useTaskMenu } from "./task-actions.js";
@@ -66,7 +77,7 @@ import {
   useStandingDoor,
   WaitingBadge,
 } from "./task-row-parts.js";
-import type { TasksViewFrame } from "./tasks-page-options.js";
+import { OlderCompleted, type TasksViewFrame } from "./tasks-page-options.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -135,6 +146,41 @@ const FIRST_SHOWN: string = TASK_STATUS.TODO;
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
 
+/** The mark a tag wears for who holds its issue. */
+const TAG_MARK = {
+  [TASK_ISSUE_PROVIDER.GITHUB]: INTEGRATION_PROVIDER.GITHUB,
+  [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
+} as const satisfies Record<TaskIssueProvider, string>;
+
+/**
+ * The issues a card's task links, oldest first, a tag each in a row under
+ * its name: the provider's mark and its key, a GitHub issue of the task's
+ * own repository by its `#N` alone. A press on a tag opens the issue as a
+ * link to it does elsewhere (`../tasks/use-open-link.ts`), never the task.
+ * Nothing for a task that links none.
+ */
+function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | null {
+  const openLink = useOpenLink();
+  const tags = task.issues ?? [];
+  if (tags.length === 0) return null;
+  return (
+    <div className="tasks-board-tags">
+      {tags.map((tag) => (
+        <Chip
+          key={tag.id}
+          look={CHIP_LOOK.PILL}
+          size={CHIP_SIZE.COMPACT}
+          data-provider={tag.provider}
+          onClick={() => openLink(tag.url)}
+        >
+          <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
+          <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>
+        </Chip>
+      ))}
+    </div>
+  );
+}
+
 /**
  * One task's card: its key, what waits on the reader, when it last moved,
  * and its creator's face over its name, one press that opens it, and at its foot
@@ -168,6 +214,7 @@ function TaskBoardCard({
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
+  const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
@@ -195,7 +242,14 @@ function TaskBoardCard({
         ) : null}
         {drawn(TASK_PROPERTY.CREATOR) ? (
           <span className="tasks-board-face">
-            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+            {maker === undefined ? null : (
+              <span className="tasks-board-maker">{actorName(maker.actor)}</span>
+            )}
+            <ActorMark
+              actor={maker?.actor ?? creator}
+              size={ACTOR_SIZE.MARK}
+              forWhom={maker === undefined ? undefined : creator}
+            />
           </span>
         ) : null}
       </span>
@@ -246,6 +300,7 @@ function TaskBoardCard({
           {RENAME_FAILED_NOTE}
         </span>
       ) : null}
+      <TaskBoardTags task={task} />
       <div className="tasks-board-card-foot">
         {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
         {drawn(TASK_PROPERTY.PRIORITY) ? (
@@ -328,6 +383,7 @@ function TaskBoardColumnView({
   now,
   onOpen,
   onStanding,
+  onShowOlder,
 }: {
   tasks: TasksControl;
   column: TasksGroup;
@@ -343,6 +399,8 @@ function TaskBoardColumnView({
   now: number;
   onOpen: (task: TaskSummary) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
+  /** Shows every settled task, as the column's "+ N older" line asks. */
+  onShowOlder: () => void;
 }): React.JSX.Element {
   // Note that a card is carried by its press alone, so a press on one of its chips, its ⋯, or a menu they drop stays that control's.
   const drag = useRowDrag(undefined, {
@@ -378,9 +436,11 @@ function TaskBoardColumnView({
         )}
       </h2>
       {column.tasks.length === 0 ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {NO_TASKS}
-        </Text>
+        column.older === undefined ? (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {NO_TASKS}
+          </Text>
+        ) : null
       ) : (
         <div className="tasks-board-column-scroll">
           <ScrollArea
@@ -406,6 +466,7 @@ function TaskBoardColumnView({
           </ScrollArea>
         </div>
       )}
+      <OlderCompleted older={column.older} onShow={onShowOlder} />
     </section>
   );
 }
@@ -433,7 +494,7 @@ export function TasksBoard({
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
-  const columns = tasksBoardColumns(listed, { filter, display });
+  const columns = tasksBoardColumns(listed, { filter, display, now });
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
@@ -510,6 +571,7 @@ export function TasksBoard({
               now={now}
               onOpen={(task) => tasks.onSelect(task.id)}
               onStanding={setStanding}
+              onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
             />
           ),
         )}

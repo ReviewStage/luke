@@ -48,9 +48,11 @@ import {
 import { Base64 } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
+import { type BrowserLiveConcern, browserLiveConcern } from "./compose-browser-live.js";
 import type { Composer } from "./composer.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
+import { openedUnderCredential } from "./relay-credential.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -59,19 +61,21 @@ import type { RunMode } from "./run-mode.js";
  * The REST calls are one service call each, answered whole. An attached
  * shell is a connection the desktop named, held here on one fiber for as
  * long as the tab wants it: the fiber opens the relay socket under the
- * account's bearer, hands up what the shell printed as `TERMINAL_OUTPUT`
- * events named by that connection, and says how the connection stands as
- * `TERMINAL_STATE` events. A socket that dropped — a sleep, a network
- * change, the relay function's bound — is opened again on its own, after a
- * wait that doubles to ten seconds and starts over once the shell attaches;
- * one whose agent has not opened its sandbox is asked after every five
- * seconds; and one the relay ended as idle, stopped, gone, or exited, or
- * one the deployment serves no relay for, stays ended until the tab
- * attaches again. A wake after the Mac slept cuts every
- * wait short. Output is paced to what the tab has drawn: past
- * `PAUSE_ABOVE_BYTES` unacked the socket is no longer read, so the relay
- * backs up rather than this process. Nothing a shell printed is kept here,
- * logged, or counted: it is handed to the event and let go.
+ * account's credential (`relay-credential.ts`: the desktop's bearer, or in
+ * a browser tab the page's cookie, which the browser carries itself), hands
+ * up what the shell printed as `TERMINAL_OUTPUT` events named by that
+ * connection, and says how the connection stands as `TERMINAL_STATE`
+ * events. A socket that dropped — a sleep, a network change, the relay
+ * function's bound — is opened again on its own, after a wait that doubles
+ * to ten seconds and starts over once the shell attaches; one whose agent
+ * has not opened its sandbox is asked after every five seconds; and one the
+ * relay ended as idle, stopped, gone, or exited, or one the deployment
+ * serves no relay for, stays ended until the tab attaches again. A wake
+ * after the Mac slept cuts every wait short. Output is paced to what the
+ * tab has drawn: past `PAUSE_ABOVE_BYTES` unacked the socket is no longer
+ * read, so the relay backs up rather than this process. Nothing a shell
+ * printed is kept here, logged, or counted: it is handed to the event and
+ * let go.
  */
 
 /** What one relay socket hands up: a binary frame's bytes, a text frame, or the close code that ended it, last. */
@@ -124,7 +128,7 @@ export interface TerminalsDependencies {
   kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "emit"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
-  account: Pick<AccountComposer, "capabilitiesActive" | "token">;
+  account: Pick<AccountComposer, "capabilitiesActive" | "credential">;
   client: TerminalClient;
   openSocket: OpenTerminalSocket;
 }
@@ -133,6 +137,12 @@ export interface TerminalsComposer extends Composer {
   /** Every connection ended, as a sign-out ends them; each tab hears it idle, so a key press attaches again. */
   readonly reset: Effect.Effect<void>;
 }
+
+/** The shells' own methods: the concern's, but the live view's beside them (`compose-browser-live.ts`). */
+type ShellMethods = Omit<
+  PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.TERMINALS>,
+  keyof BrowserLiveConcern["methods"]
+>;
 
 /** The status of an upgrade a server refused for want of itself rather than the ask: it may answer the next one. */
 const SERVER_ERROR_STATUS = 500;
@@ -215,7 +225,13 @@ export function composeTerminals(
 ): Effect.Effect<TerminalsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const fibers = yield* FiberMap.make<string>();
-    return composed(dependencies, fibers, yield* HttpClient.HttpClient);
+    const views = browserLiveConcern(dependencies, yield* FiberMap.make<string>());
+    const terminals = composed(dependencies, fibers, yield* HttpClient.HttpClient);
+    return {
+      methods: { ...terminals.methods, ...views.methods },
+      lifetime: terminals.lifetime,
+      reset: Effect.andThen(terminals.reset, views.reset),
+    };
   });
 }
 
@@ -224,7 +240,7 @@ function composed(
   dependencies: TerminalsDependencies,
   fibers: FiberMap.FiberMap<string>,
   http: HttpClient.HttpClient,
-): TerminalsComposer {
+): Omit<TerminalsComposer, "methods"> & { readonly methods: ShellMethods } {
   const { kernel, account, client, openSocket } = dependencies;
   const connections = new Map<string, Connection>();
   const socketOrigin = webSocketOrigin(kernel.hostedServiceBaseUrl);
@@ -255,18 +271,8 @@ function composed(
       yield* socket.pause;
     });
 
-  /** The relay socket opened under the account's bearer; a refusal of it is renewed once, on a bearer that changed. */
   const opened = (address: string) =>
-    Effect.gen(function* () {
-      const bearer = yield* account.token.readAccessToken();
-      if (bearer === undefined) return { refused: 401 } satisfies TerminalSocketOpening;
-      const opening = yield* openSocket(address, { authorization: `Bearer ${bearer}` });
-      if (!("refused" in opening) || opening.refused !== 401) return opening;
-      yield* Effect.ignore(account.token.refreshAccount());
-      const renewed = yield* account.token.readAccessToken();
-      if (renewed === undefined || renewed === bearer) return opening;
-      return yield* openSocket(address, { authorization: `Bearer ${renewed}` });
-    });
+    openedUnderCredential(account.credential, openSocket, address);
 
   /**
    * One socket's life: opened, read until it closes, and its close read as
@@ -403,7 +409,7 @@ function composed(
 
   const encoder = new TextEncoder();
 
-  const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.TERMINALS> = {
+  const methods: ShellMethods = {
     [GATEWAY_METHOD.TERMINALS_LIST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(

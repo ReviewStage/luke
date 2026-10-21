@@ -12,6 +12,7 @@ import { STORE_WRITE_EFFECT, storeWriter } from "@luke/database/models/writer";
 import {
   insertConversation,
   openHostedStoreTestDatabase,
+  readMessagesByConversationTyped,
   readVoiceSessionByLiveSessionId,
   readVoiceTranscriptSegmentsBySession,
 } from "@luke/database/testing";
@@ -19,8 +20,8 @@ import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@luke/live";
 import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { heard, said } from "../testing/live-events.js";
-import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 
 /**
  * The voice writer over the real migrations on PGlite, fed a synthetic Live
@@ -36,7 +37,7 @@ const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
-const store = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
+const store = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 const record = voiceSessionRecord(() => NOW);
 
 let liveSessions = 0;
@@ -134,4 +135,77 @@ test("a session no row stands for is refused, and another account's row is not t
     Result.fail(VOICE_WRITE_REFUSAL.NO_SESSION),
   );
   assert.deepEqual(await segments(live.liveSessionId), []);
+});
+
+test("a line typed into the call is one typed row naming the call, and Luke's words after it follow it as its ask", async () => {
+  const live = await target();
+  const voice = writer();
+  await database.run(voice.consume(live, heard("check the tests", 0, 800)));
+  assert.deepEqual(
+    await database.run(
+      voice.upsertSpokenRow(live, { rowId: "row-1", speaker: "user", startMs: 0, endMs: 800 }),
+    ),
+    WRITTEN,
+  );
+  assert.deepEqual(
+    await database.run(
+      voice.writeTypedRow(live, { rowId: "typed-1", text: "Use the fixture branch.", atMs: 900 }),
+    ),
+    WRITTEN,
+  );
+  await database.run(voice.consume(live, said("Switching branches.", 1000, 1600)));
+  assert.deepEqual(
+    await database.run(
+      voice.upsertSpokenRow(live, {
+        rowId: "reply-1",
+        speaker: "assistant",
+        startMs: 1000,
+        endMs: 1600,
+      }),
+    ),
+    WRITTEN,
+  );
+  const sessionId = await sessionRowId(live.liveSessionId);
+  const rows = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.clientId, row.metadata]),
+    [
+      [
+        "row-1",
+        {
+          author: "developer",
+          channel: "voice",
+          voice_session_id: sessionId,
+          from_ms: 0,
+          to_ms: 800,
+        },
+      ],
+      [
+        "typed-1",
+        { author: "developer", channel: "typed", voice_session_id: sessionId, from_ms: 900 },
+      ],
+      [
+        "reply-1",
+        {
+          author: "voice_model",
+          channel: "voice",
+          voice_session_id: sessionId,
+          from_ms: 1000,
+          to_ms: 1600,
+          delegation_id: "typed-1",
+        },
+      ],
+    ],
+  );
+  // Written again under its id, the line stands once.
+  await database.run(
+    voice.writeTypedRow(live, { rowId: "typed-1", text: "Use the fixture branch.", atMs: 900 }),
+  );
+  assert.equal(
+    (await readMessagesByConversationTyped(database.run, live.conversation.conversationId)).length,
+    3,
+  );
 });

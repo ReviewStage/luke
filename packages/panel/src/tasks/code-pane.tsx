@@ -1,5 +1,5 @@
 import type { CodeRef } from "@luke/features/task-wire";
-import type { TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { IconButton, SCROLL_FADE_INSET } from "@luke/ui";
 import {
   type CodeFeedCall,
@@ -10,34 +10,38 @@ import {
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { memo } from "react";
+import { Checkpoint } from "../ai-elements/checkpoint.js";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { MarkdownMessage } from "../markdown-message.js";
 import { Tooltip } from "../tooltip.js";
-import { CallCheckpoint, CallEnded } from "./call-card.js";
-import { CodeLineRows } from "./code-lines.js";
+import { CallEndMarker, CallStartMarker } from "./call-card.js";
+import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
-import { useMentionLink } from "./task-mentions.js";
-import { useOpenLink } from "./use-open-link.js";
+import { callHeading } from "./task-time.js";
+import { WORKED_SEPARATOR } from "./working-time.js";
 
 /**
- * code-pane.tsx -- the code Luke put on screen on a task's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
+ * code-pane.tsx -- the code a task's agents put on screen: the side panel's Code tab, every snippet they showed, one card each, in the order they showed them.
  *
- * Luke names a file of the task's repository and the lines that matter as he
- * starts to speak about them; the service reads them from its checkout of
- * the repository, and the host keeps the lines pointed at with a few of the
- * file around them and colours them (`task-code.ts`). The tab draws each
- * as a card: the file's path, Luke's note on why he showed them, those
- * lines numbered from where they sit in the file, and a copy of the lines
- * pointed at, so the feed reads as a walkthrough, a step a card. Two
- * snippets of one file are two cards. The cards stand under the call they
- * were shown on, each call opening at the Checkpoint the Call tab
- * opens it at and, once it has ended, closing on the line the Call tab
- * closes it on, its card on hover, and the feed keeps to its newest card
+ * An agent names a file of the task's repository and the lines that matter
+ * as it starts to speak about them; the service reads them from the agent's
+ * checkout of the repository, and the host keeps the lines pointed at with a few of the
+ * file around them (`task-code.ts`). The tab draws each as a card: the
+ * file's path and a copy of the lines pointed at over those lines, drawn
+ * and coloured by the diff bundle as View settings draws code, numbered from
+ * where they sit in the file, with the agent's note on why it showed them under
+ * the last of them (`code-snippet.tsx`), so the feed reads as a
+ * walkthrough, a step a card. Two
+ * snippets of one file are two cards. Code an agent showed on a turn of its
+ * own, typed or spoken, stands under that turn, headed by the agent's name
+ * and when the turn began. The cards stand under the call they
+ * were shown on, each call opening at the marker an agent's transcript
+ * opens it at and, once it has ended, closing on the marker it closes it
+ * on, its card on hover, and the feed keeps to its newest card
  * while it is scrolled there, so code shown on a live call lands at the bottom as the
  * transcript's lines do, and scrolling up to read an earlier card leaves
  * it where it is until the developer scrolls back down. Every line here is
@@ -50,6 +54,9 @@ const COPY_LABEL = "Copy lines";
 
 /** What a card's button that opens the whole file in a tab is called. */
 const OPEN_FILE_LABEL = "Open file";
+
+/** No agent named, where the pane is drawn with no agents to name. */
+const noAgentLabel = (): undefined => undefined;
 
 /**
  * Scrolls `lines` alone until `target` stands in its middle. Note that this
@@ -72,15 +79,6 @@ export function scrollerOf(element: HTMLElement): HTMLElement | undefined {
     }
   }
   return undefined;
-}
-
-/** A card's lines. */
-export function CodeLines({ code }: { code: TaskCode }): React.JSX.Element {
-  return (
-    <div className="code-lines">
-      <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />
-    </div>
-  );
 }
 
 /**
@@ -115,7 +113,7 @@ export function CodeCardHeader({
   onOpen,
 }: {
   codeRef: CodeRef;
-  /** Luke's note on the lines, which the file's card says; none where the card has none. */
+  /** The agent's note on the lines, which the file's card says; none where the card has none. */
   note: string | undefined;
   /** The lines a copy carries; none where the card holds no lines yet. */
   copied: string | undefined;
@@ -141,29 +139,31 @@ export function CodeCardHeader({
   );
 }
 
-/**
- * Luke's note on a snippet, as Markdown, a link naming a mention drawn as
- * its chip, as a File tab draws the same note (`file-note.tsx`). Note that
- * it reads the page's mentions itself, so the page drawn again draws the
- * note again rather than the card's lines.
- */
-function CodeCardNote({ note }: { note: string }): React.JSX.Element {
-  const link = useMentionLink();
-  const openLink = useOpenLink();
-  return (
-    <MarkdownMessage words={note} className="code-card-note" link={link} openLink={openLink} />
-  );
-}
-
-/** One snippet: its header, Luke's note, where code shown before notes were asked for has none, and the lines themselves. */
+/** One snippet: its header, then the lines themselves with the agent's note under the last it pointed at, where code shown before notes were asked for has none. */
 function CodeCardContent({
   showing,
+  taskId,
+  agentLabel,
   onOpenFile,
 }: {
   showing: TaskCodeShowing;
+  taskId: string | undefined;
+  agentLabel: (agentId: string) => string | undefined;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   const { code } = showing;
+  const notes = useSnippetNote(
+    code,
+    {
+      callId: showing.callId,
+      turnId: showing.turnId,
+      agentId: showing.agentId,
+      shownAt: showing.shownAt,
+      note: code.note,
+    },
+    taskId,
+    agentLabel,
+  );
   return (
     <article className="code-card" data-call-id={showing.callId} aria-label={fileRefText(code.ref)}>
       <CodeCardHeader
@@ -172,8 +172,7 @@ function CodeCardContent({
         copied={copiedLines(code)}
         onOpen={() => onOpenFile(code.ref, code.commit)}
       />
-      {code.note === undefined ? null : <CodeCardNote note={code.note} />}
-      <CodeLines code={code} />
+      <CodeSnippet code={code} notes={notes} />
     </article>
   );
 }
@@ -186,26 +185,70 @@ function CodeCardContent({
  * otherwise redraw each of them several times a second. Its opening of a
  * file is the panel's own, which is the same door from one draw to the next.
  */
-const CodeCard = memo(CodeCardContent, (was, now) => was.showing.callId === now.showing.callId);
+const CodeCard = memo(
+  CodeCardContent,
+  (was, now) => was.showing.callId === now.showing.callId && was.taskId === now.taskId,
+);
 
-/** One call's run: the checkpoint it begins at, each code shown on it, and once it has ended, the line it closes with, as the Call tab draws them (`call-card.tsx`). */
+/** The divider an agent's turn begins at: the agent's name and when the turn began, "Invite flow · Today, 3:42 PM", or when alone for an agent the task no longer lists. */
+function AgentTurnCheckpoint({
+  agent,
+  startedAt,
+  now,
+}: {
+  agent: string | undefined;
+  startedAt: number;
+  now: number;
+}): React.JSX.Element {
+  const heading = callHeading(startedAt, now);
+  return (
+    <Checkpoint>
+      {agent === undefined ? heading : `${agent}${WORKED_SEPARATOR}${heading}`}
+    </Checkpoint>
+  );
+}
+
+/** One call's or one agent's turn's run: the marker or divider it begins at, each code shown on it, and once a call has ended, the marker it closes with, as an agent's transcript draws them (`call-card.tsx`). */
 function CodeFeedRun({
   call,
   now,
+  taskId,
+  agentLabel,
   onOpenFile,
 }: {
   call: CodeFeedCall;
   now: number;
+  taskId: string | undefined;
+  agentLabel: (agentId: string) => string | undefined;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   return (
     <>
-      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
+      {call.agentId === undefined ? (
+        <CallStartMarker
+          startedAt={call.startedAt}
+          live={call.live}
+          now={now}
+          caller={call.caller}
+        />
+      ) : (
+        <AgentTurnCheckpoint
+          agent={agentLabel(call.agentId)}
+          startedAt={call.startedAt}
+          now={now}
+        />
+      )}
       {call.showings.map((showing) => (
-        <CodeCard key={showing.callId} showing={showing} onOpenFile={onOpenFile} />
+        <CodeCard
+          key={showing.callId}
+          showing={showing}
+          taskId={taskId}
+          agentLabel={agentLabel}
+          onOpenFile={onOpenFile}
+        />
       ))}
       {call.ended === undefined ? null : (
-        <CallEnded line={call.ended} startedAt={call.startedAt} record={call.record} />
+        <CallEndMarker line={call.ended} startedAt={call.startedAt} record={call.record} />
       )}
     </>
   );
@@ -215,11 +258,17 @@ function CodeFeedRun({
 export function CodePane({
   shown,
   calls,
+  taskId,
+  agentLabel = noAgentLabel,
   onOpenFile,
 }: {
   shown: readonly TaskCodeShowing[];
   /** The task's calls as the Call tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
+  /** The task the code was shown on, whose work a note's link names; none offers no link. */
+  taskId?: string | undefined;
+  /** An agent on the task as its tab names it, which heads the code its turns showed; none for an agent not listed, whose turn is headed by its time alone. */
+  agentLabel?: ((agentId: string) => string | undefined) | undefined;
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
@@ -229,7 +278,14 @@ export function CodePane({
       <Conversation>
         <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
           {codeFeedCalls(shown, calls).map((call) => (
-            <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
+            <CodeFeedRun
+              key={call.key}
+              call={call}
+              now={now}
+              taskId={taskId}
+              agentLabel={agentLabel}
+              onOpenFile={onOpenFile}
+            />
           ))}
         </ConversationContent>
         <ConversationScrollButton />

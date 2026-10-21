@@ -1,29 +1,82 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AUTOMATION_CALL_FAILURE, automationViewSchema } from "@luke/features/automation-view";
+import type {
+  AutomationRunsLiveAnswer,
+  AutomationsLiveAnswer,
+} from "@luke/features/automation-live";
+import {
+  AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
+  automationViewSchema,
+} from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
-import { unparsedWire, type WireRecord } from "@luke/wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayEventKind,
+  type GatewayMethod,
+} from "@luke/gateway";
+import { unparsedWire, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Effect, Result } from "effect";
 import { vi } from "vitest";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
+import type { LiveClient } from "./live-follow.js";
+import { fakeRealtime } from "./testing/fake-realtime.js";
 
 /**
  * The automations concern: behind a closed gate nothing is asked of the
  * service, a write's params reach the service as the window named them,
  * the window hears the service's answer whole, and params of the wrong
- * shape are refused before anything travels. Synthetic ids and words.
+ * shape are refused before anything travels. What a window follows is
+ * emitted as it stands and each time it moves, for the account signed in as
+ * it started, until let go or signed out. Synthetic ids and words.
  */
 
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 const WORKSPACE_ID = "workspace-1";
+
+const ACCOUNT_ID = "account-1";
+
+/** A workspace with no automations, its live read answered polled, as while Realtime is off. */
+const POLLED_LIST: AutomationsLiveAnswer = {
+  url: LIVE_POLL_URL,
+  queries: {
+    automations: {
+      capability: "",
+      queryFingerprint: "",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      rows: [],
+      digest: "d1",
+    },
+  },
+};
+
+/** An automation with no runs yet, its live read answered polled. */
+const POLLED_RUNS: AutomationRunsLiveAnswer = {
+  url: LIVE_POLL_URL,
+  queries: {
+    runs: {
+      capability: "",
+      queryFingerprint: "",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      rows: [],
+      digest: "r1",
+    },
+  },
+};
+
+const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
@@ -58,8 +111,15 @@ const CREATE = {
 };
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService(options: { replaceRefused?: boolean } = {}) {
+function fakeService(options: { replaceRefused?: boolean; txid?: string } = {}) {
   const asked: unknown[] = [];
+  /** What the list's live read answers first; a poll past it holds until the test ends, as nothing moves. */
+  const live: {
+    list: AutomationsLiveAnswer | typeof LIVE_SIGNED_OUT;
+    /** What the runs' live read answers first, and what a poll past it answers; not found, and held, where unsaid. */
+    runs?: AutomationRunsLiveAnswer;
+    runsPolled?: { readonly failure: typeof AUTOMATION_CALL_FAILURE.NOT_FOUND };
+  } = { list: POLLED_LIST };
   const answer =
     <A>(name: string, value: A) =>
     (params: Parameters<AutomationsClient[keyof AutomationsClient]>[0]) =>
@@ -70,8 +130,20 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
   const client: AutomationsClient = {
     list: answer("list", { automations: [SUMMARY] }),
     create: answer("create", { automation: SUMMARY }),
-    change: answer("change", { automation: SUMMARY }),
-    remove: answer("remove", { deleted: true } as const),
+    change: answer(
+      "change",
+      options.txid === undefined
+        ? { automation: SUMMARY }
+        : { automation: SUMMARY, txid: options.txid },
+    ),
+    // Note that the delete's transaction is read as it is asked, so a test may answer another next.
+    remove: (params) =>
+      Effect.sync(() => {
+        asked.push(["remove", params]);
+        return options.txid === undefined
+          ? ({ deleted: true } as const)
+          : ({ deleted: true, txid: options.txid } as const);
+      }),
     runNow: answer("run", { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }),
     runs: answer("runs", { runs: [] }),
     replaceWebhookSecret: answer(
@@ -80,26 +152,70 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
         ? { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED }
         : { automation: SUMMARY },
     ),
+    listLive: (workspaceId, userId, poll) =>
+      poll
+        ? Effect.never
+        : Effect.sync(() => {
+            asked.push(["list-live", workspaceId, userId]);
+            return live.list;
+          }),
+    runsLive: (automationId, userId, poll) =>
+      poll
+        ? live.runsPolled === undefined
+          ? Effect.never
+          : // A poll is held a while before it answers, as the service holds one.
+            Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
+        : Effect.sync(() => {
+            asked.push(["runs-live", automationId, userId]);
+            return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+          }),
   };
-  return { client, asked };
+  return { client, asked, live };
 }
 
 function subject(
-  options: { signedIn?: boolean; sendsNetwork?: boolean; replaceRefused?: boolean } = {},
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    replaceRefused?: boolean;
+    /** The transaction a change answers it committed in. */
+    txid?: string;
+    openLive?: (url: string) => LiveClient;
+  } = {},
 ) {
   return Effect.gen(function* () {
     const service = fakeService(options);
+    const emitted: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const composer = yield* composeAutomations({
-      kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
+      kernel: {
+        runMode: { sendsNetwork: options.sendsNetwork ?? true },
+        now: () => 0,
+        hostedServiceBaseUrl: "https://service.example",
+        emit: (kind, payload) => emitted.push({ kind, payload }),
+      },
       account: { capabilitiesActive: () => options.signedIn ?? true },
+      accountId: () => (options.signedIn === false ? undefined : ACCOUNT_ID),
       client: service.client,
+      ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked };
+    /** What the follows told the windows, in order. */
+    const changed = () =>
+      emitted
+        .filter((each) => each.kind === GATEWAY_EVENT.AUTOMATIONS_CHANGED)
+        .map((each) => each.payload);
+    return {
+      call,
+      asked: service.asked,
+      live: service.live,
+      changed,
+      reset: composer.reset,
+      options,
+    };
   });
 }
 
@@ -216,4 +332,270 @@ it.effect(
       assert.deepEqual(answered, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(asked, []);
     }).pipe(Effect.ensuring(Effect.sync(() => vi.restoreAllMocks()))),
+);
+
+it.effect(
+  "a followed list is told as it stands for the account signed in, a gone automation's runs are told not found, and a sign-out ends the follows",
+  () =>
+    Effect.gen(function* () {
+      const workspace = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID };
+      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
+      const { call, asked, changed, reset } = yield* subject();
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace), {});
+      yield* settled;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs), {});
+      yield* settled;
+      assert.deepEqual(changed(), [
+        { scope: workspace, view: { automations: [] } },
+        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
+      ]);
+      assert.deepEqual(asked, [
+        ["list-live", WORKSPACE_ID, ACCOUNT_ID],
+        ["runs-live", AUTOMATION_ID, ACCOUNT_ID],
+      ]);
+
+      // Following again starts over, so a second window hears the list at once.
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* settled;
+      assert.equal(changed().length, 3);
+
+      yield* reset;
+      yield* settled;
+      assert.equal(changed().length, 3);
+
+      const signedOut = yield* subject();
+      signedOut.live.list = LIVE_SIGNED_OUT;
+      yield* signedOut.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* settled;
+      assert.deepEqual(signedOut.changed(), []);
+      assert.equal(signedOut.asked.length, 1);
+    }),
+);
+
+it.effect(
+  "an automation deleted while its runs are followed is told not found at once, and the follow ends",
+  () =>
+    Effect.gen(function* () {
+      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
+      const { call, asked, changed, live } = yield* subject();
+      live.runs = POLLED_RUNS;
+      live.runsPolled = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs);
+      yield* settled;
+
+      assert.deepEqual(changed(), [
+        { scope: runs, view: { runs: [] } },
+        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
+      ]);
+      assert.deepEqual(asked, [["runs-live", AUTOMATION_ID, ACCOUNT_ID]], "nothing asks again");
+    }),
+);
+
+it.effect(
+  "a change is answered once its transaction arrives on its workspace's followed list, and at once where nothing follows it",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const { call, live } = yield* subject({ txid: "77", openLive: realtime.open });
+      const change = { automationId: AUTOMATION_ID, change: { name: "Renamed" } };
+
+      // Nothing follows the workspace yet, so the change is answered without waiting.
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, change), {
+        automation: SUMMARY,
+        txid: "77",
+      });
+
+      live.list = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          automations: {
+            capability: "capability-automations",
+            queryFingerprint: "automations",
+            expiresAt: 60_000,
+          },
+        },
+      };
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
+        kind: AUTOMATION_FOLLOW.WORKSPACE,
+        id: WORKSPACE_ID,
+      });
+      yield* settled;
+      realtime.deliver("automations", []);
+      yield* settled;
+
+      let answered = false;
+      yield* Effect.forkChild(
+        Effect.tap(call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, change), () =>
+          Effect.sync(() => {
+            answered = true;
+          }),
+        ),
+      );
+      yield* settled;
+      assert.equal(answered, false, "the change waits for its transaction");
+      assert.deepEqual(realtime.awaitingTxids(), ["77"]);
+
+      realtime.arrive("77");
+      yield* settled;
+      assert.equal(answered, true);
+    }),
+);
+
+it.effect(
+  "a delete waits on its automation's followed runs, and never on a list of another workspace",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const { call, live } = yield* subject({ txid: "78", openLive: realtime.open });
+      live.list = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          automations: {
+            capability: "capability-automations",
+            queryFingerprint: "automations",
+            expiresAt: 60_000,
+          },
+        },
+      };
+      live.runs = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          runs: { capability: "capability-runs", queryFingerprint: "runs", expiresAt: 60_000 },
+        },
+      };
+      const named = { automationId: AUTOMATION_ID };
+
+      // Only another workspace's list is followed, which never drew this automation.
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
+        kind: AUTOMATION_FOLLOW.WORKSPACE,
+        id: "workspace-2",
+      });
+      yield* settled;
+      realtime.deliver("automations", []);
+      yield* settled;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_DELETE, named), {
+        deleted: true,
+        txid: "78",
+      });
+      assert.deepEqual(realtime.awaitingTxids(), []);
+
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
+        kind: AUTOMATION_FOLLOW.RUNS,
+        id: AUTOMATION_ID,
+      });
+      yield* settled;
+      realtime.deliver("runs", []);
+      yield* settled;
+      let answered = false;
+      yield* Effect.forkChild(
+        Effect.tap(call(GATEWAY_METHOD.AUTOMATIONS_DELETE, named), () =>
+          Effect.sync(() => {
+            answered = true;
+          }),
+        ),
+      );
+      yield* settled;
+      assert.equal(answered, false, "the delete waits on the followed runs");
+      realtime.arrive("78");
+      yield* settled;
+      assert.equal(answered, true);
+    }),
+);
+
+/** The automation as a workspace list's live row delivers it, with no run yet. */
+const LIVE_ROW = {
+  id: AUTOMATION_ID,
+  userId: ACCOUNT_ID,
+  taskId: null,
+  taskName: null,
+  name: SUMMARY.name,
+  enabled: true,
+  trigger: SCHEDULE,
+  action: SUMMARY.action,
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: 10,
+  organizationId: WORKSPACE_ID,
+  scope: AUTOMATION_SCOPE.WORKSPACE,
+  repositories: ["acme/web"],
+  taskRepository: null,
+  targetKind: AUTOMATION_TARGET.NEW_AGENT,
+  targetAgentId: null,
+  archiveSuccessful: false,
+  createdAt: 1,
+  mine: true,
+  runId: null,
+  runFiring: null,
+  runStatus: null,
+  runReason: null,
+  runFiredAt: null,
+  runSettledAt: null,
+  agentId: null,
+  agentTitle: null,
+  agentCreatedAt: null,
+  ownKey: null,
+  turnId: null,
+  turnStatus: null,
+  cancelRequested: null,
+  turnQueuedAt: null,
+  turnSettledAt: null,
+  turnSessionEnded: null,
+  awaitingLineAt: null,
+  failureWord: null,
+};
+
+it.effect(
+  "a delete waits on the followed list that draws its automation, and no longer once that list drops it",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const { call, live, changed, options } = yield* subject({
+        txid: "79",
+        openLive: realtime.open,
+      });
+      live.list = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          automations: {
+            capability: "capability-automations",
+            queryFingerprint: "automations",
+            expiresAt: 60_000,
+          },
+        },
+      };
+      const named = { automationId: AUTOMATION_ID };
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
+        kind: AUTOMATION_FOLLOW.WORKSPACE,
+        id: WORKSPACE_ID,
+      });
+      yield* settled;
+      realtime.deliver("automations", [LIVE_ROW]);
+      yield* settled;
+      assert.equal(changed().length, 1, "the list drew the automation");
+
+      let answered = false;
+      yield* Effect.forkChild(
+        Effect.tap(call(GATEWAY_METHOD.AUTOMATIONS_DELETE, named), () =>
+          Effect.sync(() => {
+            answered = true;
+          }),
+        ),
+      );
+      yield* settled;
+      assert.equal(answered, false, "the delete waits on the list that draws it");
+      realtime.arrive("79");
+      yield* settled;
+      assert.equal(answered, true);
+
+      // The automation moves to a workspace nothing follows, so the list drops it.
+      realtime.deliver("automations", []);
+      yield* settled;
+      options.txid = "80";
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_DELETE, named), {
+        deleted: true,
+        txid: "80",
+      });
+      assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
 );

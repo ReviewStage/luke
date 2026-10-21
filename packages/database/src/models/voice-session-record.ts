@@ -5,6 +5,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
+import type { ConversationRuntime } from "../storage-vocabulary.js";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -12,7 +13,7 @@ import {
   type VoiceCloseReason,
   type VoiceSegmentRole,
 } from "../voice-vocabulary.js";
-import { readCodingAgent } from "./coding-agent-store.js";
+import { readCodingAgent, readCodingAgentRouting } from "./coding-agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { HANDED_TO_SWEEP_AT, readTask } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
@@ -74,7 +75,8 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
-  taskId: string;
+  /** The task the call's agent is on; none for a call into an agent with no task. */
+  taskId?: string | undefined;
   agentId?: string | undefined;
   attachId: string;
   model: string;
@@ -92,21 +94,23 @@ interface VoiceSessionAgentClaim {
   agentId: string;
 }
 
-/** The calls whose words a new call reads back: the task's, or the agent's alone where the call names one. */
-interface EarlierCallsClaim extends VoiceSessionTaskClaim {
-  agentId?: string | undefined;
+/** The calls whose words a new call reads back: the agent's it names. */
+interface EarlierCallsClaim {
+  agentId: string;
 }
 
 /**
  * An agent the account reaches, as a call into it is checked and opened:
- * the task it works on, whether it is archived, and its conversation under
- * the member who started it, which the call's turns and record are written
- * to whoever is calling.
+ * the task it works on, whether it is archived, what answers its
+ * conversation, and that conversation under the member who started it,
+ * which the call's turns and record are written to whoever is calling.
  */
 export interface HeldVoiceAgent {
   readonly agentId: string;
   readonly taskId: string | null;
   readonly archived: boolean;
+  /** What answers the agent's conversation; eve for a conversation from before the column. A call reaches eve alone. */
+  readonly runtime: ConversationRuntime;
   readonly conversation: ConversationTarget;
 }
 
@@ -192,9 +196,8 @@ export interface VoiceSessionRecord {
   /** The live session named, where the account created it, with the task it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
   /**
-   * What was said on the task's calls so far, or on the agent's alone where
-   * the claim names one, oldest first, adjacent words of one speaker on one
-   * call run together: the newest `EARLIER_CALL_SEGMENTS` segments, which is
+   * What was said on the agent's calls so far, oldest first, adjacent words
+   * of one speaker on one call run together: the newest `EARLIER_CALL_SEGMENTS` segments, which is
    * more than a session's startup history holds.
    */
   earlierCalls(input: EarlierCallsClaim): VoiceSessionRecordEffect<EarlierCallLine[]>;
@@ -237,7 +240,7 @@ const RegisterRequestSchema = Schema.Struct({
   userId: Schema.String,
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
-  taskId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   attachId: Schema.String,
   model: Schema.String,
@@ -293,8 +296,7 @@ const findOwnedSession = SqlSchema.findOneOption({
 });
 
 const EarlierCallsRequestSchema = Schema.Struct({
-  taskId: Schema.String,
-  agentId: Schema.NullOr(Schema.String),
+  agentId: Schema.String,
   limit: Schema.Number,
 });
 
@@ -324,11 +326,7 @@ const findEarlierSegments = SqlSchema.findAll({
         })
         .from(voiceTranscriptSegments)
         .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-        .where(
-          request.agentId === null
-            ? eq(voiceSessions.taskId, request.taskId)
-            : eq(voiceSessions.agentId, request.agentId),
-        )
+        .where(eq(voiceSessions.agentId, request.agentId))
         .orderBy(
           desc(voiceSessions.startedAt),
           desc(voiceSessions.id),
@@ -577,7 +575,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
             userId: input.userId,
             liveSessionId: input.sessionId,
             delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-            taskId: input.taskId,
+            taskId: input.taskId ?? null,
             agentId: input.agentId ?? null,
             attachId: input.attachId,
             model: input.model,
@@ -595,18 +593,20 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         Option.match({ onNone: () => undefined, onSome: (stored) => stored.task }),
       ),
     heldAgent: (input) =>
-      Effect.map(
-        readCodingAgent(input.userId, input.agentId),
-        Option.match({
-          onNone: () => undefined,
-          onSome: (agent): HeldVoiceAgent => ({
-            agentId: agent.id,
-            taskId: agent.taskId,
-            archived: agent.archivedAt !== null,
-            conversation: { userId: agent.userId, conversationId: agent.conversationId },
-          }),
-        }),
-      ),
+      Effect.gen(function* () {
+        const agent = yield* readCodingAgent(input.userId, input.agentId);
+        if (Option.isNone(agent)) return undefined;
+        // An agent deleted between the two reads is none the call reaches.
+        const routing = yield* readCodingAgentRouting(input.userId, input.agentId);
+        if (Option.isNone(routing)) return undefined;
+        return {
+          agentId: agent.value.id,
+          taskId: agent.value.taskId,
+          archived: agent.value.archivedAt !== null,
+          runtime: routing.value.runtime,
+          conversation: { userId: agent.value.userId, conversationId: agent.value.conversationId },
+        } satisfies HeldVoiceAgent;
+      }),
     owned: (input) =>
       Effect.map(
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
@@ -621,11 +621,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
       ),
     earlierCalls: (input) =>
       Effect.map(
-        findEarlierSegments({
-          taskId: input.taskId,
-          agentId: input.agentId ?? null,
-          limit: EARLIER_CALL_SEGMENTS,
-        }),
+        findEarlierSegments({ agentId: input.agentId, limit: EARLIER_CALL_SEGMENTS }),
         earlierLines,
       ),
     noteUsage: (input) =>

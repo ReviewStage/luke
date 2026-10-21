@@ -3,13 +3,11 @@
  *
  * The Mac's held read is answered with the command queued for its account
  * as soon as one waits, and with none once the hold ends; the result it
- * posts is kept for the agent's call. An older Mac's read, naming no kinds,
- * is handed shell commands alone; a browser call no listening Mac can run
- * is answered not run at once, and one the Mac refuses is answered not run
- * with the Mac's reason. A browser command's result, image and all, is
- * posted to its own route and answered to the call, whose row is gone once
- * it took it; an image past its bound is refused as it arrives. Only the
- * Mac's bearer is read, never a cookie,
+ * posts is kept for the agent's call. A read naming no kinds, or a kind
+ * this service no longer queues, is handed shell commands alone; a call no
+ * listening Mac can run is answered not run at once, and one the Mac
+ * refuses is answered not run with the Mac's reason. Only the Mac's bearer
+ * is read, never a cookie,
  * and before anything the body says. Each refusal answers what the old
  * group answered.
  *
@@ -17,25 +15,22 @@
  */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
   macCommandResult,
   macCommandsWaiting,
+  macListeningSince,
   queueMacCommand,
 } from "@luke/database/models/mac-command-store";
 import { user } from "@luke/database/schemas/auth";
-import { macCommand } from "@luke/database/schemas/mac-command";
 import { getTestDB } from "@luke/database/testing";
 import {
-  MAC_COMMAND_BOUNDS,
-  MAC_COMMAND_IMAGE_TYPE,
   MAC_COMMAND_KIND,
-  type MacBrowserResult,
   type MacCommand,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
-import { eq } from "drizzle-orm";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -47,7 +42,8 @@ import { macCommandsProcedures } from "./mac-commands-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const MAC_COMMANDS = "/api/mac-commands";
-const BROWSER_RESULTS = "/api/mac-commands/browser";
+const CLAIM = "/api/mac-commands/claim";
+const LISTENING = "/api/mac-commands/listening";
 const JSON_TYPE = "application/json";
 
 const COMMAND: MacCommand = {
@@ -57,17 +53,8 @@ const COMMAND: MacCommand = {
   timeoutSeconds: 60,
 };
 
-const BROWSER_PARAMS = { act: "open", address: "http://localhost:3000" };
-
-const BROWSER_COMMAND: MacCommand = {
-  id: "33333333-3333-4333-8333-333333333333",
-  kind: MAC_COMMAND_KIND.BROWSER,
-  params: BROWSER_PARAMS,
-  timeoutSeconds: 30,
-};
-
-/** What a newer Mac's read names in its query: shell, and the browser. */
-const NEWER_KINDS = "shell,browser";
+/** What a Mac from before agents lost the Mac's Browser tabs names in its query: shell, and a kind this service no longer queues. */
+const STALE_KINDS = "shell,browser";
 
 const RESULT: MacCommandResult = {
   exitCode: 0,
@@ -75,21 +62,6 @@ const RESULT: MacCommandResult = {
   stderr: "",
   truncated: false,
   timedOut: false,
-};
-
-/** A JPEG's first bytes, which is what the image's type is read off. */
-const JPEG_SIGNATURE = [0xff, 0xd8, 0xff, 0xe0];
-
-/** A JPEG of the bytes given, its signature first, in base64. */
-function jpeg(bytes: number): string {
-  const image = new Uint8Array(bytes);
-  image.set(JPEG_SIGNATURE);
-  return Buffer.from(image).toString("base64");
-}
-
-const BROWSER_RESULT: MacBrowserResult = {
-  output: { address: "http://localhost:3000/", title: "Preview", snapshot: 'heading "Hello"' },
-  image: { mediaType: MAC_COMMAND_IMAGE_TYPE.JPEG, data: jpeg(4_096) },
 };
 
 /** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
@@ -188,11 +160,11 @@ const emptyRead = (incoming: Request) =>
     return yield* Fiber.join(read);
   });
 
-/** Lets a forked call's statements run until a command of any kind waits for the account. */
+/** Lets a forked call's statements run until a command waits for the account. */
 const untilQueued = (userId: string) =>
   Effect.gen(function* () {
     const since = new Date(yield* Clock.currentTimeMillis);
-    const kinds = [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER];
+    const kinds = [MAC_COMMAND_KIND.SHELL];
     while (!(yield* macCommandsWaiting(userId, since, kinds))) yield* Effect.yieldNow;
   });
 
@@ -223,161 +195,64 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
   );
 
   it.effect(
-    "an older Mac's read, naming no kinds, is handed shell commands alone, and a browser command waits for a Mac that names it",
+    "a read naming no kinds, or a kind this service no longer queues, is handed shell commands",
     () =>
       Effect.gen(function* () {
         yield* account("user-older");
         const shell = { ...COMMAND, id: "44444444-4444-4444-8444-444444444444" };
-        yield* queueMacCommand("user-older", BROWSER_COMMAND);
+        const later = { ...COMMAND, id: "33333333-3333-4333-8333-333333333333" };
         yield* queueMacCommand("user-older", shell);
 
         const older = yield* bytes(request({ userId: "user-older" }));
-        const newer = yield* bytes(request({ userId: "user-older", kinds: NEWER_KINDS }));
+        yield* queueMacCommand("user-older", later);
+        const stale = yield* bytes(request({ userId: "user-older", kinds: STALE_KINDS }));
 
         assert.deepEqual(commandsOf(older), [shell]);
-        assert.deepEqual(commandsOf(newer), [BROWSER_COMMAND]);
+        assert.deepEqual(commandsOf(stale), [later]);
       }),
   );
 
-  it.effect("a browser call no listening Mac can run is answered not run at once", () =>
-    Effect.gen(function* () {
-      yield* account("user-no-browser");
-      yield* emptyRead(request({ userId: "user-no-browser" }));
+  it.effect(
+    "a call no listening Mac can run is answered not run at once, and nothing is queued",
+    () =>
+      Effect.gen(function* () {
+        yield* account("user-no-mac");
 
-      const answer = yield* askMac("user-no-browser", {
-        kind: MAC_COMMAND_KIND.BROWSER,
-        params: BROWSER_PARAMS,
-      });
-      const newer = yield* emptyRead(request({ userId: "user-no-browser", kinds: NEWER_KINDS }));
+        const answer = yield* askMac("user-no-mac", {
+          kind: MAC_COMMAND_KIND.SHELL,
+          command: COMMAND.command,
+        });
+        const read = yield* emptyRead(request({ userId: "user-no-mac" }));
 
-      assert.equal(answer.status, MAC_COMMAND_STATUS.NOT_RUN);
-      assert.match("reason" in answer ? answer.reason : "", /Browser tabs/u);
-      assert.deepEqual(commandsOf(newer), [], "nothing was left queued");
-    }),
+        assert.equal(answer.status, MAC_COMMAND_STATUS.NOT_RUN);
+        assert.match(
+          "reason" in answer ? answer.reason : "",
+          /not running on the developer's Mac/u,
+        );
+        assert.deepEqual(commandsOf(read), [], "nothing was left queued");
+      }),
   );
 
-  it.effect("a browser command the Mac refuses is answered not run, with the Mac's reason", () =>
+  it.effect("a command the Mac refuses is answered not run, with the Mac's reason", () =>
     Effect.gen(function* () {
       yield* account("user-refuses");
-      yield* emptyRead(request({ userId: "user-refuses", kinds: NEWER_KINDS }));
+      yield* emptyRead(request({ userId: "user-refuses" }));
 
       const call = yield* Effect.forkChild(
-        askMac("user-refuses", { kind: MAC_COMMAND_KIND.BROWSER, params: BROWSER_PARAMS }),
+        askMac("user-refuses", { kind: MAC_COMMAND_KIND.SHELL, command: COMMAND.command }),
       );
       yield* untilQueued("user-refuses");
-      const [taken] = commandsOf(
-        yield* bytes(request({ userId: "user-refuses", kinds: NEWER_KINDS })),
-      );
-      const refused = "Not run: this Mac cannot drive a Browser tab yet.";
+      const [taken] = commandsOf(yield* bytes(request({ userId: "user-refuses" })));
+      const refused = "Not run: this Mac names no home folder.";
       const posted = JSON.stringify({ id: taken?.id, result: { refused } });
       yield* bytes(request({ method: "POST", userId: "user-refuses", body: posted }));
       yield* TestClock.adjust("1 second");
 
-      assert.equal(taken?.kind, MAC_COMMAND_KIND.BROWSER);
+      assert.equal(taken?.kind, MAC_COMMAND_KIND.SHELL);
       assert.deepEqual(yield* Fiber.join(call), {
         status: MAC_COMMAND_STATUS.NOT_RUN,
         reason: refused,
       });
-    }),
-  );
-
-  it.effect(
-    "a browser command's result, image and all, is answered to its call, and its row is gone once the call took it",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        yield* account("user-browser");
-        yield* emptyRead(request({ userId: "user-browser", kinds: NEWER_KINDS }));
-
-        const call = yield* Effect.forkChild(
-          askMac("user-browser", { kind: MAC_COMMAND_KIND.BROWSER, params: BROWSER_PARAMS }),
-        );
-        yield* untilQueued("user-browser");
-        const [taken] = commandsOf(
-          yield* bytes(request({ userId: "user-browser", kinds: NEWER_KINDS })),
-        );
-        const posted = JSON.stringify({ id: taken?.id, result: BROWSER_RESULT });
-        const settled = yield* bytes(
-          request({ method: "POST", path: BROWSER_RESULTS, userId: "user-browser", body: posted }),
-        );
-        yield* TestClock.adjust("1 second");
-        const answer = yield* Fiber.join(call);
-        const left = yield* db
-          .select()
-          .from(macCommand)
-          .where(eq(macCommand.userId, "user-browser"));
-
-        assert.equal(settled.text, '{"settled":true}');
-        assert.deepEqual(answer, { status: MAC_COMMAND_STATUS.RAN, ...BROWSER_RESULT });
-        assert.deepEqual(left, [], "nothing of the image is kept once the call took it");
-      }),
-  );
-
-  it.effect("a browser result is refused where its image is past its bound, or not its type", () =>
-    Effect.gen(function* () {
-      yield* account("user-oversize");
-      const browser = { ...BROWSER_COMMAND, id: "55555555-5555-4555-8555-555555555555" };
-      yield* queueMacCommand("user-oversize", browser);
-      yield* bytes(request({ userId: "user-oversize", kinds: NEWER_KINDS }));
-      const post = (result: unknown, length?: number) =>
-        bytes(
-          request({
-            method: "POST",
-            path: BROWSER_RESULTS,
-            userId: "user-oversize",
-            body: JSON.stringify({ id: browser.id, result }),
-            ...(length === undefined ? undefined : { length }),
-          }),
-        );
-      const invalid = refused(HOSTED_HTTP_STATUS.BAD_REQUEST, "invalid-request");
-      const oversize = {
-        ...BROWSER_RESULT,
-        image: { ...BROWSER_RESULT.image, data: jpeg(MAC_COMMAND_BOUNDS.MAX_IMAGE_BYTES + 1) },
-      };
-      const mislabelled = {
-        ...BROWSER_RESULT,
-        image: { ...BROWSER_RESULT.image, mediaType: MAC_COMMAND_IMAGE_TYPE.PNG },
-      };
-
-      assert.deepEqual(yield* post(oversize), invalid);
-      assert.deepEqual(yield* post(mislabelled), invalid);
-      assert.deepEqual(
-        yield* post(BROWSER_RESULT, 4_000_000),
-        refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, "request-too-large"),
-      );
-      assert.deepEqual(yield* macCommandResult("user-oversize", browser.id), Option.none());
-    }),
-  );
-
-  it.effect("a browser result finds only a browser command, and only its own route takes it", () =>
-    Effect.gen(function* () {
-      yield* account("user-kinds");
-      const shell = { ...COMMAND, id: "66666666-6666-4666-8666-666666666666" };
-      yield* queueMacCommand("user-kinds", shell);
-      yield* bytes(request({ userId: "user-kinds" }));
-
-      const browserOnShell = yield* bytes(
-        request({
-          method: "POST",
-          path: BROWSER_RESULTS,
-          userId: "user-kinds",
-          body: JSON.stringify({ id: shell.id, result: BROWSER_RESULT }),
-        }),
-      );
-      const browserOnShellRoute = yield* bytes(
-        request({
-          method: "POST",
-          userId: "user-kinds",
-          body: JSON.stringify({ id: shell.id, result: BROWSER_RESULT }),
-        }),
-      );
-
-      assert.deepEqual(browserOnShell, refused(HOSTED_HTTP_STATUS.NOT_FOUND, "not-found"));
-      assert.deepEqual(
-        browserOnShellRoute,
-        refused(HOSTED_HTTP_STATUS.BAD_REQUEST, "invalid-request"),
-        "the commands' own route takes no browser result",
-      );
     }),
   );
 
@@ -426,5 +301,67 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         refused(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, "method-not-allowed"),
       );
     }),
+  );
+
+  it.effect(
+    "a command heard of live is claimed by its id once, by its own account, and answered with what to run",
+    () =>
+      Effect.gen(function* () {
+        yield* account("user-claims");
+        yield* account("user-claims-other");
+        const queued = { ...COMMAND, id: randomUUID() };
+        yield* queueMacCommand("user-claims", queued);
+        const claim = (userId: string, body: string) =>
+          bytes(request({ method: "POST", path: CLAIM, userId, body }));
+        const asked = JSON.stringify({ id: queued.id });
+        const notFound = refused(HOSTED_HTTP_STATUS.NOT_FOUND, "not-found");
+
+        assert.deepEqual(yield* claim("user-claims-other", asked), notFound);
+        assert.deepEqual(yield* claim("user-claims", asked), {
+          status: HOSTED_HTTP_STATUS.OK,
+          contentType: JSON_TYPE,
+          cacheControl: "private, no-store",
+          text: JSON.stringify({ command: queued }),
+        });
+        assert.deepEqual(yield* claim("user-claims", asked), notFound, "claimed once");
+        assert.deepEqual(
+          yield* claim("user-claims", '{"id":"not-an-id"}'),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, "invalid-request"),
+        );
+        assert.deepEqual(
+          yield* bytes(request({ method: "POST", path: CLAIM, cookie: true, body: asked })),
+          refused(HOSTED_HTTP_STATUS.UNAUTHORIZED, "invalid-token"),
+          "never on a cookie",
+        );
+      }),
+  );
+
+  it.effect(
+    "a Mac that says it listens is counted listening, whatever kinds it names, for its own account alone",
+    () =>
+      Effect.gen(function* () {
+        yield* account("user-listens");
+        yield* account("user-silent");
+        const since = new Date(yield* Clock.currentTimeMillis);
+
+        assert.deepEqual(
+          yield* bytes(
+            request({
+              method: "POST",
+              path: LISTENING,
+              userId: "user-listens",
+              body: JSON.stringify({ kinds: STALE_KINDS }),
+            }),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.OK,
+            contentType: JSON_TYPE,
+            cacheControl: "private, no-store",
+            text: '{"listening":true}',
+          },
+        );
+        assert.equal(yield* macListeningSince("user-listens", since), true);
+        assert.equal(yield* macListeningSince("user-silent", since), false);
+      }),
   );
 });

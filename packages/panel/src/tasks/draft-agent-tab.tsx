@@ -3,12 +3,15 @@ import type { Failure } from "@luke/features/failure-remedy";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
+import { type AgentCallDoors, CallButton } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { ArchivedComposerNote } from "./archived-task.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
+import { PayerField, useStartPayerKeys } from "./payer-field.js";
+import { payerOffer, startPayer } from "./payer-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
 import { useWorkingNow, WorkingLine } from "./working-time.js";
@@ -51,6 +54,24 @@ import { useWorkingNow, WorkingLine } from "./working-time.js";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
+ * For an account with a Claude plan connected, a draft on a Claude model
+ * shows beside its chip who pays for the agent
+ * (`payer-field.tsx`): the plan, or the API key or Luke's key, standing on
+ * the account's default until the developer picks one for this agent, and
+ * the Start names the payer the field shows, so a default changed in
+ * Settings since the keys were read never starts the agent on another;
+ * elsewhere nothing changes.
+ *
+ * Where the platform takes calls, the box's row offers Call, the waveform
+ * an agent's tab offers (`agent-call.tsx`), and a draft's is the one way a
+ * voice chat starts: its press starts the agent on eve (`startCall`), on
+ * the box's words and files where it holds any, so nothing typed is lost,
+ * and blank where it holds none, then opens a call into it as the tab gives
+ * way to the agent's own. A Call that did not start the agent leaves the
+ * words in the box with why under it, and its Retry presses Call again. A
+ * fork's or a continue's draft starts from its source, so it offers none,
+ * and neither does the web's, which has no voice.
+ *
  * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
  * both: it holds the words, files, and model New task's box held, and why
@@ -86,13 +107,18 @@ export function DraftAgentTab({
   draft,
   control,
   cards,
+  call,
 }: {
   draft: AgentDraft;
   control: CodingAgentsControl;
   /** The cards a fork's source chip hangs, as its tab's own chip does; none where the place draws none. */
   cards?: TranscriptCards | undefined;
+  /** What the agent's call opens through once Call starts it; none where the platform has no voice. */
+  call?: AgentCallDoors | undefined;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
+  // Whether the note under the box is a Call's, so its Retry presses Call again rather than sending.
+  const [callFailed, setCallFailed] = useState(false);
   // When a fork's or a continue's Start went, which its working line counts from; none while none is out.
   const [sentAt, setSentAt] = useState<number | undefined>(undefined);
   const [note, setNote] = useState<Failure | undefined>(undefined);
@@ -115,6 +141,7 @@ export function DraftAgentTab({
     };
   }, []);
 
+  const payerKeys = useStartPayerKeys();
   const { fork } = draft;
   const source =
     fork === undefined
@@ -122,24 +149,50 @@ export function DraftAgentTab({
       : [...(control.agents ?? []), ...(control.archived ?? [])].find(
           (agent) => agent.id === fork.agentId,
         );
+  // A fork runs on its source's model and effort until the developer picks another.
+  const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+  const offer = payerOffer(payerKeys, choice?.model);
+  const shownPayer = startPayer(offer, draft.payer) ?? offer?.fallback;
   const send = () => {
     const prompt = draft.prompt.trim();
     if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
     setSending(true);
     setNote(undefined);
+    setCallFailed(false);
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
+    // Note that the payer the field shows is the one sent, so the Start runs on what the developer saw.
+    const payer = shownPayer;
     const started =
       fork === undefined
-        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers)
-        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers);
+        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers, payer)
+        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers, payer);
     started.then((failed) => {
       setSending(false);
       setSentAt(undefined);
       setNote(failed);
     });
   };
+  // Note that the agent stands once the Start lands, so the call opens into it then, as the tab gives way to its own.
+  const pressCall = () => {
+    const start = latest.current.startCall;
+    if (sending || start === undefined || call === undefined) return;
+    setSending(true);
+    setNote(undefined);
+    setCallFailed(false);
+    if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
+    start(draft).then((answer) => {
+      setSending(false);
+      if ("failure" in answer) {
+        setCallFailed(true);
+        setNote(answer.failure);
+        return;
+      }
+      call.onPress(answer.agentId);
+    });
+  };
+  const offersCall = call !== undefined && control.startCall !== undefined && fork === undefined;
   const composer: AgentComposerControl = {
     draft: draft.prompt,
     setDraft: (prompt) => control.onDraftChange({ prompt }),
@@ -149,11 +202,10 @@ export function DraftAgentTab({
     note: shownNote,
     closed: undefined,
     send,
-    retry: send,
+    retry: callFailed ? pressCall : send,
     sent: [],
   };
-  // A fork runs on its source's model and effort until the developer picks another.
-  const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+
   if (control.onUnarchive !== undefined) {
     return (
       <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
@@ -205,6 +257,28 @@ export function DraftAgentTab({
           followsUp={false}
           keywords={control.keywords}
           skills={control.readSkills}
+          call={
+            offersCall ? (
+              <CallButton
+                subject={draft.id}
+                archived={false}
+                busy={sending || control.start.busy}
+                onPress={pressCall}
+              />
+            ) : undefined
+          }
+          actions={
+            offer === undefined || shownPayer === undefined
+              ? undefined
+              : () => (
+                  <PayerField
+                    offer={offer}
+                    value={shownPayer}
+                    disabled={sending}
+                    onChange={(payer) => control.onDraftChange({ payer })}
+                  />
+                )
+          }
         />
       </footer>
     </section>

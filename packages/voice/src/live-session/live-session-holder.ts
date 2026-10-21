@@ -6,11 +6,9 @@ import {
   type AvatarUnavailableFrame,
   type AvatarUnavailableReason,
   type LiveSessionCreated,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
@@ -50,6 +48,7 @@ import {
   type LiveSessionSource,
 } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
+import type { VoiceCallAbout } from "../voice-view.js";
 import {
   requestClose,
   SIDEBAND_CLOSE_OUTCOME,
@@ -152,21 +151,14 @@ export interface LiveSessionHolderOptions {
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
   /**
-   * The service's notetaker sent a draft of the plan the standing task
-   * call is about: a draft for any other task, or from a session already
-   * ended, never reaches it. What the draft is shown as is the caller's.
-   */
-  onPlanDraft?: (draft: PlanDraftFrame) => void;
-  /**
-   * The service said what each part of Luke is doing on the standing
-   * task call, on the same terms as `onPlanDraft`. A task call's end
-   * is told as a snapshot with nothing doing, so none outlives the call.
+   * The service said what each part of the standing task call is doing:
+   * activity about any other task, or from a session already ended, never
+   * reaches it. A task call's end is told as a snapshot with nothing doing,
+   * so none outlives the call.
    */
   onTaskActivity?: (activity: TaskActivityFrame) => void;
-  /** Luke put code on screen on the standing task call, on the same terms as `onPlanDraft`. */
+  /** Luke put code on screen on the standing task call, on the same terms as `onTaskActivity`. */
   onTaskCode?: (code: TaskCodeFrame) => void;
-  /** A brain turn's work on the standing task call changed, on the same terms as `onPlanDraft`. */
-  onTaskWork?: (work: TaskWorkFrame) => void;
   /** The task call about the task named ended, so what it put on screen goes with it. */
   onTaskCallEnded?: (taskId: string) => void;
 }
@@ -202,9 +194,9 @@ export const LIVE_SESSION_END_CAUSE = {
 export type LiveSessionEndCause =
   (typeof LIVE_SESSION_END_CAUSE)[keyof typeof LIVE_SESSION_END_CAUSE];
 
-/** A creation under way: the task it is about, and the end a delete or a sign-out asked for meanwhile. */
+/** A creation under way: the agent it speaks into and that agent's task, and the end a delete or a sign-out asked for meanwhile. */
 interface Creating {
-  readonly taskId: string;
+  readonly about: VoiceCallAbout;
   endedBy: LiveSessionEndCause | undefined;
 }
 
@@ -217,6 +209,8 @@ interface HeldSession {
   peerReason: LivePeerEndReason | undefined;
   /** The task the call is about, which the session is bound to for its life. */
   readonly taskId: string;
+  /** The agent the call speaks into, which the host checked belongs to that task before the call was created. */
+  readonly agentId: string;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
@@ -373,7 +367,7 @@ export class LiveSessionHolder {
           : LIVE_SESSION_END_CAUSE.TASK_DELETED;
       const about = (candidate: string) => taskId === undefined || candidate === taskId;
       const creating = this.#creating;
-      if (creating !== undefined && about(creating.taskId)) creating.endedBy ??= cause;
+      if (creating !== undefined && about(creating.about.taskId)) creating.endedBy ??= cause;
       const session = this.#held;
       if (session === undefined || !about(session.taskId)) return Effect.void;
       return this.#end(session, cause);
@@ -389,10 +383,13 @@ export class LiveSessionHolder {
    * is opened before anything is created into it and closed again unless a
    * session came to stand there.
    */
-  createSession(sdpOffer: string, taskId: string): Effect.Effect<LiveSessionCreated | undefined> {
+  createSession(
+    sdpOffer: string,
+    about: VoiceCallAbout,
+  ): Effect.Effect<LiveSessionCreated | undefined> {
     // The creation is named from its first step to its last, so an end landing
     // anywhere in it (the prior session's end, the create, the attach) is heard.
-    const creating: Creating = { taskId, endedBy: undefined };
+    const creating: Creating = { about, endedBy: undefined };
     return Effect.ensuring(
       Effect.suspend(() => {
         this.#creating = creating;
@@ -411,7 +408,7 @@ export class LiveSessionHolder {
       if (!source || creating.endedBy !== undefined) return undefined;
       const scope = yield* Scope.fork(this.#sessions, "sequential");
       const created = yield* Effect.onExit(
-        this.#stand(source, sdpOffer, creating.taskId, scope),
+        this.#stand(source, sdpOffer, creating.about, scope),
         (exit) =>
           Exit.isSuccess(exit) && exit.value !== undefined
             ? Effect.void
@@ -431,11 +428,11 @@ export class LiveSessionHolder {
   #stand(
     source: LiveSessionSource,
     sdpOffer: string,
-    taskId: string,
+    about: VoiceCallAbout,
     scope: Scope.Closeable,
   ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
-      const opened = yield* Scope.provide(source.create({ sdpOffer, taskId }), scope);
+      const opened = yield* Scope.provide(source.create({ sdpOffer, ...about }), scope);
       if (!opened) return undefined;
       this.#options.emit({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const sideband = yield* Scope.provide(opened.attach(), scope);
@@ -444,7 +441,8 @@ export class LiveSessionHolder {
         stoodAt: this.#clock.currentTimeMillisUnsafe(),
         endCause: undefined,
         peerReason: undefined,
-        taskId,
+        taskId: about.taskId,
+        agentId: about.agentId,
         sideband,
         opened,
         scope,
@@ -460,10 +458,8 @@ export class LiveSessionHolder {
       // ends the session: the graceful close already closed it, and a session
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
-      opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
       opened.onTaskActivity?.((activity) => this.#activity(session, activity));
       opened.onTaskCode?.((code) => this.#code(session, code));
-      opened.onTaskWork?.((work) => this.#work(session, work));
       opened.onTaskCallEnding?.((ending) => this.#ending(session, ending));
       opened.onAvatarStarted?.((started) => this.#avatarStarted(session, started));
       opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
@@ -676,6 +672,25 @@ export class LiveSessionHolder {
   }
 
   /**
+   * A line typed into an agent's composer, handed to the call where the
+   * standing call speaks into that agent: the service is asked, through the
+   * source's door, to write it down, hand it to the agent, and speak the
+   * reply, so nothing here appends it, under the composer's key for the send,
+   * so a Retry is the same line to the service. Answers whether the call took it; a
+   * call on another agent, a session not yet started, or one with no door
+   * takes nothing, and the line is the composer's to send as it would with
+   * no call up.
+   */
+  typeLine(agentId: string, text: string, clientKey: string): boolean {
+    const session = this.#held;
+    if (!session?.started || session.ended || session.agentId !== agentId) return false;
+    const type = session.opened.typeLine;
+    if (type === undefined) return false;
+    type(text, clientKey);
+    return true;
+  }
+
+  /**
    * Asks the service for Luke's avatar on the standing call, under a request
    * id of its own. Answers whether it was asked: a session with no door for
    * it, or an avatar already up, asks nothing, because each start mints a
@@ -779,12 +794,6 @@ export class LiveSessionHolder {
     return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
   }
 
-  /** A draft of the plan the session is bound to, passed on while the session stands. */
-  #drafted(session: HeldSession, draft: PlanDraftFrame): void {
-    if (session.ended || draft.planId !== session.taskId) return;
-    this.#options.onPlanDraft?.(draft);
-  }
-
   /** The service's activity about the task the session is bound to, passed on while the session stands. */
   #activity(session: HeldSession, activity: TaskActivityFrame): void {
     if (session.ended || activity.planId !== session.taskId) return;
@@ -795,12 +804,6 @@ export class LiveSessionHolder {
   #code(session: HeldSession, code: TaskCodeFrame): void {
     if (session.ended || code.planId !== session.taskId) return;
     this.#options.onTaskCode?.(code);
-  }
-
-  /** A brain turn's work on the call about the task the session is bound to, passed on while the session stands. */
-  #work(session: HeldSession, work: TaskWorkFrame): void {
-    if (session.ended || work.planId !== session.taskId) return;
-    this.#options.onTaskWork?.(work);
   }
 
   /**

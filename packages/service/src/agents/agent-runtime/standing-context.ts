@@ -21,7 +21,14 @@ import { NOTE_KIND, type PlanAgentEdit } from "@luke/features/plan-template";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
-import type { ChatSince } from "../brain-host/chat.js";
+import type { MessageLine } from "../coder-host/chat.js";
+
+/** What a turn opens with of the chat: the messages the agent had not read, oldest change first, whether more wait, and the place it has read through once the turn settles, where it was handed any. */
+export interface ChatSince {
+  readonly messages: readonly MessageLine[];
+  readonly more: boolean;
+  readonly through?: number;
+}
 
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const TASK_MARKER = "[task]";

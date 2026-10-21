@@ -2,6 +2,7 @@ import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import {
   endsTurn,
+  keepsSandboxAlive,
   lapsesCredential,
   renewsCredential,
   type SandboxRecord,
@@ -13,7 +14,9 @@ import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-h
 import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
 import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
+import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-context";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
 import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
@@ -21,7 +24,7 @@ import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
-import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
+import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store, and the two things the
@@ -36,7 +39,9 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * firewall (`packages/service/src/agents/coder-host/deepen.ts`), a step
  * that starts past the credential's age renews it there, or, for an agent on its starter's own token, which never ages, the
  * first step of each turn sets it again, and a turn's end takes that token
- * off wherever it stops the sandbox; and a turn's end, however it ended,
+ * off wherever it stops the sandbox; a step keeps the running sandbox alive
+ * past its short timeout every few minutes of a turn
+ * (`packages/service/src/agents/session-sandboxes.ts`); and a turn's end, however it ended,
  * writes the branch checked out
  * in the sandbox on the agent's row, which is where its pull request is
  * read from, then stops the sandbox at once rather than waiting out its
@@ -187,6 +192,10 @@ export default defineHook({
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);
+      // A compaction may summarise away what the turns' messages handed, so the next turn hands it again.
+      if (event.type === "compaction.completed") {
+        pinnedState(turnHanded).update(handedAfterCompaction);
+      }
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         const openedAt = seams.now();
         const memberToken = await onMemberToken(ctx);
@@ -221,6 +230,11 @@ export default defineHook({
       const now = seams.now();
       if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
         await renewCredential(ctx, sandbox, now);
+      }
+      // Stamped before it is asked, so a keep-alive Vercel did not confirm waits the interval like one it did.
+      if (keepsSandboxAlive(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
+        sandbox.update((held) => ({ ...held, keptAliveAt: now }));
+        await runAgent(keepSessionSandboxAlive(ctx.session.id));
       }
       if (ending === undefined) return;
       // Whether a terminal holds the sandbox is read last, just before the stop, so a developer who typed during the turn's end keeps it.

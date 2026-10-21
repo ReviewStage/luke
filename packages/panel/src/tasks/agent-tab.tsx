@@ -1,7 +1,8 @@
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { type CodingAgentTranscriptKey, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
+import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
@@ -15,6 +16,8 @@ import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/
 import { inboxLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
+import type { TaskStatus } from "@luke/features/task-wire";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -25,22 +28,33 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   INLINE_REF_LOOK,
+  TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
+import {
+  callEndedLine,
+  callOfLine,
+  callPlaces,
+  type TranscriptCallRow,
+} from "@luke/voice/transcript-model";
+import { MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
   createContext,
   Fragment,
   memo,
   type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -50,6 +64,7 @@ import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
+  ConversationRows,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
@@ -60,11 +75,19 @@ import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { FadingWords } from "../fading-words.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import {
+  AgentCallControls,
+  type AgentCallDoors,
+  AgentCallFoot,
+  takesCalls,
+  useAgentOnCall,
+} from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -78,13 +101,17 @@ import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
+import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
 import {
   AGENT_PART,
   type AgentPart,
+  type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentPart,
+  agentParts,
   agentRows,
   agentStillWriting,
   agentTabLabel,
@@ -106,9 +133,13 @@ import {
   messageWords,
   newestTodos,
   placedMessages,
+  planPayerOf,
   providerOf,
+  type SpokenMessage,
   settledPlanEdits,
   sidebarCallIds,
+  spokenMessages,
+  type TurnRead,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -127,6 +158,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links.js";
+import { ChatGptPlanLabel, ClaudePlanLabel } from "./plan-label.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
@@ -136,6 +168,7 @@ import { MentionedServers, SentToAgent } from "./server-card.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
+import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
 import {
@@ -166,14 +199,17 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks.js";
+import { type FindRow, useTranscriptFind } from "./transcript-find.js";
 import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark.js";
+import { useAgentCalls } from "./use-agent-calls.js";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
 import { useAgentPullRequest } from "./use-agent-pull-request.js";
 import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useKnownNames } from "./use-known-names.js";
+import { useKnownNames, useTaskStatus } from "./use-known-names.js";
+import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
 /**
@@ -216,7 +252,13 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * last line and then one quiet line saying how long it worked and when it
  * ended; a
  * turn that was stopped or failed ends on one quiet line saying so, with
- * why where the service said. The list
+ * why where the service said. A call into the agent stands between a
+ * plain divider saying when it began and a line saying it ended, and on it
+ * each exchange reads as a conversation: the developer's line, what the
+ * voice said, and the turn whose words it read aloud folded closed under
+ * that, its reasoning, calls, written answer, and how long it worked one
+ * press away (`spokenMessages`), so an answer is not read twice; on a call
+ * into a busy agent, only the work after the ask joined its turn. The list
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
@@ -245,6 +287,8 @@ interface TranscriptLead {
   /** The word before the card's title. */
   label: string;
   icon: ReactNode;
+  /** Whether the card is its task's plan, which wears the task's status's mark in place of `icon` where the window lists the task. */
+  plan?: true;
   /** What the tab says before the first message lands; a turn that ended before one says how instead. */
   startingLine: string;
 }
@@ -253,11 +297,18 @@ interface TranscriptLead {
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: <DocumentIcon />,
+  plan: true,
   startingLine: "The agent is starting.",
 };
 
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+
+/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's. */
+const ROW_ESTIMATE_PX = 160;
+
+/** The room between two of the log's rows, in pixels: the log's own step between lines (`--luke-space-12`, tasks.css). */
+const ROW_GAP_PX = 12;
 
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
@@ -299,9 +350,10 @@ export interface TranscriptOrigin {
   readonly body?: string | undefined;
 }
 
-/** The task an agent's plan is the plan of, as its card's sender line names it: its name, and the card its sidebar row hangs. */
+/** The task an agent's plan is the plan of, as its card's sender line names it: its name, its status, whose mark it wears, and the card its sidebar row hangs. */
 export interface BriefTask {
   readonly name: string;
+  readonly status: TaskStatus | undefined;
   readonly card: ReactNode;
 }
 
@@ -423,15 +475,17 @@ function calledAgentActor(
   };
 }
 
-/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it, and a call about an agent naming it by its chip where `cards` or its answer know it. */
+/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it, and a call about an agent naming it by its chip where `cards` or its answer know it; an answer its page carried cut drawn as `cut` says. */
 function ToolCallView({
   part,
   jobs,
   cards,
+  cut,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   jobs?: WorkerJobs | undefined;
   cards?: TranscriptCards | undefined;
+  cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
   const known = useKnownNames();
@@ -448,6 +502,7 @@ function ToolCallView({
         input={view.input}
         output={view.output}
         errorText={part.errorText}
+        cut={cut}
       />
       <CallPictures tool={part.tool} input={part.input} output={part.output} />
     </>
@@ -692,27 +747,79 @@ function TargetCallView({
   );
 }
 
+/**
+ * A call whose answer its page carried cut: its row as any call's, its body
+ * reading the answer whole as it opens and then drawing it as the call's own.
+ * Note that both are the one row, so the fold stays open as the answer lands.
+ */
+function CutToolCallView({
+  part,
+  cut,
+  jobs,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  cut: AgentPartCut;
+  jobs: WorkerJobs | undefined;
+}): ReactNode {
+  const { callId } = part;
+  const isCall = useCallback(
+    (read: WireValue) => {
+      const whole = agentPart(read);
+      return whole.kind === AGENT_PART.TOOL && whole.callId === callId;
+    },
+    [callId],
+  );
+  const read = useWholePart(cut, isCall);
+  if ("body" in read) return <ToolCallView part={part} jobs={jobs} cut={read.body} />;
+  const whole = agentPart(read.part);
+  return <ToolCallView part={whole.kind === AGENT_PART.TOOL ? whole : part} jobs={jobs} />;
+}
+
+/** Whether a part read is a thought, which a cut thought's whole read must be. */
+function isThought(read: WireValue): boolean {
+  return agentPart(read).kind === AGENT_PART.REASONING;
+}
+
+/** A thought its page carried cut: its line as any thought's, its body reading the words whole as it opens. */
+function CutReasoningView({ cut }: { cut: AgentPartCut }): ReactNode {
+  const read = useWholePart(cut, isThought);
+  if ("body" in read) return <TranscriptReasoning text="" cut={read.body} />;
+  const whole = agentPart(read.part);
+  return <TranscriptReasoning text={whole.kind === AGENT_PART.REASONING ? whole.text : ""} />;
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
   delegation,
   todos,
+  moving = false,
 }: {
   part: AgentPart;
   delegation: DelegationDoors | undefined;
   todos: TodosPlace;
+  /** Whether the agent may still write to the message the part is of, whose words are then read as they stream. */
+  moving?: boolean;
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
       // The agent's words alone may be replied to, never a call's output or a thought.
       return (
         <div {...{ [REPLY_SCOPE]: "" }}>
-          <TranscriptWords text={part.text} />
+          <TranscriptWords text={part.text} streaming={moving} />
         </div>
       );
     case AGENT_PART.REASONING:
-      return <TranscriptReasoning text={part.text} />;
+      return part.cut === undefined ? (
+        <TranscriptReasoning text={part.text} />
+      ) : (
+        <CutReasoningView cut={part.cut} />
+      );
     case AGENT_PART.TOOL: {
+      // Only an answer the window draws as words is cut (`part-cut.ts`), so the call draws as any call's row.
+      if (part.cut !== undefined) {
+        return <CutToolCallView part={part} cut={part.cut} jobs={delegation?.jobs} />;
+      }
       // A set of pictures the agent showed, or is showing, is drawn as itself; one refused keeps its row, where its error is read.
       if (part.tool === AGENT_TOOL.SHOW_IMAGE && part.state !== TOOL_STATE.OUTPUT_ERROR) {
         return <ShownPictures input={part.input} output={part.output} />;
@@ -813,11 +920,17 @@ function PlanCard({
 }): ReactNode {
   const named = sender != null;
   const words = <TranscriptWords text={text} />;
+  // The task's status as the list holds it, else as the window hands the open task live (`LiveDoors`), as its sender reads it.
+  const listed = useTaskStatus(lead.plan ? taskId : undefined);
+  const handed = useContext(LiveDoors)?.cards?.task?.status;
+  const status = lead.plan ? (listed ?? handed) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       <Plan data-task-card="" aria-label={lead.label}>
         <PlanHeader>
-          <PlanIcon>{lead.icon}</PlanIcon>
+          <PlanIcon>
+            {status === undefined ? lead.icon : <TaskStatusMark status={status} />}
+          </PlanIcon>
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
@@ -841,14 +954,14 @@ function PlanCard({
   );
 }
 
-/** A task named as the sender of its plan: its document glyph and its name as one target, hanging its card and opening its plan where the place can. */
+/** A task named as the sender of its plan: its status's mark and its name as one target, hanging its card and opening its plan where the place can. */
 function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | undefined }) {
   return (
     <InlineRef
       look={INLINE_REF_LOOK.WASH}
       glyph={
         <span className="agent-origin-glyph">
-          <DocumentIcon />
+          <PlanGlyph status={task.status} />
         </span>
       }
       label={task.name}
@@ -1044,6 +1157,41 @@ export interface ArrivedLine {
 /** No line reached the turn while it ran. */
 const NO_ARRIVED: readonly ArrivedLine[] = [];
 
+/** A transcript with no calls into its agent, as a worker's is. */
+const NO_CALLS: readonly TranscriptCallRow[] = [];
+
+/** The divider a call begins at, before the first of its lines the transcript draws; nothing where none begins there. */
+function CallOpen({
+  call,
+  now,
+}: {
+  call: TranscriptCallRow | undefined;
+  now: number;
+}): React.JSX.Element | null {
+  if (call === undefined) return null;
+  return (
+    <CallStartMarker startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
+  );
+}
+
+/** The line a call that ended closes with, after the last of its lines; nothing where none ends there. */
+function CallClose({ call }: { call: TranscriptCallRow | undefined }): React.ReactNode {
+  const line = call === undefined ? undefined : callEndedLine(call);
+  if (call === undefined || line === undefined) return null;
+  return <CallEndMarker line={line} startedAt={call.startedAt} record={call.record} />;
+}
+
+/** A line heard on a call that no row holds yet, drawn as the row it will be: the speaker's words, one text part. */
+function heardLine(line: UIMessage): CodingAgentMessage {
+  return {
+    id: line.id,
+    role: line.role,
+    parts: line.parts.flatMap((part) =>
+      part.type === TRANSCRIPT_PART_TYPE.TEXT ? [{ type: part.type, text: part.text }] : [],
+    ),
+  };
+}
+
 /**
  * The line a finished turn ends on: how long it worked and when it ended,
  * then its Copy and Copy link beside it, set as a sent message's are under
@@ -1078,7 +1226,7 @@ export function AgentMessage({
   delegation,
   todos = NO_TODOS,
   briefTitle,
-  said = false,
+  said,
   sender,
   origin,
   arrived = NO_ARRIVED,
@@ -1104,8 +1252,8 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
-  said?: boolean;
+  /** How much of it the voice read aloud on a call (`spokenMessages`): all of it, its lines drawn ahead of it, or the work after a call's ask joined it, its lines drawn where the ask arrived; once it has finished that much folds closed under them, its words and how long it worked inside the fold. None where the voice read nothing of it. */
+  said?: TurnRead | undefined;
   /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
@@ -1190,7 +1338,24 @@ export function AgentMessage({
   // Note that Copy waits for whole words, while Fork takes a turn of no words, or one still running, as it stands.
   const copyable = words !== "" && !moving;
   const forks = forkable && forkCut?.messageSteps !== 0;
-  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
+  const foot = (
+    <TurnFoot
+      workedFor={workedFor}
+      copy={
+        copyable || (forks && forkOffered) ? (
+          <CopyMessageAction
+            words={words}
+            copyable={copyable}
+            messageId={message.id}
+            forkable={forks}
+            forkCut={forkCut}
+            placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+          />
+        ) : null
+      }
+    />
+  );
+  // A spoken turn's foot, how long it worked with its Copy and Fork, stays inside its fold, under the words it holds.
   return stretches.map((stretch, index) => {
     if (stretch.line !== undefined) {
       const line = stretch.line;
@@ -1216,27 +1381,16 @@ export function AgentMessage({
       >
         {index === 0 ? named : null}
         <MessageContent>
-          <TranscriptRows rows={stretch.rows} trailer={said && ends ? workedFor : undefined}>
-            {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
+          <TranscriptRows
+            rows={stretch.rows}
+            trailer={said !== undefined && ends ? foot : undefined}
+          >
+            {(part) => (
+              <AgentPartView part={part} delegation={delegation} todos={todos} moving={moving} />
+            )}
           </TranscriptRows>
         </MessageContent>
-        {said || !ends ? null : (
-          <TurnFoot
-            workedFor={workedFor}
-            copy={
-              copyable || (forks && forkOffered) ? (
-                <CopyMessageAction
-                  words={words}
-                  copyable={copyable}
-                  messageId={message.id}
-                  forkable={forks}
-                  forkCut={forkCut}
-                  placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-                />
-              ) : null
-            }
-          />
-        )}
+        {said !== undefined || !ends ? null : foot}
         {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );
@@ -1434,6 +1588,115 @@ function sameMessageDraw(a: AgentMessageProps, b: AgentMessageProps): boolean {
 /** A transcript's message, drawn again only where `sameMessageDraw` says it changed. */
 const SteadyAgentMessage = memo(AgentMessage, sameMessageDraw);
 
+/** The door that brings a message whose row is not drawn into view, handing its row to `then` once drawn; false where no row draws it. */
+export type MessageBringer = (messageId: string, then: (row: HTMLElement) => void) => boolean;
+
+/** A row placed in a transcript: its message, the lines that reached it, and the voice's lines drawn ahead of it. */
+type PlacedRow = SpokenMessage;
+
+/** No rows to find in, while no find bar stands open. */
+const NO_FIND_ROWS: readonly FindRow[] = [];
+
+/** Whether a row draws the message with `messageId`: its own, a line that reached it, or one said ahead of it. */
+function drawsMessage(row: PlacedRow, messageId: string): boolean {
+  return (
+    row.message.id === messageId ||
+    row.arrived.some((line) => line.id === messageId) ||
+    row.said.some((line) => line.id === messageId)
+  );
+}
+
+/** Each message's words as a find counts them, kept by the message, so a page that leaves it reads them once. */
+const wordsFound = new WeakMap<CodingAgentMessage, string>();
+
+/** The words a message draws that a find counts before its row is drawn: its text and its reasoning. */
+function findWordsOf(message: CodingAgentMessage): string {
+  const kept = wordsFound.get(message);
+  if (kept !== undefined) return kept;
+  const words = agentParts(message)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TEXT || part.kind === AGENT_PART.REASONING ? [part.text] : [],
+    )
+    .join("\n");
+  wordsFound.set(message, words);
+  return words;
+}
+
+/** A row as a find reads it before it is drawn: its messages' words. */
+function findRowOf(row: PlacedRow): FindRow {
+  return {
+    key: row.message.id,
+    words: [...row.said, row.message, ...row.arrived].map(findWordsOf).join("\n"),
+  };
+}
+
+/** Whether two runs of lines are the same lines in the same order. */
+function sameLines(a: readonly CodingAgentMessage[], b: readonly CodingAgentMessage[]): boolean {
+  return a === b || (a.length === b.length && a.every((line, index) => line === b[index]));
+}
+
+/** A row as the calls are placed among the rows, kept by its message while the lines drawn in it stand as they did. */
+const callRows = new WeakMap<
+  CodingAgentMessage,
+  { readonly lines: readonly CodingAgentMessage[]; readonly row: CallPlacedRow }
+>();
+
+/** A row placed for the calls into the agent, as `callPlaces` reads it: the message, and every line drawn inside it. */
+type CallPlacedRow = CodingAgentMessage & { readonly arrived: readonly CodingAgentMessage[] };
+
+/** A row as the calls are placed among the rows: read anew only for a message a page touched, or whose lines moved. */
+function callRowOf({ message, arrived, said }: PlacedRow): CallPlacedRow {
+  const lines = said.length === 0 ? arrived : [...arrived, ...said];
+  const kept = callRows.get(message);
+  if (kept !== undefined && sameLines(kept.lines, lines)) return kept.row;
+  const row = { ...message, arrived: lines };
+  callRows.set(message, { lines, row });
+  return row;
+}
+
+/**
+ * Each line that reached a turn, with who sent it, by the turn's message:
+ * named anew only for a message a page touched or whose lines moved, or
+ * once the people it names by are read again, so a page's naming costs as
+ * much as its own messages.
+ */
+function useArrivals(
+  placed: readonly PlacedRow[],
+  readerId: string | undefined,
+  members: Parameters<typeof lineSender>[2],
+  former: Parameters<typeof lineSender>[3],
+): ReadonlyMap<string, readonly ArrivedLine[]> {
+  const kept = useRef<{
+    readonly by: readonly unknown[];
+    readonly named: WeakMap<
+      CodingAgentMessage,
+      { readonly lines: readonly CodingAgentMessage[]; readonly arrived: readonly ArrivedLine[] }
+    >;
+  }>(undefined);
+  return useMemo(() => {
+    const by = [readerId, members, former];
+    if (kept.current === undefined || !kept.current.by.every((each, at) => each === by[at])) {
+      kept.current = { by, named: new WeakMap() };
+    }
+    const { named } = kept.current;
+    return new Map(
+      placed.map(({ message, arrived }) => {
+        const was = named.get(message);
+        if (was !== undefined && sameLines(was.lines, arrived)) return [message.id, was.arrived];
+        const lines =
+          arrived.length === 0
+            ? NO_ARRIVED
+            : arrived.map((line) => ({
+                message: line,
+                sender: lineSender(line.sentBy, readerId, members, former),
+              }));
+        named.set(message, { lines: arrived, arrived: lines });
+        return [message.id, lines];
+      }),
+    );
+  }, [placed, readerId, members, former]);
+}
+
 /**
  * How a transcript's messages are placed, read once for the messages held
  * rather than on every draw: where the to-do lists stand, which message
@@ -1455,8 +1718,9 @@ function transcriptPlacing(
   );
   // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
   const opening = !replayed || first === undefined ? undefined : replayOpening(first);
-  // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
-  const placed = placedMessages(messages);
+  // A line that reached a turn while it ran is drawn inside that turn, where it arrived, and the
+  // voice's line reading a turn aloud on a call ahead of it, the turn folded behind it.
+  const placed = spokenMessages(placedMessages(messages));
   const open = openReply(messages, working);
   return { todos, first, opening, placed, open };
 }
@@ -1476,6 +1740,7 @@ function AgentTranscriptView({
   endReason = FAILURE_REASON.OTHER,
   onOpenApiKeys,
   onRetry,
+  onOlder,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
@@ -1486,8 +1751,17 @@ function AgentTranscriptView({
   replay,
   endPress,
   endTrail,
+  calls = NO_CALLS,
+  bringIn,
+  holding = false,
 }: {
   messages: readonly CodingAgentMessage[];
+  /** Whether the log waits to draw for what stands around it, saying it is loading meanwhile. */
+  holding?: boolean;
+  /** Where the transcript hands the door that brings a message whose row is not drawn into view, which a link to the message asks through; none where nothing asks. */
+  bringIn?: RefObject<MessageBringer | undefined> | undefined;
+  /** The calls into the agent, oldest first, which the transcript places among its rows by the call each spoken line names (`callPlaces`); none on a worker's. */
+  calls?: readonly TranscriptCallRow[];
   /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
   brief?: CodingAgentBrief | undefined;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
@@ -1509,6 +1783,8 @@ function AgentTranscriptView({
   /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
   onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
+  /** Reads the messages older than the first held, which the log asks for as the reader nears its top; none where none stand. */
+  onOlder?: (() => void) | undefined;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1540,25 +1816,42 @@ function AgentTranscriptView({
     [messages, working, undelivered, replayed],
   );
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
-  const arrivals = useMemo(
-    () =>
-      new Map(
-        placing.placed.map(({ message, arrived }) => [
-          message.id,
-          arrived.length === 0
-            ? NO_ARRIVED
-            : arrived.map((line) => ({
-                message: line,
-                sender: lineSender(line.sentBy, readerId, members, former),
-              })),
-        ]),
-      ),
-    [placing, readerId, members, former],
-  );
+  const arrivals = useArrivals(placing.placed, readerId, members, former);
   const cards = delegation?.cards;
   const chat = delegation?.chat;
   const live = useMemo(() => ({ cards, chat }), [cards, chat]);
-  if (messages.length > 0) {
+  // Where each call begins and ends among the rows drawn, a line that reached a turn drawn inside it, and what of the calls heard here no row holds yet.
+  const places = useMemo(() => callPlaces(placing.placed.map(callRowOf), calls), [placing, calls]);
+  // Note that the clock is the minute's own, so a call's day moves on with it while the rows hold.
+  const now = useMinute();
+  const heard = places.heard;
+  // Each row is keyed by the message it draws, which its measured height is kept by.
+  const rowKeys = useKept(
+    placing.placed.map(({ message }) => message.id),
+    sameIds,
+  );
+  const log = useRef<HTMLDivElement>(null);
+  const rowsHandle = useRef<VirtualRowsHandle>(null);
+  // Note that the rows' words are read only while a find bar stands open over the tab.
+  const finding = useFindOpen();
+  const findRows = useMemo(
+    () => (finding ? placing.placed.map(findRowOf) : NO_FIND_ROWS),
+    [finding, placing],
+  );
+  useTranscriptFind({
+    root: log,
+    rows: findRows,
+    handle: rowsHandle,
+    findable: rowKeys.length > 0,
+  });
+  useLayoutEffect(() => {
+    if (bringIn === undefined) return;
+    bringIn.current = (messageId, then) => {
+      const row = placing.placed.find((placed) => drawsMessage(placed, messageId));
+      return row !== undefined && rowsHandle.current?.bringIn(row.message.id, then) === true;
+    };
+  });
+  if (!holding && (messages.length > 0 || heard.length > 0)) {
     const { todos, first, opening, placed, open } = placing;
     // The plan is the first of the developer's messages, unless the agent
     // was handed a prompt in its place, which is the developer's message as
@@ -1572,52 +1865,100 @@ function AgentTranscriptView({
     const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
-        <Conversation>
+        <Conversation list={log} onNearTop={onOlder}>
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
-            {placed.map(({ message }, index) => (
-              <Fragment key={message.id}>
-                <SteadyAgentMessage
-                  message={message === first && opening !== undefined ? opening.brief : message}
-                  plan={message === plan}
-                  taskId={message === plan ? taskId : undefined}
-                  lead={lead}
-                  moving={working && index === placed.length - 1}
-                  forkCut={forkCutOf(message, open)}
-                  delegation={delegation}
-                  todos={todos}
-                  briefTitle={briefTitle}
-                  origin={message === plan ? origin : undefined}
-                  sender={
-                    message === task
-                      ? briefSender
-                      : lineSender(message.sentBy, readerId, members, former)
-                  }
-                  arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                />
-                {message === first && opening !== undefined && replay !== undefined ? (
+            <ConversationRows
+              keys={rowKeys}
+              estimate={ROW_ESTIMATE_PX}
+              gap={ROW_GAP_PX}
+              rowClassName="agent-log-row"
+              handle={rowsHandle}
+            >
+              {(index) => {
+                const row = placed[index];
+                if (row === undefined) return null;
+                const { message, said, read } = row;
+                return (
                   <>
-                    <ReplayCard
-                      replay={opening.replay}
-                      sentAt={first.sentAt}
-                      place={replay}
-                      taskId={taskId}
-                    />
-                    {opening.note === undefined ? null : (
+                    {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
+                      <CallOpen key={call.key} call={call} now={now} />
+                    ))}
+                    {said.map((line) => (
                       <SteadyAgentMessage
-                        message={opening.note}
+                        key={line.id}
+                        message={line}
                         plan={false}
                         lead={lead}
                         moving={false}
+                        forkCut={forkCutOf(line, open)}
                         delegation={delegation}
-                        sender={briefSender}
+                        sender={lineSender(line.sentBy, readerId, members, former)}
                       />
-                    )}
+                    ))}
+                    <SteadyAgentMessage
+                      message={message === first && opening !== undefined ? opening.brief : message}
+                      plan={message === plan}
+                      taskId={message === plan ? taskId : undefined}
+                      lead={lead}
+                      moving={working && index === placed.length - 1}
+                      said={working && index === placed.length - 1 ? undefined : read}
+                      forkCut={forkCutOf(message, open)}
+                      delegation={delegation}
+                      todos={todos}
+                      briefTitle={briefTitle}
+                      origin={message === plan ? origin : undefined}
+                      sender={
+                        message === task
+                          ? briefSender
+                          : lineSender(message.sentBy, readerId, members, former)
+                      }
+                      arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                    />
+                    {message === first && opening !== undefined && replay !== undefined ? (
+                      <>
+                        <ReplayCard
+                          replay={opening.replay}
+                          sentAt={first.sentAt}
+                          place={replay}
+                          taskId={taskId}
+                        />
+                        {opening.note === undefined ? null : (
+                          <SteadyAgentMessage
+                            message={opening.note}
+                            plan={false}
+                            lead={lead}
+                            moving={false}
+                            delegation={delegation}
+                            sender={briefSender}
+                          />
+                        )}
+                      </>
+                    ) : null}
+                    {earlierOmitted && message === plan ? (
+                      <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                    ) : null}
+                    {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
+                      <CallClose key={call.key} call={call} />
+                    ))}
                   </>
-                ) : null}
-                {earlierOmitted && message === plan ? (
-                  <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                ) : null}
+                );
+              }}
+            </ConversationRows>
+            {heard.map((tail) => (
+              <Fragment key={tail.call.key}>
+                <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
+                {tail.lines.map((line) => (
+                  <SteadyAgentMessage
+                    key={line.id}
+                    message={heardLine(line)}
+                    plan={false}
+                    lead={lead}
+                    moving={false}
+                    delegation={delegation}
+                  />
+                ))}
+                <CallClose call={tail.call.live ? undefined : tail.call} />
               </Fragment>
             ))}
             {working ? (
@@ -1656,7 +1997,7 @@ function AgentTranscriptView({
   // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
   return (
     <ConversationEmptyState wide>
-      {reading && ended === undefined ? (
+      {holding || (reading && ended === undefined) ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <>
@@ -1714,8 +2055,20 @@ function AgentTabView({
   closedRemedy,
   continuedNote,
   continuable = false,
+  calls,
+  call: offeredCall,
+  bringIn,
+  holding = false,
 }: {
   agent: CodingAgentSummary;
+  /** Whether the log waits to draw for what stands around it, while it says it is loading. */
+  holding?: boolean;
+  /** Where the transcript hands the door that brings a message whose row is not drawn into view. */
+  bringIn?: RefObject<MessageBringer | undefined> | undefined;
+  /** The calls into the agent, which its transcript places among its rows (`useAgentCalls`). */
+  calls: readonly TranscriptCallRow[];
+  /** What the tab takes calls through; none where the platform has no voice. */
+  call?: AgentCallDoors | undefined;
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
   replay?: ReplayPlace | undefined;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
@@ -1745,7 +2098,7 @@ function AgentTabView({
   /** The chat a chat notice's card reads and opens; none where the window holds none. */
   chat?: ChatNoticeDoors | undefined;
   openGitHub: (url: string) => void;
-  /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
+  /** Turns to Settings › Agents, which a turn failed on a refused key offers. */
   onOpenApiKeys?: (() => void) | undefined;
   /** The words a dictation into the box is likely to say. */
   keywords?: readonly string[] | undefined;
@@ -1766,6 +2119,9 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
+  // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
+  const call = takesCalls(agent) ? offeredCall : undefined;
+  const onCall = useAgentOnCall(agent.id) && call !== undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
     [transcript.messages, composer.sent],
@@ -1782,6 +2138,7 @@ function AgentTabView({
   );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
+  const wholeParts = useWholePartDoor(agent.id);
   const { members, former } = useMemberDirectory();
   const tab = useRef<HTMLElement>(null);
   // The door the box hands Reply, which lays a quote in at its caret.
@@ -1825,45 +2182,58 @@ function AgentTabView({
     >
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
-          <MentionedServers value={mentioned}>
-            <UndeliveredLines value={undelivered}>
-              <AgentTranscriptView
-                messages={lines}
-                brief={agent.brief}
-                briefSender={starter === undefined ? undefined : starterActor}
-                origin={origin}
-                readerId={readerId}
-                taskId={agent.planId ?? undefined}
-                replay={replay}
-                delegation={{
-                  models,
-                  own: { model: agent.model, effort: agent.effort },
-                  starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                  onOpen: openSubagent,
-                  onOpenTarget: openTarget,
-                  cards,
-                  standings: transcript.subagents,
-                  chat,
-                  chatOn,
-                }}
-                reading={transcript.reading}
-                failed={transcript.failed}
-                working={working}
-                sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-                startedAt={startedAt}
-                ended={endLineParts(agent.status, transcript.failure, starter, continuable)}
-                endReason={endLineReason(transcript.failure, starter)}
-                onOpenApiKeys={onOpenApiKeys}
-                endPress={endPress}
-                endTrail={endTrail}
-                onRetry={transcript.onRetry}
-                overComposer
-              />
-            </UndeliveredLines>
-          </MentionedServers>
+          <WholePartsProvider value={wholeParts}>
+            <MentionedServers value={mentioned}>
+              <UndeliveredLines value={undelivered}>
+                <AgentTranscriptView
+                  messages={lines}
+                  brief={agent.brief}
+                  briefSender={starter === undefined ? undefined : starterActor}
+                  origin={origin}
+                  readerId={readerId}
+                  taskId={agent.planId ?? undefined}
+                  replay={replay}
+                  delegation={{
+                    models,
+                    own: { model: agent.model, effort: agent.effort },
+                    starts:
+                      delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                    onOpen: openSubagent,
+                    onOpenTarget: openTarget,
+                    cards,
+                    standings: transcript.subagents,
+                    chat,
+                    chatOn,
+                  }}
+                  reading={transcript.reading || holding}
+                  holding={holding}
+                  failed={transcript.failed}
+                  working={working}
+                  sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                  startedAt={startedAt}
+                  ended={
+                    // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
+                    transcript.pages === 0
+                      ? undefined
+                      : endLineParts(agent.status, transcript.failure, starter, continuable)
+                  }
+                  endReason={endLineReason(transcript.failure, starter)}
+                  onOpenApiKeys={onOpenApiKeys}
+                  endPress={endPress}
+                  endTrail={endTrail}
+                  onRetry={transcript.onRetry}
+                  onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                  overComposer
+                  calls={calls}
+                  bringIn={bringIn}
+                />
+              </UndeliveredLines>
+            </MentionedServers>
+          </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
+        {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
@@ -1900,6 +2270,30 @@ function AgentTabView({
             skills={skills}
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
+            payer={
+              agent.runtime === CODING_AGENT_RUNTIME.CODEX ? (
+                <ChatGptPlanLabel
+                  starter={readerId !== undefined && agent.startedBy?.userId === readerId}
+                  status={agent.status}
+                />
+              ) : agent.runtime === CODING_AGENT_RUNTIME.CLAUDE_CODE ? (
+                <ClaudePlanLabel
+                  starter={readerId !== undefined && agent.startedBy?.userId === readerId}
+                  status={agent.status}
+                />
+              ) : undefined
+            }
+            call={
+              call === undefined ? undefined : (
+                <AgentCallControls
+                  agentId={agent.id}
+                  archived={onUnarchive !== undefined}
+                  doors={call}
+                />
+              )
+            }
+            // Note that a call holds the microphone, so its own mute stands where Dictate would.
+            dictates={!onCall}
           />
         )}
       </footer>
@@ -1925,10 +2319,13 @@ export function AgentTab({
   chat,
   onHeld,
   run,
+  call,
 }: {
   agent: CodingAgentSummary;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: CodingAgentOrigin | undefined;
+  /** What the tab takes calls through; none where the platform has no voice. */
+  call?: AgentCallDoors | undefined;
   control: CodingAgentsControl;
   /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
@@ -1954,6 +2351,12 @@ export function AgentTab({
     onTitle: control.onTitle,
   });
   const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
+  const { calls, settled: callsSettled } = useAgentCalls({
+    agentId: agent.id,
+    read: control.readCalls,
+    messages,
+    readerId: control.me,
+  });
   // Note that what is held is dated by the page it was read from, never by
   // the summary, because the summary moves on to a new turn before its
   // messages land; and nothing is said before a page has landed.
@@ -1997,6 +2400,7 @@ export function AgentTab({
     messages: transcript.messages,
     running: agent.status === CODING_AGENT_STATUS.RUNNING,
     send: control.onMessage,
+    payer: planPayerOf(agent.runtime),
     onStatus: control.onStatus,
   });
   const model = useAgentModel({ agent, choose: control.onChoose });
@@ -2005,24 +2409,37 @@ export function AgentTab({
     write: control.onSwitchServers,
     onOpenSettings: control.onOpenIntegrations,
   });
-  const published = useAgentPullRequest({
+  const { published, settled: publishedSettled } = useAgentPullRequest({
     agentId: agent.id,
     status: agent.status,
     shown,
     messages: transcript.messages,
     read: control.readPullRequest,
+    known: control.pullRequests.get(agent.id),
   });
+  // Note that the log first draws once what stands around it has landed too: the pull request's dock over the box, and the dividers of calls its lines were said on, so neither moves a line the reader sees.
+  const surroundsLanded =
+    publishedSettled &&
+    (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
+  const opened = useRef(false);
+  if (surroundsLanded) opened.current = true;
+  const holding = messages.length > 0 && !opened.current;
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
+  const bringIn = useRef<MessageBringer | undefined>(undefined);
   useMessageReveal({
     agentId: agent.id,
     shown,
     caughtUp: transcript.caughtUp,
+    whole: !transcript.hasOlder,
+    olderFailed: transcript.olderFailed,
+    loadOlder: transcript.loadOlder,
     pages: transcript.pages,
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
+    bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
     gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
   });
   const starter = teammateStarter(agent.startedBy, control.me);
@@ -2069,6 +2486,10 @@ export function AgentTab({
     <MessagePlaceProvider value={messagePlace}>
       <AgentTabView
         agent={agent}
+        calls={calls}
+        call={call}
+        bringIn={bringIn}
+        holding={holding}
         models={control.models}
         readModels={control.readModels}
         transcript={transcript}
@@ -2163,13 +2584,10 @@ export function AgentSubagentTab({
   onStatus,
   onHeld,
   sender,
-  transcriptKey,
 }: {
   agentId: string;
   callId: string;
   task: string;
-  /** The transcript the tab follows, where it is a task's planning worker's rather than the agent's worker's under `agentId` and `callId`. */
-  transcriptKey?: CodingAgentTranscriptKey | undefined;
   /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
   status: CodingAgentStatus;
@@ -2181,7 +2599,7 @@ export function AgentSubagentTab({
   onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const transcript = useAgentTranscript({
-    transcript: transcriptKey ?? { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
+    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
     shown,
     follower: control.transcripts,
     onStatus: (_agentId, next) => onStatus(next.status),
@@ -2194,6 +2612,7 @@ export function AgentSubagentTab({
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
   const pictures = useAgentPictureDoor(agentId, callId);
+  const wholeParts = useWholePartDoor(agentId, callId);
   const { members, former } = useMemberDirectory();
   const macOwner = useKept(macOwnerOf(owner?.startedBy, members, control.me, former), sameFields);
   // The worker's lines, its task first, and what its rows draw from, kept from draw to draw while none of it moved.
@@ -2211,19 +2630,22 @@ export function AgentSubagentTab({
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
-          <AgentTranscriptView
-            messages={lines}
-            lead={WORKER_LEAD}
-            origin={origin}
-            delegation={delegation}
-            reading={transcript.reading}
-            failed={transcript.failed}
-            working={agentStillWriting(status)}
-            sessionStarting={status === CODING_AGENT_STATUS.STARTING}
-            startedAt={shown ? transcript.runStartedAt : undefined}
-            ended={endLineParts(status, transcript.failure)}
-            onRetry={transcript.onRetry}
-          />
+          <WholePartsProvider value={wholeParts}>
+            <AgentTranscriptView
+              messages={lines}
+              lead={WORKER_LEAD}
+              origin={origin}
+              delegation={delegation}
+              reading={transcript.reading}
+              failed={transcript.failed}
+              working={agentStillWriting(status)}
+              sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+              startedAt={shown ? transcript.runStartedAt : undefined}
+              ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
+              onRetry={transcript.onRetry}
+              onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+            />
+          </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
     </section>

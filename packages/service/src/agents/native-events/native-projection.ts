@@ -14,7 +14,13 @@ import {
   sessionKey,
 } from "../../core.js";
 import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
-import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moments.js";
+import {
+  NATIVE_ENDING,
+  NATIVE_MOMENT,
+  type NativeMoment,
+  PLAN_STATUS,
+  type PlanStatus,
+} from "./native-moments.js";
 
 /**
  * native-projection.ts -- a native harness's moments folded into the store writer's events, as eve's relay folds eve's stream.
@@ -73,6 +79,8 @@ const UsageSchema = Schema.Struct({
 const TurnSchema = Schema.Struct({
   /** The store's id for the turn. */
   id: Schema.String,
+  /** When the turn opened, in epoch milliseconds; absent on a turn kept from before it was recorded. */
+  openedAt: Schema.optionalKey(Schema.Number),
   /** The number of the last event told the writer for the turn, which numbers its next. */
   told: Schema.Number,
   /** How many steps the turn has opened. */
@@ -83,6 +91,8 @@ const TurnSchema = Schema.Struct({
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
+  /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
+  servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 type Turn = typeof TurnSchema.Type;
 
@@ -93,6 +103,12 @@ const NativeProjectionSchema = Schema.Struct({
   session: Schema.optionalKey(Schema.String),
   /** The plan's limit as it last refused the harness, kept until it lifts. */
   rateLimit: Schema.optionalKey(Schema.String),
+  /** When that limit resets, in epoch milliseconds, where the harness said. */
+  rateLimitResetsAt: Schema.optionalKey(Schema.Number),
+  /** The running total a harness that reports one (Codex) last reported, which the next report is metered against. */
+  metered: Schema.optionalKey(UsageSchema),
+  /** When a batch last kept the runner's sandbox alive (`../sandbox-keep-alive.ts`), in epoch milliseconds. */
+  keptAliveAt: Schema.optionalKey(Schema.Number),
 });
 export type NativeProjection = typeof NativeProjectionSchema.Type;
 
@@ -103,6 +119,22 @@ const readProjection = Schema.decodeUnknownOption(NativeProjectionSchema);
 /** The projection a conversation kept, or the empty one before its first save or for state no longer read. */
 export function heldProjection(saved: WireValue | null): NativeProjection {
   return Option.getOrElse(readProjection(saved), () => EMPTY_PROJECTION);
+}
+
+/** The projection with the servers the turn under way took as it started, where that turn is the one named. */
+export function withTurnServers(
+  state: NativeProjection,
+  turnId: string,
+  servers: readonly string[],
+): NativeProjection {
+  const turn = state.turn;
+  if (turn === undefined || turn.id !== turnId || servers.length === 0) return state;
+  return { ...state, turn: { ...turn, servers: [...servers] } };
+}
+
+/** The servers the turn under way took as it started; none where no turn is under way. */
+export function turnServersOf(state: NativeProjection): readonly string[] {
+  return state.turn?.servers ?? [];
 }
 
 /** A write the projection asks of the store, in the order it must land. */
@@ -117,6 +149,8 @@ export const NATIVE_WRITE = {
   SESSION: "session",
   /** Record that the harness folded its context. */
   COMPACTED: "compacted",
+  /** Record how a turn found the plan that pays for the agent, on its row. */
+  PLAN_STATUS: "plan_status",
 } as const;
 
 export type NativeWrite =
@@ -128,7 +162,15 @@ export type NativeWrite =
       readonly clientId: string;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
-  | { readonly kind: typeof NATIVE_WRITE.COMPACTED };
+  | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
+  | {
+      readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
+      readonly status: PlanStatus;
+      /** When a reached limit resets, in epoch milliseconds, where the harness said. */
+      readonly resetsAt?: number;
+      /** When the turn that found it opened, so a credential saved since is not judged by it. */
+      readonly turnOpenedAt?: number;
+    };
 
 /** What one event is projected under: its conversation and number, the instant, the model the agent runs on, and which tools the record holds. */
 export interface NativeProjectionContext {
@@ -199,7 +241,7 @@ class Fold {
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
     const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
     const opened = this.#tell(
-      { id, told: 0, steps: 0, calls: {} },
+      { id, told: 0, steps: 0, calls: {}, openedAt: this.#context.now },
       { kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
     );
     this.#setTurn(opened);
@@ -297,6 +339,7 @@ class Fold {
         callId: moment.callId,
         name,
         settlement: moment.settlement,
+        ...(moment.input !== undefined ? { input: moment.input } : undefined),
       }),
     );
   }
@@ -326,13 +369,22 @@ class Fold {
     });
     this.#setTurn(undefined);
     // Note that a limit is the launch's: the next launch is refused again or it is not.
-    const { rateLimit: _spent, ...rest } = this.state;
+    const { rateLimit: _spent, rateLimitResetsAt: _resets, ...rest } = this.state;
     this.state = rest;
   }
 
   #usage(usage: BrainRunUsage): void {
     const turn = this.turn();
     this.#setTurn({ ...turn, usage: addModelUsage(turn.usage, usage) });
+  }
+
+  /** A running total metered: the turn under way takes what it grew by; with no turn under way it is only noted, so it is not metered again. */
+  #usageTotal(total: BrainRunUsage): void {
+    const grown = usageGrowth(this.state.metered, total);
+    this.state = { ...this.state, metered: total };
+    const turn = this.state.turn;
+    if (turn === undefined || grown === undefined) return;
+    this.#setTurn({ ...turn, usage: addModelUsage(turn.usage, grown) });
   }
 
   #result(failure: string | undefined): void {
@@ -389,6 +441,9 @@ class Fold {
       case NATIVE_MOMENT.USAGE:
         this.#usage(moment.usage);
         return;
+      case NATIVE_MOMENT.USAGE_TOTAL:
+        this.#usageTotal(moment.total);
+        return;
       case NATIVE_MOMENT.RESULT:
         this.#result(moment.failure);
         return;
@@ -396,8 +451,29 @@ class Fold {
         this.writes.push({ kind: NATIVE_WRITE.COMPACTED });
         return;
       case NATIVE_MOMENT.RATE_LIMIT: {
-        const { rateLimit: _held, ...rest } = this.state;
-        this.state = moment.refused ? { ...rest, rateLimit: moment.detail } : rest;
+        const { rateLimit: _held, rateLimitResetsAt: _resets, ...rest } = this.state;
+        this.state = moment.refused
+          ? {
+              ...rest,
+              rateLimit: moment.detail,
+              ...(moment.resetsAt !== undefined
+                ? { rateLimitResetsAt: moment.resetsAt }
+                : undefined),
+            }
+          : rest;
+        return;
+      }
+      case NATIVE_MOMENT.PLAN: {
+        // Note that a reached limit resets when the limit the harness last reported says.
+        const resetsAt =
+          moment.status === PLAN_STATUS.LIMIT_REACHED ? this.state.rateLimitResetsAt : undefined;
+        const turnOpenedAt = this.state.turn?.openedAt;
+        this.writes.push({
+          kind: NATIVE_WRITE.PLAN_STATUS,
+          status: moment.status,
+          ...(resetsAt !== undefined ? { resetsAt } : undefined),
+          ...(turnOpenedAt !== undefined ? { turnOpenedAt } : undefined),
+        });
         return;
       }
       case NATIVE_MOMENT.WAITING: {
@@ -411,6 +487,26 @@ class Fold {
         return;
     }
   }
+}
+
+type Usage = typeof UsageSchema.Type;
+
+/**
+ * What a running total grew by since the one before: all of it where none
+ * was metered or where it is smaller (a new thread counts from nothing), and
+ * nothing where it did not grow.
+ */
+function usageGrowth(before: Usage | undefined, total: Usage): BrainRunUsage | undefined {
+  const grown = {
+    inputTokens: total.inputTokens - (before?.inputTokens ?? 0),
+    outputTokens: total.outputTokens - (before?.outputTokens ?? 0),
+    cachedInputTokens: total.cachedInputTokens - (before?.cachedInputTokens ?? 0),
+    reasoningTokens: total.reasoningTokens - (before?.reasoningTokens ?? 0),
+    cacheWriteTokens: (total.cacheWriteTokens ?? 0) - (before?.cacheWriteTokens ?? 0),
+  };
+  const counts = Object.values(grown);
+  if (counts.some((count) => count < 0)) return total;
+  return counts.some((count) => count > 0) ? grown : undefined;
 }
 
 /** The turn's status by how its launch ended: done, unless its last model turn failed; stopped is cancelled. */

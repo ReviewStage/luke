@@ -85,8 +85,6 @@ export {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
-  type PlanDraftFrame,
-  planDraftFrameFromWire,
   SESSION_CREATE_BOUNDS,
   type SessionActivityFrame,
   type SessionAttachedFrame,
@@ -96,6 +94,7 @@ export {
   type SessionHangUpFrame,
   type SessionReportFrame,
   type SessionStopFrame,
+  type SessionTypedFrame,
   sessionActivityFrameFromWire,
   sessionActivityFrameSchema,
   sessionAttachedFrameFromWire,
@@ -110,14 +109,13 @@ export {
   sessionReportFrameFromWire,
   sessionReportFrameSchema,
   sessionStopFrameSchema,
+  sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
   taskCodeFrameFromWire,
-  taskWorkFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
@@ -125,6 +123,7 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_NOT_CLAIMED,
 } from "./mac-command-client.js";
 export {
   automationPath,
@@ -149,6 +148,7 @@ export {
   type TaskCallResult,
   type TaskMarks,
   type TaskStarted,
+  type TaskWritten,
 } from "./task-client.js";
 export {
   HostedTerminalClient,

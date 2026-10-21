@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
-import { BRAIN_INSTRUCTIONS } from "./brain-host/brain.js";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
 import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
@@ -11,8 +10,8 @@ import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
  * link-examples.test.ts -- the link every author is shown how to write a
  * file, a pull request, or an issue with is one Luke draws as a chip: the
  * coding agent's instructions, which show every kind it names as a mention,
- * its inbox and plan tools, the planner's, and the notetaker's; the coding
- * agent's last example is another agent's. An example spelled with `<owner>/<name>` and `<path>` is
+ * and its inbox and plan tools; the coding agent's last example is another
+ * agent's. An example spelled with `<owner>/<name>` and `<path>` is
  * read as an author fills it in. Synthetic repository.
  */
 
@@ -74,7 +73,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
   }
 });
 
-test("a coding agent with Chat on is shown its task's Luke as the link Luke draws as his chip, and an agent on no task is shown no link of a Luke's", () => {
+test("a coding agent with Chat on is shown no link of a task's Luke, on a task or on none", () => {
   const chatOf = (taskLink: string | null) => {
     const words = coderInstructions(
       REPOSITORY,
@@ -84,22 +83,16 @@ test("a coding agent with Chat on is shown its task's Luke as the link Luke draw
       undefined,
       true,
     );
-    const from = words.indexOf("## Chat with other agents");
+    const from = words.indexOf("## Your team's chat");
     return words.slice(from, words.indexOf("\n## ", from + 1));
   };
-  const onTask = chatOf(TASK_ADDRESS);
-  assert.deepEqual(drawnAs(onTask), [MENTION_KIND.LUKE]);
-  assert.ok(onTask.includes(`[@Luke](${TASK_ADDRESS}/luke)`));
+  assert.deepEqual(drawnAs(chatOf(TASK_ADDRESS)), []);
   assert.deepEqual(drawnAs(chatOf(null)), []);
 });
 
 test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip", () => {
   assert.deepEqual(drawnAs(INBOX_TOOLS.POST.description), [MENTION_KIND.FILE]);
   assert.deepEqual(drawnAs(EDIT_PLAN_TOOL.description), [MENTION_KIND.FILE]);
-});
-
-test("the planner shows an issue's link for the plan and a file's link for code, each drawn as its chip", () => {
-  assert.deepEqual(drawnAs(BRAIN_INSTRUCTIONS), [MENTION_KIND.LINK, MENTION_KIND.FILE]);
 });
 
 /** Every date mention the words show, as the mention its target names. */
@@ -109,12 +102,7 @@ function datesIn(words: string): (string | undefined)[] {
   );
 }
 
-test("a coding agent and the planner are each shown a day, a time, and a range, each a date Luke draws as its chip", () => {
+test("a coding agent is shown a day, a time, and a range, each a date Luke draws as its chip", () => {
   const words = coderInstructions(REPOSITORY, CODING_AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
-  assert.deepEqual(datesIn(BRAIN_INSTRUCTIONS), [
-    MENTION_KIND.DATE,
-    MENTION_KIND.DATE,
-    MENTION_KIND.DATE,
-  ]);
 });

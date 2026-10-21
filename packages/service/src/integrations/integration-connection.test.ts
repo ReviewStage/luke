@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { openTaskConversation } from "@luke/database/models/task-store";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
@@ -19,9 +19,9 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_TURN,
 } from "../agents/brain-host/bounds.js";
-import { type BrainHost, brainHost } from "../agents/brain-host/host.js";
+import { type CoderHost, coderHost } from "../agents/coder-host/host.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { GitHubApp } from "../github/github-app.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import {
   GITHUB_APP_SETTINGS,
   openGithubUser,
@@ -42,17 +42,17 @@ import {
   vercelConnector,
   WorkspaceLinearConnect,
 } from "./integration-connect.js";
-import {
-  type IntegrationAdmission,
-  integrationAccessToken,
-  integrationConnection,
-  integrationUnavailable,
-} from "./integration-connection.js";
+import { integrationConnection } from "./integration-connection.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
   deleteIntegrationConnection,
 } from "./integration-store.js";
+import {
+  type IntegrationAdmission,
+  integrationAccessToken,
+  integrationUnavailable,
+} from "./integration-token.js";
 import {
   beginWorkspaceIntegrationSignIn,
   completeWorkspaceIntegrationSignIn,
@@ -60,11 +60,11 @@ import {
 } from "./workspace-integration-store.js";
 
 /**
- * The one connection per integration all four agents register, through the
+ * The one connection per integration both agents register, through the
  * token read their edges compose with each agent's own ownership check: the
- * brain's and the coding agent's root admission, and each one's
- * worker's delegated admission. Linear stands for every provider. The store
- * and both hosts are the real ones over the migrations on PGlite; Vercel
+ * coding agent's root admission, and its worker's delegated admission.
+ * Linear stands for every provider. The store and the host are the real
+ * ones over the migrations on PGlite; Vercel
  * Connect is the one double, a connector that holds a token per account.
  * Every token a test reads back names the account it was issued for, so a
  * read that reached another account's grant fails by its value. Every
@@ -121,10 +121,10 @@ function connectLayer(grants: Map<string, FakeGrant>) {
   return integrationConnectOf((provider) => fakeConnect(provider === LINEAR ? grants : new Map()));
 }
 
-/** The brain's host over the test's store; nothing a token read reaches is a seam of its. */
-const taskBrainHost = Effect.gen(function* () {
-  const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
-  return brainHost({
+/** A coding agent's host over the test's store; nothing a token read reaches is a seam of its. */
+const agentHost = Effect.gen(function* () {
+  const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+  return coderHost({
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
@@ -133,12 +133,11 @@ const taskBrainHost = Effect.gen(function* () {
     },
     deploymentSecret: () => undefined,
     eveOrigin: () => undefined,
-    openAi: () => undefined,
+    keys: () => Effect.die(new Error("no token read reads a provider key")),
+    fastRefused: async () => undefined,
     titleModel: () => undefined,
+    research: () => ({ openAi: undefined, spend: Effect.void }),
     scriptedModel: () => false,
-    spend: () => {
-      throw new Error("no token read spends");
-    },
     now: () => NOW,
   });
 });
@@ -166,17 +165,25 @@ function typedSeat(userId: string, conversationId: string): SessionAuth {
   });
 }
 
-/** An account with a task whose conversation a brain session was claimed for, under the seat given. */
+/** An account with an agent on a task whose conversation a session was claimed for, under the seat given. */
 const plannedSession = (
-  host: BrainHost,
+  host: CoderHost,
   seat: (userId: string, conversationId: string) => SessionAuth,
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const opened = yield* openTaskConversation(userId, task.id);
-    assert.ok(Option.isSome(opened));
-    const conversationId = opened.value.conversationId;
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: `start-${userId}`,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Teammate invitations",
+      prompt: null,
+      repository: null,
+    });
+    assert.ok(Option.isSome(started));
+    const conversationId = started.value.agent.conversationId;
     const auth = seat(userId, conversationId);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
@@ -208,10 +215,10 @@ const SUITE = Layer.mergeAll(getTestDB(), noNetwork, GitHubApp.layer(GITHUB_APP_
 
 it.layer(SUITE)("an integration connection's token read", (it) => {
   it.effect(
-    "the planning root reads the token of the account the session was admitted for, and never another connected account's",
+    "an agent's root reads the token of the account the session was admitted for, and never another connected account's",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const mine = yield* plannedSession(host, typedSeat);
         const theirs = yield* plannedSession(host, typedSeat);
         yield* connected(mine.userId);
@@ -237,7 +244,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "a second account at a provider reads its own grant, under its own subject, and the first reads the first's",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const session = yield* plannedSession(host, typedSeat);
         const subject = `subject-${session.userId}`;
         yield* connected(session.userId);
@@ -275,7 +282,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "a connection handed for one account never reaches another added later under the same name",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const session = yield* plannedSession(host, typedSeat);
         const second = (subject: string) =>
           Effect.gen(function* () {
@@ -310,10 +317,10 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
   );
 
   it.effect(
-    "a member speaking in a plan conversation a teammate opened reads the member's own token, never the opener's",
+    "a member speaking in an agent's conversation a teammate started reads the member's own token, never the starter's",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const opened = yield* plannedSession(host, typedSeat);
         const member = yield* openGithubUser();
         yield* joinWorkspace(opened.workspaceId, member);
@@ -339,7 +346,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "in a plan of a workspace with Linear connected, the Linear token is the workspace's for every member, and the account's own once the workspace disconnects",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const state = `workspace-state-${session.workspaceId}`;
@@ -375,7 +382,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "in a plan of a workspace with Linear connected, a turn is handed Linear once, on the workspace's grant, and a second account handed before keeps its own",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const session = yield* plannedSession(host, typedSeat);
         const subject = `subject-${session.userId}`;
         yield* connected(session.userId);
@@ -435,7 +442,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "in a plan of a workspace with Linear connected on a deployment naming no workspace connector, the turn's Linear is unreachable, never the member's own grant",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const state = `workspace-state-${session.workspaceId}`;
@@ -481,10 +488,10 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
   );
 
   it.effect(
-    "a member speaking in a plan conversation a teammate opened is handed the providers offered to the member, by the member's own allowlist",
+    "a member speaking in an agent's conversation a teammate started is handed the providers offered to the member, by the member's own allowlist",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const opened = yield* plannedSession(host, typedSeat);
         const member = yield* openGithubUser();
         yield* joinWorkspace(opened.workspaceId, member);
@@ -513,7 +520,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "Connect unreachable or unconfigured fails the read with a fixed sentence, and nothing it said reaches the log",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const secret = "lin_oauth_leaked_bearer_1234567890abcdef";
@@ -562,7 +569,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "GitHub's token is the account's own GitHub sign-in token, asked of no connector, and an account that never signed in with GitHub is told to sign in with GitHub",
     () =>
       Effect.gen(function* () {
-        const host = yield* taskBrainHost;
+        const host = yield* agentHost;
         const signedIn = yield* plannedSession(host, typedSeat);
         const googleOnly = yield* plannedSession(host, typedSeat);
         const db = yield* Database;

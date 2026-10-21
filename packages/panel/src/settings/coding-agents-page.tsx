@@ -11,7 +11,6 @@ import {
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   CHOICE_BAR_LOOK,
@@ -22,6 +21,8 @@ import {
   SettingsRowsSkeleton,
   SettingsSection,
   TEXT_LINK_LOOK,
+  TEXT_TONE,
+  Text,
   TextLink,
 } from "@luke/ui";
 import { actionRejection } from "@luke/ui/use-setting-write";
@@ -48,23 +49,21 @@ import {
   windowOf,
 } from "../tasks/coding-agent-model.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { useCapability, useNativeAgentsAccess } from "../use-app-state.js";
-import { ApiKeysSection } from "./api-keys-section.js";
+import { AgentAuthSection } from "./agent-auth-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
-import { ChatGptPlanSection } from "./chatgpt-plan-section.js";
 import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
- * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
+ * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on, a voice chat's as a Start's, there being no voice default of its own.
  *
- * The page is three groups under their own headings: this file's Default
- * model, the model a Generate chapters runs on (`chapters-model-section.tsx`),
- * then the account's own API keys (`api-keys-section.tsx`); on the desktop,
- * for an account in the native-agents cohort, a fourth, Codex, connects the
- * account's ChatGPT plan (`chatgpt-plan-section.tsx`). The two
+ * The page opens on one line of what it is for, then the harnesses' rows,
+ * each saying how Claude Code or Codex is connected and opening the dialog
+ * that connects it with a plan or an API key (`agent-auth-section.tsx`),
+ * then this file's Default model, then the model a Generate chapters runs
+ * on (`chapters-model-section.tsx`). The harnesses and the Default model
  * share the one read of the keys, so a
- * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
+ * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
  * and by a Start that named a model alike, so the page reads it afresh as it
  * opens and shows what the last Start wrote. The model row is the same picker every settings row uses,
@@ -94,7 +93,7 @@ const PAGE_LINE = {
   FAILED: "The default could not be read.",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   MODELS_NONE_MATCH: "No models match.",
-  SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
+  SIGNED_OUT: "Sign in to choose the model your agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
@@ -409,16 +408,12 @@ function CodingAgentsSection({
 }
 
 /**
- * The Default model and API keys groups, over the keys the API keys group
- * holds: the model row's note says which provider runs on the account's own
- * key, so it reads them from the group that changes them rather than from a
- * read of its own that a save below would leave behind.
+ * The harnesses and the Default model group, over the keys the harnesses'
+ * rows hold: the model row's note says which provider runs on the account's
+ * own key, so it reads them from the rows that change them rather than from
+ * a read of its own that a save there would leave behind.
  */
 export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
-  // The ChatGPT plan is offered where the loopback can be listened on, and to the cohort alone.
-  const loopbackOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
-  const inCohort = useNativeAgentsAccess();
-  const chatGptOffered = loopbackOffered && inCohort;
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
@@ -427,10 +422,12 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
   }, []);
   return (
     <>
+      <Text tone={TEXT_TONE.MUTED}>
+        For your agents. Other users connect their own subscriptions or API keys.
+      </Text>
+      <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
-      <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
-      {chatGptOffered ? <ChatGptPlanSection signedIn={signedIn} /> : null}
     </>
   );
 }

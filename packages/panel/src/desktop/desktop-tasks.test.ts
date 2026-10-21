@@ -5,6 +5,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -13,7 +14,6 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -27,7 +27,6 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -36,7 +35,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -47,6 +45,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import "../file-tree/index.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -107,67 +106,58 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {
-  const markup = renderToStaticMarkup(
-    createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
-      looks: NO_LOOKS,
-      tasks: tasksControl({
-        page: TASKS_PAGE.DOCUMENT,
-        activeTaskId: TASK.id,
-        region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        mainTabs: { ...tasksControl().mainTabs, tab: MAIN_TAB.CALL },
-        transcript: {
-          region: {
-            kind: TRANSCRIPT_REGION.READY,
-            earlierOmitted: false,
-            calls: [
-              {
-                key: "call-1",
-                startedAt: 1_000,
-                live: true,
-                lukeEnded: false,
-                messages: [
-                  {
-                    id: "0",
-                    role: "user",
-                    parts: [{ type: "text", text: "Invites should expire." }],
-                  },
-                  {
-                    id: "1",
-                    role: "assistant",
-                    parts: [{ type: "text", text: "After how many days?" }],
-                  },
-                ],
-              },
-            ],
+test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
+  const DRAFT_ID = "draft-1";
+  const drawn = (calls: TasksControl["calls"]) => {
+    const page = document.createElement("div");
+    page.innerHTML = renderToStaticMarkup(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          mainTabs: {
+            ...tasksControl().mainTabs,
+            tabs: [{ draft: DRAFT_ID }],
+            tab: { draft: DRAFT_ID },
           },
-          onRetry: () => undefined,
-        },
+          calls,
+          agents: codingAgentsControl({
+            agentIds: [],
+            draft: {
+              id: DRAFT_ID,
+              prompt: "",
+              attachments: [],
+              choice: undefined,
+              disabledServers: [],
+            },
+            startCall: () => Promise.resolve({ agentId: "agent-1" }),
+          }),
+        }),
       }),
-    }),
+    );
+    return page;
+  };
+  const voiced = drawn({ onPress: () => undefined });
+  assert.ok(
+    voiced.querySelector(".desktop-agent .agent-composer"),
+    "the draft's composer is drawn",
   );
-
-  const page = document.createElement("div");
-  page.innerHTML = markup;
-  const call = page.querySelector('section.task-call.ph-no-capture[aria-label="Call"]');
-  assert.ok(call, "the Call tab, left out of the recording");
-  // The developer's line a bubble of their own, Luke's an assistant's message, as an agent's tab draws them.
-  assert.deepEqual(
-    [...call.querySelectorAll(".is-user, .is-assistant")].map((message) => [
-      message.classList.contains("is-user") ? "user" : "assistant",
-      message.querySelector("p")?.textContent,
-    ]),
-    [
-      ["user", "Invites should expire."],
-      ["assistant", "After how many days?"],
-    ],
+  assert.equal(voiced.querySelector(".desktop-no-agent"), null);
+  assert.equal(
+    [...voiced.querySelectorAll("button")].some((each) =>
+      /voice chat/u.test(each.textContent ?? ""),
+    ),
+    false,
   );
-  assert.match(call.textContent ?? "", /Live/u);
+  assert.ok(voiced.querySelector(".agent-call-button button"), "and Call in it");
+  assert.equal(drawn(undefined).querySelector(".agent-call-button"), null, "the web's offers none");
 });
 
-/** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
-function codeTab(shownCode: readonly never[] | undefined, workFailed = false): HTMLElement {
+/** The Code tab as the task's page draws it over the code the task holds, and whether its code read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -178,7 +168,7 @@ function codeTab(shownCode: readonly never[] | undefined, workFailed = false): H
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
         sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
         shownCode,
-        workFailed,
+        codeFailed,
       }),
     }),
   );
@@ -202,7 +192,7 @@ test("the Code tab waits while the task's code is unread, and says there is none
   assert.equal(none.querySelector("[role=status]"), null);
 });
 
-test("the Code tab whose work read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
   let retries = 0;
   const container = document.createElement("div");
   document.body.append(container);
@@ -218,8 +208,8 @@ test("the Code tab whose work read did not land says so with Retry while it hold
           region: { kind: DOCUMENT_REGION.READY, task: TASK },
           sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
           shownCode: undefined,
-          workFailed: true,
-          onRetryWork: () => {
+          codeFailed: true,
+          onRetryCode: () => {
             retries += 1;
           },
         }),
@@ -264,7 +254,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -278,10 +268,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
             },
             agents: codingAgentsControl({
               agentIds: [agentId],
-              readInbox: ({ after }) =>
-                after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items: [], cursor: "1" })
-                  : new Promise(() => undefined),
+              inboxFollower: followedInboxes(() => ({ items: [] })).follower,
             }),
           }),
         }),
@@ -336,10 +323,10 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
 async function narrowTaskInbox(
   items: readonly InboxItem[],
   width = 700,
-  /** What the read held open past the first answers, where a test settles it; else it stays open. */
+  /** What is pushed after the first push, where a test settles it; else nothing is. */
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
-  /** What the first read answers, where a test holds it open; else the items given. */
-  first: Promise<CodingAgentInboxAnswerView> = Promise.resolve({ items, cursor: "1" }),
+  /** What the first push says, where a test holds it back until it settles; else the items given, once followed. */
+  first?: Promise<CodingAgentInboxAnswerView>,
   /** The account reading, none where a test does not say, and where its answers go. */
   reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
     me: undefined,
@@ -353,6 +340,16 @@ async function narrowTaskInbox(
       removeEventListener: () => undefined,
     }),
   });
+  // The inbox is pushed as `items` once followed, or as `first` says once it settles, and
+  // again as `later` says once it settles.
+  const main = followedInboxes(() => (first === undefined ? { items } : undefined));
+  const pushed = (answer: CodingAgentInboxAnswerView) =>
+    main.push(
+      { kind: INBOX_SCOPE_KIND.PLAN, id: TASK.id },
+      "failure" in answer ? { failure: answer.failure } : { items: answer.items },
+    );
+  void first?.then(pushed);
+  void later.then(pushed);
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -362,7 +359,7 @@ async function narrowTaskInbox(
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -380,12 +377,7 @@ async function narrowTaskInbox(
               ...(reader.answerInbox === undefined
                 ? undefined
                 : { answerInbox: reader.answerInbox }),
-              readInbox: ({ after }) =>
-                after === INBOX_CURSOR_START
-                  ? first
-                  : after === "1"
-                    ? later
-                    : new Promise(() => undefined),
+              inboxFollower: main.follower,
             }),
           }),
         }),
@@ -632,7 +624,7 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   inbox.unmount();
 });
 
-test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says there is nothing to do", async () => {
+test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
@@ -640,8 +632,9 @@ test("on To do, the item a task's Inbox chose for itself stays shown once it is 
   await inbox.pressScope("To do");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
-  assert.deepEqual(inbox.rows(), []);
-  assert.equal(inbox.filteredOut()?.[1], "Nothing to do");
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "the answered row stays while chosen");
+  assert.equal(inbox.row("Expire after 7 days?")?.closest("li")?.dataset["muted"], "true");
+  assert.equal(inbox.filteredOut(), null);
   assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
   window.localStorage.clear();
   inbox.unmount();
@@ -926,15 +919,15 @@ async function chatTabMounted(ownChannel: boolean) {
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          captions: undefined,
+          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            mainTabs: {
-              ...tasksControl().mainTabs,
-              tabs: [MAIN_TAB.CALL, MAIN_TAB.CHAT],
-              tab: MAIN_TAB.CHAT,
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tab: SIDE_PANEL_TAB.CHAT,
             },
             chatView: { ...tasksControl().chatView, available: true, chat },
           }),
@@ -948,7 +941,7 @@ async function chatTabMounted(ownChannel: boolean) {
   return { container, root };
 }
 
-test("a task's Chat tab shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
+test("a task's Chat tab in the side panel shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
@@ -959,7 +952,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
     /Message #teammate-invitations/u,
     "its composer asks for a message to the channel",
   );
-  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 8);
   act(() => own.root.unmount());
   own.container.remove();
 
@@ -972,7 +965,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
   none.container.remove();
 });
 
-test("with Chat off for the account, a Chat tab kept on the task's strip draws nothing", async () => {
+test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {
   handState({});
   const off = await chatTabMounted(true);
   assert.equal(off.container.querySelector("section.desktop-task-chat"), null);
@@ -1071,7 +1064,7 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            captions: undefined,
+            notice: undefined,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
               activeTaskId: TASK.id,
@@ -1118,8 +1111,8 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   const page = panelPage(SIDE_PANEL_TAB.PLAN, {
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, { agent: agentId }],
-      tab: MAIN_TAB.CALL,
+      tabs: [{ agent: agentId }],
+      tab: undefined,
       onClose: () => closed.push("column"),
     },
     sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },

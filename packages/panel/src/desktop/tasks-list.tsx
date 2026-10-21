@@ -37,7 +37,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { creatorActor } from "@luke/ui/actor-model";
+import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   placeWrites,
@@ -47,6 +47,7 @@ import {
 } from "@luke/ui/task-sections-model";
 import { RENAME_FAILED_NOTE, TASK_MARK } from "@luke/ui/tasks-model";
 import {
+  COMPLETED_WINDOW,
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
   TASKS_GROUP,
@@ -79,6 +80,7 @@ import { RelativeTime } from "../tasks/relative-time.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { readKept, writeKept } from "./folded-groups.js";
@@ -97,6 +99,7 @@ import {
   creatorWords,
   NO_CREATOR,
   NO_REPOSITORY,
+  OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
 import { useRowDrag } from "./use-row-drag.js";
@@ -528,6 +531,7 @@ function TaskListRow({
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
+  const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
@@ -643,7 +647,20 @@ function TaskListRow({
           <FadingWords className="tasks-list-repository" words={repositoryName} />
         </>,
       )}
-      {cell(TASK_PROPERTY.CREATOR, <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />)}
+      {/* Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does. */}
+      {cell(
+        TASK_PROPERTY.CREATOR,
+        <>
+          {maker === undefined ? null : (
+            <span className="tasks-list-maker">{actorName(maker.actor)}</span>
+          )}
+          <ActorMark
+            actor={maker?.actor ?? creator}
+            size={ACTOR_SIZE.MARK}
+            forWhom={maker === undefined ? undefined : creator}
+          />
+        </>,
+      )}
       {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} />)}
       {cell(
         TASK_PROPERTY.UPDATED,
@@ -679,6 +696,7 @@ function TasksListGroup({
   onToggle,
   drops,
   draggable,
+  onShowOlder,
   children,
 }: {
   group: TasksGroup;
@@ -688,6 +706,8 @@ function TasksListGroup({
   drops: ListDrops;
   /** Whether its rows are dragged at all: not on a phone, whose drag is its scroll. */
   draggable: boolean;
+  /** Shows every settled task, as the group's "+ N older" line asks. */
+  onShowOlder: () => void;
   children: ReactNode;
 }): React.JSX.Element {
   const move = folded ? undefined : drops.move(group);
@@ -729,9 +749,11 @@ function TasksListGroup({
         </h2>
       ) : null}
       {folded ? null : group.tasks.length === 0 ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
-        </Text>
+        group.older === undefined ? (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
+          </Text>
+        ) : null
       ) : (
         <ul
           className="tasks-list-rows"
@@ -742,6 +764,7 @@ function TasksListGroup({
           {children}
         </ul>
       )}
+      {folded ? null : <OlderCompleted older={group.older} onShow={onShowOlder} />}
     </section>
   );
 }
@@ -790,6 +813,7 @@ export function TasksList({
     sections: listSections(tasks),
     readerId: tasks.me,
     creatorName,
+    now,
   });
   const creatorMark = (creatorId: string) => {
     const named = listed.find((task) => (task.createdBy?.userId ?? task.ownerId) === creatorId);
@@ -841,6 +865,7 @@ export function TasksList({
             onToggle={() => folds.toggle(group.head)}
             drops={drops}
             draggable={!narrow}
+            onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
           >
             {group.tasks.map((task) => (
               <TaskListRow

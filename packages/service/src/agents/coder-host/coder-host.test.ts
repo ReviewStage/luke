@@ -9,6 +9,7 @@ import {
   agentWorkspace,
   ensureGeneral,
   ensureMember,
+  ensureTaskChannel,
   postMessage,
   roster,
 } from "@luke/database/models/chat-store";
@@ -22,6 +23,7 @@ import {
   hasRepository,
   latestTurnsOf,
   readCodingAgent,
+  recordCodingAgentPublished,
   writeDelegation,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
@@ -29,7 +31,7 @@ import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listJournalsCalling } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { openTaskConversation, readTask, updateTask } from "@luke/database/models/task-store";
+import { readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
@@ -37,7 +39,12 @@ import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabu
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -53,6 +60,12 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { TASK_STATUS } from "@luke/features/task-wire";
+import {
+  transcriptWindowPartRowSchema,
+  transcriptWindowRowSchema,
+  windowMessagesOf,
+} from "@luke/features/transcript-window";
 import { EXPERIMENT } from "@luke/settings";
 import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -94,8 +107,10 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
+  type BrainHostTurn,
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
+import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
@@ -103,11 +118,12 @@ import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { accountInboxPast } from "./inbox-page.js";
 import type { ProviderKeys } from "./model.js";
+import { cutMessage } from "./part-cut.js";
 import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, turnToolsOf } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, runCallTool } from "./tool-set.js";
 import {
   CURSOR_START,
   titleMayLand,
@@ -115,7 +131,12 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./transcript.js";
-import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
+import {
+  agentFollowedBy,
+  transcriptLiveStatements,
+  transcriptWindowLiveStatements,
+} from "./transcript-live.js";
+import { handedAfterCompaction, type TurnHanded } from "./turn-context.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -610,6 +631,8 @@ const liveRowsOf = (
       conversation: sql.unsafe(statements.conversation.sql, [...statements.conversation.params]),
       agent: sql.unsafe(statements.agent.sql, [...statements.agent.params]),
       workers: sql.unsafe(statements.workers.sql, [...statements.workers.params]),
+      window: sql.unsafe(statements.window.sql, [...statements.window.params]),
+      windowParts: sql.unsafe(statements.windowParts.sql, [...statements.windowParts.params]),
     });
     const decoded = yield* Schema.decodeUnknownEffect(agentTranscriptLiveRowsSchema)(rows);
     return JSON.stringify(
@@ -617,6 +640,24 @@ const liveRowsOf = (
         part,
         list.map((row) => JSON.stringify(row)).toSorted(),
       ]),
+    );
+  });
+
+/** A transcript's live window run as Realtime runs it, each row decoded as the desktop decodes it and drawn as the tab draws it, oldest first. */
+const windowOf = (target: ConversationTarget, readerId = target.userId) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statements = Option.getOrThrow(
+      transcriptWindowLiveStatements(
+        target,
+        agentFollowedBy(target.userId, target.conversationId, readerId),
+      ),
+    );
+    const rows = yield* sql.unsafe(statements.window.sql, [...statements.window.params]);
+    const parts = yield* sql.unsafe(statements.windowParts.sql, [...statements.windowParts.params]);
+    return windowMessagesOf(
+      yield* Schema.decodeUnknownEffect(Schema.Array(transcriptWindowRowSchema))(rows),
+      yield* Schema.decodeUnknownEffect(Schema.Array(transcriptWindowPartRowSchema))(parts),
     );
   });
 
@@ -662,6 +703,88 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           past.wakeIn,
           writtenAt.getTime() + Duration.toMillis(CODER.LINE_GRACE) + 1 - now,
         );
+      }),
+  );
+
+  it.effect(
+    "a transcript's live window draws each of its newest messages as the page past the start says it, the turn's journal and every sender's line alike, and holds nothing for an account outside the agent's workspace",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Now send the invitation from the settings page.",
+            clientKey: "from-a-member",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "The invite emails are in.",
+            clientKey: "from-an-agent",
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
+          },
+          Effect.succeed(true),
+        );
+        // A journal whose command output and thoughts run past the bound, which the window carries cut as a page asked cut does.
+        const db = yield* Database;
+        yield* db.insert(messages).values({
+          userId,
+          conversationId: target.conversationId,
+          seq: 900,
+          clientId: randomUUID(),
+          role: MESSAGE_ROLE.ASSISTANT,
+          // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+          parts: [
+            { type: "text", text: "Building." },
+            // A part of a tool since retired, which every read leaves out, so the parts after it keep their places.
+            {
+              type: "tool-long_retired",
+              toolCallId: "call-retired",
+              state: "output-available",
+              input: {},
+              output: "gone",
+            },
+            {
+              type: "tool-bash",
+              toolCallId: "call-build",
+              state: "output-available",
+              input: { command: "pnpm build" },
+              output: "built one more file\n".repeat(1_000),
+            },
+            { type: "reasoning", text: "Weigh the build again. ".repeat(500), state: "done" },
+          ] as never,
+          metadata: { author: MESSAGE_AUTHOR.BRAIN },
+          placedAt: new Date(),
+        });
+        const page = yield* transcriptNow(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+
+        const drawn = yield* windowOf(target);
+        assert.ok(drawn.some((message) => message.sentBy?.name === "Invite emails"));
+        assert.ok(drawn.some((message) => message.startedAt !== undefined));
+        assert.deepEqual(
+          drawn.at(-1)?.cutParts?.map((cut) => cut.index),
+          [1, 2],
+        );
+        // SAFETY: a page's message is the wire's once serialized, which its JSON parts already are here.
+        const said = page.page.messages as unknown as readonly CodingAgentMessage[];
+        assert.deepEqual(drawn, said.map(cutMessage));
+
+        const stranger = yield* openGithubUser();
+        assert.deepEqual(yield* windowOf(target, stranger), []);
       }),
   );
 
@@ -776,6 +899,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           ["conversation", []],
           ["agent", []],
           ["workers", []],
+          ["window", []],
+          ["windowParts", []],
         ]);
         assert.equal(
           yield* liveRowsOf({ userId: stranger, conversationId: parent }, parent),
@@ -802,12 +927,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
-        // The same account's other conversation: a task's, which no agent row names.
+        // The same account's other conversation, which no agent row names.
         const userId = admitted.target.userId;
-        const task = yield* startTask(userId, { name: "Billing export" });
-        const conversationId = Option.getOrThrow(
-          yield* openTaskConversation(userId, task.id),
-        ).conversationId;
+        const [opened] = yield* Database.use((db) =>
+          db
+            .insert(conversations)
+            .values({ userId, kind: CONVERSATION_KIND.MAIN })
+            .returning({ id: conversations.id }),
+        );
+        assert.ok(opened);
+        const conversationId = opened.id;
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);
         const starting = yield* host.admitStarting(auth, sessionId);
@@ -999,6 +1128,45 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(Result.isFailure(refused));
         assert.match(refused.failure, /is no model Luke offers/u);
         assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
+      }),
+  );
+
+  it.effect(
+    "a turn starting takes up a task marked done, and its end, the agent's pull request merged and everyone idle, finishes the task again",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        assert.ok(agent.taskId !== null);
+        const taskId = agent.taskId;
+        yield* updateTask(userId, taskId, { status: TASK_STATUS.DONE });
+        yield* recordCodingAgentPublished(userId, agent.id, {
+          number: 42,
+          title: "Fix the refresh",
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.MERGED,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 12,
+          deletions: 3,
+          changedFiles: 2,
+        });
+        const statusOf = Effect.map(
+          readTask(userId, taskId),
+          (read) => Option.getOrThrow(read).task.status,
+        );
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const [started, ...rest] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started);
+        // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+        yield* host.relay(started, admitted, session as never, state, {});
+        assert.equal(yield* statusOf, TASK_STATUS.IN_PROGRESS);
+        for (const event of rest) {
+          // SAFETY: as above.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        assert.equal(yield* statusOf, TASK_STATUS.DONE);
       }),
   );
 
@@ -1204,7 +1372,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(stored.task.document.body, stored.text);
         // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
         const at = yield* Clock.currentTimeMillis;
-        assert.deepEqual(stored.task.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
+        assert.deepEqual(stored.task.agentEdits, [
+          { agentId: agent.id, label: agent.personaName ?? agent.model, at },
+        ]);
         assert.deepEqual(
           stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
           [["add", "add"]],
@@ -1268,6 +1438,76 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(look.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
         assert.deepEqual(look.output, { status: PICTURE_LOOK_STATUS.LOOKED });
         assert.equal(JSON.stringify(page).includes(answer.image), false);
+      }),
+  );
+
+  it.effect(
+    "an agent's browser call keeps its steps and the tabs it acted on in the transcript, and never a screenshot's picture",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const picture = "/9j/4AAQSkZJRgABAQAAAQABAAD";
+        const input = { actions: [{ action: "screenshot", tab: "tab-1" }] };
+        const answer = {
+          status: BROWSER_TOOL_STATUS.RAN,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", data: picture, width: 1280, height: 800 },
+            },
+          ],
+          skipped: 0,
+          tabs: [{ tab: "tab-1", url: "http://localhost:3000/", title: "Shop" }],
+        };
+
+        const call = { callId: "call-browser", toolName: CODER_TOOL.BROWSER };
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: [{ kind: "tool-call", ...call, input }] },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              ...at,
+              status: "completed",
+              result: { kind: "tool-result", ...call, output: answer },
+            },
+          }),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const browsed = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(browsed);
+        assert.equal(browsed.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+        assert.deepEqual(browsed.output, {
+          ...answer,
+          steps: [
+            {
+              action: "screenshot",
+              status: "done",
+              tab: "tab-1",
+              image: { mime: "image/jpeg", width: 1280, height: 800 },
+            },
+          ],
+        });
+        assert.equal(JSON.stringify(page).includes(picture), false);
       }),
   );
 
@@ -1897,68 +2137,134 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const person = Option.getOrThrow(
           yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
         );
-        const general = Option.getOrThrow(yield* ensureGeneral(userId, workspace));
+        // The agent's own channel, the one its chat is scoped to.
+        const home = Option.getOrThrow(
+          agent.taskId === null
+            ? yield* ensureGeneral(userId, workspace)
+            : yield* ensureTaskChannel(userId, agent.taskId),
+        );
         // The agent joins before the post, as a member joins the chat at its head.
         yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
         yield* postMessage(userId, workspace, {
           authorMemberId: person.id,
-          to: { channelId: general.id },
+          to: { channelId: home.id },
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });
-        assert.equal(
-          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
-          undefined,
-        );
+        const typed = (handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
+        const off = yield* typed({});
+        assert.ok(!off.text?.includes(CHAT_DIGEST_HEADING), off.text ?? "");
         yield* chatOn(userId);
-        const digest =
-          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined)) ?? "";
-        assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), digest);
-        assert.ok(digest.endsWith("The invite table is mine."), digest);
+        const on = yield* typed(off.handed);
+        const text = on.text ?? "";
+        const digest = text.slice(text.indexOf(CHAT_DIGEST_HEADING));
+        assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), text);
+        assert.ok(digest.endsWith("The invite table is mine."), text);
+        // The same unread chat is not handed twice: the history already holds it.
+        const again = yield* typed(on.handed);
+        assert.ok(!again.text?.includes(CHAT_DIGEST_HEADING), again.text ?? "");
       }),
   );
 
   it.effect(
-    "a spoken turn opens with the call's words, how to talk the plan through, and the task as it stands, and is offered the call's own tools; a typed turn of a fresh agent opens with none of it and is offered none",
+    "the call's words open the first of a run of spoken turns as its message, a later spoken turn says in a line they still hold, and a typed turn after them says they no longer do",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
+        const turnOf = (kind: BrainHostTurn, handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind, turnId: undefined }, handed);
 
-        const spoken =
-          (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN, undefined)) ?? "";
+        const typed = yield* turnOf(BRAIN_HOST_TURN.TYPED, {});
+        assert.ok(!typed.text?.includes("This turn is"), typed.text ?? "");
+
+        const called = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, typed.handed);
         for (const told of [
           "## This turn is spoken",
           `\`${CODER_TOOL.QUEUE_QUESTION}\``,
           "## Talking the plan through",
-          "[the developer's time]",
-          "[saved document]",
-          "Name: Teammate invitations",
         ]) {
-          assert.ok(spoken.includes(told), told);
+          assert.ok(called.text?.includes(told), told);
         }
-        assert.deepEqual(
-          [...turnToolsOf(host.turnKind(spokenSeat(admitted.target)))],
-          [CODER_TOOL.QUEUE_QUESTION, CODER_TOOL.WITHDRAW_QUESTION, CODER_TOOL.END_CALL],
-        );
 
-        assert.equal(
-          yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, undefined),
-          undefined,
-        );
-        assert.deepEqual(
-          [
-            ...turnToolsOf(
-              host.turnKind(ownSeat(admitted.target.userId, admitted.target.conversationId)),
-            ),
-          ],
-          [],
-        );
+        const still = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, called.handed);
+        assert.ok(still.text?.startsWith("This turn is spoken too"), still.text ?? "");
+        assert.ok(!still.text?.includes("## Talking the plan through"), still.text ?? "");
+
+        const after = yield* turnOf(BRAIN_HOST_TURN.TYPED, still.handed);
+        assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
+        const again = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, after.handed);
+        assert.ok(again.text?.includes("## This turn is spoken"), again.text ?? "");
+
+        // A compaction may drop the call's words, so a spoken turn after it is handed them whole,
+        // and a typed one is still told they no longer hold.
+        const compacted = handedAfterCompaction(again.handed);
+        const resumed = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, compacted);
+        assert.ok(resumed.text?.includes("## This turn is spoken"), resumed.text ?? "");
+        const typedAfter = yield* turnOf(BRAIN_HOST_TURN.TYPED, compacted);
+        assert.ok(typedAfter.text?.startsWith("This turn is typed"), typedAfter.text ?? "");
       }),
   );
 
   it.effect(
-    "a typed turn is handed the task as it stands only once someone other than the agent saved the plan after the agent's previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
+    "the call's own tools run on a spoken turn and are refused on a typed one, so both are offered the same tools",
+    () =>
+      Effect.sync(() => {
+        const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
+        for (const tool of [
+          CODER_TOOL.QUEUE_QUESTION,
+          CODER_TOOL.WITHDRAW_QUESTION,
+          CODER_TOOL.END_CALL,
+        ] as const) {
+          assert.deepEqual(
+            runCallTool(BRAIN_HOST_TURN.SPOKEN, tool, () => accepted),
+            accepted,
+          );
+          const refused = runCallTool(BRAIN_HOST_TURN.TYPED, tool, () => accepted);
+          assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+          assert.match(String(refused.reason), /No call is live/u);
+        }
+      }),
+  );
+
+  it.effect(
+    "a spoken turn's message hands the task as it stands where the session has not handed it, then the time alone while nothing changed, and the task again once the rest of it changed",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        assert.ok(agent.taskId !== null);
+        const spoken = (handed: TurnHanded) =>
+          host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.SPOKEN, turnId: undefined }, handed);
+
+        const opening = yield* spoken({});
+        for (const told of [
+          "[the developer's time]",
+          "[saved document]",
+          "Name: Teammate invitations",
+        ]) {
+          assert.ok(opening.text?.includes(told), told);
+        }
+
+        const unchanged = yield* spoken(opening.handed);
+        assert.ok(unchanged.text?.includes("[the developer's time]"), unchanged.text ?? "");
+        assert.ok(!unchanged.text?.includes("[saved document]"), unchanged.text ?? "");
+
+        yield* updateTask(userId, agent.taskId, { name: "Teammate invitations, by link" });
+        const renamed = yield* spoken(unchanged.handed);
+        assert.ok(
+          renamed.text?.includes("Name: Teammate invitations, by link"),
+          renamed.text ?? "",
+        );
+        assert.ok(renamed.text?.includes("[saved document]"), renamed.text ?? "");
+        const after = yield* spoken(renamed.handed);
+        assert.ok(!after.text?.includes("[saved document]"), after.text ?? "");
+      }),
+  );
+
+  it.effect(
+    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the plan after its previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
     () =>
       Effect.gen(function* () {
         // The relay's clock, which stamps when a turn started, stands ten minutes into the test's.
@@ -1966,8 +2272,23 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { userId, agent, auth, sessionId, admitted } = yield* openAgent(host);
         assert.ok(agent.taskId !== null);
         const binding = { userId, taskId: agent.taskId };
+        let handed: TurnHanded = {};
+        // Each typed turn's message, the session keeping what it handed; the task's text, or nothing where it was not handed.
         const typedAt = (eveTurnId: string) =>
-          host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED, hostTurnId(sessionId, eveTurnId));
+          Effect.map(
+            Effect.suspend(() =>
+              host.turnMessage(
+                admitted,
+                { kind: BRAIN_HOST_TURN.TYPED, turnId: hostTurnId(sessionId, eveTurnId) },
+                handed,
+              ),
+            ),
+            (message) => {
+              handed = message.handed;
+              const text = message.text ?? "";
+              return text.includes("[saved document]") ? text : undefined;
+            },
+          );
         const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
           Effect.map(
             host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox),
@@ -1985,6 +2306,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
           yield* host.relay(event, admitted, session as never, state, {});
         }
+        // Once the first turn ran, the session hands the task whole once: its board, threads, and brief are new to it.
+        assert.ok(yield* typedAt("turn_1"));
         assert.equal(yield* typedAt("turn_1"), undefined);
 
         // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
@@ -2006,10 +2329,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Resending renews the link.")]),
           ACTION_RESULT_STATUS.ACCEPTED,
         );
-        const handed = (yield* typedAt("turn_1")) ?? "";
-        assert.ok(handed.includes("saved since your last turn by someone other than you"), handed);
-        assert.ok(handed.includes("A withdrawn invite never grants access."), handed);
-        assert.ok(!handed.includes("## This turn is spoken"), handed);
+        const changed = (yield* typedAt("turn_1")) ?? "";
+        assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
+        assert.ok(!changed.includes("## This turn is spoken"), changed);
       }),
   );
 
@@ -2287,6 +2609,128 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             [opened.id, undefined],
             [line.success.id, { journalId: journal.id, afterStep: 1 }],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a line the voice says on a call names on the agent's page the turn its ask ran in, with the steps begun before the ask where it joined a typed turn under way, said before the ask bound (read again once it does), while that turn ran, or three minutes after it settled alike, and the turn's journal names the same turn; a line whose ask learned no turn names none",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, {}),
+          );
+        const opening = codingTurn("turn_0", "turn.completed");
+        yield* relayed(opening.slice(0, opening.findIndex((e) => e.type === "step.completed") + 1));
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-call" }),
+        );
+        const lineId = `line-${delegationId}`;
+        yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "Where are you with the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        const said = (clientId: string, text: string, delegation: string) =>
+          writer.upsertSpokenRow(target, {
+            role: MESSAGE_ROLE.ASSISTANT,
+            clientId,
+            text,
+            metadata: {
+              author: MESSAGE_AUTHOR.VOICE_MODEL,
+              channel: MESSAGE_CHANNEL.VOICE,
+              delegation_id: delegation,
+            },
+          });
+        const pageAfter = (cursor: typeof CURSOR_START) =>
+          transcriptPast(target, CODER_TOOL_SET, cursor, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+        // The voice says it is checking before eve has steered the ask in, so before it binds, and a
+        // tab following the transcript reads that line then.
+        yield* said("said-early", "Checking now.", delegationId);
+        const early = yield* pageAfter(CURSOR_START);
+        assert.deepEqual(
+          early.messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).at(-1)
+            ?.readFrom,
+          undefined,
+        );
+        session.auth = { current: spokenSeat(target).current, initiator: auth.initiator };
+        const tail = steeredTail("turn_0", "The developer asked where the invites are.", [
+          "delivery-call",
+        ]);
+        yield* relayed(tail.slice(0, 2));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+
+        // The voice answers the ask while the turn it joined still runs, as on a call into a busy agent.
+        yield* said("said-mid-turn", "The table is built; the tests run now.", delegationId);
+        yield* relayed(tail.slice(2));
+        const turnId = hostTurnId(sessionId, "turn_0");
+        assert.equal((yield* turnRow(turnId))?.status, TURN_STATUS.SETTLED);
+        // And again three minutes after the turn settled, past the window the stored row names it in.
+        yield* TestClock.adjust(Duration.minutes(3));
+        yield* said("said-later", "The tests passed, by the way.", delegationId);
+        // A line following an ask the voice handed on that never reached a turn.
+        const unbound = `dl_${randomUUID()}`;
+        yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: unbound,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* said("said-unbound", "I couldn't reach it.", unbound);
+
+        // The tab reads the early line again past its cursor, now naming the turn its ask joined.
+        const reread = (yield* pageAfter(early.cursor)).messages.find((message) =>
+          message.parts.some((part) => isTextUIPart(part) && part.text === "Checking now."),
+        );
+        assert.deepEqual(reread?.readFrom, { turnId, afterStep: 1 });
+        const page = yield* pageAfter(CURSOR_START);
+        const spoken = page.messages.filter(
+          (message) =>
+            message.role === MESSAGE_ROLE.ASSISTANT &&
+            "channel" in message.metadata &&
+            message.metadata.channel === MESSAGE_CHANNEL.VOICE,
+        );
+        assert.deepEqual(
+          spoken.map((message) => [message.parts, message.readFrom]),
+          [
+            [[{ type: "text", text: "Checking now.", state: "done" }], { turnId, afterStep: 1 }],
+            [
+              [{ type: "text", text: "The table is built; the tests run now.", state: "done" }],
+              { turnId, afterStep: 1 },
+            ],
+            [
+              [{ type: "text", text: "The tests passed, by the way.", state: "done" }],
+              { turnId, afterStep: 1 },
+            ],
+            [[{ type: "text", text: "I couldn't reach it.", state: "done" }], undefined],
+          ],
+        );
+        const journals = page.messages.filter(
+          (message) => message.role === MESSAGE_ROLE.ASSISTANT && !spoken.includes(message),
+        );
+        assert.deepEqual(
+          journals.map((message) => message.turnId),
+          [turnId],
         );
       }),
   );

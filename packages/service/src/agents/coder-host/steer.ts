@@ -7,6 +7,7 @@ import {
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
+  readCodingAgentRouting,
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
@@ -23,7 +24,7 @@ import {
   STORE_WRITE_REFUSAL,
   type StoreWriter,
 } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -42,7 +43,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import { controlsAgent } from "../agent-reach.js";
+import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -54,6 +55,8 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { isNativeRuntime } from "./native-runtime.js";
+import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**
@@ -133,12 +136,11 @@ export const STEER_OUTCOME = {
   REPEATED: "repeated",
 } as const;
 
-export type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
+type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
 
-/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and anything else is an outage. A session eve no longer runs is no refusal: the message opens a fresh one. */
+/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and a failure is read by `failedCallRefusal`, an outage unless a native harness said why. A session eve no longer runs is no refusal: the message opens a fresh one. */
 const REFUSAL_OF_SEND_OUTCOME = {
   [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
-  [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
 } as const;
 
 /**
@@ -235,26 +237,53 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
 
+/** The runtime the agent's conversation runs on, eve where none is recorded. */
+const runtimeOf = (userId: string, agent: CodingAgent) =>
+  Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+    Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
+  );
+
+/** A steer as its sender's route reads it: what it came to, and the transaction that wrote the line, where this steer wrote it. */
+export interface SteerWritten {
+  readonly outcome: SteerOutcome;
+  readonly txid?: string;
+}
+
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
-export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
+export const steerCodingAgent = (
+  eve: AgentSessions<EveTypedTurn>,
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  agent: CodingAgent,
+  line: SteerLine,
+) =>
+  Effect.map(
+    steerCodingAgentWritten(eve, writer, userId, agent, line),
+    (written) => written.outcome,
+  );
+
+/** As `steerCodingAgent`, with the transaction that wrote the line beside what it came to. */
+export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: CodingAgent,
   line: SteerLine,
 ): Effect.fn.Return<
-  SteerOutcome,
+  SteerWritten,
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   // An agent on its starter's own GitHub token takes words from its starter alone.
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  // An agent its starter's plan pays for takes words from those the plan's policy admits.
+  yield* admitsPlanWriter(userId, agent);
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(
     sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
   );
-  if (repeated) return STEER_OUTCOME.REPEATED;
+  if (repeated) return { outcome: STEER_OUTCOME.REPEATED };
   // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
   const held =
     agent.taskId === null
@@ -304,6 +333,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     conversationId: agent.conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
     message: eveContent(line.text, line.attachments ?? [], mentioned),
+    // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
+    lineId: sentLineId(line.clientKey),
   };
   // Note that a session eve no longer runs, or none at all, is no refusal: the words open a fresh
   // session over the same conversation, which claims its record forward from the one that ended and
@@ -314,6 +345,10 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         .send(sessionId, message)
         .pipe(Effect.catchTag("EveUnreachable", unreached));
       if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+      if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+        refused = failedCallRefusal(sent);
+        return false;
+      }
       if (sent.outcome !== EVE_SEND_OUTCOME.RETIRED) {
         refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
         return false;
@@ -322,7 +357,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     }
     const opened = yield* eve.open(message).pipe(Effect.catchTag("EveUnreachable", unreached));
     if (opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-      refused = HOSTED_REFUSAL.UNAVAILABLE;
+      refused = failedCallRefusal(opened);
       return false;
     }
     // Note that the fresh session claims the record here, still under the conversation's lock, rather
@@ -349,7 +384,20 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
       : mentionedServers(line.serverWords ?? line.text, task?.task.repository ?? null);
-  const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
+  // Note that a native agent's servers are written just after its harness takes the words rather than
+  // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
+  // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock
+  // on it until the hand-over gave up. Its runner's first events take them under the conversation's lock,
+  // which waits for this transaction all the same, so the turn they are for still finds them.
+  const native = isNativeRuntime(yield* hostedStoreOrUnavailable(runtimeOf(userId, agent)));
+  const handing = native
+    ? Effect.flatMap(handOver, (taken) =>
+        taken
+          ? dispatchMentioningServers(userId, agent.id, servers, Effect.succeed(true))
+          : Effect.succeed(false),
+      )
+    : dispatchMentioningServers(userId, agent.id, servers, handOver);
+  const dispatch = handing.pipe(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(
@@ -376,5 +424,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
   if (Option.isNone(written.success))
     return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
-  return STEER_OUTCOME.SENT;
+  const { txid } = written.success.value;
+  return txid === undefined
+    ? { outcome: STEER_OUTCOME.SENT }
+    : { outcome: STEER_OUTCOME.SENT, txid };
 });

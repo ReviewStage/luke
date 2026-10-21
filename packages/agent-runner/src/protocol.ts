@@ -84,6 +84,17 @@ export const INPUT_LINE = {
   TOKEN: "token",
 } as const;
 
+/**
+ * The argument that starts the runner's bundle as Codex's token command rather
+ * than as a launch: `node <bundle> codex-token <tokenUrl>`, which prints the
+ * plan's access token Luke answers, and nothing else, on stdout.
+ */
+export const CODEX_TOKEN_COMMAND = "codex-token";
+
+/** What Luke's token route answers a runner: the plan's access token, good for at least the route's margin. */
+export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });
+export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
+
 /** The image types the Messages API takes in a base64 image block. */
 export const IMAGE_MEDIA_TYPE = {
   PNG: "image/png",
@@ -153,6 +164,16 @@ export const CodexConfigSchema = Schema.Struct({
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
   mcpUrl: Schema.String,
+  /**
+   * Where the runner asks Luke for the plan's access token, under its bearer
+   * (`/api/agents/runner-token`). Where it is given, app-server takes its
+   * token from the runner's `codex-token` command (Codex's provider `auth`),
+   * which Codex runs again as its cached token ages and after a 401, so a
+   * turn outlives any one token; `ACCESS_TOKEN` is then neither read nor
+   * handed to app-server. Absent, app-server reads `ACCESS_TOKEN` once as
+   * it starts, as for test mode's API key.
+   */
+  tokenUrl: Schema.optionalKey(Schema.String),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
@@ -188,8 +209,17 @@ const MessageLineSchema = Schema.Struct({
   uuid: Schema.optionalKey(UuidSchema),
   content: Schema.Array(ContentBlockSchema),
 });
-/** Stop the running turn. */
-const StopLineSchema = Schema.Struct({ type: Schema.Literal(INPUT_LINE.STOP) });
+/**
+ * Stop the running turn. `launch` names the launch the stop is for by its
+ * first event number (its config's `firstSequence`): one launch runs one of
+ * Luke's turns, so a stop Luke meant for an earlier launch's turn, delayed
+ * past it, is skipped by the launch that replaced it rather than
+ * interrupting its turn. A stop that names none is taken by any launch.
+ */
+const StopLineSchema = Schema.Struct({
+  type: Schema.Literal(INPUT_LINE.STOP),
+  launch: Schema.optionalKey(SequenceSchema),
+});
 /**
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not
@@ -201,9 +231,10 @@ const ModelLineSchema = Schema.Struct({
   effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
 });
 /**
- * A refreshed ChatGPT access token, for a Codex launch: the runner restarts
- * app-server with it and resumes the thread before the next turn it starts,
- * never during one. The one line that carries a secret: never logged, echoed
+ * A refreshed ChatGPT access token, for a Codex launch that reads
+ * `ACCESS_TOKEN` (no `tokenUrl`): the runner restarts app-server with it and
+ * resumes the thread before the next turn it starts, never during one. A
+ * launch with a `tokenUrl` withholds it and takes nothing from it. The one line that carries a secret: never logged, echoed
  * or posted, and taken out of every event. A Claude Code launch skips it.
  */
 const TokenLineSchema = Schema.Struct({
@@ -250,7 +281,7 @@ export const RUNNER_END = {
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
 
-/** The ACCEPTED event: the message line, by its `uuid`, handed to the SDK. */
+/** The ACCEPTED event: the message line, by its `uuid`, handed to the SDK, or taken by Codex's app-server. */
 export interface RunnerAccepted {
   readonly type: typeof RUNNER_EVENT.ACCEPTED;
   readonly uuid: string;

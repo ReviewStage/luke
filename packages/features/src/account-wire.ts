@@ -46,14 +46,9 @@ export const accountDeleteAnswerSchema = EffectSchema.Struct({
 
 /**
  * What the signed-in account may open in the app's clients (GET): whether it
- * is an admin, whether it is in the cohort whose coding agents may run on a
- * provider's own harness on its plan (`LUKE_NATIVE_AGENT_ACCOUNTS`), and
- * nothing of any other account. A client draws by it and authorizes
- * nothing: the admin dashboard's own gate decides every read, and the
- * service's own cohort check every agent's runtime. A service that predates
- * the cohort answers no `nativeAgents`, which reads as no.
+ * is an admin, and nothing of any other account. A client draws by it and
+ * authorizes nothing: the admin dashboard's own gate decides every read.
  */
 export const accountAccessAnswerSchema = EffectSchema.Struct({
   admin: EffectSchema.Boolean,
-  nativeAgents: EffectSchema.optionalKey(EffectSchema.Boolean),
 });

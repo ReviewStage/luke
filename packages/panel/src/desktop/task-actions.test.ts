@@ -1,17 +1,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
+import {
+  DOCUMENT_REGION,
+  type SettledStatus,
+  TASKS_PAGE,
+  type TaskMark,
+} from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -244,7 +249,7 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
   assert.equal(title?.textContent, "Permanently delete task?");
   assert.equal(
     body?.textContent,
-    "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
+    "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, mark it done.",
   );
   // A key already pressed lands on the answer that changes nothing.
   assert.equal(document.activeElement, answer("Cancel"));
@@ -275,7 +280,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
 });
 
 /** The open task's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
-function sharedTab(me: string, tab: MainTab = MAIN_TAB.CALL): TasksControl {
+function sharedTab(me: string, tab: MainTab | undefined = undefined): TasksControl {
   const base = tasksControl();
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -283,7 +288,7 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.CALL): TasksControl {
     tasks: [SHARED_TASK, OTHER],
     activeTaskId: SHARED_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: SHARED_TASK },
-    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.CALL, MAIN_TAB.CHAT], tab },
+    mainTabs: { ...base.mainTabs, tabs: tab === undefined ? [] : [tab], tab },
   });
 }
 
@@ -353,8 +358,42 @@ test("a sidebar task someone else created wears its creator's face before its ti
   assert.deepEqual(faces(OTHER), [[], undefined]);
 });
 
-test("Start and the task's ⋯ stand in the toolbar on the Call tab alone", () => {
-  const drawn = (tab: MainTab) => {
+test("a sidebar task Luke or a coding agent made wears their square with its member's face on the corner, the reader's own task too, and its ⋯ says who made it for whom", () => {
+  /** Each mark the row wears, by its kind, and the kind of the face on its corner. */
+  const marks = (task: TaskSummary) => {
+    const { tasks, asked } = openTab();
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: sidebarTask(tasks, task, asked),
+      }),
+    );
+    const worn = [...container.querySelectorAll(".sidebar-task-time > .actor-mark")].map((mark) => [
+      mark.getAttribute("data-kind"),
+      mark.querySelector(".actor-mark-for")?.getAttribute("data-kind") ?? null,
+    ]);
+    unmountAll();
+    return worn;
+  };
+  const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
+  const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
+  assert.deepEqual(marks(byAgent), [["agent", "person"]]);
+  assert.deepEqual(marks({ ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } }), [
+    ["luke", "person"],
+  ]);
+  // A task the reader made by hand still wears nothing.
+  assert.deepEqual(marks(deans), []);
+
+  const { asked } = openTab();
+  const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });
+  rightClick(mountSidebarTask(listed, byAgent, asked), 40, 60);
+  assert.equal(menuFooter()[0], "Created by Coding agent for you");
+  unmountAll();
+});
+
+test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
+  const drawn = (tab: MainTab | undefined) => {
     const container = mount(
       createElement(DesktopTasks, {
         summary: UNPINNED_SUMMARY,
@@ -370,8 +409,7 @@ test("Start and the task's ⋯ stand in the toolbar on the Call tab alone", () =
     return shown;
   };
 
-  assert.deepEqual(drawn(MAIN_TAB.CALL), ["Start a coding agent", "Task actions"]);
-  assert.deepEqual(drawn(MAIN_TAB.CHAT), []);
+  assert.deepEqual(drawn(undefined), ["Start a coding agent", "Task actions"]);
 });
 
 /** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
@@ -515,14 +553,22 @@ test("a task's card says who created it where others share its workspace, the re
   assert.deepEqual(details(charles, PERSONAL), []);
   // A service that names no creator leaves the card as it was.
   assert.deepEqual(details(OTHER, STAGE), []);
+  // A task an agent made for the reader says so in a workspace of one too.
+  const byAgent = {
+    ...charles,
+    ownerId: DEAN.userId,
+    createdBy: DEAN,
+    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+  } as const;
+  assert.deepEqual(details(byAgent, PERSONAL), ["Created by Coding agent for you"]);
 });
 
 test("a task's card's creator line opens the creator's page in the window, and is words outside it", () => {
   const opened: string[] = [];
   const tasks = tasksControl({ me: DEAN.userId, workspaces: [STAGE] });
   const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
-  const drawn = (inWindow: boolean) => {
-    const card = taskCardOf(tasks, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
+  const drawn = (inWindow: boolean, task: TaskSummary = charles) => {
+    const card = taskCardOf(tasks, { ...task, workspaceId: STAGE.id }, task.updatedAt);
     const view = mount(
       createElement(MemberDirectory, {
         workspace: undefined,
@@ -543,6 +589,15 @@ test("a task's card's creator line opens the creator's page in the window, and i
   assert.deepEqual(opened, [CHARLES.userId]);
   unmountAll();
   assert.equal(drawn(false)?.tagName, "SPAN");
+  // A task an agent made for Charles still opens Charles's page, the member it names.
+  const byAgent = drawn(true, {
+    ...charles,
+    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+  });
+  assert.equal(byAgent?.tagName, "BUTTON");
+  act(() => byAgent?.click());
+  assert.deepEqual(opened, [CHARLES.userId, CHARLES.userId]);
+  unmountAll();
 });
 
 test("a task's card says you of the reader's own task outside a member directory, and, where the service counts no members, says who created it only once the members read lists someone else", async () => {
@@ -597,20 +652,17 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Archive asks first of a plan with agents, from its menu and its row's own button alike, and archives on its answer, while a plan with none archives at once", async () => {
+test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task cancels it, and a task already done offers neither Mark done nor its check", async () => {
   const working: TaskSummary = {
     ...OTHER,
+    status: TASK_STATUS.IN_PROGRESS,
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
-  const idle: TaskSummary = {
-    ...OTHER,
-    id: "5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
-    name: "Rate limits",
-  };
-  const marked: [string, TaskMark][] = [];
+  const done: TaskSummary = { ...working, status: TASK_STATUS.DONE };
+  const settled: [string[], SettledStatus][] = [];
   const tasks = tasksControl({
-    tasks: [working, idle],
-    onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
+    tasks: [working],
+    onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
   });
   const asked: Asked = {
     opened: [],
@@ -620,37 +672,33 @@ test("Archive asks first of a plan with agents, from its menu and its row's own 
     renamed: [],
     marked: [],
   };
-  const archiveButton = (container: HTMLElement) => {
-    const button = container.querySelector('button[aria-label="Archive"]');
-    assert.ok(button instanceof HTMLButtonElement);
-    return button;
-  };
+  const doneButton = (container: HTMLElement) =>
+    container.querySelector('button[aria-label="Mark done"]');
 
   const row = mount(sidebarTask(tasks, working, asked));
-  act(() => archiveButton(row).click());
-  assert.equal(asking(), true, "Archive asks first of a plan with agents");
-  assert.equal(
-    dialog()?.textContent?.includes(
-      "Archiving “Billing export” will stop and archive all its agents. Unarchiving it brings them back.",
-    ),
-    true,
-  );
-  act(() => answer("Cancel").click());
-  assert.deepEqual(marked, []);
+  const check = doneButton(row);
+  assert.ok(check instanceof HTMLButtonElement, "the row offers Mark done as its button");
+  act(() => check.click());
+  assert.equal(asking(), false, "Mark done asks nothing, since it stops no agent");
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
   rightClick(rowButton, 40, 60);
-  choose("Archive");
-  await act(async () => answer("Archive").click());
-  assert.deepEqual(marked, [[working.id, "archive"]]);
-  assert.equal(asking(), false);
+  choose("Mark done");
+  rightClick(rowButton, 40, 60);
+  choose("Cancel task");
+  assert.deepEqual(settled, [
+    [[working.id], TASK_STATUS.DONE],
+    [[working.id], TASK_STATUS.DONE],
+    [[working.id], TASK_STATUS.CANCELED],
+  ]);
 
   unmountAll();
-  const idleArchive = archiveButton(mount(sidebarTask(tasks, idle, asked)));
-  act(() => idleArchive.click());
-  assert.equal(asking(), false, "a plan with no agents archives at once");
-  assert.deepEqual(marked, [
-    [working.id, "archive"],
-    [idle.id, "archive"],
-  ]);
+  const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
+  assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
+  const doneRowButton = doneRow.querySelector("ul > li > button");
+  assert.ok(doneRowButton instanceof HTMLButtonElement);
+  rightClick(doneRowButton, 40, 60);
+  const labels = menuItems().map((item) => item.textContent);
+  assert.equal(labels.includes("Mark done"), false);
+  assert.equal(labels.includes("Cancel task"), true);
 });

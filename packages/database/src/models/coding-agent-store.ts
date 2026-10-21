@@ -1,3 +1,4 @@
+import { pickPersonaName } from "@luke/features/agent-persona";
 import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_ARCHIVER,
@@ -41,7 +42,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
+import { DateTime, Effect, Option, Random, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { agentPin } from "../schemas/agent-pin.js";
@@ -55,7 +56,7 @@ import {
   type StoredPullRequest,
   type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
-import { conversations, messages, turns } from "../schemas/storage.js";
+import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
 import {
@@ -185,6 +186,8 @@ export interface CodingAgent {
   readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
+  /** The human name the agent was given as it was created; null for an agent from before names were given. */
+  readonly personaName: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
   /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
@@ -223,6 +226,8 @@ export interface TasklessCodingAgent extends CodingAgentLine {
 export interface CodingAgentStarted {
   readonly agent: CodingAgent;
   readonly created: boolean;
+  /** The transaction the agent's row was written in, where this Start wrote it. */
+  readonly txid?: string;
 }
 
 /** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`message-reads.ts`), re-exported here beside the agents it is read for. */
@@ -279,6 +284,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly startedFrom?: StoredStartedFrom | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
+  /** The human name the agent keeps, a continued agent's own; none where it is given a new one. */
+  readonly personaName?: string | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -334,6 +341,7 @@ const CODING_AGENT_COLUMNS = {
   branch: codingAgent.branch,
   startBranch: codingAgent.startBranch,
   title: codingAgent.title,
+  personaName: codingAgent.personaName,
   archivedAt: codingAgent.archivedAt,
   archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
@@ -371,6 +379,7 @@ const CODING_AGENT_LINE_COLUMNS = {
   branch: codingAgent.branch,
   startBranch: codingAgent.startBranch,
   title: codingAgent.title,
+  personaName: codingAgent.personaName,
   archivedAt: codingAgent.archivedAt,
   archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
@@ -474,6 +483,7 @@ const CodingAgentRowSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   startBranch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
+  personaName: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   archivedBy: ArchivedByColumnSchema,
   disabledServers: DisabledServersColumnSchema,
@@ -596,6 +606,23 @@ const insertAgentConversation = SqlSchema.findOne({
     ),
 });
 
+/**
+ * The id of the transaction a write committed in, read in the write's own
+ * `RETURNING`, as Neon's mutations guide says, so a client following the
+ * task list waits for that transaction to arrive before it confirms the
+ * write.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
+/** An agent's row as a write returned it, with the transaction it committed in. */
+const CommittedAgentRowSchema = Schema.Struct({
+  ...CodingAgentRowSchema.fields,
+  txid: Schema.String,
+});
+
+/** The transaction a pin's write committed in; none where the pin stood as asked already. */
+const TxidRowSchema = Schema.Struct({ txid: Schema.String });
+
 const insertAgent = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -606,6 +633,7 @@ const insertAgent = SqlSchema.findOne({
     automationOrigin: AutomationOriginColumnSchema,
     startedFrom: StartedFromColumnSchema,
     title: Schema.NullOr(Schema.String),
+    personaName: Schema.String,
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -620,7 +648,7 @@ const insertAgent = SqlSchema.findOne({
     payer: Schema.NullOr(PayerColumnSchema),
     now: Schema.Date,
   }),
-  Result: CodingAgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: (write) =>
     Database.use((db) =>
       db
@@ -633,6 +661,7 @@ const insertAgent = SqlSchema.findOne({
           automationOrigin: write.automationOrigin,
           startedFrom: write.startedFrom,
           title: write.title,
+          personaName: write.personaName,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -649,9 +678,34 @@ const insertAgent = SqlSchema.findOne({
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
-        .returning(CODING_AGENT_COLUMNS),
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
+
+/** The human names the agents of a task were given, read under the task's lock as a Start takes it, so a new one is given a first name none of them wears. */
+const findTaskPersonaNames = SqlSchema.findAll({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ personaName: Schema.NullOr(Schema.String) }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ personaName: codingAgent.personaName })
+        .from(codingAgent)
+        .where(eq(codingAgent.taskId, taskId)),
+    ),
+});
+
+/** A human name for a new agent of the task, or of no task, whose first name none of the task's agents wears while one is left. */
+function newPersonaName(taskId: string | null) {
+  return Effect.gen(function* () {
+    const taken =
+      taskId === null
+        ? []
+        : (yield* findTaskPersonaNames({ taskId })).flatMap((row) => row.personaName ?? []);
+    const draw = yield* Random.next;
+    return pickPersonaName(taken, () => draw);
+  });
+}
 
 const updateAgentChoice = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -758,14 +812,14 @@ const updateAgentTitle = SqlSchema.findOneOption({
     agentId: Schema.String,
     title: Schema.NullOr(Schema.String),
   }),
-  Result: CodingAgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: ({ userId, agentId, title }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
         .set({ title })
         .where(reachableAgent(userId, agentId))
-        .returning(CODING_AGENT_COLUMNS),
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -816,14 +870,14 @@ const updateAgentArchived = SqlSchema.findOneOption({
     archivedAt: Schema.NullOr(Schema.Date),
     archivedBy: ArchivedByColumnSchema,
   }),
-  Result: CodingAgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: ({ userId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
         .set({ archivedAt, archivedBy })
         .where(reachableAgent(userId, agentId))
-        .returning(CODING_AGENT_COLUMNS),
+        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -884,7 +938,7 @@ const findAgentRouting = SqlSchema.findOneOption({
         .select({
           runtime: conversations.runtime,
           nativeSession: conversations.nativeSession,
-          runnerTokenHash: conversations.runnerTokenHash,
+          runnerTokenHash: codingAgent.runnerTokenHash,
           payer: codingAgent.payer,
         })
         .from(codingAgent)
@@ -942,14 +996,96 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
           conversationId: conversations.id,
           runtimeSessionId: conversations.runtimeSessionId,
         })
-        .from(conversations)
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
         .where(
           and(
-            eq(conversations.runnerTokenHash, runnerTokenHash),
+            eq(codingAgent.runnerTokenHash, runnerTokenHash),
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             isNull(conversations.deletedAt),
           ),
         )
+        .limit(1),
+    ),
+});
+
+/** The runtimes whose sandbox Luke opens itself, with a runner in it: the native harnesses. */
+const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX] as const;
+
+/** The turn statuses a turn ends in; a queued or running one has not ended. */
+const ENDED_TURN_STATUSES = [
+  TURN_STATUS.SETTLED,
+  TURN_STATUS.CANCELLED,
+  TURN_STATUS.FAILED,
+] as const;
+
+/** A sandbox's agent id as its tag spells it, before a query takes it as a `uuid`. */
+const AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/**
+ * The conversation of the agent under this id, where it stands undeleted on a
+ * native harness, read with no account in hand, because the sweep that asks
+ * acts for every account at once.
+ */
+const findNativeAgentConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: conversations.id })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(
+          and(
+            eq(codingAgent.id, agentId),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/**
+ * The native runtime of each conversation named that runs on one, read with
+ * no account in hand: only for ids a gate already read, as
+ * `latestTurnsOfReached`, such as the agents a member's workspace reaches.
+ */
+const findNativeRuntimes = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    conversationId: Schema.String,
+    runtime: Schema.Literals(NATIVE_RUNTIMES),
+  }),
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: conversations.id, runtime: conversations.runtime })
+        .from(conversations)
+        .where(
+          and(
+            inArray(conversations.id, [...conversationIds]),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+          ),
+        ),
+    ),
+});
+
+/** The conversation's newest turn: where it stands, and when it settled. */
+const findNewestTurnStanding = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({
+    status: Schema.String,
+    settledAt: Schema.NullOr(InstantColumnSchema),
+  }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ status: turns.status, settledAt: turns.settledAt })
+        .from(turns)
+        .where(eq(turns.conversationId, conversationId))
+        .orderBy(desc(turns.queuedAt), desc(turns.id))
         .limit(1),
     ),
 });
@@ -964,10 +1100,10 @@ const updateAgentRunnerToken = SqlSchema.findAll({
   execute: ({ userId, agentId, runnerTokenHash }) =>
     Database.use((db) =>
       db
-        .update(conversations)
+        .update(codingAgent)
         .set({ runnerTokenHash })
-        .where(reachableAgentConversation(userId, agentId))
-        .returning({ id: conversations.id }),
+        .where(reachableAgent(userId, agentId))
+        .returning({ id: codingAgent.id }),
     ),
 });
 
@@ -1411,25 +1547,28 @@ const findAgent = SqlSchema.findOneOption({
 });
 
 /** The account's pin of the agent, from now; one already standing keeps its instant. */
-const insertAgentPin = SqlSchema.void({
+const insertAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  Result: TxidRowSchema,
   execute: ({ userId, agentId, now }) =>
     Database.use((db) =>
       db
         .insert(agentPin)
         .values({ userId, codingAgentId: agentId, pinnedAt: now })
-        .onConflictDoNothing(),
+        .onConflictDoNothing()
+        .returning({ txid: TXID }),
     ),
 });
 
 /** The account's pin of the agent at the position given, from now where it was not pinned; one already standing keeps its instant and moves. */
-const placeAgentPin = SqlSchema.void({
+const placeAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
     position: Schema.String,
     now: Schema.Date,
   }),
+  Result: TxidRowSchema,
   execute: ({ userId, agentId, position, now }) =>
     Database.use((db) =>
       db
@@ -1438,18 +1577,57 @@ const placeAgentPin = SqlSchema.void({
         .onConflictDoUpdate({
           target: [agentPin.userId, agentPin.codingAgentId],
           set: { position },
-        }),
+        })
+        .returning({ txid: TXID }),
     ),
 });
 
 /** The account's pin of the agent taken away; every other member's stands. */
-const deleteAgentPin = SqlSchema.void({
+const deleteAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: TxidRowSchema,
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
         .delete(agentPin)
-        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId))),
+        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId)))
+        .returning({ txid: TXID }),
+    ),
+});
+
+/**
+ * The columns of an agent that a caller holding only its conversation most
+ * often needs: who it is, who started it, its task, repository, title, and
+ * archive. Note that these leave out the plan's text and the prompt, the bulk
+ * of a row, since every Luke tool call an agent makes reads its agent.
+ */
+const CODING_AGENT_HEADER_COLUMNS = {
+  id: codingAgent.id,
+  userId: codingAgent.userId,
+  taskId: codingAgent.taskId,
+  repository: codingAgent.repository,
+  title: codingAgent.title,
+  archivedAt: codingAgent.archivedAt,
+} as const;
+
+const CodingAgentHeaderRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
+  repository: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
+  archivedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+const findAgentHeaderOfConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: CodingAgentHeaderRowSchema,
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_HEADER_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
     ),
 });
 
@@ -1527,7 +1705,7 @@ export function createCodingAgent(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        const row = yield* insertAgent({
+        const { txid, ...row } = yield* insertAgent({
           userId,
           conversationId: conversation.id,
           taskId: started.taskId,
@@ -1536,6 +1714,7 @@ export function createCodingAgent(
           automationOrigin: started.automationOrigin ?? null,
           startedFrom: started.startedFrom ?? null,
           title: started.title ?? null,
+          personaName: started.personaName ?? (yield* newPersonaName(started.taskId)),
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
@@ -1550,7 +1729,7 @@ export function createCodingAgent(
           payer: started.payer ?? null,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
-        return Option.some({ agent: row, created: true });
+        return Option.some({ agent: row, created: true, txid });
       }),
     ),
   );
@@ -1974,7 +2153,30 @@ export function renameCodingAgent(
   agentId: string,
   title: string | null,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return updateAgentTitle({ userId, agentId, title });
+  return Effect.map(renameCodingAgentCommitted(userId, agentId, title), Option.map(agentOf));
+}
+
+/** An agent as a write left it, and the transaction it committed in; none where it changed no row. */
+export interface CodingAgentCommitted {
+  readonly agent: CodingAgent;
+  readonly txid?: string;
+}
+
+/** The agent's row without the transaction it was returned with. */
+function agentOf({ agent }: CodingAgentCommitted): CodingAgent {
+  return agent;
+}
+
+/** The agent renamed, as `renameCodingAgent` renames it, and the transaction its row was written in. */
+export function renameCodingAgentCommitted(
+  userId: string,
+  agentId: string,
+  title: string | null,
+): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
+  return Effect.map(
+    updateAgentTitle({ userId, agentId, title }),
+    Option.map(({ txid, ...agent }) => ({ agent, txid })),
+  );
 }
 
 /** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. Nothing for an agent of a workspace the account is not in. */
@@ -1984,13 +2186,29 @@ export function archiveCodingAgent(
   archived: boolean,
   archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.map(
+    archiveCodingAgentCommitted(userId, agentId, archived, archivedBy),
+    Option.map(agentOf),
+  );
+}
+
+/** The agent archived or brought back, as `archiveCodingAgent` does it, and the transaction its row was written in. */
+export function archiveCodingAgentCommitted(
+  userId: string,
+  agentId: string,
+  archived: boolean,
+  archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    updateAgentArchived({
-      userId,
-      agentId,
-      archivedAt: archived ? now : null,
-      archivedBy: archived ? archivedBy : null,
-    }),
+    Effect.map(
+      updateAgentArchived({
+        userId,
+        agentId,
+        archivedAt: archived ? now : null,
+        archivedBy: archived ? archivedBy : null,
+      }),
+      Option.map(({ txid, ...agent }) => ({ agent, txid })),
+    ),
   );
 }
 
@@ -2112,14 +2330,30 @@ export function pinCodingAgent(
   pinned: boolean,
   position?: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.map(
+    pinCodingAgentCommitted(userId, agentId, pinned, position),
+    Option.map(agentOf),
+  );
+}
+
+/** The account's pin of the agent set, as `pinCodingAgent` sets it, and the transaction the pin was written in; none where it stood as asked. */
+export function pinCodingAgentCommitted(
+  userId: string,
+  agentId: string,
+  pinned: boolean,
+  position?: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
   return Effect.gen(function* () {
     const found = yield* findAgent({ userId, agentId });
     if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
     const now = yield* DateTime.nowAsDate;
-    if (!pinned) yield* deleteAgentPin({ userId, agentId });
-    else if (position === undefined) yield* insertAgentPin({ userId, agentId, now });
-    else yield* placeAgentPin({ userId, agentId, position, now });
-    return found;
+    const written = !pinned
+      ? yield* deleteAgentPin({ userId, agentId })
+      : position === undefined
+        ? yield* insertAgentPin({ userId, agentId, now })
+        : yield* placeAgentPin({ userId, agentId, position, now });
+    const txid = Option.getOrUndefined(written)?.txid;
+    return Option.some(txid === undefined ? { agent: found.value } : { agent: found.value, txid });
   });
 }
 
@@ -2216,6 +2450,21 @@ export function readCodingAgentRouting(
   );
 }
 
+/**
+ * The native runtime of each conversation named, keyed by conversation;
+ * one on eve, or from before the column, is absent. Only for ids a gate
+ * already read, as above.
+ */
+export function nativeRuntimesOfReached(
+  conversationIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, (typeof NATIVE_RUNTIMES)[number]>> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findNativeRuntimes({ conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.runtime])),
+  );
+}
+
 /** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */
 export function recordCodingAgentNativeSession(
   userId: string,
@@ -2262,8 +2511,42 @@ export function readRunnerTokenConversation(
     const found = yield* findRunnerTokenConversation({ runnerTokenHash });
     if (Option.isNone(found)) return found;
     const { userId, conversationId } = found.value;
-    const agent = yield* findAgentOfConversation({ userId, conversationId });
+    const agent = yield* findAgentHeaderOfConversation({ userId, conversationId });
     return Option.isSome(agent) ? found : Option.none();
+  });
+}
+
+/** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
+export interface NativeRunStanding {
+  /** The agent's conversation, which a Terminal's lease is held on. */
+  readonly conversationId: string;
+  /** When its newest turn ended; null while that turn is queued or running (a runner waiting on a wakeup among it), or before it has any turn. */
+  readonly endedAt: Date | null;
+}
+
+/**
+ * Where the run of the agent under this id stands, read with no account in
+ * hand, because the scheduled sweep stops ended native sandboxes for every
+ * account: its conversation, and when its newest turn ended. Nothing for an
+ * id that names no agent, an agent on eve, or one whose conversation was
+ * deleted. Only for an id a sandbox Luke opened carries; it answers nothing
+ * a member wrote.
+ */
+export function readNativeRunStanding(
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<NativeRunStanding>> {
+  return Effect.gen(function* () {
+    if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
+    const found = yield* findNativeAgentConversation({ agentId });
+    if (Option.isNone(found)) return Option.none();
+    const { conversationId } = found.value;
+    const newest = yield* findNewestTurnStanding({ conversationId });
+    const ended = Option.filter(newest, (turn) =>
+      ENDED_TURN_STATUSES.some((status) => status === turn.status),
+    );
+    // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
+    const endedAt = Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
+    return Option.some({ conversationId, endedAt });
   });
 }
 
@@ -2273,6 +2556,24 @@ export function readCodingAgentOfConversation(
   conversationId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgentOfConversation({ userId, conversationId });
+}
+
+/** An agent as far as its header reads it (`CODING_AGENT_HEADER_COLUMNS`). */
+export type CodingAgentHeader = Pick<
+  CodingAgent,
+  "id" | "userId" | "taskId" | "repository" | "title" | "archivedAt"
+>;
+
+/**
+ * The header of the agent whose conversation this is, for a caller that needs
+ * no more of it than who it is, its task, repository, title, and archive;
+ * nothing where `readCodingAgentOfConversation` answers nothing.
+ */
+export function readCodingAgentHeaderOfConversation(
+  userId: string,
+  conversationId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentHeader>> {
+  return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
@@ -2627,6 +2928,71 @@ export function linePlacesOf(
     findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
     (rows) =>
       new Map(rows.map(({ id, journalId, afterStep }) => [id, { journalId, afterStep }] as const)),
+  );
+}
+
+/**
+ * The turn an ask the voice handed on ran in, as its binding names it: the
+ * turn, and for an ask that joined a typed turn under way how many of that
+ * turn's steps had begun before it (`asks.joined_after_step`), from which
+ * its answer is read.
+ */
+export interface AskTurn {
+  readonly turnId: string;
+  readonly afterStep?: number;
+}
+
+const findAskTurns = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    clientIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({
+    clientId: Schema.String,
+    turnId: Schema.String,
+    afterStep: Schema.NullOr(Schema.Int),
+  }),
+  execute: ({ userId, conversationId, clientIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          clientId: asks.clientId,
+          turnId: sql<string>`${asks.turnId}::text`,
+          afterStep: asks.joinedAfterStep,
+        })
+        .from(asks)
+        .where(
+          and(
+            eq(asks.userId, userId),
+            eq(asks.conversationId, conversationId),
+            inArray(asks.clientId, [...clientIds]),
+            isNotNull(asks.turnId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The turn each of these asks of the account's conversation ran in, by the
+ * ask's client id, for the asks that have learned one: an ask still unbound,
+ * and one of another conversation or account, names none. None asked, none
+ * read.
+ */
+export function askTurnsOf(
+  target: ConversationTarget,
+  clientIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, AskTurn>> {
+  if (clientIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findAskTurns({ userId: target.userId, conversationId: target.conversationId, clientIds }),
+    (rows) =>
+      new Map(
+        rows.map(({ clientId, turnId, afterStep }) => [
+          clientId,
+          afterStep === null ? { turnId } : { turnId, afterStep },
+        ]),
+      ),
   );
 }
 

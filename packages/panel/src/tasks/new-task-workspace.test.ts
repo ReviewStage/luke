@@ -8,7 +8,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -19,9 +19,9 @@ import type { RepositoryChooser } from "./repository-chip.js";
  * offers no other: its head row's repository chip lists that workspace's
  * repositories, and the task starts there. Where the owner's workspace
  * changes under the composer, as Home's does, a repository or a Linear
- * search of the other's is let go. Each test stands the card in Plan mode,
- * which starts with or without a repository, as New task keeps the mode it
- * was left in. Synthetic throughout.
+ * search of the other's is let go. Each test starts a bare task, ⌘Return on
+ * an empty box, which starts with or without a repository. Synthetic
+ * throughout.
  */
 const PERSONAL: Workspace = {
   id: "ws-personal",
@@ -44,7 +44,6 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  window.localStorage.setItem("luke.new-task-mode", "plan");
   fakeAppBridge({});
 });
 
@@ -124,9 +123,6 @@ test("New task offers no workspace picker, and its head row's repository chip li
   assert.deepEqual(dialog.starts, [["acme-corp/relay", ACME.id]]);
 });
 
-/** Plan mode's Start, the composer's round button. */
-const START_WITH_LUKE = 'button[aria-label="Start planning"]';
-
 /** New task open over the two workspaces, starting in `workspaceId` until `rehome` lists another, each start's repository and workspace written down. */
 async function openNewTask(workspaceId: string, preset?: string) {
   const starts: [string | null, string | undefined][] = [];
@@ -157,9 +153,9 @@ async function openNewTask(workspaceId: string, preset?: string) {
   const repositoryChip = () =>
     document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("the repository chip stands");
+  // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
   const create = async () => {
-    const button = document.querySelector<HTMLButtonElement>(START_WITH_LUKE);
-    act(() => button?.click());
+    pressInComposer(document, "Enter", { metaKey: true });
     await settle();
   };
   /** Stands the card again with the owner listing another workspace. */

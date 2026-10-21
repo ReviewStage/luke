@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAutomationClient,
   HostedCodingAgentClient,
@@ -8,10 +9,8 @@ import {
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
 } from "@luke/features";
 import {
   carried,
@@ -133,23 +132,22 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // No brain runs on this Mac: the exchange is the service's, and Luke
     // speaks only on a task's call the developer opened.
     // The tasks composer is built after the live one and ends its calls, so
-    // the live composer reads the open task, and hands it the task's drafts
-    // and their activity, through these late bindings.
+    // the live composer reads the open task, and hands it the call's
+    // activity, code, and work, through these late bindings.
     let activeTaskId: () => string | undefined = () => undefined;
-    let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
+    let agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
+      Effect.succeed(undefined);
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (taskId: string) => void = () => undefined;
     let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
-    let showTaskWork: (work: TaskWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
       activeTaskId: () => activeTaskId(),
-      showPlanDraft: (draft) => showPlanDraft(draft),
+      agentTaskOf: (agentId) => agentTaskOf(agentId),
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (taskId) => taskCallEnded(taskId),
       showTaskCode: (code) => showTaskCode(code),
-      showTaskWork: (work) => showTaskWork(work),
     });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -160,9 +158,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });
+    /** The account signed in now, by its id, which every live read names. */
+    const accountId = () => {
+      const signedIn = account.session.snapshot();
+      return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+    };
     const tasks = yield* composeTasks({
       kernel,
       account,
+      accountId,
       endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
         new HostedTaskClient({
@@ -178,16 +182,19 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           }),
         },
       ),
-      conversations: codingAgentClient,
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
+      accountId,
       client: codingAgentClient,
+      typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
+      listed: tasks.listed,
     });
     const automations = yield* composeAutomations({
       kernel,
       account,
+      accountId,
       client: new HostedAutomationClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
@@ -219,6 +226,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeMacCommands({
           kernel,
           account,
+          accountId,
           enabled: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
@@ -252,11 +260,13 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
-    showPlanDraft = tasks.showDraft;
+    agentTaskOf = codingAgents.agentTaskOf;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
-    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
-    showTaskWork = (work) => tasks.showWork(work.planId, work.turn);
+    // Note that code a call into an agent with no task shows names no task, so no task's Code tab takes it.
+    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => {
+      if (taskId !== undefined) tasks.showCode(taskId, shown);
+    };
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
@@ -277,6 +287,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* account.forgetAccess;
       yield* tasks.reset;
       yield* codingAgents.reset;
+      yield* automations.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;

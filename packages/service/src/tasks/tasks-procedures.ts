@@ -1,5 +1,5 @@
 /**
- * tasks-procedures.ts -- the account's plans: list, start, open, change, and delete, and each one's board, edit, history, transcript, work, and Luke's Stop.
+ * tasks-procedures.ts -- the account's plans: list, start, open, change, and delete, and each one's board, edit, and history.
  *
  * Every procedure resolves the caller before it touches a row, and every row
  * it touches is one the caller reaches: a plan id another account owns
@@ -26,11 +26,7 @@
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`@luke/database/models/board-store`). `/api/plans/{id}/transcript`
- * is what was said on the plan's calls, read and never written here
- * (`@luke/database/models/transcript-store`). `/api/plans/{id}/work` is what
- * Luke's brain wrote and ran on them, a page at a time, and every code he
- * showed (`tasks/task-work-store.ts`). `/api/plans/{id}/revisions` is the
+ * winning (`@luke/database/models/board-store`). `/api/plans/{id}/revisions` is the
  * plan's history for the History tab, a page at a time;
  * `/api/plans/{id}/revisions/{seq}` one revision's content beside the one
  * before it; and `/api/plans/{id}/revisions/{seq}/restore` puts that content
@@ -47,12 +43,10 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
-import { hostedStore } from "@luke/database/models/hosted-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
-import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
+import { standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
   linkTaskIssue,
   listTaskIssues,
@@ -60,15 +54,14 @@ import {
   unlinkTaskIssue,
 } from "@luke/database/models/task-issue-store";
 import {
-  createTask,
-  deleteTask,
+  createTaskCommitted,
+  deleteTaskCommitted,
   listTasks,
   readTask,
   readTaskHeader,
   type TaskHeader,
-  updateTask,
+  updateTaskCommitted,
 } from "@luke/database/models/task-store";
-import { readTranscript } from "@luke/database/models/transcript-store";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
@@ -86,8 +79,7 @@ import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-
 import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
@@ -99,6 +91,7 @@ import {
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
+import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
@@ -127,9 +120,8 @@ import {
   linkViewOf,
   liveTaskIssues,
 } from "./task-issue-links.js";
-import { readTaskWork } from "./task-work-store.js";
 
-export interface TasksProcedureSeams extends EveReach {
+export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
@@ -357,11 +349,19 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ) =>
-  startRequestedAgent(eveFor<EveTypedTurn>(seams, request, userId), userId, task.id, agent).pipe(
+  startRequestedAgent(
+    eveFor<EveTypedTurn>(seams, request, userId),
+    userId,
+    { taskId: task.id },
+    agent,
+  ).pipe(
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),
-        (plan): TaskStartAnswer => ({ plan, agent: started.agent }),
+        (plan): TaskStartAnswer =>
+          started.txid === undefined
+            ? { plan, agent: started.agent }
+            : { plan, agent: started.agent, txid: started.txid },
       ),
     ),
     Effect.catch((refusal) =>
@@ -374,7 +374,11 @@ const startedAgentOn = (
         yield* Effect.logWarning(
           `the agent a task's start asked for was refused: ${refusal.error}`,
         );
-        return { plan: task, agentRefusal: { error: refusal.error } } satisfies TaskStartAnswer;
+        const agentRefusal = {
+          error: refusal.error,
+          ...(refusal.resetsAt === undefined ? undefined : { resetsAt: refusal.resetsAt }),
+        };
+        return { plan: task, agentRefusal } satisfies TaskStartAnswer;
       }),
     ),
   );
@@ -467,7 +471,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      const task = yield* createTask(userId, {
+      const { task, txid } = yield* createTaskCommitted(userId, {
         organizationId,
         ...(input.name === undefined ? undefined : { name: input.name }),
         repository: reached.repository,
@@ -493,7 +497,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         agent === undefined
           ? { plan: task }
           : yield* startedAgentOn(seams, request, userId, task, agent);
-      return { status: TASK_START_STATUS.CREATED, body: answer };
+      // An agent's Start commits after the task's insert, so its transaction, where it has one, is the later.
+      const committed = answer.txid ?? txid;
+      return {
+        status: TASK_START_STATUS.CREATED,
+        body: committed === undefined ? answer : { ...answer, txid: committed },
+      };
     }),
 
     /** One plan with its saved document. */
@@ -559,8 +568,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const archiving = changes.archived === true;
+      // The agents the archive archives with the task, whose sandboxes are stopped once it stands.
+      const archivedWith = archiving
+        ? yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId))
+        : [];
       if (archiving) {
-        const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+        const agents = archivedWith;
         // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
         const ready = yield* Effect.forEach(agents, stopsForGood);
         if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -570,7 +583,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           { discard: true },
         );
       }
-      const task = yield* updateTask(
+      const task = yield* updateTaskCommitted(
         userId,
         taskId,
         {
@@ -600,7 +613,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { plan: task.value };
+      if (archiving)
+        yield* Effect.provide(stoppedInBackground(archivedWith), seams.sessionSandboxes);
+      const { task: plan, txid } = task.value;
+      return txid === undefined ? { plan } : { plan, txid };
     }),
 
     /**
@@ -634,7 +650,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       const stopped = new Set(agents.map(({ id }) => id));
       const deleted = yield* hostedStoreOrUnavailable(
-        deleteTask(userId, taskId, {
+        deleteTaskCommitted(userId, taskId, {
           stoppedAgentIds: stopped,
           // Note that the sessions are retired under the plan's lock and before its conversations are
           // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
@@ -649,8 +665,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent started while the others were stopped is one this delete has not stopped yet.
       if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-      if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { deleted: true as const };
+      if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { deleted: true as const, txid: deleted.value.txid };
     }),
 
     /** The plan's board, with Luke's latest drawing. */
@@ -661,7 +677,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       return { board: board.value };
     }),
 
-    /** The Mac's scene written whole, the last write winning. */
+    /** The Mac's scene written whole, the last write winning; with the id of its transaction where the board's live row shows it. */
     saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const save = input.body;
@@ -669,7 +685,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         writeScene(context.userId, taskId, save.elements, save.appliedDrawing, save.image),
       );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { board: written.value };
+      return written.value;
     }),
 
     /**
@@ -695,28 +711,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       }
     }),
 
-    /** What was said on the plan's calls. */
-    transcript: plans.transcript.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
-      const transcript = yield* hostedStoreOrUnavailable(readTranscript(context.userId, taskId));
-      if (Option.isNone(transcript)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { transcript: transcript.value };
-    }),
-
-    /** A page of the plan's work, and on the newest page every code shown on it. */
-    work: plans.work.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
-      const work = yield* hostedStoreOrUnavailable(
-        readTaskWork(context.userId, taskId, input.before),
-      );
-      if (Option.isNone(work)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return work.value;
-    }),
-
     /**
      * A page of the plan's history, the newest first. A plan with no history
      * yet answers an empty page, and so does a plan id the account does not
-     * own, as `readTranscript` answers neither apart.
+     * own, which it answers no differently.
      */
     revisions: plans.revisions.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
@@ -735,8 +733,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * One revision's content put back as the plan's, a revision of the
-     * developer's naming it, answered with the plan as it now stands. It
-     * names nothing in a body: the plan and the revision are the path's.
+     * developer's naming it, answered with the plan as it now stands and the
+     * transaction its revision was written in, none where it changed
+     * nothing. It names nothing in a body: the plan and the revision are the
+     * path's.
      */
     restore: plans.restore.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.id);
@@ -746,7 +746,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           RESTORE_REFUSAL.get(restored.reason) ?? HOSTED_REFUSAL.UNAVAILABLE,
         );
       }
-      return { plan: restored.task };
+      return {
+        plan: restored.task,
+        ...(restored.txid === undefined ? undefined : { txid: restored.txid }),
+      };
     }),
 
     /**
@@ -810,30 +813,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       if (!unlinked) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { unlinked: true as const };
-    }),
-
-    /** The turn Luke is running on the plan stopped, call or no call, under its conversation's owner, through eve as the request's own caller (`eveFor`). */
-    stop: plans.stop.effect(function* ({ input, context }) {
-      const { userId, request } = context;
-      const taskId = yield* taskIdOf(input.id);
-      const { conversationId } = yield* reachedTask(userId, taskId);
-      const owner = Option.getOrUndefined(
-        conversationId === undefined
-          ? Option.none()
-          : yield* hostedStoreOrUnavailable(conversationOwnerOf(conversationId)),
-      );
-      if (conversationId === undefined || owner === undefined) return {};
-      const eve = yield* eveFor(seams, request, userId, EVE_MOUNT.TASKS);
-      const stopSeams = { store: hostedStore(), asks: askRecord(), writer: yield* writer, eve };
-      const stopped = yield* hostedStoreOrUnavailable(
-        stopConversation(stopSeams, owner, conversationId),
-      );
-      const refused =
-        stopped !== undefined &&
-        Result.isFailure(stopped) &&
-        stopped.failure.refusal === STOP_REFUSAL.UPSTREAM;
-      if (refused) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);
-      return {};
     }),
   };
 }

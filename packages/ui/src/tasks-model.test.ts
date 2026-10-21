@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -7,6 +7,7 @@ import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
   agentPromptOf,
+  CALL_LABEL,
   ISSUE_MATCH_LIMIT,
   linearIssuesAskOf,
   MICROPHONE_PRESS,
@@ -15,9 +16,17 @@ import {
   offeredIssues,
   pendingMark,
   positionedView,
+  SETTLED_STATUS,
+  settleChanges,
+  settledNote,
+  settleOffered,
+  statusedView,
   TASK_MARK,
   taskNameOfIssue,
+  undoStillDue,
+  unsettledMarks,
   unsettledPinPositions,
+  unsettledStatuses,
 } from "./tasks-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -33,14 +42,17 @@ function _view(patch: Partial<TasksView>): TasksView {
   };
 }
 
-test("the microphone asks for the permission first, then for a plan, and then talks about it or mutes", () => {
+test("an agent's Call button asks for the permission first, then calls the agent, or mutes and unmutes its own call", () => {
+  const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
+  const otherAgent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const own = { taskId: INVITES, agentId };
   const input = {
     voiceAvailable: true,
     microphoneStatus: MICROPHONE_STATUS.GRANTED,
-    activeTaskId: INVITES,
+    agentId,
     archived: false,
     listening: false,
-    callTaskId: undefined,
+    call: undefined,
     voiceStatus: LIVE_STATUS.IDLE,
   };
   assert.deepEqual(microphoneButton({ ...input, voiceAvailable: false }), {
@@ -56,52 +68,36 @@ test("the microphone asks for the permission first, then for a plan, and then ta
     microphoneButton({ ...input, microphoneStatus: MICROPHONE_STATUS.DENIED }).press,
     MICROPHONE_PRESS.OPEN_SETTINGS,
   );
-  assert.equal(
-    microphoneButton({ ...input, activeTaskId: undefined }).press,
-    MICROPHONE_PRESS.NONE,
-  );
+  assert.equal(microphoneButton({ ...input, archived: true }).press, MICROPHONE_PRESS.NONE);
   assert.deepEqual(microphoneButton(input), {
     press: MICROPHONE_PRESS.TALK,
-    label: "Talk about this task",
+    label: CALL_LABEL,
     muted: false,
   });
   assert.deepEqual(
-    microphoneButton({
-      ...input,
-      listening: true,
-      callTaskId: INVITES,
-      voiceStatus: LIVE_STATUS.LISTENING,
-    }),
+    microphoneButton({ ...input, listening: true, call: own, voiceStatus: LIVE_STATUS.LISTENING }),
     { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
   );
-  // The task's own call standing unheard is muted, Luke speaking over it or not.
+  // The agent's own call standing unheard is muted, Luke speaking over it or not.
   for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
-    assert.deepEqual(microphoneButton({ ...input, callTaskId: INVITES, voiceStatus }), {
+    assert.deepEqual(microphoneButton({ ...input, call: own, voiceStatus }), {
       press: MICROPHONE_PRESS.TALK,
       label: "Unmute the microphone",
       muted: true,
     });
   }
-  // A call still connecting, or another task's muted call, is not this task muted.
+  // A call still connecting, or another agent's muted call, is not this agent muted.
   assert.equal(
-    microphoneButton({ ...input, callTaskId: INVITES, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
+    microphoneButton({ ...input, call: own, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
     false,
   );
+  const other = { taskId: INVITES, agentId: otherAgent };
   assert.equal(
-    microphoneButton({
-      ...input,
-      callTaskId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-      voiceStatus: LIVE_STATUS.MUTED,
-    }).muted,
+    microphoneButton({ ...input, call: other, voiceStatus: LIVE_STATUS.MUTED }).muted,
     false,
   );
-  // A desk call or another task's call heard is one the press hangs up, not one it mutes.
-  for (const callTaskId of [undefined, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"]) {
-    assert.equal(
-      microphoneButton({ ...input, listening: true, callTaskId }).label,
-      "Talk about this task",
-    );
-  }
+  // Another agent's call heard is one the press hangs up, not one it mutes.
+  assert.equal(microphoneButton({ ...input, listening: true, call: other }).label, CALL_LABEL);
 });
 
 /** A task's row of the list on a repository, last updated at `updatedAt`. */
@@ -270,4 +266,89 @@ test("New task offers at most a handful of issues however many match", () => {
   }));
 
   assert.equal(offeredIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
+});
+
+/** A listed task at a status, or with none, as a service before statuses lists it. */
+function standingTask(id: string, status?: (typeof TASK_STATUS)[keyof typeof TASK_STATUS]) {
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name: "Teammate invitations",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: null,
+    ...(status === undefined ? undefined : { status }),
+  };
+}
+
+test("Mark done asks Done of the task, and its Undo puts back the status it stood at", () => {
+  const working = standingTask(INVITES, TASK_STATUS.IN_PROGRESS);
+
+  const { asked, undo } = settleChanges([working], SETTLED_STATUS.DONE);
+
+  assert.deepEqual(asked, [{ taskId: INVITES, status: TASK_STATUS.DONE }]);
+  assert.deepEqual(undo, [{ taskId: INVITES, status: TASK_STATUS.IN_PROGRESS }]);
+  assert.equal(settledNote(SETTLED_STATUS.DONE, 1, 0), "Marked done");
+});
+
+test("a repository's Mark tasks done asks Done of every task, each Undo putting back its own status, and leaves one already done alone", () => {
+  const tasks = [
+    standingTask("task-backlog", TASK_STATUS.BACKLOG),
+    standingTask("task-todo", TASK_STATUS.TODO),
+    standingTask("task-before-statuses"),
+    standingTask("task-done", TASK_STATUS.DONE),
+  ];
+
+  const { asked, undo } = settleChanges(tasks, SETTLED_STATUS.DONE);
+
+  assert.deepEqual(
+    asked.map(({ status }) => status),
+    [TASK_STATUS.DONE, TASK_STATUS.DONE, TASK_STATUS.DONE],
+  );
+  assert.deepEqual(undo, [
+    { taskId: "task-backlog", status: TASK_STATUS.BACKLOG },
+    { taskId: "task-todo", status: TASK_STATUS.TODO },
+    { taskId: "task-before-statuses", status: TASK_STATUS.TODO },
+  ]);
+  assert.equal(settledNote(SETTLED_STATUS.DONE, 3, 1), "3 tasks marked done, 1 could not be");
+});
+
+test("a task already done is offered no Mark done, and one already canceled no Cancel task", () => {
+  assert.equal(settleOffered(standingTask(INVITES, TASK_STATUS.DONE), SETTLED_STATUS.DONE), false);
+  assert.equal(
+    settleOffered(standingTask(INVITES, TASK_STATUS.CANCELED), SETTLED_STATUS.DONE),
+    true,
+  );
+  assert.equal(
+    settleOffered(standingTask(INVITES, TASK_STATUS.CANCELED), SETTLED_STATUS.CANCELED),
+    false,
+  );
+});
+
+test("a status given here is drawn on the task until the list carries it, then let go, apart from a pin given with it", () => {
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  const statuses = new Map([[INVITES, { status: TASK_STATUS.DONE }]]);
+  const pinned = new Map([[INVITES, pendingMark(TASK_MARK.PIN, 4)]]);
+
+  assert.equal(statusedView(listed, statuses).tasks[0]?.status, TASK_STATUS.DONE);
+  assert.equal(unsettledStatuses(statuses, listed).size, 1);
+  const done = _view({ tasks: [standingTask(INVITES, TASK_STATUS.DONE)] });
+  assert.equal(unsettledStatuses(statuses, done).size, 0);
+  // Note that the status landing lets go of nothing the pin still waits on.
+  assert.equal(unsettledMarks(pinned, done).size, 1);
+});
+
+test("Mark done's Undo puts back only the tasks still done, leaving one given another status since as it was chosen", () => {
+  const undo = [
+    { taskId: "task-still-done", status: TASK_STATUS.TODO },
+    { taskId: "task-moved-since", status: TASK_STATUS.TODO },
+  ];
+  const now = [
+    standingTask("task-still-done", TASK_STATUS.DONE),
+    standingTask("task-moved-since", TASK_STATUS.IN_PROGRESS),
+  ];
+
+  assert.deepEqual(undoStillDue(undo, SETTLED_STATUS.DONE, now), [
+    { taskId: "task-still-done", status: TASK_STATUS.TODO },
+  ]);
 });

@@ -59,23 +59,12 @@ export const ownedByTaskAlone = (table: {
  * of its own, and a new kind of owner is one more nullable column, one more
  * term of the check, and one more partial index.
  *
- * The owners move here one at a time from the tables they kept their own
- * in (`chat_attachment`, `inbox_attachment`, `plan_attachment`,
- * `conversation_attachment`). Each move copies the old table's rows here
- * under their ids, drops the table or renames it out of the way (a drop
- * locks every table its foreign keys name, which a rename does not), and
- * leaves a view over this one under
- * its name and its columns' names, so a run still on a deployment from
- * before the move reads and writes the rows it always did; a later
- * migration drops the view once those runs have drained. A chat message's
- * pictures moved first, an inbox item's files second, and a plan's pictures
- * third: `chat_attachment`, `inbox_attachment`, and `plan_attachment` are
- * those views, as is `conversation_attachment`, for the pictures a
- * conversation's tools answered, which moved last. Their columns stood here
- * a deployment ahead of their move: adding their foreign key locks
- * `conversations`, which an agent's every turn writes, so it was done where
- * no copy waited on a conversation's row.
- *
+ * Every owner once kept a table of its own (`chat_attachment`,
+ * `inbox_attachment`, `plan_attachment`, `conversation_attachment`), and
+ * each moved here in turn: its rows copied under their ids, its name left
+ * as a view over this table for runs still on an older deployment, and the
+ * view dropped once those had drained.
+
  * A conversation's picture is keyed by the SHA-256 of its bytes within its
  * conversation, so the same picture answered twice is one row, and keeps
  * the size in pixels its header states, so a reader holds its place before

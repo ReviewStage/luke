@@ -5,7 +5,7 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -45,6 +45,17 @@ export const accountProviderKey = pgTable(
      * other kind, whose credential carries no expiry Luke reads.
      */
     accessExpiresAt: timestamptz("access_expires_at"),
+    /**
+     * Whether a subscription credential pays for the account's coding agents
+     * by default ("Use my Claude plan for coding agents"): on as the plan is
+     * connected, kept across a replaced token, and gone with the row on a
+     * disconnect, so connecting again turns it back on. Start may pick
+     * another payer for one agent whatever it says. An API key's row keeps
+     * the default and nothing reads it.
+     */
+    forAgents: boolean("for_agents").notNull().default(true),
+    /** When a plan's reached usage limit resets, where its provider said; null for every other status. */
+    limitResetsAt: timestamptz("limit_resets_at"),
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [

@@ -31,7 +31,7 @@ export const RUN_PROFILE = {
   TASKS_BOARD: "tasks-board",
   /** The same task mid-call, opened at launch on the transcript of what was said on its calls. */
   TASKS_TRANSCRIPT: "tasks-transcript",
-  /** The same task mid-call, opened at launch on the work Luke's brain did on its calls. */
+  /** The same task mid-call, opened at launch on the work its agent did on its calls. */
   TASKS_WORK: "tasks-work",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",
@@ -64,23 +64,6 @@ export interface AppAudioSlice {
   microphoneStatus: MicrophoneStatus;
   microphoneRoute?: MicrophoneRoute;
   outputAudio?: OutputAudioState;
-}
-
-export interface AppHotkeysSlice {
-  /**
-   * The accelerator each key was registered as, absent where the system
-   * refused one — a chord nothing can trigger must not be drawn as though it
-   * works. Raw rather than labelled, because the panel draws the keys apart
-   * and says the chord whole.
-   */
-  talk?: string;
-  /**
-   * Whether the talk key reports being let go of. Only a key that does can
-   * hold a turn open for as long as it is down; the fallback can only toggle
-   * one, and the panel says which of the two the developer actually has.
-   */
-  talkHeld: boolean;
-  stop?: string;
 }
 
 interface AppVoiceSlice {
@@ -220,15 +203,13 @@ interface AppNetworkSlice {
 /**
  * What the signed-in account may open in the app, as the host last read it
  * from the service for that account (`account-access-client.ts`): whether
- * it is an admin, which the sidebar offers the admin dashboard by, and
- * whether it is in the native-agents cohort. Neither while nobody is signed
- * in, for another account than the one read, or where the read failed. A window draws by it and authorizes nothing:
+ * it is an admin, which the sidebar offers the admin dashboard by. Not while
+ * nobody is signed in, for another account than the one read, or where the
+ * read failed. A window draws by it and authorizes nothing:
  * the dashboard's own gate on the service decides every admin read.
  */
 export interface AppAccessSlice {
   admin: boolean;
-  /** Whether the account is in the cohort whose coding agents may run on a provider's plan, which draws the plan sign-ins in Settings. */
-  nativeAgents: boolean;
 }
 
 /**
@@ -250,13 +231,12 @@ export interface AppState {
   access: AppAccessSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
-  hotkeys: AppHotkeysSlice;
   voice: AppVoiceSlice;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list, the one active task, and its saved document. Only
-   * the panel's Tasks tab draws it, and the active task is the one a voice
-   * session and the talk key bind to.
+   * the panel's Tasks tab draws it, and the active task is the one whose
+   * agents a voice session may be created into.
    */
   tasks: TasksView;
   codingAgents: AppCodingAgentsSlice;
@@ -331,4 +311,4 @@ export function sessionReplayBootstrap(
 }
 
 /** The access of nobody, of another account, or of a read that failed: nothing opened. */
-export const NO_ACCESS: AppAccessSlice = { admin: false, nativeAgents: false };
+export const NO_ACCESS: AppAccessSlice = { admin: false };

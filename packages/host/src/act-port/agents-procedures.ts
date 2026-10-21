@@ -16,6 +16,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
@@ -32,6 +33,8 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
   type CodingAgentPinParams,
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
@@ -46,6 +49,9 @@ import {
   type CodingAgentStopParams,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptOlderParams,
+  type CodingAgentTranscriptPage,
   type CodingAgentWorkspaceListParams,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
@@ -54,6 +60,7 @@ import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effe
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
+import { streamed } from "./followed-stream.js";
 
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
@@ -70,9 +77,14 @@ export interface AgentProceduresDependencies {
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
     /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
     transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
     transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    /** The page of a transcript below the oldest message the window holds, read at once. */
+    transcriptOlder(
+      params: CodingAgentTranscriptOlderParams,
+    ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
     onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
     codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
@@ -83,6 +95,7 @@ export interface AgentProceduresDependencies {
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+    codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
@@ -119,9 +132,9 @@ export interface AgentProceduresDependencies {
     | "observeTitle"
     | "observeMessaged"
     | "observeModels"
-    | "observePublished"
     | "observeTaskGone"
     | "shown"
+    | "seen"
     | "shownInbox"
     | "shownChat"
   >;
@@ -148,34 +161,11 @@ class TranscriptStreamKey extends Data.Class<{
 }> {}
 
 function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStreamKey {
-  const owner = transcript.kind === TRANSCRIPT_KIND.AGENT ? transcript.agentId : transcript.taskId;
-  return new TranscriptStreamKey({ kind: transcript.kind, owner, callId: transcript.callId });
-}
-
-/**
- * An async iterable as the iterator oRPC streams. Note that its end is
- * handed straight to the iterable's own, rather than through an async
- * generator, which would queue the end behind a read still waiting for the
- * next page and so never close the stream.
- */
-function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefined, unknown> {
-  const iterator = iterable[Symbol.asyncIterator]();
-  const ended = async (): Promise<IteratorReturnResult<undefined>> => {
-    await iterator.return?.();
-    return { done: true, value: undefined };
-  };
-  const self: AsyncIteratorObject<A, undefined, unknown> = {
-    next: async () => {
-      const read = await iterator.next();
-      return read.done === true ? { done: true, value: undefined } : read;
-    },
-    return: ended,
-    [Symbol.asyncIterator]: () => self,
-    [Symbol.asyncDispose]: async () => {
-      await ended();
-    },
-  };
-  return self;
+  return new TranscriptStreamKey({
+    kind: transcript.kind,
+    owner: transcript.agentId,
+    callId: transcript.callId,
+  });
 }
 
 /**
@@ -188,9 +178,9 @@ function transcriptPages(
   host: AgentProceduresDependencies["host"],
   open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
   transcript: CodingAgentTranscriptKey,
-): Stream.Stream<CodingAgentMessagesAnswerView> {
+): Stream.Stream<CodingAgentTranscriptPage> {
   const key = transcriptKeyOf(transcript);
-  return Stream.callback<CodingAgentMessagesAnswerView>((queue) =>
+  return Stream.callback<CodingAgentTranscriptPage>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() =>
@@ -298,6 +288,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         });
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_PART]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PART].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentPart(input);
+      },
+    ),
     [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actPort[
       AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT
     ].effect(function* ({ input, context, errors }) {
@@ -314,6 +310,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         ),
       );
       return streamed(yield* Stream.toAsyncIterableEffect(pages));
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.transcriptOlder(input);
     }),
     [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MESSAGE].effect(
       function* ({ input, context, errors }) {
@@ -367,22 +369,29 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         notices.shownChat(input.chatShown ?? null);
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SEEN].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        notices.seen(input.agentId);
+      },
+    ),
     [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PAGE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* host.codingAgentPage(input);
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_CALLS]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CALLS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentCalls(input);
+      },
+    ),
     [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actPort[
       AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that a read of another pull request by its number is no word on what the agent itself published.
-      return yield* noted(host.codingAgentPullRequest(input), (answer) => {
-        if ("pullRequest" in answer && input.number === undefined) {
-          notices.observePublished(input.agentId, answer.pullRequest);
-        }
-      });
+      return yield* host.codingAgentPullRequest(input);
     }),
     [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CHANGES].effect(
       function* ({ input, context, errors }) {

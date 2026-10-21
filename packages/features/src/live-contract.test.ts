@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { LIVE_VOICE } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { test } from "vitest";
+import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,
@@ -14,6 +15,7 @@ import {
   isHostedVoiceServiceAddress,
   sessionCreatedFrameFromWire,
   sessionOpeningFrameFromWire,
+  sessionReportFrameFromWire,
   VOICE_SERVICE_FRAME,
 } from "./live-contract.js";
 import { VIDEO_AVATAR } from "./video-avatar.js";
@@ -29,6 +31,7 @@ const developer = {
 const part = { type: "input_text", text: "What needs me?" };
 const user = { type: "message", role: "user", content: [part] };
 const TASK_ID = "1a000000-0000-4000-8000-000000000001";
+const AGENT_ID = "2b000000-0000-4000-8000-000000000002";
 
 const assistant = {
   type: "message",
@@ -43,6 +46,7 @@ function createFrame(overrides: { [field: string]: UnparsedWireValue } = {}) {
     voice: LIVE_VOICE.MARIN,
     input: [developer, user, assistant],
     planId: TASK_ID,
+    agentId: AGENT_ID,
     ...overrides,
   };
 }
@@ -68,10 +72,14 @@ test("an opening frame is either a create or an attach, told apart by type", () 
     VOICE_SERVICE_FRAME.SESSION_CREATE,
   );
   assert.equal(sessionOpeningFrameFromWire(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
-  // Every call is about one task: a create that names none, or names it in another shape, is refused.
+  // A call is keyed by its agent: a create that names no task is a call into an agent with none, and one naming it in another shape is refused.
   const { planId: _named, ...taskless } = createFrame();
-  assert.equal(sessionOpeningFrameFromWire(taskless), undefined);
+  assert.deepEqual(sessionOpeningFrameFromWire(taskless), taskless);
   assert.equal(sessionOpeningFrameFromWire(createFrame({ planId: "plan-1" })), undefined);
+  // And every call speaks into one agent: a create that names none is no request at all.
+  const { agentId: _agent, ...agentless } = createFrame();
+  assert.equal(sessionOpeningFrameFromWire(agentless), undefined);
+  assert.equal(sessionOpeningFrameFromWire(createFrame({ agentId: "agent-1" })), undefined);
   assert.equal(
     sessionOpeningFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),
     undefined,
@@ -218,6 +226,26 @@ test("every avatar frame without its request id is refused, the answers included
     avatarUnavailableFrameFromWire({
       type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
       reason: AVATAR_UNAVAILABLE_REASON.ERROR,
+    }),
+    undefined,
+  );
+});
+
+test("a line typed into the call is a report carrying its words, trimmed, and its send's key, and one with no words, no key, or past a message's bound is refused", () => {
+  const typed = VOICE_SERVICE_FRAME.SESSION_TYPED;
+  const clientKey = "send-1";
+  assert.deepEqual(
+    sessionReportFrameFromWire({ type: typed, text: "  Use the fixture branch. ", clientKey }),
+    { type: typed, text: "Use the fixture branch.", clientKey },
+  );
+  assert.equal(sessionReportFrameFromWire({ type: typed, text: "   ", clientKey }), undefined);
+  assert.equal(sessionReportFrameFromWire({ type: typed, clientKey }), undefined);
+  assert.equal(sessionReportFrameFromWire({ type: typed, text: "Hi." }), undefined);
+  assert.equal(
+    sessionReportFrameFromWire({
+      type: typed,
+      text: "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
+      clientKey,
     }),
     undefined,
   );

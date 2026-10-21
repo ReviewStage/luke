@@ -19,6 +19,7 @@ import {
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
+  type TurnStatus,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
@@ -27,7 +28,7 @@ import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { conversations, messages, turns } from "../../schemas/storage.js";
+import { asks, conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { voiceSessions } from "../../schemas/voice.js";
 import {
@@ -41,6 +42,7 @@ import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
+  askTurnsOf,
   type CodingAgent,
   type CodingAgentLine,
   codingAgentLineOf,
@@ -59,10 +61,14 @@ import {
   listWorkspaceCodingAgents,
   listWorldCodingAgents,
   type NewCodingAgent,
+  nativeRuntimesOfReached,
   pinCodingAgent,
   readCodingAgent,
+  readCodingAgentHeaderOfConversation,
+  readCodingAgentOfConversation,
   readCodingAgentPublished,
   readCodingAgentRouting,
+  readNativeRunStanding,
   readRunnerTokenConversation,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
@@ -91,11 +97,13 @@ import { type LineSender, storeWriter } from "../writer.js";
  * and the workspace's agents listed for its members alone. And what sent
  * each of the developer's lines to an agent, read by the agent's account.
  * And where in a turn under way each line arrived, as the turn took it in.
+ * And the turn each ask the voice handed on ran in, as its binding names it.
  * And who an agent writes as on GitHub, settled once by its first session.
  * And an agent's pin, which is its reader's own, as a plan's is.
  * And an agent with no repository, started blank, which a call names.
  * And how an agent is run: its runtime, its harness's session, its
  * runner's bearer digest, and who pays for it.
+ * And the agent a conversation is, one at most, read by its header.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -371,6 +379,83 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
             reviewed,
           ])).size,
           0,
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's ask turns", (it) => {
+  it.effect(
+    "each ask that learned its turn names it by the ask's client id, with the steps begun before it where it joined a typed turn under way; an unbound ask names none, and another account reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const joinedTurn = randomUUID();
+        const wholeTurn = randomUUID();
+        const db = yield* Database;
+        yield* db.insert(asks).values([
+          {
+            ...target,
+            clientId: "dl_joined",
+            origin: TURN_ORIGIN.SPOKEN,
+            turnId: joinedTurn,
+            joinedAfterStep: 3,
+          },
+          { ...target, clientId: "dl_whole", origin: TURN_ORIGIN.SPOKEN, turnId: wholeTurn },
+          { ...target, clientId: "dl_unbound", origin: TURN_ORIGIN.SPOKEN },
+        ]);
+        const named = ["dl_joined", "dl_whole", "dl_unbound", "dl_never"];
+
+        const turnsOf = yield* askTurnsOf(target, named);
+        assert.deepEqual(
+          named.map((id) => turnsOf.get(id)),
+          [{ turnId: joinedTurn, afterStep: 3 }, { turnId: wholeTurn }, undefined, undefined],
+        );
+        assert.equal(
+          (yield* askTurnsOf({ userId: other, conversationId: target.conversationId }, named)).size,
+          0,
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) => {
+  it.effect(
+    "a line typed into a call into the agent is its ask's, and a turn receiving the same words never takes it as a line awaiting a turn",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.SPOKEN,
+          eveTurnId: "turn_0",
+        });
+        const text = "Use the fixture branch.";
+        yield* writer.writeTypedCallLine(target, {
+          clientId: "typed-line-1",
+          text,
+          metadata: {
+            author: MESSAGE_AUTHOR.DEVELOPER,
+            channel: MESSAGE_CHANNEL.TYPED,
+            voice_session_id: randomUUID(),
+            from_ms: 900,
+          },
+          sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+        });
+        assert.deepEqual(
+          Result.map(yield* writer.takeAwaitingLine(target, { text, turnId }), (ids) => ids.length),
+          Result.succeed(0),
         );
       }),
   );
@@ -1771,6 +1856,110 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   );
 
   it.effect(
+    "a native agent's run reads as ended once its newest turn ends, never while one is queued or running, and an eve, deleted, or unknown agent reads as none",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const claude = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const codex = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        const eve = yield* startIn(starter, workspace, {});
+        const deleted = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const settledAt = new Date(Date.UTC(2026, 9, 14, 12));
+        const turnOf = (conversationId: string, status: TurnStatus, at: Date) =>
+          db.insert(turns).values({
+            userId: starter,
+            conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status,
+            queuedAt: at,
+            settledAt: status === TURN_STATUS.RUNNING ? null : at,
+          });
+        for (const agent of [eve, deleted]) {
+          yield* turnOf(agent.conversationId, TURN_STATUS.SETTLED, settledAt);
+        }
+        yield* db
+          .update(conversations)
+          .set({ deletedAt: settledAt })
+          .where(eq(conversations.id, deleted.conversationId));
+
+        const beforeAnyTurn = yield* readNativeRunStanding(claude.id);
+        yield* turnOf(claude.conversationId, TURN_STATUS.SETTLED, settledAt);
+        yield* turnOf(codex.conversationId, TURN_STATUS.CANCELLED, settledAt);
+        const ended = yield* readNativeRunStanding(claude.id);
+        const cancelled = yield* readNativeRunStanding(codex.id);
+        yield* turnOf(
+          claude.conversationId,
+          TURN_STATUS.RUNNING,
+          new Date(settledAt.getTime() + 1),
+        );
+        const running = yield* readNativeRunStanding(claude.id);
+
+        assert.deepEqual(Option.getOrThrow(beforeAnyTurn), {
+          conversationId: claude.conversationId,
+          endedAt: null,
+        });
+        assert.deepEqual(Option.getOrThrow(ended), {
+          conversationId: claude.conversationId,
+          endedAt: settledAt,
+        });
+        assert.deepEqual(Option.getOrThrow(cancelled), {
+          conversationId: codex.conversationId,
+          endedAt: settledAt,
+        });
+        assert.deepEqual(Option.getOrThrow(running), {
+          conversationId: claude.conversationId,
+          endedAt: null,
+        });
+        assert.ok(Option.isNone(yield* readNativeRunStanding(eve.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(deleted.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
+        assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
+      }),
+  );
+
+  it.effect("the native runtimes read names the native agents' conversations alone", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      const eve = yield* startIn(starter, workspace);
+      const claude = yield* startIn(starter, workspace, {
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+      });
+      const codex = yield* startIn(starter, workspace, {
+        runtime: CONVERSATION_RUNTIME.CODEX,
+        payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+      });
+
+      const read = yield* nativeRuntimesOfReached([
+        eve.conversationId,
+        claude.conversationId,
+        codex.conversationId,
+      ]);
+
+      assert.deepEqual(
+        [...read.entries()].sort(([a], [b]) => a.localeCompare(b)),
+        [
+          [claude.conversationId, CONVERSATION_RUNTIME.CLAUDE_CODE] as const,
+          [codex.conversationId, CONVERSATION_RUNTIME.CODEX] as const,
+        ].sort(([a], [b]) => a.localeCompare(b)),
+      );
+      assert.equal((yield* nativeRuntimesOfReached([])).size, 0);
+    }),
+  );
+
+  it.effect(
     "an account outside the agent's workspace reads none of its routing and writes neither its session nor its bearer",
     () =>
       Effect.gen(function* () {
@@ -1797,6 +1986,155 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runnerTokenHash: "digest-1",
           payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) => {
+  const startIn = (starter: string, organizationId: string) =>
+    Effect.map(
+      createCodingAgent(starter, {
+        taskId: null,
+        organizationId,
+        planSnapshot: null,
+        prompt: "Sweep the flaky tests.",
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: "acme/api",
+        title: "Flaky tests",
+      }),
+      (started) => Option.getOrThrow(started).agent,
+    );
+
+  it.effect(
+    "a conversation's agent header reads its agent for the workspace's members alone, and none once the reader left",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const stranger = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const agent = yield* startIn(starter, workspace);
+        const header = {
+          id: agent.id,
+          userId: starter,
+          taskId: null,
+          repository: "acme/api",
+          title: "Flaky tests",
+          archivedAt: null,
+        };
+
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(starter, agent.conversationId),
+          Option.some(header),
+        );
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(teammate, agent.conversationId),
+          Option.some(header),
+        );
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(stranger, agent.conversationId),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* readCodingAgentOfConversation(stranger, agent.conversationId),
+          Option.none(),
+        );
+
+        yield* leaveWorkspace(workspace, teammate);
+        assert.deepEqual(
+          yield* readCodingAgentHeaderOfConversation(teammate, agent.conversationId),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect("a second agent on a conversation an agent already has is refused", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      const agent = yield* startIn(starter, workspace);
+      const db = yield* Database;
+
+      const second = yield* Effect.exit(
+        db.insert(codingAgent).values({
+          organizationId: workspace,
+          userId: starter,
+          conversationId: agent.conversationId,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          idempotencyKey: randomUUID(),
+        }),
+      );
+
+      assert.ok(second._tag === "Failure");
+      assert.deepEqual(
+        Option.map(
+          yield* readCodingAgentOfConversation(starter, agent.conversationId),
+          (read) => read.id,
+        ),
+        Option.some(agent.id),
+      );
+    }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's human names", (it) => {
+  it.effect(
+    "every agent started on a task is given a first name alone that no other agent of the task wears, and a Start that names one keeps it",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const start = (personaName?: string) =>
+          createCodingAgent(starter, {
+            taskId: task.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+            ...(personaName === undefined ? undefined : { personaName }),
+          }).pipe(Effect.map((started) => Option.getOrThrow(started).agent));
+        const names: string[] = [];
+        for (let started = 0; started < 12; started += 1) {
+          const agent = yield* start();
+          assert.match(agent.personaName ?? "", /^\S+$/u);
+          names.push(agent.personaName ?? "");
+        }
+        assert.equal(new Set(names).size, names.length);
+        assert.equal((yield* start("Maya Chen")).personaName, "Maya Chen");
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
+  it.effect(
+    "a line written answers the transaction that wrote it, and one already standing under its key answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const line = {
+          text: "Use seven days.",
+          clientKey: "send-1",
+          sender: { kind: MESSAGE_SENDER.LUKE },
+        };
+        const written = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+        const again = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        assert.match(written.success.value.txid ?? "", /^\d+$/u);
+        assert.ok(Result.isSuccess(again) && Option.isSome(again.success));
+        assert.equal(again.success.value.txid, undefined);
       }),
   );
 });

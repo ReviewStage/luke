@@ -62,6 +62,14 @@ export const WORKSPACE_ROLE = {
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
 
+const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
+
+/** The highest role the plugin's role text names, which may list several comma-separated, read as a member where it names none Luke knows. */
+export function roleOf(text: string): WorkspaceRole {
+  const named = text.split(",").map((part) => part.trim());
+  return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
+}
+
 /**
  * The roles a member is given, by an invitation or by the owner: a
  * workspace has one owner, its creator, so nobody is made one but by the
@@ -271,8 +279,6 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceSchema),
 });
 
-export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
-
 /** One workspace: the one created, renamed, or given a photo. */
 export const workspaceAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
 
@@ -371,6 +377,8 @@ export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   members: EffectSchema.Array(workspaceMemberSchema),
   former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
 });
+
+export type WorkspaceMembersAnswer = typeof workspaceMembersAnswerSchema.Type;
 
 /** The query a members read names its workspace under. */
 export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;

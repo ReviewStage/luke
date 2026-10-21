@@ -20,7 +20,6 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
-  type InboxReplyKind,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
@@ -73,7 +72,7 @@ import {
 import { isWireString } from "@luke/wire";
 import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon, Undo2Icon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
+import { ActorLine, ActorRef, AutomationCard } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -112,6 +111,7 @@ import {
   decidedOf,
   decisionsOf,
   doDecision,
+  EMPTY_INBOX_DRAFT,
   fieldValueOf,
   INBOX_HOLDER,
   INBOX_MISSING,
@@ -167,9 +167,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's question, everything it offered, and its answer, given in place or as it was given.
  *
  * The item reads as a comment thread, as an issue or a pull request does:
- * its title alone leads as the thread's subject. Each message under it is a comment, its
- * writer's face in a column of its own, a line of name and when beside it,
- * and a line down from the face joining it to the next. The agent's
+ * its title alone leads as the thread's subject. Each message under it is a comment, headed
+ * by its writer's chip, their face and name, and when, the chip's face
+ * standing out on the line that runs down through every face to join the
+ * comments, and its words indented under the name. The agent's
  * question comes first: the blocks of context the agent wrote, Markdown as the
  * transcript draws it, its links read under the item's own workspace, its
  * plan's or its agent's, a link as the transcript draws one, opened in the
@@ -195,8 +196,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * and a text field the composer's own field with its mentions and skills
  * (`inbox-form-text.tsx`); nothing for words or a note. Enter on an option or in a field sends the answer as
  * the box's Send does, and never presses the option, Space and the arrow
- * keys being an option's own. The draft reply is the reader's face, "You"
- * and "draft", over the agent composer's box, its card and its field, with
+ * keys being an option's own. The draft reply is the reader's chip, "You"
+ * and nothing after it, over the agent composer's box, its card and its field, with
  * its `@` mentions, its skills, and its microphone (`inbox-answer-box.tsx`),
  * flowing at the thread's end rather than docked under it, and every item is sent by its one
  * Send, a note's reading "Got it" until a word is written. A card whose
@@ -260,7 +261,9 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * its answer to the reply rather than sending it, and a press pressed
  * again takes it off. Answered, it leaves the agent's message
  * for the reply that answered it, or says "Answered" alone where that
- * reply is no longer read; replaced, it says it was replaced by a newer question, or message, alone;
+ * reply is no longer read; replaced, it keeps its controls as it offered
+ * them, dimmed and taking nothing, over a pill saying a newer question, or
+ * message, replaced it;
  * withdrawn, it says why, or who closed the item.
  *
  * Words selected in what the agent wrote, its question's Markdown, its
@@ -1019,17 +1022,8 @@ interface ItemAgent {
 }
 
 /** The agent in a line of the thread: its tile and name, which hang its card and open its tab. */
-function AgentName({
-  by,
-  nameOnly = false,
-}: {
-  by: ItemAgent;
-  /** Whether the name stands without its tile, as a comment's writer does beside their face. */
-  nameOnly?: boolean;
-}): React.JSX.Element {
-  return (
-    <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} nameOnly={nameOnly} />
-  );
+function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
+  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
 }
 
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
@@ -1122,20 +1116,20 @@ const COMMENT = {
 type CommentKind = (typeof COMMENT)[keyof typeof COMMENT];
 
 /**
- * One message of the thread as a comment: its writer's face in a column of
- * its own, then a line of who and when, and what they wrote under it, a
- * line down from the face joining it to the next. The writer is named
- * once, by name alone, since the face already stands beside it.
+ * One message of the thread as a comment: a line of who and when, then
+ * what they wrote under it. The writer leads the line as the window names
+ * anyone, their face and name as one chip hanging their card, and the
+ * chip's face is the thread's gutter: it stands out to the left of the
+ * words, on the line that runs down through every face to join the
+ * comments, as an issue's timeline joins them.
  */
 function Comment({
   kind,
-  face,
   head,
   messageId,
   children,
 }: {
   kind: CommentKind;
-  face: Actor;
   head: React.ReactNode;
   /** The message a thread's message comment draws, which a send scrolls to. */
   messageId?: string | undefined;
@@ -1143,26 +1137,20 @@ function Comment({
 }): React.JSX.Element {
   return (
     <li className="inbox-comment" data-inbox-comment={kind} data-message-id={messageId}>
-      <span className="inbox-comment-face">
-        <ActorMark actor={face} size={ACTOR_SIZE.ROW} />
-      </span>
-      <div className="inbox-comment-main">
-        <div className="inbox-comment-head">{head}</div>
-        {children === undefined ? null : <div className="inbox-comment-body">{children}</div>}
-      </div>
+      <div className="inbox-comment-head">{head}</div>
+      {children === undefined ? null : <div className="inbox-comment-body">{children}</div>}
     </li>
   );
 }
 
-/** A comment's writer by name, which hangs their card and opens their page or tab. */
+/** A comment's writer, their face and name as one chip, which hangs their card and opens their page or tab. */
 function CommentName({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <span className="inbox-comment-name">{children}</span>;
 }
 
-/** What the draft reply's head says: the reader, and that it is not sent yet. */
+/** What the draft reply's head names the reader by, where nothing else names them. */
 const DRAFT_HEAD = {
   YOU: "You",
-  DRAFT: "draft",
 } as const;
 
 /** The reader as the window draws them: as the workspace's members list them, else as their account signs in, else by their id alone. */
@@ -1181,9 +1169,10 @@ function useReader(readerId: string | undefined): Actor {
 
 /**
  * The reader's reply not yet sent, as the thread's last comment, drawn as
- * a member's is: their face, "You" and "draft" in its head, and the box
- * under it, so what is sent drops into the thread in its place and the
- * box stands at the end again, as an issue's thread is written on.
+ * a member's is: headed by the reader's own chip, "You", with nothing after
+ * it, and the box under it, so what is sent drops into the thread in its
+ * place and the box stands at the end again, as an issue's thread is
+ * written on.
  */
 function DraftReply({
   readerId,
@@ -1196,12 +1185,10 @@ function DraftReply({
   return (
     <Comment
       kind={COMMENT.DRAFT}
-      face={reader}
       head={
-        <>
-          <CommentName>{DRAFT_HEAD.YOU}</CommentName>
-          <span className="inbox-comment-when">{DRAFT_HEAD.DRAFT}</span>
-        </>
+        <CommentName>
+          <ActorRef actor={reader} />
+        </CommentName>
       }
     >
       {children}
@@ -1239,7 +1226,8 @@ interface CommentFilesProps {
 
 /**
  * The files the developer's answer or a message on the thread carried,
- * drawn after its words, never as a strip over them. A picture its words
+ * drawn over its words, as the agent's tab draws a sent message's and every
+ * box holds them over what is typed. A picture its words
  * name already stands there, as an agent's do, so it is not drawn again;
  * every other picture is drawn as one in the words is, side by side where
  * several, the item's viewer walking it with the rest (`inbox-pictures.tsx`),
@@ -1373,11 +1361,10 @@ function Answered({
   return (
     <Comment
       kind={COMMENT.ANSWERED}
-      face={answerer}
       head={
         <>
           <CommentName>
-            <ActorRef actor={answerer} nameOnly />
+            <ActorRef actor={answerer} />
           </CommentName>
           <span className="inbox-comment-when">
             <RelativeTime
@@ -1401,12 +1388,6 @@ function Answered({
       {settled.values === undefined || drawn ? null : (
         <AnswerValues values={item.answer?.values ?? []} texts={NO_TEXT_LABELS} />
       )}
-      {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
-      {settled.note === undefined ? null : (
-        <div className="inbox-words" data-inbox-note="">
-          <SentWords text={settled.note} asDocument />
-        </div>
-      )}
       <CommentFiles
         itemId={item.id}
         files={item.answerFiles ?? NO_FILES}
@@ -1415,6 +1396,12 @@ function Answered({
         onImage={onImage}
         onRetryImage={onRetryImage}
       />
+      {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
+      {settled.note === undefined ? null : (
+        <div className="inbox-words" data-inbox-note="">
+          <SentWords text={settled.note} asDocument />
+        </div>
+      )}
     </Comment>
   );
 }
@@ -1434,11 +1421,10 @@ function Withdrawn({
   return (
     <Comment
       kind={COMMENT.WITHDRAWN}
-      face={by.subject.tile}
       head={
         <>
           <CommentName>
-            <AgentName by={by} nameOnly />
+            <AgentName by={by} />
           </CommentName>
           <span className="inbox-comment-when">
             withdrew this{" "}
@@ -1475,11 +1461,10 @@ function Closed({
   return (
     <Comment
       kind={COMMENT.CLOSED}
-      face={closer}
       head={
         <>
           <CommentName>
-            <ActorRef actor={closer} nameOnly />
+            <ActorRef actor={closer} />
           </CommentName>
           <span className="inbox-comment-when">
             <RelativeTime
@@ -1530,12 +1515,11 @@ function Message({
   return (
     <Comment
       kind={COMMENT.MESSAGE}
-      face={fromAgent ? by.subject.tile : member}
       messageId={message.id}
       head={
         <>
           <CommentName>
-            {fromAgent ? <AgentName by={by} nameOnly /> : <ActorRef actor={member} nameOnly />}
+            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
           </CommentName>
           <span className="inbox-comment-when">
             <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
@@ -1543,6 +1527,14 @@ function Message({
         </>
       }
     >
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        words={message.text}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
       {message.text === "" ? null : (
         <div
           className="inbox-words"
@@ -1553,14 +1545,6 @@ function Message({
           <SentWords text={message.text} asDocument />
         </div>
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        words={message.text}
-        images={images}
-        onImage={onImage}
-        onRetryImage={onRetryImage}
-      />
     </Comment>
   );
 }
@@ -1750,7 +1734,6 @@ const WITHDRAWN = "Withdrawn";
 const ASK_PRESS = {
   DONE: "Mark done",
   NOT_DONE: "Couldn't do it",
-  ANSWER: "Answer",
 } as const;
 
 /** What an open ask's presses send, and what they are drawn with. */
@@ -1795,8 +1778,8 @@ function AskPress({
  * in other words; a `do`'s steps as
  * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
  * an `answer`'s fields, whose values attach to the reply as they are
- * filled, with no press, a form filled in part sending what was filled, or
- * its Answer, whose reply's words are the answer.
+ * filled, with no press, a form filled in part sending what was filled;
+ * nothing for an `answer` of words alone, whose reply's words are the answer.
  */
 function AskControls({
   ask,
@@ -1807,10 +1790,8 @@ function AskControls({
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
   doors: AskDoors;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { draft, disabled, onDraft } = doors;
-  const press = (reply: InboxReplyKind) =>
-    onDraft({ ...draft, press: draft.press === reply ? undefined : reply });
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
@@ -1878,16 +1859,8 @@ function AskControls({
       );
     }
     case INBOX_ASK.ANSWER:
-      return ask.fields === undefined ? (
-        <div className="inbox-ask-presses">
-          <AskPress
-            label={ASK_PRESS.ANSWER}
-            pressed={draft.press === INBOX_REPLY.ANSWERED}
-            disabled={disabled}
-            onPress={() => press(INBOX_REPLY.ANSWERED)}
-          />
-        </div>
-      ) : (
+      // An ask of words alone has no controls: the box's line is its answer.
+      return ask.fields === undefined ? null : (
         <div className="inbox-ask-fields">
           <FormFields
             form={{ fields: ask.fields }}
@@ -1944,56 +1917,43 @@ function AnsweredPress({
 }
 
 /**
- * The ask a member's reply answered, at the head of that reply under their
- * face and name, in the reply's stamp's place: the ask's controls alone,
- * standing in the reply with no card around them, as the answer left them, in the look they had
- * while it waited and taking nothing, which say how it was answered: a
- * `decide`'s options with the picks checked, or its two small buttons with
- * the one pressed marked; a `do`'s steps ticked as they were sent, over
- * Mark done and Couldn't do it with the one pressed marked; an `answer`'s
- * fields, each holding what it was given, empty where it was left empty.
- * An `answer` of no fields draws no card, its reply's words being the
- * answer and the agent's message saying it was answered (`AskBox`).
+ * An ask's controls as they were left, in the look they had while it
+ * waited and taking nothing: a `decide`'s options with `draft`'s picks
+ * checked, or its two small buttons with the one pressed marked; a `do`'s
+ * steps ticked as `draft` holds them, over Mark done and Couldn't do it
+ * with the one `draft` pressed marked; an `answer`'s fields, each holding
+ * what `draft` gives it. An `answer` of no fields has none, and draws nothing.
  */
-function AnsweredCard({
+function HeldControls({
   ask,
   title,
-  answers,
+  draft,
 }: {
   ask: InboxKnownAsk;
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
-  answers: InboxAnswers;
+  draft: InboxDraft;
 }): React.JSX.Element | null {
-  const draft = answeredDraft(ask, answers);
-  const body = (controls: React.ReactNode) => (
-    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
-    <div className="inbox-ask-answered" data-inbox-answered="">
-      {controls}
-    </div>
-  );
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
-      return body(
-        decideButtons(ask) ? (
-          <div className="inbox-ask-presses">
-            {ask.options.map((option, at) => (
-              <AnsweredPress
-                key={option.label}
-                label={option.label}
-                tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
-                pressed={draft.choices.includes(option.label)}
-              />
-            ))}
-          </div>
-        ) : (
-          <ChoiceOptions choice={ask} draft={draft} disabled={false} readOnly onDraft={heldStill} />
-        ),
+      return decideButtons(ask) ? (
+        <div className="inbox-ask-presses">
+          {ask.options.map((option, at) => (
+            <AnsweredPress
+              key={option.label}
+              label={option.label}
+              tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
+              pressed={draft.choices.includes(option.label)}
+            />
+          ))}
+        </div>
+      ) : (
+        <ChoiceOptions choice={ask} draft={draft} disabled={false} readOnly onDraft={heldStill} />
       );
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
       const ticked = new Set(draft.steps ?? []);
-      return body(
+      return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
             {steps.map((step, at) => (
@@ -2009,31 +1969,61 @@ function AnsweredCard({
             <AnsweredPress
               label={ASK_PRESS.DONE}
               tone={ANSWER_TONE.AHEAD}
-              pressed={answers.reply === INBOX_REPLY.DONE}
+              pressed={draft.press === INBOX_REPLY.DONE}
             />
             <AnsweredPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
               tone={ANSWER_TONE.BACK}
-              pressed={answers.reply === INBOX_REPLY.NOT_DONE}
+              pressed={draft.press === INBOX_REPLY.NOT_DONE}
             />
           </div>
-        </>,
+        </>
       );
     }
     case INBOX_ASK.ANSWER:
-      return ask.fields === undefined
-        ? null
-        : body(
-            <FormFields
-              form={{ fields: ask.fields }}
-              draft={draft}
-              disabled={false}
-              readOnly
-              onDraft={heldStill}
-            />,
-          );
+      return ask.fields === undefined ? null : (
+        <FormFields
+          form={{ fields: ask.fields }}
+          draft={draft}
+          disabled={false}
+          readOnly
+          onDraft={heldStill}
+        />
+      );
   }
+}
+
+/** Whether an ask draws any controls once it no longer waits: every one but an `answer` of words alone. */
+function hasControls(ask: InboxKnownAsk): boolean {
+  return ask.type !== INBOX_ASK.ANSWER || ask.fields !== undefined;
+}
+
+/**
+ * The ask a member's reply answered, at the head of that reply under their
+ * face and name, in the reply's stamp's place: the ask's controls alone
+ * (`HeldControls`), standing in the reply with no card around them, as the
+ * answer left them, which say how it was answered. An `answer` of no fields
+ * draws no card, its reply's words being the answer and the agent's message
+ * saying it was answered (`AskBox`).
+ */
+function AnsweredCard({
+  ask,
+  title,
+  answers,
+}: {
+  ask: InboxKnownAsk;
+  /** The item's title, which stands as the one step of a to-do that names none. */
+  title: string;
+  answers: InboxAnswers;
+}): React.JSX.Element | null {
+  if (!hasControls(ask)) return null;
+  return (
+    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
+    <div className="inbox-ask-answered" data-inbox-answered="">
+      <HeldControls ask={ask} title={title} draft={answeredDraft(ask, answers)} />
+    </div>
+  );
 }
 
 /**
@@ -2051,15 +2041,25 @@ function AnsweredMarker(): React.JSX.Element {
 }
 
 /**
- * What ends an agent's message whose ask was replaced: the same small
- * pill, in the muted ink alone, saying what replaced it, a newer question
- * where a later message of the agent's on the thread asks one and a newer
- * message otherwise, with no card.
+ * What ends an agent's message whose ask was replaced: its controls as it
+ * offered them (`HeldControls`), dimmed, nothing picked and taking nothing,
+ * so what it used to ask still reads in the thread, then the same small
+ * pill as an answered ask's, in the muted ink alone, saying what replaced
+ * it, a newer question where a later message of the agent's on the thread
+ * asks one and a newer message otherwise. An `answer` of words alone, which
+ * has no controls, ends with the pill alone, as does a to-do naming no
+ * steps, whose one step was the item's title as it stood then, which a
+ * later post may have renamed.
  */
-function ReplacedMarker({
+function ReplacedAsk({
+  ask,
+  title,
   message,
   thread,
 }: {
+  ask: InboxKnownAsk;
+  /** The item's title, which stands as the one step of a to-do that names none. */
+  title: string;
   message: InboxMessage;
   thread: readonly InboxMessage[];
 }): React.JSX.Element {
@@ -2067,10 +2067,20 @@ function ReplacedMarker({
   const asked = thread
     .slice(at + 1)
     .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
-  return (
+  const marker = (
     <span className="inbox-ask-settled" data-inbox-settled="replaced">
       {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
     </span>
+  );
+  // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
+  if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return marker;
+  return (
+    <div className="inbox-ask-replaced" data-inbox-replaced="">
+      <div className="inbox-ask-replaced-controls" aria-disabled="true">
+        <HeldControls ask={ask} title={title} draft={EMPTY_INBOX_DRAFT} />
+      </div>
+      {marker}
+    </div>
   );
 }
 
@@ -2129,8 +2139,9 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
  * a card saying
  * "Answered" alone where the thread read no longer carries that reply; for
- * a replaced ask, no card, a small marker saying a newer question, or
- * message, replaced it (`ReplacedMarker`); a withdrawn one's card with
+ * a replaced ask, no card, its controls as it offered them, dimmed, over a
+ * small marker saying a newer question, or message, replaced it
+ * (`ReplacedAsk`); a withdrawn one's card with
  * why, or who closed the item; and an ask this build does not know a card
  * naming a newer Luke.
  */
@@ -2159,7 +2170,9 @@ function AskBox({
     );
   }
   if (ask.status === INBOX_ASK_STATUS.REPLACED) {
-    return <ReplacedMarker message={message} thread={thread} />;
+    return (
+      <ReplacedAsk ask={ask} title={cardTitle(item.title)} message={message} thread={thread} />
+    );
   }
   if (ask.status === INBOX_ASK_STATUS.OPEN) {
     return <AskMarker on={waitingOn} />;
@@ -2189,9 +2202,10 @@ function AskBox({
 }
 
 /**
- * The open question's controls at the top of the draft reply's card, over
- * the note, with no head of their own, since the agent's message says what
- * it asks: an Enter on an option or in a field sends the card. Where the
+ * The open question's controls as the draft reply's card's body, over its
+ * foot, with no card, border, or head of their own, since the agent's
+ * message says what it asks: an Enter on an option or in a field sends the
+ * card. Where the
  * item is put away with its task, they stand in the agent's message
  * instead, as a card of their own whose controls take nothing.
  */
@@ -2268,12 +2282,11 @@ function ThreadMessage({
   return (
     <Comment
       kind={COMMENT.MESSAGE}
-      face={fromAgent ? by.subject.tile : member}
       messageId={message.id}
       head={
         <>
           <CommentName>
-            {fromAgent ? <AgentName by={by} nameOnly /> : <ActorRef actor={member} nameOnly />}
+            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
           </CommentName>
           <span className="inbox-comment-when">
             <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
@@ -2290,6 +2303,14 @@ function ThreadMessage({
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        words={message.text}
+        images={control.images}
+        onImage={control.onImage}
+        onRetryImage={control.onRetryImage}
+      />
       {message.text === "" ? null : (
         <div
           className="inbox-words inbox-message-words"
@@ -2304,14 +2325,6 @@ function ThreadMessage({
           )}
         </div>
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        words={message.text}
-        images={control.images}
-        onImage={control.onImage}
-        onRetryImage={control.onRetryImage}
-      />
       {message.ask === undefined ? null : (
         <AskBox
           item={item}
@@ -2557,7 +2570,11 @@ function Crumbs({
     holder.kind === INBOX_HOLDER.TASK
       ? {
           label: holder.task.name,
-          glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name }).icon,
+          glyph: tabLook({
+            kind: TAB_KIND.PLAN,
+            name: holder.task.name,
+            status: holder.task.status,
+          }).icon,
           hint: holder.task.name,
           card: doors.taskCard,
           onPress: () => onOpenHolder?.(),
@@ -2672,6 +2689,8 @@ export function InboxPane({
   // The open question's controls stand in the draft reply, over its note: a thread's open ask's, or an older item's response's.
   const asking = thread === undefined ? undefined : openAskOf(thread);
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
+  // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
+  const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   // Note that a note asks nothing back but a nod, so it waits on no one's answer and wears no marker.
   const marked = knownResponse(item.response) && item.response.type !== INBOX_RESPONSE.NONE;
   // Note that an item put away with its task draws its question in the agent's message instead, taking nothing, since no draft stands to hold it.
@@ -2688,7 +2707,7 @@ export function InboxPane({
           />
         </DraftQuestion>
       ) : undefined
-    ) : openAsk === undefined ? undefined : (
+    ) : openAsk === undefined || wordsAlone ? undefined : (
       <DraftQuestion held={archived} pane={pane}>
         <AskControls
           ask={openAsk}
@@ -2706,7 +2725,6 @@ export function InboxPane({
           readerId={readerId}
           control={control}
           agent={by.subject.agent}
-          agentName={by.subject.name}
           thread={thread}
           controls={question}
           skills={agents.readSkills}
@@ -2766,11 +2784,10 @@ export function InboxPane({
                       <ol className="inbox-thread" aria-label="Thread">
                         <Comment
                           kind={COMMENT.ASKED}
-                          face={by.subject.tile}
                           head={
                             <>
                               <CommentName>
-                                <AgentName by={by} nameOnly />
+                                <AgentName by={by} />
                               </CommentName>
                               <span className="inbox-comment-when">
                                 <RelativeTime

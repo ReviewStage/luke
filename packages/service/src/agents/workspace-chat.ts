@@ -26,6 +26,7 @@ import {
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatBlock,
+  type ChatJoinAnswer,
   type ChatReply,
   type ChatWriteAnswer,
   type ChatWriteRequest,
@@ -61,10 +62,12 @@ import {
 } from "./coder-host/chat-notify.js";
 import {
   channelOnWire,
+  joinWorkspaceChat,
   messageOnWire,
   readsOf,
   workspaceChatPast,
 } from "./coder-host/chat-page.js";
+import { sessionsRouter } from "./coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deploymentEve } from "./deployment-eve.js";
 
@@ -75,8 +78,12 @@ import { deploymentEve } from "./deployment-eve.js";
  * the workspace sees of its chat past the cursor, held open while nothing
  * moved (`hosted/coder-host/chat-page.ts`): the roster, the channels, the
  * messages posted or changed past the cursor, and the cursor to read on
- * from. `POST` to the same path writes as the account's own member of the
- * workspace, one of four things: a post, to the channel the window shows
+ * from. A read writes nothing: the person joins the workspace's chat first,
+ * `POST {join: true}`, which makes their member and `#general` where they
+ * are not yet, and a read of one who has not joined is not found. A read
+ * from the start joins too, since released desktops read from there without
+ * joining first. `POST` to the same path writes as the account's own member of the
+ * workspace, one of four things besides: a post, to the channel the window shows
  * by its id, a channel by `#name`, a member's DM by the member's mention
  * link, `#general` where unsaid, or a thread by the
  * place of the message it replies to, told to the members it addresses
@@ -148,6 +155,10 @@ export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   const after = readEither(seqCursorSchema)(unparsedWire(query.after ?? CHAT_CURSOR_START));
   if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const reader = yield* chatAccount(userId);
+  // A released desktop never joins, so its read from the start joins for it, once per loop rather than once per read.
+  if (after.success === CHAT_CURSOR_START) {
+    yield* hostedStoreOrUnavailable(joinWorkspaceChat(reader, workspace));
+  }
   const page = yield* hostedStoreOrUnavailable(
     workspaceChatPast(reader, workspace, Number(after.success)),
   );
@@ -167,9 +178,14 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   (starterUserId: string) => AgentSessions,
   HostedRefusal,
-  HttpClient.HttpClient | HostedEnvironment
+  HttpClient.HttpClient | HostedEnvironment | DatabaseServices
 > {
-  if (seams.eveAs !== undefined) return seams.eveAs;
+  const { eveAs } = seams;
+  if (eveAs !== undefined) {
+    // A test's own eve is answered by the runtime its conversation runs on, as the deployment's is.
+    const route = yield* sessionsRouter;
+    return (starter) => route(eveAs(starter), starter);
+  }
   return yield* deploymentEve<BrainHostTurn>(seams.eveOrigin(), EVE_MOUNT.CODER);
 });
 
@@ -177,7 +193,11 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
 const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
   writer: Writer,
-): Effect.fn.Return<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment> {
+): Effect.fn.Return<
+  ChatTelling,
+  HostedRefusal,
+  HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+> {
   return {
     eveFor: yield* eveAsStarter(seams),
     writer: storeWriter({ tools: CODER_TOOL_SET }),
@@ -261,9 +281,20 @@ function picturesOf(
   return pictures;
 }
 
+/** The transaction a write's row was written in, where it was; nothing for a row read rather than written. */
+function txidOf(row: {
+  readonly txid?: string | undefined;
+}): { readonly txid: string } | undefined {
+  return row.txid === undefined ? undefined : { txid: row.txid };
+}
+
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
+  telling: Effect.Effect<
+    ChatTelling,
+    HostedRefusal,
+    HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+  >,
   writer: Writer,
   post: PostPlace & {
     readonly text?: string;
@@ -299,7 +330,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
       is_reply: post.replyTo !== undefined,
     });
   }
-  return { posted: messageOnWire(told.message), receipt: told.receipt };
+  return { posted: messageOnWire(told.message), receipt: told.receipt, ...txidOf(told.message) };
 });
 
 /**
@@ -310,7 +341,11 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
  * ask no longer open, is answered with the ask as it stands, not taken.
  */
 const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
+  telling: Effect.Effect<
+    ChatTelling,
+    HostedRefusal,
+    HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+  >,
   writer: Writer,
   asked: {
     readonly answer: { readonly seq: number; readonly revision: number; readonly reply: ChatReply };
@@ -350,7 +385,7 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
     yield* tellMessage(yield* telling, posted.value, []);
   }
-  return { ask: messageOnWire(now), taken };
+  return { ask: messageOnWire(now), taken, ...(taken ? txidOf(now) : undefined) };
 });
 
 /** A person's own ask resolved with why; not found where the place holds no ask of theirs. */
@@ -370,7 +405,7 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     resolveAsk(userId, organizationId, self.id, key.value, reason),
   );
   if (Option.isNone(resolved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { resolved: messageOnWire(resolved.value) };
+  return { resolved: messageOnWire(resolved.value), ...txidOf(resolved.value) };
 });
 
 /**
@@ -385,16 +420,16 @@ const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, DatabaseServices> {
   const { userId, organizationId, self } = writer;
   if (channelId === undefined) {
-    const moved = yield* hostedStoreOrUnavailable(readAllTo(userId, organizationId, self.id, seq));
-    if (Option.isNone(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  } else {
-    const read = yield* hostedStoreOrUnavailable(
-      readTo(userId, organizationId, self.id, channelId, seq),
-    );
-    if (!read) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const all = yield* hostedStoreOrUnavailable(readAllTo(userId, organizationId, self.id, seq));
+    if (Option.isNone(all)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return yield* hostedStoreOrUnavailable(readsOf(userId, organizationId, self.id));
   }
+  const moved = yield* hostedStoreOrUnavailable(
+    readTo(userId, organizationId, self.id, channelId, seq),
+  );
+  if (!moved) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const read = yield* hostedStoreOrUnavailable(readsOf(userId, organizationId, self.id));
-  return read;
+  return { ...read, ...txidOf(moved) };
 });
 
 /**
@@ -412,7 +447,7 @@ const openAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     openTopicChannel(userId, organizationId, open.name, self.id, open.purpose ?? null),
   );
   if (Result.isFailure(opened)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[opened.failure]);
-  return { channel: channelOnWire(opened.success) };
+  return { channel: channelOnWire(opened.success), ...txidOf(opened.success) };
 });
 
 /** A topic channel renamed, its purpose said or cleared, or archived or brought back by a person, as the store takes the edit. */
@@ -431,7 +466,18 @@ const editAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     editTopicChannel(userId, organizationId, self.id, channelId, change),
   );
   if (Result.isFailure(edited)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[edited.failure]);
-  return { channel: channelOnWire(edited.success) };
+  return { channel: channelOnWire(edited.success), ...txidOf(edited.success) };
+});
+
+/** The person's own member of the workspace's chat and its `#general`, made where they are not yet; not found where the account is not in it. */
+export const joinWorkspaceChatAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+): Effect.fn.Return<ChatJoinAnswer, HostedRefusal, DatabaseServices> {
+  const joiner = yield* chatAccount(userId);
+  const self = yield* hostedStoreOrUnavailable(joinWorkspaceChat(joiner, workspaceId));
+  if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return { self: self.value.id };
 });
 
 /** One write to the workspace's chat as the account's own member of it: a post, an answer, a resolve, a read, or a topic channel opened or edited. */

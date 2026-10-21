@@ -4,6 +4,14 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { browserSessionOf } from "@luke/service/agents/browser/agent-browser";
+import {
+  BROWSER_TOOL,
+  type BrowserToolResult,
+  browserModelOutput,
+  browserNotRun,
+  runBrowserTool,
+} from "@luke/service/agents/browser/browser-tool";
 import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
 import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
@@ -13,6 +21,7 @@ import {
   type ChatCall,
   type CoderHost,
   type CoderSessionPromptRecord,
+  type CoderTurnMessage,
   coderHost,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
@@ -30,14 +39,15 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
+  type CallTool,
   type CODER_TOOL,
   type RepositoryTool,
   repositoryToolsOf,
-  type SpokenTurnTool,
+  runCallTool,
   type TaskTool,
   taskToolsOf,
-  turnToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
@@ -46,6 +56,7 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
@@ -67,16 +78,14 @@ import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
- * deployment's seams, on the same terms as the brain's
- * (`apps/luke/host.ts`): the seams are composed here, once, over the same
+ * deployment's seams: the seams are composed here, once, over the same
  * `HostedEnvironment` layer the web runtime builds, and run synchronously
  * because eve loads the authored files as modules and the environment read
  * is a `Config` over `process.env`, which suspends on nothing. The edge's
  * own runner is handed down too: eve's door holds a promise, and it runs on
  * it, so nothing under `server/hosted/` keeps a runner of its own. The
  * worker's authored files and the delegation tool run what they need
- * through the doors below rather than at edges of their own, as the
- * planning worker's do through `apps/luke/host.ts`.
+ * through the doors below rather than at edges of their own.
  */
 export const seams: CoderHostSeams = Effect.runSync(
   Effect.provide(productionCoderHostSeams(runAgent), hostedEnvironment),
@@ -173,6 +182,16 @@ export function relayChildEvent(
 }
 
 /**
+ * The agent's sandbox kept alive for a step of its worker, which reads in it
+ * (`@luke/service/agents/session-sandboxes`'s `keepSessionSandboxAlive`), on
+ * the edge's runner; a keep-alive that fails is logged there and never
+ * reaches the worker.
+ */
+export function keepAgentSandboxAlive(agentSessionId: string): Promise<void> {
+  return runAgent(keepSessionSandboxAlive(agentSessionId));
+}
+
+/**
  * The task's tools the session is offered for the turn it opens, for those
  * tools' own files (`taskToolsOf`): none for a session the host does not
  * admit or whose conversation is no agent's.
@@ -193,15 +212,14 @@ export function offeredTaskTools(
 }
 
 /**
- * The call's own tools the session is offered for the kind of turn it opens,
- * for those tools' own files (`turnToolsOf`): all three on a spoken turn,
- * none on a typed one. Note that it is read off the request alone, with no
- * admission, because the tools reach nothing when they run: the journal
- * carries their calls to the voice, and a session the host does not admit
- * runs no model step to call them from.
+ * One call of the call's own tools (`runCallTool`), for those tools' own
+ * files: run on a spoken turn and refused on any other, the turn's kind
+ * read off the request alone, with no admission, because the tools reach
+ * nothing when they run: the journal carries their calls to the voice, and
+ * a session the host does not admit runs no model step to call them from.
  */
-export function offeredTurnTools(auth: SessionAuth): ReadonlySet<SpokenTurnTool> {
-  return turnToolsOf(host.turnKind(auth));
+export function callTool(auth: SessionAuth, tool: CallTool, run: () => WireRecord): WireRecord {
+  return runCallTool(host.turnKind(auth), tool, run);
 }
 
 /**
@@ -256,6 +274,28 @@ export function offeredChatTools(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return false;
       return yield* host.chatOffered(admitted.success, prompt);
+    }),
+  );
+}
+
+/**
+ * The message a turn opens with after the history, the turn named by its
+ * store id, and what the session has handed once it is (`CoderHost`'s `turnMessage`), for the turn's message
+ * file (`instructions/turn-message.ts`); nothing to hand for a session the
+ * host does not admit.
+ */
+export function turnMessage(
+  auth: SessionAuth,
+  sessionId: string,
+  turnId: string,
+  handed: TurnHanded,
+): Promise<CoderTurnMessage> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return { text: undefined, handed };
+      const turn = { kind: host.turnKind(auth), turnId };
+      return yield* host.turnMessage(admitted.success, turn, handed);
     }),
   );
 }
@@ -544,6 +584,40 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           const call = unparsedWire(input as WireBoundaryInput);
           return yield* runOnMacTool(admitted.success.target.userId, call);
+        }),
+      ),
+  });
+}
+
+/**
+ * `browser` as the agent and its worker are offered it, each admitted on
+ * its own terms (the worker's on ownership, as its resolvers are), and run
+ * through the one door every agent's call goes through
+ * (`packages/service/src/agents/browser/browser-tool.ts`): the Chromium in
+ * the root's sandbox, which a worker shares, with its tabs kept under the
+ * agent's own conversation, which a worker's admission names too. A session
+ * the host does not admit runs nothing. Its screenshots reach the model as
+ * images and the transcript keeps the rest.
+ */
+export function browserFor(admit: CoderHost["admit"]) {
+  return defineTool({
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
+    // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
+    toModelOutput: (output) => browserModelOutput(unparsedWire(output as WireBoundaryInput)),
+    execute: (input, ctx): Promise<BrowserToolResult> =>
+      runAgent(
+        Effect.gen(function* () {
+          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          if (Result.isFailure(admitted)) return browserNotRun(admitted.failure);
+          const call = {
+            browserSession: browserSessionOf(ctx.session),
+            conversationId: admitted.success.target.conversationId,
+            // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
+            openSandbox: () => ctx.getSandbox(),
+          };
+          // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
+          return yield* runBrowserTool(call, unparsedWire(input as WireBoundaryInput));
         }),
       ),
   });

@@ -6,6 +6,8 @@ import {
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
+  type AutomationFollow,
+  type AutomationFollowed,
   type AutomationIdParams,
   type AutomationListParams,
   type AutomationListView,
@@ -14,23 +16,28 @@ import {
   type AutomationRunView,
   type AutomationView,
   automationDeletedViewSchema,
+  automationFollowedSchema,
   automationListViewSchema,
   automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  type BrowserLiveClosedEvent,
+  type BrowserLiveMessageEvent,
+  browserLiveClosedEventSchema,
+  browserLiveMessageEventSchema,
+} from "@luke/features/browser-live-acts";
+import {
   type ChatGptSignInAnswerView,
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
-  type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
   type CodingAgentChatAttachmentParams,
-  type CodingAgentChatParams,
+  type CodingAgentChatChanged,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
@@ -39,16 +46,16 @@ import {
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxChanged,
   type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
-  type CodingAgentInboxParams,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
+  type CodingAgentInboxScope,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -60,6 +67,8 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
   type CodingAgentPictureParams,
   type CodingAgentPinParams,
   type CodingAgentPullRequestActionParams,
@@ -75,18 +84,21 @@ import {
   type CodingAgentStopParams,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptOlderParams,
   type CodingAgentWorkspaceListParams,
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
+  codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
-  codingAgentChatAnswerViewSchema,
+  codingAgentChatChangedSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxChangedSchema,
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateViewSchema,
@@ -97,11 +109,13 @@ import {
   codingAgentOverviewConversationAnswerViewSchema,
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
+  codingAgentPartViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentReviewOptionsAnswerViewSchema,
   codingAgentTranscriptChangedSchema,
+  codingAgentTranscriptOlderAnswerSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -114,6 +128,7 @@ import {
   type PlanTemplateRevisionsAnswerView,
   type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
+  type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -121,7 +136,6 @@ import {
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
-  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   FACTORY_WORLD_CALL_FAILURE,
@@ -162,8 +176,14 @@ import {
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskHistoryFollow,
+  type TaskHistoryFollowed,
+  type TaskPagesFollow,
+  type TaskPagesFollowed,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksBrowserTabsAnswer,
+  type TasksBrowserTabsParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -189,7 +209,6 @@ import {
   type TasksIssueUnlinkParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
-  type TasksMessagesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -244,6 +263,9 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  taskHistoryFollowedSchema,
+  taskPagesFollowedSchema,
+  tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
@@ -278,6 +300,11 @@ import {
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
+  type WorkspaceInvitationsFollowed,
+  type WorkspacePeopleFollow,
+  type WorkspacePeopleFollowed,
+  workspaceInvitationsFollowedSchema,
+  workspacePeopleFollowedSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -316,6 +343,7 @@ import type {
   SettingsResetScope,
 } from "@luke/settings";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -395,12 +423,13 @@ export interface HostOperator {
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
   /**
-   * The peer's SDP offer, and the task the call is about, answered with the
-   * session the host created; a host that creates none answers nothing.
+   * The peer's SDP offer, and the agent the call speaks into with its task,
+   * answered with the session the host created; a host that creates none
+   * answers nothing.
    */
   createLiveSession(
     sdp: string,
-    taskId: string,
+    about: VoiceCallAbout,
   ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   /** The peer's hang-up of the session it names; one the host no longer holds is left alone. */
   endLiveSession(request: VoiceEndLiveSessionParams): Effect.Effect<void>;
@@ -421,12 +450,6 @@ export interface HostOperator {
   tasksRefresh(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
-  /** The Work tab scrolled back: the host reads the open task's page of work before the oldest turn it holds, and the view takes it. */
-  tasksWorkEarlier(): Effect.Effect<void>;
-  /** The Call tab scrolled back: the host reads the open task's page of conversation before the oldest turn it holds, and the view takes it. */
-  tasksConversationEarlier(): Effect.Effect<void>;
-  /** One page of a task's conversation, or the brain's worker's, held by the service while it runs; or why there is none. */
-  tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
   /** One task made the active one, replacing whichever was; answers whether the host took it. */
   tasksOpen(taskId: string): Effect.Effect<boolean>;
@@ -469,6 +492,8 @@ export interface HostOperator {
   tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
   /** The issues a task links, each with where it stands now; or why there are none. */
   tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
+  /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
+  tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** One more issue linked to a task, read from its provider by the service; or why none was. */
   tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
   /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
@@ -481,12 +506,22 @@ export interface HostOperator {
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
-  /** The turn Luke is running on a task stopped on the service. */
-  tasksStopWork(taskId: string): Effect.Effect<void>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
   tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
+  /** One plan's pages followed from now until let go, heard through `onTaskPagesChanged`. */
+  tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
+  /** A followed plan's pages let go: nothing more is heard of them until they are followed again. */
+  tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
+  /** A followed plan's pages as they now stand, each time they move while followed. */
+  onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+  /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
+  tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+  /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
+  tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+  /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
+  onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
@@ -535,6 +570,20 @@ export interface HostOperator {
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
+  /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
+  workspacePeopleFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's people let go: nothing more is heard of them until they are followed again. */
+  workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's people as they now stand, each time they move while followed. */
+  onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
+  /** A workspace's pending invitations followed from now until let go, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
+  workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's invitations let go. */
+  workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  onWorkspaceInvitationsChanged(
+    listener: (followed: WorkspaceInvitationsFollowed) => void,
+  ): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
   /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
@@ -603,6 +652,8 @@ export interface HostOperator {
   codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+  /** The calls into one agent, each with its lines and its record; or why there is no answer. */
+  codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
   /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
@@ -617,6 +668,12 @@ export interface HostOperator {
   automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
+  /** A workspace's automations, or an automation's runs, followed from now until let go or signed out, heard through `onAutomationsChanged`; following again starts over. */
+  automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
+  /** A followed list or history let go: nothing more is heard of it until it is followed again. */
+  automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
+  /** A followed list or history as it now stands, each time it moves while followed. */
+  onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
@@ -673,6 +730,8 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
+  providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
   /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
@@ -701,12 +760,12 @@ export interface HostOperator {
   dictationTranscribe(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
-  /** One task's inbox past a cursor, held by the service while nothing changed; or why there is none. */
-  codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One agent's inbox past a cursor, an agent with no task as much as one on a task, held as a task's is; or why there is none. */
-  codingAgentAgentInbox(
-    params: CodingAgentAgentInboxParams,
-  ): Effect.Effect<CodingAgentInboxAnswerView>;
+  /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
+  codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
+  codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** A followed inbox, its items whole or why there are none, each time it changes. */
+  onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
@@ -725,15 +784,21 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
   codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
-  /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
-  codingAgentAccountInbox(
-    params: CodingAgentAccountInboxParams,
-  ): Effect.Effect<CodingAgentAccountInboxAnswerView>;
+  /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
+  codingAgentAccountInboxFollow(): Effect.Effect<void>;
+  /** The account inbox let go: nothing more is heard of it until it is followed again. */
+  codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
+  /** What waits across the followed account, or why there is none, each time it moves. */
+  onAccountInboxChanged(listener: (answer: CodingAgentAccountInboxAnswerView) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
   transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
   /** One followed transcript let go: nothing more is heard of it until it is followed again. */
   transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  /** The page of a transcript below the oldest message the window holds, read at once; or why there is none. */
+  transcriptOlder(
+    params: CodingAgentTranscriptOlderParams,
+  ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
   /** A followed transcript's next page, or why there is none, each time it moves. */
   onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
   codingAgentInboxAttachment(
@@ -743,8 +808,14 @@ export interface HostOperator {
   codingAgentPicture(
     params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
-  /** A workspace's chat past a cursor, held by the service while nothing moved; or why there is none. */
-  codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
+  /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
+  codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
+  /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
+  codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
+  /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
+  codingAgentChatUnfollow(workspaceId: string): Effect.Effect<void>;
+  /** A followed workspace's chat, whole or why there is none, each time it changes. */
+  onChatChanged(listener: (changed: CodingAgentChatChanged) => void): () => void;
   /** A write to a workspace's chat as the account's own member; what it came to, or why there is no answer. */
   codingAgentChatPost(
     params: CodingAgentChatPostParams,
@@ -795,6 +866,20 @@ export interface HostOperator {
   ): () => void;
   /** How an attached shell's connection stands, by its connection. */
   onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
+  /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
+  browserLiveConnect(params: {
+    connectionId: string;
+    taskId: string;
+    tabId: string;
+  }): Effect.Effect<boolean>;
+  /** One text frame for the service on a live view's connection. */
+  browserLiveSend(params: { connectionId: string; text: string }): Effect.Effect<void>;
+  /** A live view's connection let go, its socket closed. */
+  browserLiveDisconnect(params: { connectionId: string }): Effect.Effect<void>;
+  /** One text frame the service sent on a live view, by its connection. */
+  onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
+  /** A live view's socket closed, with its code, by its connection. */
+  onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
 }
 
 /** The host's answer to a terminal call, read by its schema; none where the host refused it or the shape is not read. */
@@ -881,9 +966,6 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 /** What a coding-agent call the host could not answer is drawn as. */
 /** A followed transcript as the gateway's params carry it. */
 function transcriptParams(transcript: CodingAgentTranscriptKey): WireRecord {
-  if (transcript.kind === TRANSCRIPT_KIND.TASK_WORKER) {
-    return { kind: transcript.kind, taskId: transcript.taskId, callId: transcript.callId };
-  }
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
@@ -1090,9 +1172,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
         Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
-    createLiveSession: (sdp, taskId) =>
+    createLiveSession: (sdp, { taskId, agentId }) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, taskId }),
+        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, taskId, agentId }),
         (answer) =>
           answer.ok
             ? Result.getSuccess(
@@ -1138,18 +1220,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
-    tasksWorkEarlier: () => fire(client.call(GATEWAY_METHOD.TASKS_WORK_EARLIER)),
-    tasksConversationEarlier: () => fire(client.call(GATEWAY_METHOD.TASKS_CONVERSATION_EARLIER)),
-    tasksMessages: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_MESSAGES, {
-          taskId: params.taskId,
-          ...("after" in params ? { after: params.after } : undefined),
-          ...("before" in params ? { before: params.before } : undefined),
-          ...("callId" in params ? { callId: params.callId } : undefined),
-        }),
-        codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
-      ),
     tasksOpen: (taskId) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_OPEN, { taskId }),
@@ -1316,6 +1386,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId: params.taskId }),
         taskIssueAnswer(tasksIssueLinksAnswerSchema),
       ),
+    tasksBrowserTabs: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
+        taskIssueAnswer(tasksBrowserTabsAnswerSchema),
+      ),
     tasksIssueLink: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
@@ -1446,6 +1521,29 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
+    tasksPagesFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, scope)),
+    tasksPagesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, scope)),
+    onTaskPagesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(taskPagesFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),
+    tasksHistoryUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, scope)),
+    onTaskHistoryChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(taskHistoryFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
     tasksPages: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_PAGES, { taskId: params.taskId }),
@@ -1461,8 +1559,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
-    tasksStopWork: (taskId) =>
-      Effect.asVoid(client.call(GATEWAY_METHOD.TASKS_STOP_WORK, { taskId })),
     githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
     githubDisconnect: () =>
       Effect.map(
@@ -1534,6 +1630,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
         workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
+      ),
+    workspacePeopleFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, scope)),
+    workspacePeopleUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, scope)),
+    onWorkspacePeopleChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(workspacePeopleFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    workspaceInvitationsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, scope)),
+    workspaceInvitationsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, scope)),
+    onWorkspaceInvitationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(workspaceInvitationsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     workspacePhoto: (params) =>
       Effect.map(
@@ -1715,7 +1837,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
-          taskId: params.taskId,
+          ...(params.taskId === undefined ? undefined : { taskId: params.taskId }),
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
@@ -1727,6 +1849,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined),
           ...("from" in params ? { from: params.from } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
+          ...("payer" in params ? { payer: params.payer } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -1802,6 +1925,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentPageAnswerViewSchema),
       ),
+    codingAgentCalls: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentCallsAnswerViewSchema),
+      ),
     automationList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_LIST, params),
@@ -1836,6 +1964,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
         automationAnswer(automationViewSchema),
+      ),
+    automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
+    automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
+    onAutomationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.AUTOMATIONS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     factoryWorld: (params) =>
       Effect.map(
@@ -1927,6 +2066,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
           provider: params.provider,
+          ...(params.kind === undefined ? undefined : { kind: params.kind }),
           key: params.key,
         }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
@@ -1936,6 +2076,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
           provider: params.provider,
           ...(params.kind === undefined ? undefined : { kind: params.kind }),
+        }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    providerKeyForAgents: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS, {
+          provider: params.provider,
+          kind: params.kind,
+          forAgents: params.forAgents,
         }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
       ),
@@ -1997,21 +2146,25 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         codingAgentAnswer(dictationTranscribeAnswerViewSchema),
       ),
-    codingAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-          taskId: params.taskId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+    codingAgentInboxFollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id }),
       ),
-    codingAgentAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-          agentId: params.agentId,
-          after: params.after,
+    codingAgentInboxUnfollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, {
+          kind: scope.kind,
+          id: scope.id,
         }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+      ),
+    onInboxChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INBOX_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     codingAgentInboxAnswer: (params) =>
       Effect.map(
@@ -2064,28 +2217,36 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
         codingAgentAnswer(codingAgentInboxReadAllViewSchema),
       ),
-    codingAgentAccountInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: params.after }),
-        codingAgentAnswer(codingAgentAccountInboxAnswerViewSchema),
+    codingAgentAccountInboxFollow: () =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
+    codingAgentAccountInboxUnfollow: () =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW, {})),
+    onAccountInboxChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentAccountInboxAnswerViewSchema, { excess: EXCESS_KEYS.DROP })(
+              payload,
+            ),
+          ),
+        listener,
       ),
     transcriptFollow: (transcript) =>
       fire(
-        client.call(
-          transcript.kind === TRANSCRIPT_KIND.AGENT
-            ? GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW
-            : GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW,
-          transcriptParams(transcript),
-        ),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript)),
+      ),
+    transcriptOlder: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, {
+          ...transcriptParams(params),
+          before: params.before,
+        }),
+        codingAgentAnswer(codingAgentTranscriptOlderAnswerSchema),
       ),
     transcriptUnfollow: (transcript) =>
       fire(
-        client.call(
-          transcript.kind === TRANSCRIPT_KIND.AGENT
-            ? GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW
-            : GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW,
-          transcriptParams(transcript),
-        ),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript)),
       ),
     onTranscriptChanged: (listener) =>
       on(
@@ -2109,13 +2270,23 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
       ),
-    codingAgentChat: (params) =>
+    codingAgentPart: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
-          workspaceId: params.workspaceId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentChatAnswerViewSchema),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
+        codingAgentAnswer(codingAgentPartViewSchema),
+      ),
+    codingAgentChatFollow: (workspaceId) =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),
+    codingAgentChatUnfollow: (workspaceId) =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW, { workspaceId })),
+    onChatChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CHAT_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentChatChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     codingAgentChatPost: (params) =>
       Effect.map(
@@ -2158,9 +2329,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED,
         (payload): AppAccessSlice | undefined =>
-          isRecord(payload) && isWireBoolean(payload.admin)
-            ? { admin: payload.admin, nativeAgents: payload.nativeAgents === true }
-            : undefined,
+          isRecord(payload) && isWireBoolean(payload.admin) ? { admin: payload.admin } : undefined,
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>
@@ -2269,6 +2438,38 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.TERMINAL_STATE,
         (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
+        listener,
+      ),
+    browserLiveConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, {
+          connectionId: params.connectionId,
+          taskId: params.taskId,
+          tabId: params.tabId,
+        }),
+        (answer) => answer.ok,
+      ),
+    browserLiveSend: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.BROWSER_LIVE_SEND, {
+          connectionId: params.connectionId,
+          text: params.text,
+        }),
+      ),
+    browserLiveDisconnect: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT, { connectionId: params.connectionId }),
+      ),
+    onBrowserLiveMessage: (listener) =>
+      on(
+        GATEWAY_EVENT.BROWSER_LIVE_MESSAGE,
+        (payload) => Result.getOrUndefined(readEither(browserLiveMessageEventSchema)(payload)),
+        listener,
+      ),
+    onBrowserLiveClosed: (listener) =>
+      on(
+        GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
+        (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
       ),
     onSessionReplayChanged: (listener) =>

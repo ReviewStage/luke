@@ -14,7 +14,7 @@ import { Tooltip } from "../tooltip.js";
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
  * restyled to Luke's tokens: the developer's turn stands at the right in a
  * raised bubble, Luke's at the left in plain text across the whole column,
- * as the voice captions draw them. The actions on a message are the
+ * as a chat app draws them. The actions on a message are the
  * registry's, each one a quiet icon button that shows while the pointer or
  * the keyboard is on the message, floated to its corner rather than drawn
  * in a row under it, with the window's own hover hint in place of the

@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
+import type {
+  CodingAgentMessagesAnswerView,
+  CodingAgentTranscriptPage,
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -16,7 +19,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
@@ -187,10 +190,12 @@ function recording(cards: TranscriptCards, drawn: string[]): TranscriptCards {
 /** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
-  let hear: ((page: CodingAgentMessagesAnswerView) => void) | undefined;
+  let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
   const transcripts: TranscriptFollower = (_transcript, heard) => {
     hear = heard;
-    heard(page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"));
+    heard(
+      pushedPage(page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1")),
+    );
     return () => {
       hear = undefined;
     };
@@ -206,7 +211,6 @@ function runningTab() {
   const cardsOf = (control: ReturnType<typeof controlOf>, task?: BriefTask) =>
     taskCards({
       agents: control,
-      workRows: [],
       held: NOTHING_HELD,
       chosen: () => false,
       shownCode: [],
@@ -241,7 +245,7 @@ function runningTab() {
     },
     async answer(next: CodingAgentMessagesAnswerView) {
       await act(async () => {
-        hear?.(next);
+        hear?.(pushedPage(next));
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
     },
@@ -337,6 +341,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   const control = tab.controlOf("Invoice export");
   const task = (name: string): BriefTask => ({
     name,
+    status: undefined,
     card: createElement("span", { "data-task-card-probe": "" }, `${name}, its card`),
   });
   act(() => tab.draw(control, tab.cardsOf(control, task("First draft"))));

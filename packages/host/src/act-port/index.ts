@@ -57,6 +57,12 @@ export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
+export {
+  type HostTerminalPort,
+  type TerminalActsDependencies,
+  type TerminalPortSeam,
+  terminalProcedures,
+} from "./terminal-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
 export type ActPortHandler<Sender = unknown> = RPCHandler<ActPortContext<Sender>>;

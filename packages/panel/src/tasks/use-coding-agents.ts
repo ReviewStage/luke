@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
@@ -16,8 +17,10 @@ import {
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
   type CodingAgentOrigin,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
+  hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
@@ -38,6 +41,7 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
+import { rendererPause } from "../renderer-runtime.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -45,6 +49,7 @@ import {
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
+  PREPARING_IMAGE,
   RENAME_FAILED,
   SERVERS_FAILED,
   START_ARCHIVED,
@@ -56,6 +61,7 @@ import {
   withAgentRun,
 } from "./coding-agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
+import { untilImagePrepared } from "./image-preparing.js";
 import {
   type ByPullRequestTab,
   pullRequestAsked,
@@ -63,6 +69,7 @@ import {
 } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
+import type { CallsReader } from "./use-agent-calls.js";
 import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
@@ -72,12 +79,8 @@ import {
   type TranscriptReader,
   windowTranscriptFollower,
 } from "./use-agent-transcript.js";
-import type {
-  InboxAnswerer,
-  InboxImageReader,
-  InboxMessenger,
-  InboxReader,
-} from "./use-task-inbox.js";
+import { type InboxFollower, windowInboxFollower } from "./use-followed-inboxes.js";
+import type { InboxAnswerer, InboxImageReader, InboxMessenger } from "./use-task-inbox.js";
 
 /** A pull request's chapters the port refused to answer, as the tab hears any answer that never came. */
 const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
@@ -215,7 +218,9 @@ export interface CodingAgentsControl {
   onDropFork: () => void;
   /** Writes the open task's draft: the words in its box, the choice on its chip, the MCP servers it switched off, or that the refusal it was handed was let go. */
   onDraftChange: (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
+    change: Partial<
+      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "payer" | "refused">
+    >,
   ) => void;
   /**
    * Hands a task New task just started, whose agent the service refused, a
@@ -245,6 +250,7 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
+    payer?: CodingAgentPayer,
   ) => Promise<Failure | undefined>;
   /**
    * Starts the draft's fork: from its source at its message, under the
@@ -260,6 +266,7 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
+    payer?: CodingAgentPayer,
   ) => Promise<Failure | undefined>;
   /** Brings the open task back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -277,6 +284,17 @@ export interface CodingAgentsControl {
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
   };
+  /**
+   * A draft's Call: starts the draft's agent for a call to open into, on
+   * eve whatever the account's routing would choose. A draft holding words
+   * or files starts on them under its own key, as a send does, marked
+   * `call`; an empty one starts blank under a key of the press's own, which
+   * needs no repository. Either runs on the draft's chips, lets the draft go
+   * once it lands, and opens the agent's tab as a Start's does. Answers the
+   * agent, or why it did not start. Present exactly while the open task is
+   * not archived.
+   */
+  startCall: ((draft: AgentDraft) => Promise<DraftCallStart>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
@@ -287,7 +305,7 @@ export interface CodingAgentsControl {
   onSwitchServers: ServersWriter;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Coding agents page, where the developer's API keys are. */
+  /** Opens Settings on its Agents page, where the developer's API keys are. */
   onOpenApiKeys: () => void;
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
@@ -306,6 +324,8 @@ export interface CodingAgentsControl {
   onTitle: (agentId: string, title: string | null) => void;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
+  /** One read of the calls into an agent, each with its lines and its record, which its tab places among its rows. */
+  readCalls: CallsReader;
   /** How a shown tab follows its transcript and hears its pages pushed. */
   transcripts: TranscriptFollower;
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
@@ -360,8 +380,8 @@ export interface CodingAgentsControl {
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
-  /** One read of a task's inbox past a cursor, as the Inbox tab's loop asks it. */
-  readInbox: InboxReader;
+  /** How a task's or an agent's inbox is followed, and heard pushed, as the Inbox tab draws it. */
+  inboxFollower: InboxFollower;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
@@ -384,12 +404,20 @@ export interface AgentDraft {
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
+  /** Who the developer picked to pay for this one agent where Start offered it (`payer-model.ts`); none for the account's default. */
+  readonly payer?: CodingAgentPayer | undefined;
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
   readonly refused?: Failure | undefined;
 }
 
+/** What a draft's Call answers: the agent it started, for the call to open into, or why it did not start. */
+export type DraftCallStart = { readonly agentId: string } | { readonly failure: Failure };
+
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
-type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "refused">;
+type DraftChoices = Pick<
+  AgentDraft,
+  "id" | "choice" | "disabledServers" | "fork" | "payer" | "refused"
+>;
 
 /** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
 function taskDraft(
@@ -406,6 +434,7 @@ function taskDraft(
     disabledServers: held?.disabledServers ?? [],
     // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
     ...forkOf(held === undefined ? kept?.place.fork : held.fork),
+    ...(held?.payer === undefined ? undefined : { payer: held.payer }),
     ...(held?.refused === undefined ? undefined : { refused: held.refused }),
   };
 }
@@ -441,9 +470,9 @@ export type AgentContinuer = (
   attachments?: readonly CodingAgentAttachment[],
 ) => Promise<Failure | undefined>;
 
-/** A continue on its way or asked again: the task, the key the press minted, and the note and files it carried. */
+/** A continue on its way or asked again: the task or the page's agent it was pressed on, the key the press minted, and the note and files it carried. */
 interface PendingContinue {
-  taskId: string;
+  on: string;
   key: string;
   note: string | undefined;
   attachments: readonly CodingAgentAttachment[];
@@ -545,7 +574,7 @@ export function useCodingAgents(input: {
   onUnarchive: () => void;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
-  /** Opens Settings on its Coding agents page. */
+  /** Opens Settings on its Agents page. */
   /** The signed-in account's id, whose own agents carry no "Started by". */
   me?: string | undefined;
   onOpenApiKeys: () => void;
@@ -576,12 +605,19 @@ export function useCodingAgents(input: {
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [starting, setStarting] = useState(false);
-  // Each plan's draft's key and chip, by the plan's id; its words and files are kept apart.
+  // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
+  // is open, whose Start the service puts where that agent is (its task, or its workspace).
+  const startsOn = taskId ?? agentId;
+  // Whether a Start from one of the agents could run: on a task naming a repository, or on an agent's
+  // page, where the service reads the repository off the agent started from.
+  const startsFrom =
+    startsOn !== undefined && !archived && (taskId === undefined || repository !== null);
+  // Each place's draft's key and chip, by the plan's id or the page's agent's; its words and files are kept apart.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
-  const heldDraft = taskId === undefined ? undefined : drafts.get(taskId);
-  const keptDraft = useNewAgentDraft(taskId, heldDraft?.id);
+  const heldDraft = startsOn === undefined ? undefined : drafts.get(startsOn);
+  const keptDraft = useNewAgentDraft(startsOn, heldDraft?.id);
   const writer = useDraftWriter();
-  const draft = taskId === undefined ? undefined : taskDraft(heldDraft, keptDraft);
+  const draft = startsOn === undefined ? undefined : taskDraft(heldDraft, keptDraft);
   const [note, setNote] = useState<{ taskId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
@@ -689,23 +725,33 @@ export function useCodingAgents(input: {
         : was,
     );
 
-  /** One Start asked of the service on the task, held as under way until it answers. */
+  /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (
     on: string,
     asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
   ): Promise<CodingAgentAgentAnswer> => {
     setStarting(true);
-    return act(ACT_KIND.CODING_AGENTS_START, { taskId: on, ...asked })
-      .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
-      .then((answer) => {
-        setStarting(false);
-        return answer;
-      });
+    // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
+    const where = on === taskId ? { taskId: on } : undefined;
+    // An image still being prepared is said beside Start, and the same Start asked again under its key.
+    return untilImagePrepared(
+      () =>
+        act(ACT_KIND.CODING_AGENTS_START, { ...where, ...asked }).catch(
+          (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+        ),
+      () => setNote({ taskId: on, note: { reason: FAILURE_REASON.OTHER, text: PREPARING_IMAGE } }),
+      rendererPause,
+    ).then((answer) => {
+      setStarting(false);
+      // The word that the image was being prepared goes once the Start is answered; a refusal says its own.
+      setNote((was) => (was?.taskId === on && was.note.text === PREPARING_IMAGE ? undefined : was));
+      return answer;
+    });
   };
 
   /** A Start that landed: the agent joins the list and its tab opens. Note that one landing after the developer left the task opens no tab on the task now open. */
   const landed = (on: string, agent: CodingAgentSummary) => {
-    if (latest.current.taskId !== on) return;
+    if ((latest.current.taskId ?? latest.current.agentId) !== on) return;
     joined(on, agent);
     latest.current.onStarted(agent.id);
     readAgain();
@@ -741,22 +787,54 @@ export function useCodingAgents(input: {
     });
   };
 
+  // Note that an empty draft's press mints its own key, because a blank
+  // agent is a new one each time it is asked for, while words go under the
+  // draft's key, so a Call asked again opens the agent the first started.
+  const startCall = async (held: AgentDraft): Promise<DraftCallStart> => {
+    if (taskId === undefined)
+      return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
+    if (archived) return { failure: { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED } };
+    const prompt = held.prompt.trim();
+    const { choice, attachments, disabledServers } = held;
+    const words = hasWordsOrFiles(prompt, attachments);
+    if (words && repository === null) {
+      return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
+    }
+    const answer = await askStart(taskId, {
+      ...(words
+        ? {
+            idempotencyKey: held.id,
+            prompt,
+            ...(attachments.length === 0 ? undefined : { attachments }),
+            call: true,
+          }
+        : { idempotencyKey: mintKey(), blank: true }),
+      ...(disabledServers.length === 0 ? undefined : { disabledServers }),
+      ...(choice === undefined ? undefined : choiceRequest(choice)),
+    });
+    if ("failure" in answer) return { failure: startFailureNote(answer, taskId) };
+    withDraft(taskId, undefined);
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === held.id);
+    landed(taskId, answer.agent);
+    return { agentId: answer.agent.id };
+  };
+
   // Note that a press carries the key its agent's last press minted while the
   // service has not answered it and the words and files are the same, so a
   // press asked again opens the agent the first may already have started.
   const continueAgent: AgentContinuer = async (sourceId, note, attachments = []) => {
-    if (taskId === undefined || repository === null || archived) return undefined;
+    if (startsOn === undefined || !startsFrom) return undefined;
     const held = continues.current.get(sourceId);
     const carried = note !== undefined || attachments.length > 0 ? (note ?? "") : undefined;
     const key =
       held !== undefined &&
-      held.taskId === taskId &&
+      held.on === startsOn &&
       held.note === carried &&
       sameFiles(held.attachments, attachments)
         ? held.key
         : mintKey();
-    continues.current.set(sourceId, { taskId, key, note: carried, attachments });
-    const answer = await askStart(taskId, {
+    continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments });
+    const answer = await askStart(startsOn, {
       idempotencyKey: key,
       from: { agentId: sourceId },
       ...(carried === undefined ? undefined : { note: carried }),
@@ -767,11 +845,11 @@ export function useCodingAgents(input: {
       if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) {
         continues.current.delete(sourceId);
       }
-      if (latest.current.taskId !== taskId) failed(START_FAILED_AWAY);
-      return startFailureNote(answer, taskId);
+      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) failed(START_FAILED_AWAY);
+      return startFailureNote(answer, taskId ?? null);
     }
     continues.current.delete(sourceId);
-    landed(taskId, answer.agent);
+    landed(startsOn, answer.agent);
     return undefined;
   };
 
@@ -799,7 +877,12 @@ export function useCodingAgents(input: {
     return id;
   };
 
-  /** Where a draft's words are kept: under its key, beside the fork it is. */
+  /**
+   * Where a draft's words are kept: under its key, beside the fork it is.
+   * Note that an agent page's draft is kept with its agent's id as the
+   * `planId`, so the drafted plans list that id too; no task has it, so no
+   * row reads it as drafted.
+   */
   const wordsPlace = (on: string, id: string, fork: AgentFork | undefined): NewAgentPlace => ({
     kind: DRAFT_PLACE.NEW_AGENT,
     planId: on,
@@ -834,10 +917,10 @@ export function useCodingAgents(input: {
   // developer picks otherwise.
   const onForkDraft = (fork: AgentFork): string => {
     const id = mintKey();
-    if (taskId === undefined) return id;
+    if (startsOn === undefined) return id;
     const source = held?.find((agent) => agent.id === fork.agentId);
-    moveWords(taskId, id, fork);
-    withDraft(taskId, {
+    moveWords(startsOn, id, fork);
+    withDraft(startsOn, {
       id,
       choice: undefined,
       disabledServers: source?.disabledServers ?? [],
@@ -859,11 +942,11 @@ export function useCodingAgents(input: {
     const joins = draft?.fork?.agentId === sourceId && draft.fork.messageId === undefined;
     const adds = words.trim() !== "" || attachments.length > 0;
     const id = joins && !adds && draft !== undefined ? draft.id : mintKey();
-    if (taskId === undefined) return id;
+    if (startsOn === undefined) return id;
     const source = held?.find((agent) => agent.id === sourceId);
     const fork = continueFork(sourceId);
-    moveWords(taskId, id, fork, { text: words.trim(), attachments });
-    withDraft(taskId, {
+    moveWords(startsOn, id, fork, { text: words.trim(), attachments });
+    withDraft(startsOn, {
       id,
       choice: joins ? draft?.choice : undefined,
       disabledServers: joins ? (draft?.disabledServers ?? []) : (source?.disabledServers ?? []),
@@ -872,8 +955,13 @@ export function useCodingAgents(input: {
     return id;
   };
 
+  // Note that an agent's page starts nothing but from its agent, so a fork let go there lets its draft go.
   const onDropFork = () => {
-    if (taskId === undefined || draft === undefined) return;
+    if (draft === undefined) return;
+    if (taskId === undefined) {
+      letGo(draft.id);
+      return;
+    }
     moveWords(taskId, draft.id, undefined);
     withDraft(taskId, {
       id: draft.id,
@@ -884,22 +972,25 @@ export function useCodingAgents(input: {
 
   /** The open plan's draft's words and files moved on from those kept for it. */
   const writeWords = (next: (was: Draft) => Draft) => {
-    if (taskId === undefined || draft === undefined) return;
-    writer.update(wordsPlace(taskId, draft.id, draft.fork), next);
+    if (startsOn === undefined || draft === undefined) return;
+    writer.update(wordsPlace(startsOn, draft.id, draft.fork), next);
   };
 
   const onDraftChange = (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
+    change: Partial<
+      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "payer" | "refused">
+    >,
   ) => {
-    if (taskId === undefined || draft === undefined) return;
+    if (startsOn === undefined || draft === undefined) return;
     const { prompt, ...choices } = change;
     if (prompt !== undefined) writeWords((was) => ({ ...was, text: prompt }));
     if (Object.keys(choices).length === 0) return;
-    withDraft(taskId, {
+    withDraft(startsOn, {
       id: draft.id,
       choice: draft.choice,
       disabledServers: draft.disabledServers,
       ...(draft.fork === undefined ? undefined : { fork: draft.fork }),
+      ...(draft.payer === undefined ? undefined : { payer: draft.payer }),
       ...(draft.refused === undefined ? undefined : { refused: draft.refused }),
       ...choices,
     });
@@ -949,6 +1040,7 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
+    payer?: CodingAgentPayer,
   ): Promise<Failure | undefined> => {
     if (taskId === undefined || repository === null)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
@@ -959,6 +1051,7 @@ export function useCodingAgents(input: {
       ...(attachments.length === 0 ? undefined : { attachments }),
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
+      ...(payer === undefined ? undefined : { payer }),
     });
     if ("failure" in answer) return startFailureNote(answer, taskId);
     withDraft(taskId, undefined);
@@ -975,16 +1068,25 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
+    payer?: CodingAgentPayer,
   ): Promise<Failure | undefined> => {
-    if (taskId === undefined || repository === null)
-      return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
     if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
-    const asked = forkStart({ draftId, fork, words, attachments, choice, disabledServers });
-    const answer = await askStart(taskId, asked);
-    if ("failure" in answer) return startFailureNote(answer, taskId);
-    withDraft(taskId, undefined);
-    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
-    landed(taskId, answer.agent);
+    if (startsOn === undefined || !startsFrom)
+      return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
+    const asked = forkStart({
+      draftId,
+      fork,
+      words,
+      attachments,
+      choice,
+      disabledServers,
+      payer,
+    });
+    const answer = await askStart(startsOn, asked);
+    if ("failure" in answer) return startFailureNote(answer, taskId ?? null);
+    withDraft(startsOn, undefined);
+    writer.drop((kept) => kept.kind === DRAFT_PLACE.NEW_AGENT && kept.draftId === draftId);
+    landed(startsOn, answer.agent);
     return undefined;
   };
 
@@ -1005,12 +1107,20 @@ export function useCodingAgents(input: {
 
   const onMessage = useCallback<MessageSender>(
     async (agentId, text, clientKey, attachments) => {
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
-        agentId,
-        text,
-        clientKey,
-        ...(attachments.length === 0 ? undefined : { attachments }),
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      // A message that opens the agent's sandbox anew may wait on its image, and is asked again under its key.
+      const answer: CodingAgentAgentAnswer = await untilImagePrepared(
+        () =>
+          act(ACT_KIND.CODING_AGENTS_MESSAGE, {
+            agentId,
+            text,
+            clientKey,
+            ...(attachments.length === 0 ? undefined : { attachments }),
+          }).catch(
+            (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+          ),
+        () => undefined,
+        rendererPause,
+      );
       if (!("failure" in answer)) {
         setList((was) =>
           was.agents === undefined
@@ -1189,6 +1299,14 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readCalls = useCallback<CallsReader>(
+    (agentId) =>
+      act(ACT_KIND.CODING_AGENTS_CALLS, { agentId }).catch(
+        (): CodingAgentCallsAnswerView => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+      ),
+    [act],
+  );
+
   const readPullRequestOnce = useCallback<PullRequestReader>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
@@ -1306,10 +1424,7 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readInbox = useCallback<InboxReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
+  const inboxFollower = windowInboxFollower;
 
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
@@ -1372,8 +1487,7 @@ export function useCodingAgents(input: {
     readModels,
     readDefault,
     onUnarchive: taskId !== undefined && archived ? input.onUnarchive : undefined,
-    continueAgent:
-      taskId !== undefined && repository !== null && !archived ? continueAgent : undefined,
+    continueAgent: startsFrom ? continueAgent : undefined,
     start: {
       available: taskId !== undefined && repository !== null && !archived,
       reason: startReason(taskId, repository, archived),
@@ -1381,6 +1495,7 @@ export function useCodingAgents(input: {
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       onPress: pressStart,
     },
+    startCall: taskId !== undefined && !archived ? startCall : undefined,
     onStop,
     onMessage,
     onChoose,
@@ -1394,6 +1509,7 @@ export function useCodingAgents(input: {
     onStatus,
     onTitle,
     readTranscript,
+    readCalls,
     transcripts: windowTranscriptFollower,
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
@@ -1410,7 +1526,7 @@ export function useCodingAgents(input: {
     readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
-    readInbox,
+    inboxFollower,
     answerInbox,
     messageInbox,
     readInboxImage,

@@ -248,6 +248,8 @@ test("every route that stays off the oRPC router is reached at its public URL by
     "/api/voice/sessions.js",
     "/api/terminal/sessions",
     "/api/terminal/sessions.js",
+    "/api/browser/live",
+    "/api/browser/live.js",
     "/api/feedback",
     "/api/feedback.mjs",
   ]) {

@@ -23,7 +23,6 @@ export const AGENT_TOOL = {
   QUEUE_QUESTION: "queue_question",
   WITHDRAW_QUESTION: "withdraw_question",
   SHOW_CODE: "show_code",
-  RUN_IN_REPOSITORY: "run_in_repository",
   DRAW_ON_BOARD: DRAW_ON_BOARD_TOOL_NAME,
   LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
@@ -51,6 +50,8 @@ export const AGENT_TOOL = {
   READ_WEB_PAGE: "read_web_page",
   // A command on the developer's own Mac, every role's.
   RUN_ON_MAC: "run_on_mac",
+  // A real browser in the agent's own sandbox, which the developer can watch and take over, every role's.
+  BROWSER: "browser",
   // eve's shell and file tools and the code extension's, started in a coding agent's checkout.
   BASH: "bash",
   READ_FILE: "read_file",
@@ -66,7 +67,7 @@ export const AGENT_TOOL = {
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_INBOX: INBOX_TOOL.READ,
   OPEN_PULL_REQUEST: "open_pull_request",
-  // The workspace's chat, the planner's and every coding agent's.
+  // The workspace's chat, every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
   READ_CHAT: CHAT_TOOL.READ,
   RESOLVE_ASK: CHAT_TOOL.RESOLVE,
@@ -168,3 +169,24 @@ export const CLAUDE_CODE_TOOL = {
 
 /** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_inbox` is Luke's `read_inbox`. */
 export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
+
+/**
+ * Codex's own work, by the type of the app-server item that does it (its
+ * todo list by its own name, since Codex reports it as the turn's plan
+ * rather than as an item), which a coding agent running on Codex does in
+ * place of Luke's shell, file, search, todo, and delegation tools. Its
+ * transcript stores each under this name; a call to Luke's own MCP server is
+ * stored under Luke's tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
+ * any other MCP server as `mcpToolCall`.
+ */
+export const CODEX_TOOL = {
+  COMMAND_EXECUTION: "commandExecution",
+  FILE_CHANGE: "fileChange",
+  MCP_TOOL_CALL: "mcpToolCall",
+  WEB_SEARCH: "webSearch",
+  TODO_LIST: "todoList",
+  SUBAGENT: "collabAgentToolCall",
+} as const;
+
+/** The name Codex knows Luke's MCP server by (`mcp_servers.luke`): its calls are Luke's tools. */
+export const CODEX_LUKE_MCP_SERVER = "luke";

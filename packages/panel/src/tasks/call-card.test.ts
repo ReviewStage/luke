@@ -2,18 +2,17 @@
 
 import assert from "node:assert/strict";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { TRANSCRIPT_REGION, type TranscriptCallRow } from "@luke/voice/transcript-model";
+import type { TranscriptCallRow } from "@luke/voice/transcript-model";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { CodePane } from "./code-pane.js";
-import { TaskCall } from "./task-call.js";
 import { RUN_CARD } from "./turn-card.js";
 
 /**
- * call-card.test.ts -- a call begins and ends the same in the Call tab's
- * thread and the Code tab's feed: the one divider, live while it stands,
- * and once it has ended the one closing line, hanging the call's card.
+ * call-card.test.ts -- a call begins and ends in the Code tab's feed as in
+ * its agent's transcript: the one divider, live while it stands, and once it
+ * has ended the one closing line, hanging the call's card.
  */
 
 const MINUTE_MS = 60_000;
@@ -54,7 +53,7 @@ function shownOn(call: TranscriptCallRow, callId: string): TaskCodeShowing {
       repository: "acme/relay",
       firstLine: 1,
       lineCount: 1,
-      lines: [[{ text: "export const total = 0;" }]],
+      lines: ["export const total = 0;"],
     },
   };
 }
@@ -86,17 +85,7 @@ function cardOf(line: HTMLElement): string | undefined {
   ].at(-1)?.outerHTML;
 }
 
-test("the Code tab begins and ends each call as the Call tab does: the same divider, naming a teammate's call, live while it stands, and the same closing line hanging the call's card", () => {
-  const callTab = mounted(
-    createElement(TaskCall, {
-      region: { kind: TRANSCRIPT_REGION.READY, earlierOmitted: false, calls: CALLS },
-      onRetry: () => undefined,
-      conversation: undefined,
-      onLoadEarlier: () => Promise.resolve(),
-      onOpenSubagent: () => undefined,
-      shown: true,
-    }),
-  );
+test("the Code tab begins and ends each call: a divider naming a teammate's call, live while it stands, and a closing line hanging the call's card", () => {
   const codeTab = mounted(
     createElement(CodePane, {
       shown: [shownOn(ENDED_CALL, "show-1"), shownOn(LIVE_CALL, "show-2")],
@@ -105,36 +94,28 @@ test("the Code tab begins and ends each call as the Call tab does: the same divi
     }),
   );
 
-  const dividers = (tab: HTMLElement) =>
-    [...tab.querySelectorAll("[data-checkpoint]")].map((each) => each.outerHTML);
-  assert.equal(dividers(callTab).length, 2, "each call begins at a divider");
-  assert.deepEqual(dividers(codeTab), dividers(callTab));
+  const dividers = [...codeTab.querySelectorAll('[data-checkpoint], [data-call-marker="start"]')];
+  assert.equal(dividers.length, 2, "each call begins at a divider");
   assert.match(
-    codeTab.querySelectorAll("[data-checkpoint]")[0]?.textContent ?? "",
-    /Charles Pan’s call · /u,
-    "a teammate's call is named over its code as over its lines",
+    dividers[0]?.textContent ?? "",
+    /Charles Pan’s call started · /u,
+    "a teammate's call is named over its code",
   );
   assert.match(
-    codeTab.querySelectorAll("[data-checkpoint]")[1]?.textContent ?? "",
+    dividers[1]?.textContent ?? "",
     /Live$/u,
     "the standing call's divider says it is live",
   );
 
-  const closing = (tab: HTMLElement) => tab.querySelector<HTMLElement>("[data-call-ended]");
-  const callLine = closing(callTab);
-  const codeLine = closing(codeTab);
-  assert.ok(callLine, "the ended call closes on its line in the Call tab");
-  assert.ok(codeLine, "and in the Code tab");
-  assert.equal(codeLine.textContent, callLine.textContent);
+  const codeLine = codeTab.querySelector<HTMLElement>("[data-call-ended]");
+  assert.ok(codeLine, "the ended call closes on its line");
   assert.match(codeLine.textContent ?? "", /^Luke ended the call · 12m/u);
   assert.equal(
     codeTab.querySelectorAll("[data-call-ended]").length,
     1,
     "the standing call has not closed",
   );
-  const card = cardOf(codeLine);
-  assert.ok(card, "the Code tab's closing line hangs the call's card");
-  assert.equal(card, cardOf(callLine));
+  assert.ok(cardOf(codeLine), "the closing line hangs the call's card");
 });
 
 test("code a turn showed after a call ended stands after that call's closing line, under its own turn's divider, and not inside the call", () => {
@@ -149,7 +130,11 @@ test("code a turn showed after a call ended stands after that call's closing lin
       onOpenFile: () => undefined,
     }),
   );
-  const order = [...codeTab.querySelectorAll("[data-checkpoint], [data-call-ended], .code-card")];
+  const order = [
+    ...codeTab.querySelectorAll(
+      '[data-checkpoint], [data-call-marker="start"], [data-call-ended], .code-card',
+    ),
+  ];
   const at = (selector: string) => {
     const element = codeTab.querySelector(selector);
     return element === null ? -1 : order.indexOf(element);
@@ -159,8 +144,40 @@ test("code a turn showed after a call ended stands after that call's closing lin
   const later = at('[data-call-id="show-after"]');
   assert.ok(during < closing && closing < later, "the call closes before the later code");
   assert.equal(
-    order[later - 1]?.matches("[data-checkpoint]"),
+    order[later - 1]?.matches('[data-checkpoint], [data-call-marker="start"]'),
     true,
     "the later code has a divider of its own",
   );
+});
+
+test("code an agent showed on a turn of its own stands under that turn's divider, which names the agent, each turn its own, and a turn of an agent not listed is headed by its time alone", () => {
+  const typed: TaskCodeShowing = {
+    ...shownOn(ENDED_CALL, "show-typed"),
+    shownAt: ENDED_START + 15 * MINUTE_MS,
+    agentId: "agent-invites",
+  };
+  const later: TaskCodeShowing = {
+    ...shownOn(ENDED_CALL, "show-later"),
+    shownAt: ENDED_START + 20 * MINUTE_MS,
+    agentId: "agent-gone",
+  };
+  const codeTab = mounted(
+    createElement(CodePane, {
+      shown: [typed, later],
+      calls: [],
+      agentLabel: (agentId: string) => (agentId === "agent-invites" ? "Invite flow" : undefined),
+      onOpenFile: () => undefined,
+    }),
+  );
+  const order = [...codeTab.querySelectorAll("[data-checkpoint], .code-card")];
+  const words = order.map((element) =>
+    element.matches('[data-checkpoint], [data-call-marker="start"]')
+      ? (element.textContent ?? "")
+      : element.getAttribute("data-call-id"),
+  );
+  assert.equal(words.length, 4);
+  assert.match(words[0] ?? "", /^Invite flow · /u);
+  assert.equal(words[1], "show-typed");
+  assert.doesNotMatch(words[2] ?? "", /Invite flow/u);
+  assert.equal(words[3], "show-later");
 });

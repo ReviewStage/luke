@@ -380,6 +380,7 @@ const readAgents = Effect.fnUntraced(function* (
       line: {
         id: agent.id,
         title: agent.title,
+        ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
         status,
         ...(starter === undefined
           ? undefined

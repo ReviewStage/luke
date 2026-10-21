@@ -11,12 +11,16 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  anyPlanConnected,
   ensureChatGptHostId,
   listEveryProviderKeyRow,
   listProviderKeyRows,
   removeProviderKey,
   resealProviderKey,
   saveProviderKey,
+  setPlanStatus,
+  setProviderKeyForAgents,
+  setProviderKeyStatus,
   withProviderKeyLocked,
 } from "../provider-key-store.js";
 
@@ -209,6 +213,51 @@ it.layer(getTestDB())("the provider key store", (it) => {
       }),
   );
 
+  it.effect(
+    "a plan connected pays for the account's agents by default; the default is turned for that account alone, kept across a replaced token, and back on once the plan is connected again",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { ANTHROPIC } = PROVIDER_KEY_PROVIDER;
+        const { CLAUDE_SETUP_TOKEN } = PROVIDER_KEY_KIND;
+        const connect = (account: string, seal: string) =>
+          saveProviderKey(
+            account,
+            ANTHROPIC,
+            CLAUDE_SETUP_TOKEN,
+            sealed(seal),
+            "sk-ant-oat…",
+            null,
+            new Date(0),
+          );
+        const forAgents = (account: string) =>
+          Effect.map(listProviderKeyRows(account, CLAUDE_SETUP_TOKEN), (rows) =>
+            rows.map((row) => row.forAgents),
+          );
+        yield* connect(owner, "first");
+        yield* connect(other, "theirs");
+        assert.deepEqual(yield* forAgents(owner), [true]);
+
+        assert.equal(
+          yield* setProviderKeyForAgents(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN, false),
+          true,
+        );
+        assert.deepEqual(yield* forAgents(owner), [false]);
+        assert.deepEqual(yield* forAgents(other), [true]);
+
+        yield* connect(owner, "replaced");
+        assert.deepEqual(yield* forAgents(owner), [false]);
+
+        yield* removeProviderKey(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN);
+        assert.equal(
+          yield* setProviderKeyForAgents(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN, false),
+          false,
+        );
+        yield* connect(owner, "again");
+        assert.deepEqual(yield* forAgents(owner), [true]);
+      }),
+  );
+
   it.effect("an account's ChatGPT host id is minted once, its own, and outlives the sign-in", () =>
     Effect.gen(function* () {
       const { owner, other } = yield* openAccounts;
@@ -242,5 +291,121 @@ it.layer(getTestDB())("the provider key store", (it) => {
       assert.equal(racing[1], racing[2]);
       assert.notEqual(racing[1], first);
     }),
+  );
+
+  it.effect(
+    "a turn's word on a plan lands on its account's row alone, with a limit's reset, and never over an unreadable row, a sign-in saved after the turn, or invalid with verified",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { OPENAI } = PROVIDER_KEY_PROVIDER;
+        const { CHATGPT_OAUTH } = PROVIDER_KEY_KIND;
+        for (const account of [owner, other]) {
+          yield* saveProviderKey(
+            account,
+            OPENAI,
+            CHATGPT_OAUTH,
+            sealed("sign-in"),
+            "ChatGPT",
+            null,
+            new Date(1_000),
+          );
+        }
+        const read = (account: string) =>
+          Effect.map(listProviderKeyRows(account, CHATGPT_OAUTH), ([row]) => [
+            row?.status,
+            row?.limitResetsAt?.getTime() ?? null,
+          ]);
+        const write = (
+          status: Parameters<typeof setPlanStatus>[3],
+          savedBy: number,
+          resets?: number,
+        ) =>
+          setPlanStatus(
+            owner,
+            OPENAI,
+            CHATGPT_OAUTH,
+            status,
+            resets === undefined ? undefined : new Date(resets),
+            new Date(savedBy),
+            new Date(5_000),
+          );
+        const seen: unknown[] = [];
+
+        yield* write(PROVIDER_KEY_STATUS.LIMIT_REACHED, 2_000, 9_000);
+        seen.push(yield* read(owner), yield* read(other));
+        yield* write(PROVIDER_KEY_STATUS.INVALID, 500);
+        seen.push(yield* read(owner));
+        yield* write(PROVIDER_KEY_STATUS.INVALID, 2_000);
+        yield* write(PROVIDER_KEY_STATUS.VERIFIED, 2_000);
+        seen.push(yield* read(owner));
+        yield* setProviderKeyStatus(
+          owner,
+          OPENAI,
+          "sign-in",
+          PROVIDER_KEY_STATUS.UNREADABLE,
+          new Date(5_000),
+        );
+        yield* write(PROVIDER_KEY_STATUS.INELIGIBLE, 2_000);
+        seen.push(yield* read(owner));
+
+        assert.deepEqual(seen, [
+          [PROVIDER_KEY_STATUS.LIMIT_REACHED, 9_000],
+          [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+          [PROVIDER_KEY_STATUS.LIMIT_REACHED, 9_000],
+          [PROVIDER_KEY_STATUS.INVALID, null],
+          [PROVIDER_KEY_STATUS.UNREADABLE, null],
+        ]);
+      }),
+  );
+});
+
+// A database of its own, so no other test's rows stand in it.
+it.layer(getTestDB())("whether any account connected a plan", (it) => {
+  it.effect(
+    "no account, or only an API key, connects none; a Claude setup-token or a ChatGPT sign-in of any account does, until it is removed",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { ANTHROPIC, OPENAI } = PROVIDER_KEY_PROVIDER;
+        const { API_KEY, CLAUDE_SETUP_TOKEN, CHATGPT_OAUTH } = PROVIDER_KEY_KIND;
+        assert.equal(yield* anyPlanConnected(), false, "nothing stored");
+
+        yield* saveProviderKey(
+          owner,
+          ANTHROPIC,
+          API_KEY,
+          sealed("key-1"),
+          "sk-…a",
+          null,
+          new Date(1),
+        );
+        assert.equal(yield* anyPlanConnected(), false, "an API key is no plan");
+
+        yield* saveProviderKey(
+          other,
+          ANTHROPIC,
+          CLAUDE_SETUP_TOKEN,
+          sealed("token-1"),
+          "sk-ant-…a",
+          null,
+          new Date(1),
+        );
+        assert.equal(yield* anyPlanConnected(), true, "a setup-token");
+        yield* removeProviderKey(other, ANTHROPIC, CLAUDE_SETUP_TOKEN);
+        assert.equal(yield* anyPlanConnected(), false, "the setup-token removed");
+
+        yield* saveProviderKey(
+          other,
+          OPENAI,
+          CHATGPT_OAUTH,
+          sealed("signin-1"),
+          "ChatGPT",
+          null,
+          new Date(1),
+          new Date(3_600_000),
+        );
+        assert.equal(yield* anyPlanConnected(), true, "a ChatGPT sign-in");
+      }),
   );
 });

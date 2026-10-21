@@ -12,17 +12,17 @@ import type { StoreFailure } from "../../http/store-failure.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 
 /**
- * chat-names.ts -- how the chat names its members to a coding agent, to a plan's Luke, and in the notices they are told by: each by its mention link, as the rest of the app names a person, an agent, or a task's Luke.
+ * chat-names.ts -- how the chat names its members to a coding agent and in the notices they are told by: each by its mention link, as the rest of the app names a person or an agent.
  *
  * A person is written as their account's link, `[@Ada Lovelace](…/person/<userId>)`,
  * an agent as its own under its task, or under its workspace where it works
  * on none, named by its title or else its model's id, as `list_agents`
- * writes one, and a task's Luke as his task's `…/plan/<taskId>/luke`. Each
+ * writes one. Each
  * is written under the workspace's step as the reading account reads it
  * (`written-mentions.ts`), so the agent copies the link a read hands it to
  * address the member, and its chip opens the member wherever it is drawn.
- * A member no link can be written of, an agent or a Luke whose agent or
- * task is gone (`mintFormer`), or a person whose account is, is named by a
+ * A member no link can be written of, an agent whose coding agent is gone
+ * (`mintFormer`), or a person whose account is, is named by a
  * plain label (`CHAT_MEMBER_LABEL`), which addresses no one.
  */
 
@@ -30,7 +30,7 @@ import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 export interface ChatNames {
   /** The member as an agent reads and writes it: its mention link, or a plain label where none can be written. */
   readonly mention: (member: ChatMemberRow) => string;
-  /** What the member is called, its link's own name: a person's account's name, an agent's title or model, Luke, or a former one's label. */
+  /** What the member is called, its link's own name: a person's account's name, an agent's title or model, or a former one's label. */
   readonly name: (member: ChatMemberRow) => string;
 }
 
@@ -54,8 +54,6 @@ function namingOf(
     );
     const name = (member: ChatMemberRow): string => {
       switch (member.kind) {
-        case MEMBER_KIND.LUKE:
-          return CHAT_MEMBER_LABEL.LUKE;
         case MEMBER_KIND.AGENT: {
           const agent = member.agentId === null ? undefined : agents.get(member.agentId);
           return agent?.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT;
@@ -99,14 +97,6 @@ export function chatNamesOf(
     const { agents, people, name } = yield* namingOf(userId, organizationId, members);
     const mention = (member: ChatMemberRow): string => {
       switch (member.kind) {
-        case MEMBER_KIND.LUKE:
-          return member.taskId === null
-            ? name(member)
-            : writtenMention(
-                { kind: MENTION_KIND.LUKE, taskId: member.taskId },
-                name(member),
-                step,
-              );
         case MEMBER_KIND.AGENT: {
           const agent = member.agentId === null ? undefined : agents.get(member.agentId);
           if (member.agentId === null || agent === undefined) return name(member);

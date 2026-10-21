@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_RUNTIME, type CodingAgentRuntime } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppPlatform } from "../testing/app-platform.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentModelChip } from "./agent-model-chip.js";
@@ -13,7 +15,10 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * agent-model-chip.test.ts -- the chip's model menu stands still while it is
  * open: turning Fast on widens the chip leftward from its fixed trailing
  * edge, and the menu hung from that edge neither jumps on the frame the
- * chip widens nor once the resize is measured.
+ * chip widens nor once the resize is measured. On an agent that runs on
+ * Claude Code it offers Claude models alone, with no Fast switch and no
+ * Context row, the list `list_models` answers for the same catalog
+ * (`coder-agent-tools.test.ts`), while an eve agent's offers all of it.
  */
 
 const MODELS: readonly CatalogModel[] = [
@@ -43,6 +48,8 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
+  // The GPT model's row wears its harness's mark, an asset of the panel's.
+  fakeAppPlatform({ assetBase: () => "https://luke.test/" });
 });
 
 afterEach(() => {
@@ -125,4 +132,86 @@ test("turning Fast on in the chip's menu leaves the menu where it stood", () => 
   act(() => fast.click());
   act(() => relayout());
   assert.equal(menuLeft(view), opened, "turning Fast off again keeps it in place");
+});
+
+/** The catalog `coder-agent-tools.test.ts`'s runtime tests read: Opus with its fast version and two windows, Sonnet, and a GPT model. */
+const RUNTIME_MODELS: readonly CatalogModel[] = [
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+    contextWindows: { standardTokens: 200_000, longTokens: 1_000_000 },
+  },
+  {
+    id: "anthropic/claude-opus-5.5-fast",
+    name: "Claude Opus 5.5 Fast",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["high"],
+  },
+  {
+    id: "anthropic/claude-sonnet-5.5",
+    name: "Claude Sonnet 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+  {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  },
+];
+
+/** The open menu of a chip on an agent on the runtime given: the models it lists, and its pinned rows. */
+function openMenuOn(runtime: CodingAgentRuntime | undefined): {
+  models: string[];
+  foot: string;
+} {
+  const view = document.createElement("div");
+  document.body.append(view);
+  const root = createRoot(view);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(AgentModelChip, {
+        model: {
+          choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+          note: undefined,
+          choose: () => undefined,
+          runtime,
+        },
+        models: RUNTIME_MODELS,
+        readModels: () => undefined,
+        usage: undefined,
+      }),
+    ),
+  );
+  const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  assert.ok(chip);
+  act(() => chip.click());
+  const menu = view.querySelector('[role="dialog"]');
+  assert.ok(menu, "the menu is open");
+  const foot = menu.querySelector(".task-compose-menu-foot")?.textContent ?? "";
+  const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
+    (row) => row.textContent ?? "",
+  );
+  return { models: listed, foot };
+}
+
+test("on a Claude Code agent the menu offers Claude models alone, no Fast switch, and no Context row, while an eve agent's offers every model with both", () => {
+  const claudeCode = openMenuOn(CODING_AGENT_RUNTIME.CLAUDE_CODE);
+  const eve = openMenuOn(undefined);
+
+  assert.equal(claudeCode.models.length, 2, claudeCode.models.join(" | "));
+  assert.match(claudeCode.models[0] ?? "", /Opus 5\.5/u);
+  assert.match(claudeCode.models[1] ?? "", /Sonnet 5\.5/u);
+  assert.match(claudeCode.foot, /Effort/u);
+  assert.doesNotMatch(claudeCode.foot, /Fast|Context/u);
+
+  assert.equal(eve.models.length, 3, eve.models.join(" | "));
+  assert.match(eve.models[2] ?? "", /GPT-6\.1 Sol/u);
+  assert.match(eve.foot, /Effort/u);
+  assert.match(eve.foot, /Context/u);
+  assert.match(eve.foot, /Fast/u);
 });

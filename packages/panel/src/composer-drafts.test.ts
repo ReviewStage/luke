@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_CURSOR_START,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -27,7 +27,7 @@ import {
   type MessageSender,
   useAgentComposer,
 } from "./tasks/use-agent-composer.js";
-import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
+import type { MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
@@ -43,6 +43,7 @@ import {
 } from "./testing/composer.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
+import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
@@ -158,8 +159,8 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.CALL, agentTab],
-        tab: onTask ? MAIN_TAB.CALL : agentTab,
+        tabs: [agentTab],
+        tab: onTask ? undefined : agentTab,
         openAgents: [open.agent.id],
       },
       agents: codingAgentsControl({
@@ -430,7 +431,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, pin.tab],
+      tabs: [pin.tab],
       tab: pin.tab,
       openAgents: [open.agent.id],
     },
@@ -566,7 +567,7 @@ function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
  */
 async function columnOn(
   tabs: readonly MainTab[],
-  chosen: MainTab,
+  chosen: MainTab | undefined,
   agent = INVITES.agent,
   side: SidePanelTab | undefined = undefined,
   opening = "",
@@ -578,7 +579,7 @@ async function columnOn(
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, ...tabs],
+      tabs,
       tab: chosen,
       openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
         ? [INVITES.agent.id]
@@ -589,10 +590,7 @@ async function columnOn(
       ...codingAgentsControl({
         agents: [agent],
         agentIds: [agent.id],
-        readInbox: ({ after }) =>
-          after === INBOX_CURSOR_START
-            ? Promise.resolve({ items: [approval(1)], cursor: "1" })
-            : new Promise(() => undefined),
+        inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
       }),
       draft: {
         id: DRAFT_KEY,
@@ -671,8 +669,8 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
   );
   const tabs = [{ draft: DRAFT_KEY }];
   for (const [chosen, side, inboxMarked, draftMarked] of [
-    [MAIN_TAB.CALL, SIDE_PANEL_TAB.PLAN, true, true],
-    [MAIN_TAB.CALL, SIDE_PANEL_TAB.INBOX, false, true],
+    [undefined, SIDE_PANEL_TAB.PLAN, true, true],
+    [undefined, SIDE_PANEL_TAB.INBOX, false, true],
     [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.INBOX, false, false],
     [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.PLAN, true, false],
   ] as const) {
@@ -703,7 +701,7 @@ test("a draft agent's tab holding no words, and an Inbox whose only draft answer
   );
   const column = await columnOn(
     [{ draft: DRAFT_KEY }],
-    MAIN_TAB.CALL,
+    undefined,
     INVITES.agent,
     SIDE_PANEL_TAB.PLAN,
   );
@@ -718,12 +716,12 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
       { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
     ]),
   );
-  const closed = await columnOn([], MAIN_TAB.CALL);
+  const closed = await columnOn([], undefined);
   assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
 
   const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
-  const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.CALL, failed);
+  const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
 });
@@ -753,6 +751,7 @@ function approval(revision: number): InboxItem {
  */
 async function inboxOn(item: InboxItem) {
   answerMotion();
+  const main = followedInboxes(() => ({ items: [item] }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -765,10 +764,7 @@ async function inboxOn(item: InboxItem) {
     agents: codingAgentsControl({
       agents: [INVITES.agent],
       agentIds: [INVITES.agent.id],
-      readInbox: ({ after }) =>
-        after === INBOX_CURSOR_START
-          ? Promise.resolve({ items: [item], cursor: "1" })
-          : new Promise(() => undefined),
+      inboxFollower: main.follower,
     }),
   });
   await act(async () =>
@@ -835,21 +831,19 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
   return { ...approval(revision), id, agentId };
 }
 
-/** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
+/** An agent's own inbox with no task, followed as the Inbox page follows it, pushed as `items`. */
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
+  const main = followedInboxes(() => ({ items }));
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     control = useTaskInbox({
       taskId: agentId,
-      reader: (after) =>
-        after === INBOX_CURSOR_START
-          ? Promise.resolve({ items, cursor: "1" })
-          : new Promise(() => undefined),
+      kind: INBOX_SCOPE_KIND.AGENT,
       shown: true,
       waiting: true,
       agents: {
         heldIds: [agentId],
-        readInbox: () => new Promise(() => undefined),
+        inboxFollower: main.follower,
         answerInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),

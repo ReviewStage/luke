@@ -19,6 +19,7 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
+import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
@@ -32,6 +33,7 @@ import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
+import { colourCodeInUtilityProcess } from "./task-code-colouring";
 import {
   createTelemetryService,
   mainErrorReporting,
@@ -65,6 +67,12 @@ export interface DesktopServices {
   readonly testNotification: () => void;
   /** Luke's avatar as the host holds it, which the panel's acts reach. */
   readonly avatar: AvatarLink;
+  /**
+   * A transcript's fenced block coloured in a process of its own, spawned the
+   * first time one is asked for and killed with the launch's scope, so the
+   * tokenizer never holds this process's event loop.
+   */
+  readonly colourCode: ColourCode;
   /**
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
@@ -224,6 +232,7 @@ export function composeDesktop(
         panel: windows.panels,
         setVideo: (on) => operator.host.setVideo(on),
       });
+      const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
       // A quit asked for while a call stands asks first, as a call app does,
       // and nothing else holds one.
       quit.holdWhile(
@@ -302,7 +311,6 @@ export function composeDesktop(
       // answering nothing.
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
-        reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
       });
 
       return {
@@ -316,6 +324,7 @@ export function composeDesktop(
         notices,
         testNotification: () => noticeDoors.postTest(() => windows.panels.focusExpanded()),
         avatar,
+        colourCode,
         run,
         services,
       };

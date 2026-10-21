@@ -24,7 +24,6 @@ import {
   type LiveVoiceSurroundings,
 } from "@luke/voice/orchestrator";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
-import { outputSilent } from "@luke/voice/volume-hint";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
@@ -134,8 +133,8 @@ export function useVoiceSession(
       const call = new LiveCall({
         events,
         acts: {
-          createSession: (sdp, taskId) =>
-            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, taskId: taskId }),
+          createSession: (sdp, { taskId, agentId }) =>
+            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, taskId, agentId }),
           endSession: (request) => tell(ACT_KIND.VOICE_END_LIVE_SESSION, request),
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
@@ -202,8 +201,7 @@ export function useVoiceSession(
 
   /**
    * Everything this window reads rather than owns — whether a voice stands,
-   * whether captions are wanted, the output the captions answer, and the
-   * microphone's grant — on the one channel main holds it on, handed over
+   * and the microphone's grant — on the one channel main holds it on, handed over
    * whole whenever it moves.
    */
   const settings = useAppSlice(APP_SETTINGS_VIEW);
@@ -211,8 +209,6 @@ export function useVoiceSession(
   useEffect(() => {
     const surroundings: LiveVoiceSurroundings = {
       voiceAvailable: settings?.voiceAvailable,
-      captionsEnabled: settings?.voiceCaptions === true,
-      outputSilent: outputSilent(audio?.outputAudio),
       microphoneGranted: audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
     };
     orchestrator.surround(surroundings);
@@ -295,11 +291,10 @@ export function useVoiceSession(
     [drive, orchestrator],
   );
 
-  // The Tasks tab's microphone, about the task the panel had open: a call about
-  // that task opened and heard, or its microphone toggled, as the main process
-  // forwards the press.
+  // An agent's Call button, as the main process forwards the press: a call
+  // into that agent opened and heard, or its microphone toggled.
   useEffect(
-    () => appBridge().onTasksTalk(({ taskId }) => drive(orchestrator.talkAboutTask(taskId))),
+    () => appBridge().onTasksTalk((about) => drive(orchestrator.talkTo(about))),
     [drive, orchestrator],
   );
 
@@ -310,40 +305,6 @@ export function useVoiceSession(
         drive(orchestrator.obeySessionChange(change)),
       ),
     [drive, orchestrator],
-  );
-
-  // The talk key is registered by the main process so it answers from any app,
-  // which is the whole point: no window to find, nothing to focus first. It
-  // is held to talk: the press opens the microphone and the release closes
-  // it, so the device is open exactly while the key is down. A press during
-  // a chord being recorded is held back in the main process, where the
-  // recording is known; a release always lands, so a hold begun before the
-  // recording still ends. A press made while the panel has a task open names
-  // that task, and is heard on that task's call.
-  // The call is told too, since a hold over Luke gone quiet flushes his avatar.
-  useEffect(
-    () =>
-      appBridge().onVoiceHotkeyPress((press) => {
-        callRef.current?.reportTalkKey(true);
-        drive(orchestrator.beginTalk(press?.taskId));
-      }),
-    [drive, orchestrator],
-  );
-  useEffect(
-    () =>
-      appBridge().onVoiceHotkeyRelease(() => {
-        callRef.current?.reportTalkKey(false);
-        drive(orchestrator.endTalk());
-      }),
-    [drive, orchestrator],
-  );
-  // The stop key stops Luke from any app, call or no call (`LUKE_STOP`); a call is told back as the stop command above.
-  useEffect(
-    () =>
-      appBridge().onStopHotkeyPress(() => {
-        tell(ACT_KIND.LUKE_STOP, {});
-      }),
-    [tell],
   );
 
   useEffect(

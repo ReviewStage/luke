@@ -101,7 +101,9 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     ...(build.release ? { release: build.release } : undefined),
     integrations: [
       // The page load is started by route below, rather than by its path here.
-      browserTracingIntegration({ instrumentPageLoad: false }),
+      // Long animation frames name the script behind a slow frame; INP is
+      // among the web vitals the SDK reports by default.
+      browserTracingIntegration({ instrumentPageLoad: false, enableLongAnimationFrame: true }),
     ],
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,

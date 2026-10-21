@@ -6,7 +6,7 @@
  * and each reads it into blocks of its own. What they share is decided
  * here, so the two never drift: a call is one of a few kinds, each with
  * the verb its row says and whether its subject is code; and a turn's
- * blocks fold the way the Call tab folds them (Stagent's walk, Stage's chat
+ * blocks fold the way the Call tab folded them (Stagent's walk, Stage's chat
  * panel): calls and subagents next to one another, and the reasoning
  * between and beside them, are one group that is open while it is the
  * turn's latest work on a turn that moves and folded once the model moved
@@ -14,11 +14,16 @@
  * and a finished turn folds everything ahead of its last words into one
  * line saying how much it holds, its subagents and the coding agents it
  * started named apart from its other calls, so it reads as its answer. A
- * turn whose words were said aloud, as a spoken turn's on the Call tab
- * are, never draws them as its answer: Luke's line after it is the answer,
- * so its words run with its calls, inside the group while it moves and
- * inside the fold once it has finished, which holds all of it and counts
- * no message, and a run with no call drops its words. A group or a fold
+ * turn whose words were said aloud, as an agent's turn on a call is, never
+ * draws them as its answer: the line the voice said, drawn before it, is
+ * the answer, so its words run with its calls, inside the group while it
+ * moves, where a run with no call drops them; and once it has finished,
+ * all of it is folded closed, its words with its work and counted as
+ * messages, a turn of thoughts and words alone included, so what was said
+ * reads with the work behind it one press away. Where a call joined the
+ * turn under way, only the work from the join on was answered aloud, so
+ * only that is folded as said, and the work before it folds as it would on
+ * a turn no one read aloud. A group or a fold
  * holding a call that failed says so on its line, so a failure is not
  * folded out of sight. That
  * fold is the one grouping its calls get: a run of calls is folded once,
@@ -38,6 +43,8 @@ export const CALL_KIND = {
   COMMAND: "command",
   /** A command an agent ran on the developer's own Mac (`run_on_mac`), drawn as a command with where it ran beside it. */
   MAC_COMMAND: "mac-command",
+  /** Actions an agent took in the browser in its own sandbox (`browser`), its line saying what it did and in which tab, with where it ran beside it. */
+  BROWSER: "browser",
   READ_FILE: "read-file",
   WRITE_FILE: "write-file",
   EDIT: "edit",
@@ -109,6 +116,7 @@ export type CallKind = (typeof CALL_KIND)[keyof typeof CALL_KIND];
 export const CALL_WORDS = {
   [CALL_KIND.COMMAND]: { verb: "Ran", code: true },
   [CALL_KIND.MAC_COMMAND]: { verb: "Ran", code: true },
+  [CALL_KIND.BROWSER]: { verb: "Used the browser", code: false },
   [CALL_KIND.READ_FILE]: { verb: "Read", code: true },
   [CALL_KIND.WRITE_FILE]: { verb: "Wrote", code: true },
   [CALL_KIND.EDIT]: { verb: "Edited", code: true },
@@ -164,6 +172,45 @@ export const CALL_WORDS = {
 /** What a row of a call that ran on the developer's own Mac says of where it ran, beside its line. */
 const ON_YOUR_MAC = "On your Mac";
 
+/** What a row of a call in the agent's own browser says of where it ran, beside its line. */
+const IN_THE_BROWSER = "Browser";
+
+/** What each of the browser's actions says it did, on a browser call's line. */
+const BROWSER_ACTION_WORDS: Readonly<Record<string, string>> = {
+  list: "listed the tabs",
+  open: "opened",
+  navigate: "went to a page",
+  back: "went back",
+  forward: "went forward",
+  click: "clicked",
+  type: "typed",
+  key: "pressed a key",
+  scroll: "scrolled",
+  wait: "waited",
+  screenshot: "took a screenshot",
+  snapshot: "read the page",
+  console: "read the console",
+  close: "closed",
+};
+
+/**
+ * What a browser call's line says it did, in place of its kind's verb: each
+ * action it named once, in the order first named, and "in" where the tab it
+ * acted on follows as the subject; nothing where it named no action this
+ * build knows, so the kind's own verb stands.
+ */
+export function browserCallWords(
+  actions: readonly string[],
+  tabNamed: boolean,
+): string | undefined {
+  const said = [...new Set(actions.flatMap((action) => BROWSER_ACTION_WORDS[action] ?? []))].join(
+    ", ",
+  );
+  if (said === "") return undefined;
+  const line = `${said.charAt(0).toUpperCase()}${said.slice(1)}`;
+  return tabNamed ? `${line} in` : line;
+}
+
 /**
  * How a call about one coding agent says what it did where its row names
  * the agent by its chip: the verb alone, the chip standing in the place of
@@ -206,7 +253,8 @@ export function isCommandKind(kind: CallKind): boolean {
  * agent's starter, whom a row that knows them draws in these words' place.
  */
 export function callPlace(kind: CallKind): string | undefined {
-  return kind === CALL_KIND.MAC_COMMAND ? ON_YOUR_MAC : undefined;
+  if (kind === CALL_KIND.MAC_COMMAND) return ON_YOUR_MAC;
+  return kind === CALL_KIND.BROWSER ? IN_THE_BROWSER : undefined;
 }
 
 /** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
@@ -220,7 +268,9 @@ export interface CallLine {
  * How a call's line reads: its kind's verb before its subject; or, for a
  * command the model said the purpose of, those plain words in the verb's
  * place, as Claude Code and Cursor name a command, and the command's first
- * line after them as its preview, the whole of it in the row's body.
+ * line after them as its preview, the whole of it in the row's body; or,
+ * for a browser call, what it did (`browserCallWords`) before the tab's
+ * title, which is words.
  */
 export function callLine(
   kind: CallKind,
@@ -229,6 +279,7 @@ export function callLine(
 ): CallLine {
   const words = CALL_WORDS[kind];
   if (description === undefined) return { verb: words.verb, subject, code: words.code };
+  if (kind === CALL_KIND.BROWSER) return { verb: description, subject, code: false };
   return {
     verb: description,
     subject: subject === undefined ? undefined : firstLine(subject),
@@ -336,13 +387,13 @@ interface Held {
   readonly messages: number;
 }
 
-/** What a finished turn's folded lead says it holds; the messages a spoken turn's fold holds go unsaid, since Luke said them. */
-function foldedSummary({ calls, subagents, codingAgents, messages }: Held, said: boolean): string {
+/** What a finished turn's folded lead says it holds. */
+function foldedSummary({ calls, subagents, codingAgents, messages }: Held): string {
   const line = [
     ...(calls > 0 ? [plural(calls, "tool call", "tool calls")] : []),
     ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
     ...(codingAgents > 0 ? [plural(codingAgents, "coding agent", "coding agents")] : []),
-    ...(messages > 0 && !said ? [plural(messages, "message", "messages")] : []),
+    ...(messages > 0 ? [plural(messages, "message", "messages")] : []),
   ];
   return line.join(", ");
 }
@@ -457,9 +508,9 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
  * calls grouped, and, once the turn is done, everything ahead of its last
  * words, or all of it where they were said aloud, folded into one line
  * saying what it holds, each call inside it on a row of its own. A lead
- * without a call has no work to fold away, so it
- * keeps its rows, its reasoning drawn at the top level as on a moving turn,
- * and its words left out where they were said aloud.
+ * without a call has no work to fold away, so it keeps its rows, its
+ * reasoning drawn at the top level as on a moving turn, unless its words
+ * were said aloud, which fold with it.
  * A block the reading keeps out of the fold, as an agent's newest to-do
  * list is, is drawn right after the fold, ahead of the last words, so it
  * keeps its order against them; a finished turn with no last words folds
@@ -476,9 +527,13 @@ export function turnRows<B>(
     readonly done: boolean;
     /** Whether its words were said aloud and stand after it, which folds all of a finished turn's blocks. */
     readonly said?: boolean;
+    /** The first block of the work a call that joined the turn under way answered aloud, which folds all of a finished turn's blocks as `said` does, the ones before it read as unsaid; `said` is this at 0. */
+    readonly saidFrom?: number;
   },
 ): readonly TurnRow<B>[] {
-  const said = turn.said === true;
+  const saidFrom = turn.said === true ? 0 : turn.saidFrom;
+  const said = saidFrom !== undefined;
+  const whole = saidFrom === 0;
   const keyed = blocks.map((block, index) => ({ key: read.key(block, index), block }));
   const words = said
     ? blocks.length
@@ -488,35 +543,39 @@ export function turnRows<B>(
   // a closed group of the calls beside it.
   const keepsOne = keyed.some((each) => read.kept?.(each.block) === true);
   const last = words < 0 && turn.done && keepsOne ? blocks.length : words;
-  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true, said);
+  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true, whole);
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const held = counted(lead, read);
   const rest = groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said);
-  if (held.calls + held.subagents + held.codingAgents === 0) {
+  if (foldable(held, said) === 0) {
     // Note that a lead with no call is not folded, but a block kept out still
     // stands apart from it, because grouped with the lead's reasoning it would
     // close with it.
-    if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true, said);
-    return [...groupedRows(lead, read, turn.moving, true, said), ...rest];
+    if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true, whole);
+    return [...groupedRows(lead, read, turn.moving, true, whole), ...rest];
   }
-  return [...foldedLead(lead, read, turn.key, said), ...rest];
+  const saidBlocks = new Set(keyed.slice(saidFrom ?? blocks.length).map((each) => each.block));
+  return [...foldedLead(lead, read, turn.key, (each) => saidBlocks.has(each.block)), ...rest];
 }
 
 /**
  * A finished turn's lead folded: each stretch of work between the messages
  * that reached the turn while it ran is one fold, and each message stands
  * on its own row between them; a stretch with no call keeps its rows, as a
- * lead with none does, and a stretch of one call alone stands as that
- * call's row. Note that the first fold keeps the turn's own key, so a turn
- * no message reached folds under the key it always had.
+ * lead with none does, unless its words were said aloud, and a stretch of
+ * one call alone stands as that call's row. Inside a fold every block
+ * stands on a row of its own, said words among them. A stretch is said
+ * where its first block was (`saidAt`). Note that the first
+ * fold keeps the turn's own key, so a turn no message reached folds under
+ * the key it always had.
  */
 function foldedLead<B>(
   lead: readonly Keyed<B>[],
   read: RowReading<B>,
   turnKey: string,
-  said: boolean,
+  saidAt: (block: Keyed<B>) => boolean,
 ): TurnRow<B>[] {
   const rows: TurnRow<B>[] = [];
   let folds = 0;
@@ -527,25 +586,32 @@ function foldedLead<B>(
     }
     const [first] = run.blocks;
     if (first === undefined) continue;
+    const said = saidAt(first);
     const held = counted(run.blocks, read);
-    if (held.calls + held.subagents + held.codingAgents === 0) {
+    if (foldable(held, said) === 0) {
       rows.push(...groupedRows(run.blocks, read, false, true, said));
       continue;
     }
-    if (run.blocks.length === 1) {
+    if (run.blocks.length === 1 && held.messages === 0) {
       rows.push({ kind: TURN_ROW.BLOCK, key: first.key, block: first.block });
       continue;
     }
     rows.push({
       kind: TURN_ROW.FOLDED,
       key: folds === 0 ? `${turnKey}-folded` : first.key,
-      summary: foldedSummary(held, said),
-      rows: groupedRows(run.blocks, read, false, false, said),
+      summary: foldedSummary(held),
+      // Note that the fold's rows are read as unsaid, because said words dropped here would fold away for good.
+      rows: groupedRows(run.blocks, read, false, false, false),
       failed: anyFailed(run.blocks, read),
     });
     folds += 1;
   }
   return rows;
+}
+
+/** How much of what blocks hold a finished turn folds away: their work, and their words where they were said aloud. */
+function foldable(held: Held, said: boolean): number {
+  return held.calls + held.subagents + held.codingAgents + (said ? held.messages : 0);
 }
 
 /** A stretch of a finished turn's lead: a message that reached the turn, on its own row, or the work between two such messages. */

@@ -1,13 +1,10 @@
 /**
  * messages-procedures.ts -- the held message reads, and the writes on the same paths, as the hosted oRPC router answers them.
  *
- * Five reads the desktop holds open while nothing it reads has moved: one
+ * Three reads the desktop holds open while nothing it reads has moved: one
  * agent's transcript (`GET /api/agents/{id}/messages`) and its worker's
  * (`GET /api/agents/{id}/subagents/{call}/messages`), held while the agent
- * or the worker runs (`coder-host/transcript.ts`); one task's conversation
- * with the brain (`GET /api/plans/{id}/messages`) and its worker's
- * (`GET /api/plans/{id}/subagents/{call}/messages`), read as an agent's
- * transcript is; and a workspace's chat (`GET /api/workspaces/chat`), held
+ * or the worker runs (`coder-host/transcript.ts`); and a workspace's chat (`GET /api/workspaces/chat`), held
  * while nothing moved (`coder-host/chat-page.ts`). Each is a long-held JSON
  * procedure, its hold the store's own, unchanged: the handler adds no
  * deadline of its own, and the hold ends when the store's does, answering
@@ -25,13 +22,22 @@
  * transcript read with `wait=none` is answered at once rather than held,
  * with whether the held read would have held on it and how soon the clock
  * alone may end that hold, for a reader following
- * its live statements (`live-wire.ts`).
+ * its live statements (`live-wire.ts`). A transcript read with `parts=cut`
+ * carries each heavy part cut to its two ends (`coder-host/part-cut.ts`), and
+ * the part reads beside them answer one such part whole, under the same
+ * reach as the transcript it stands in.
+ *
+ * Beside them, the same two transcripts read back from their end, at once
+ * (`GET /api/agents/{id}/messages/newest`, and its worker's under
+ * `subagents/{call}`): the newest page, with the cursor a reader follows
+ * on from past it, or, where `before` names the oldest row a reader holds,
+ * the page below it, so a desktop opening a long transcript draws its end
+ * first and reads back only as far as it is scrolled.
  */
 
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { readTaskHeader } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -40,14 +46,20 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
+  type CodingAgentNewestAnswer,
+  type CodingAgentOlderAnswer,
+  type CodingAgentPartAnswer,
+  codingAgentBeforeSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
+  TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
 import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
+import { isRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import {
@@ -57,23 +69,13 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
-import {
-  BRAIN_POLL,
-  type BrainPage,
-  brainPagePast,
-  brainStatusNow,
-  brainTitleAwaited,
-  brainTurnsPage,
-  brainWorkerSession,
-} from "../tasks/brain-transcript.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
+import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
+import { steerCodingAgentWritten } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
-  CURSOR_START,
   cursorOfWire,
   cursorToWire,
   delegationNow,
@@ -82,13 +84,22 @@ import {
   NO_TITLE_EDGE,
   type TitleAwaited,
   type TitleEdge,
+  type TranscriptNewest,
+  type TranscriptOlder,
   type TranscriptPage,
   titleMayLand,
   titleWindowEdge,
+  transcriptBefore,
+  transcriptNewest,
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import { readWorkspaceChat, workspaceOf, writeWorkspaceChat } from "./workspace-chat.js";
+import {
+  joinWorkspaceChatAsPerson,
+  readWorkspaceChat,
+  workspaceOf,
+  writeWorkspaceChat,
+} from "./workspace-chat.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -137,14 +148,15 @@ const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** The turn an older page is read before, or none for the newest; one that is no UUID names no turn, refused as a request that does not read. */
-const turnNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+/** Where a read back from the end names it reads below, or none for the newest page; refused where it names something else. */
+const beforeNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   before: string | undefined,
-): Effect.fn.Return<string | undefined, HostedRefusal> {
+): Effect.fn.Return<number | undefined, HostedRefusal> {
   if (before === undefined) return undefined;
-  const read = readEither(wireUuidSchema)(unparsedWire(before));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return read.success;
+  const read = readEither(codingAgentBeforeSchema)(unparsedWire(before));
+  const seq = Result.isFailure(read) ? Number.NaN : Number(read.success);
+  if (!Number.isSafeInteger(seq)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return seq;
 });
 
 /**
@@ -170,10 +182,41 @@ const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 function wireMessages(
   messages: TranscriptPage["messages"] | readonly CodingAgentMessage[],
+  cut: boolean,
 ): CodingAgentMessagesAnswer["messages"] {
   // SAFETY: every part and metadata is the JSON its row stored (`storedObjectSchema`), which the SDK's part types only name more narrowly.
-  return messages as CodingAgentMessagesAnswer["messages"];
+  const stored = messages as CodingAgentMessagesAnswer["messages"];
+  return cut ? stored.map(cutMessage) : stored;
 }
+
+/** Whether a transcript read asks its heavy parts cut (`TRANSCRIPT_PARTS_QUERY`). */
+function readsCut(parts: string | undefined): boolean {
+  return parts === TRANSCRIPT_PARTS_QUERY.CUT;
+}
+
+/** A part's index as its path segment spells it, or not found for one that is no index. */
+const indexNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+  index: string,
+): Effect.fn.Return<number, HostedRefusal> {
+  if (!/^\d{1,6}$/u.test(index)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return Number(index);
+});
+
+/** One part of a message of the conversation, whole, or not found where none stands at the index. */
+const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  message: string,
+  index: string,
+) {
+  const messageId = yield* uuidNamed(message);
+  const at = yield* indexNamed(index);
+  const part = yield* hostedStoreOrUnavailable(wholePartOf(target, CODER_TOOL_SET, messageId, at));
+  if (Option.isNone(part) || !isRecord(part.value)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const answer: CodingAgentPartAnswer = { part: part.value };
+  return answer;
+});
 
 /** When the window of every title `titleAwaitedOf` waits on closes, on the same terms: none where the deployment generates no titles. */
 const titleEdgeOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -195,13 +238,14 @@ function readsNow(wait: string | undefined): boolean {
 function transcriptAnswer(
   page: TranscriptPage,
   title: string | null,
+  cut: boolean,
   holds?: boolean,
   wakeIn?: number,
 ): CodingAgentMessagesAnswer & { readonly holds?: boolean; readonly wakeIn?: number } {
   return {
     ...(holds === undefined ? undefined : { holds }),
     ...(wakeIn === undefined ? undefined : { wakeIn }),
-    messages: wireMessages(page.messages),
+    messages: wireMessages(page.messages, cut),
     cursor: cursorToWire(page.cursor),
     status: page.status,
     ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
@@ -215,16 +259,23 @@ function transcriptAnswer(
   };
 }
 
-/** A page of a task's conversation as the wire answers it, every field the page holds carried as it is; a brain conversation is named by its task, so it carries no title. */
-function taskAnswer(
-  page: BrainPage | TranscriptPage,
+/** A transcript's newest page as the wire answers it, with where the page before it is read below. */
+function newestAnswer(
+  newest: TranscriptNewest,
   title: string | null,
-): CodingAgentMessagesAnswer {
+  cut: boolean,
+): CodingAgentNewestAnswer {
   return {
-    ...page,
-    messages: wireMessages(page.messages),
-    cursor: cursorToWire(page.cursor),
-    title,
+    ...transcriptAnswer(newest.page, title, cut),
+    ...(newest.before === undefined ? undefined : { before: String(newest.before) }),
+  };
+}
+
+/** An older page of a transcript as the wire answers it. */
+function olderAnswer(older: TranscriptOlder, cut: boolean): CodingAgentOlderAnswer {
+  return {
+    messages: wireMessages(older.messages, cut),
+    ...(older.before === undefined ? undefined : { before: String(older.before) }),
   };
 }
 
@@ -257,7 +308,7 @@ const tooLongMiddleware = middlewareGen<HostedContext>(function* ({ next }, inpu
   );
 });
 
-/** The messages resource: its five held reads and the two writes on their paths, each to a signed-in caller. */
+/** The messages resource: its five held reads, the two transcripts read back from their end, the two writes on their paths, and the two part reads, each to a signed-in caller. */
 export function messagesProcedures(seams: MessagesProcedureSeams) {
   const signedIn = hosted.messages.use(accountMiddleware(seams.resolveUserId));
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -295,6 +346,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           onNone: () => agent.title,
           onSome: (now: CodingAgent) => now.title,
         }),
+        readsCut(input.parts),
         holds,
         wakeIn,
       );
@@ -306,11 +358,13 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
-        yield* steerCodingAgent(eve, writer, context.userId, agent, {
+        const { txid } = yield* steerCodingAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
         });
-        return { agent: yield* summaryOf(context.userId, agent) };
+        const summary = yield* summaryOf(context.userId, agent);
+        // The transaction that wrote the line, which the host waits to see live before it confirms the send.
+        return txid === undefined ? { agent: summary } : { agent: summary, txid };
       }),
 
     agentWorker: signedIn.agentWorker.effect(function* ({ input, context }) {
@@ -327,6 +381,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         return transcriptAnswer(
           { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
           null,
+          false,
           now ? true : undefined,
         );
       }
@@ -355,70 +410,88 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           };
       // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
-      return transcriptAnswer(page, titles.get(conversationId) ?? null, holds, wakeIn);
+      return transcriptAnswer(
+        page,
+        titles.get(conversationId) ?? null,
+        readsCut(input.parts),
+        holds,
+        wakeIn,
+      );
     }),
 
-    task: signedIn.task.effect(function* ({ input, context }) {
-      const taskId = yield* uuidNamed(input.id);
-      const after = yield* cursorNamed(input.after);
-      const before = yield* turnNamed(input.before);
-      if (after !== undefined && before !== undefined) {
-        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      }
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { conversationId } = task.value;
-      if (conversationId === undefined) {
-        return taskAnswer(
-          { messages: [], cursor: CURSOR_START, status: CODING_AGENT_STATUS.COMPLETED },
-          null,
-        );
-      }
-      const target = { userId: context.userId, conversationId };
-      const page = yield* hostedStoreOrUnavailable(
-        after === undefined
-          ? brainTurnsPage(target, before)
-          : brainPagePast(target, cursorOfWire(after)),
-      );
-      return taskAnswer(page, null);
+    agentPart: signedIn.agentPart.effect(function* ({ input, context }) {
+      const { target } = yield* reachedAgent(context.userId, input.id);
+      return yield* partAnswer(target, input.message, input.index);
     }),
 
-    taskWorker: signedIn.taskWorker.effect(function* ({ input, context }) {
-      const taskId = yield* uuidNamed(input.id);
-      const call = yield* callNamed(input.call);
-      const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task) || task.value.conversationId === undefined) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      }
-      const parent = { userId: context.userId, conversationId: task.value.conversationId };
-      const session = yield* hostedStoreOrUnavailable(brainWorkerSession(parent, call));
-      if (session === undefined) {
-        // A tab opens the moment its call is made, a step before the journal holds the call; past the turn, none is none for good.
-        const status = yield* hostedStoreOrUnavailable(brainStatusNow(parent));
-        if (status !== CODING_AGENT_STATUS.RUNNING) {
-          return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        }
-        return taskAnswer(
-          { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
-          null,
+    agentWorkerPart: signedIn.agentWorkerPart.effect(function* ({ input, context }) {
+      const callId = yield* callNamed(input.call);
+      const { agent } = yield* reachedAgent(context.userId, input.id);
+      const worker = {
+        userId: agent.userId,
+        conversationId: childConversationId(agent.conversationId, callId),
+      };
+      return yield* partAnswer(worker, input.message, input.index);
+    }),
+
+    agentNewest: signedIn.agentNewest.effect(function* ({ input, context }) {
+      const before = yield* beforeNamed(input.before);
+      const { agent, target } = yield* reachedAgent(context.userId, input.id);
+      if (before !== undefined) {
+        return olderAnswer(
+          yield* hostedStoreOrUnavailable(transcriptBefore(target, CODER_TOOL_SET, before)),
+          readsCut(input.parts),
         );
       }
-      const child = childConversationId(parent.conversationId, session);
-      const createdAt = new Date(yield* Clock.currentTimeMillis);
-      const page = yield* hostedStoreOrUnavailable(
-        transcriptPast(
-          { userId: context.userId, conversationId: child },
-          HOSTED_TOOL_SET,
-          cursorOfWire(after),
-          { createdAt },
-          undefined,
-          brainTitleAwaited(parent, child),
-          BRAIN_POLL,
-        ),
+      const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
+      const newest = yield* hostedStoreOrUnavailable(
+        transcriptNewest(target, CODER_TOOL_SET, standing, agent),
       );
-      const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
-      return taskAnswer(page, titles.get(child) ?? null);
+      // The title is read after the page, as the forward read's is, so one that landed while the page was read is told rather than lost to a follow that starts after it.
+      const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
+      return newestAnswer(
+        newest,
+        Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
+        readsCut(input.parts),
+      );
+    }),
+
+    agentWorkerNewest: signedIn.agentWorkerNewest.effect(function* ({ input, context }) {
+      const before = yield* beforeNamed(input.before);
+      const callId = yield* callNamed(input.call);
+      const { agent, target } = yield* reachedAgent(context.userId, input.id);
+      const conversationId = childConversationId(agent.conversationId, callId);
+      const read = yield* hostedStoreOrUnavailable(delegationNow(target, conversationId, agent));
+      if (read.delegation === undefined) {
+        if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+        // The call's record has not landed yet, so its worker has written nothing.
+        if (before !== undefined) return olderAnswer({ messages: [] }, false);
+        return newestAnswer(
+          {
+            page: {
+              messages: [],
+              cursor: cursorOfWire(CODING_AGENT_CURSOR_START),
+              status: CODING_AGENT_STATUS.STARTING,
+            },
+          },
+          null,
+          false,
+        );
+      }
+      const worker = { userId: agent.userId, conversationId };
+      if (before !== undefined) {
+        return olderAnswer(
+          yield* hostedStoreOrUnavailable(transcriptBefore(worker, CODER_TOOL_SET, before)),
+          readsCut(input.parts),
+        );
+      }
+      const started = { createdAt: read.delegation.createdAt };
+      const newest = yield* hostedStoreOrUnavailable(
+        transcriptNewest(worker, CODER_TOOL_SET, started),
+      );
+      // The title is read after the page, since it lands beside the worker's start, which the page's reads may span.
+      const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
+      return newestAnswer(newest, titles.get(conversationId) ?? null, readsCut(input.parts));
     }),
 
     chat: signedIn.chat.effect(function* ({ input, context }) {
@@ -429,6 +502,9 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(accountMiddleware(seams.resolveUserId))
       .chatWrite.effect(function* ({ input, context }) {
         const workspaceId = yield* workspaceOf(input.query.workspaceId);
+        if ("join" in input.body) {
+          return yield* joinWorkspaceChatAsPerson(context.userId, workspaceId);
+        }
         return yield* writeWorkspaceChat(seams, context.userId, workspaceId, input.body);
       }),
   };

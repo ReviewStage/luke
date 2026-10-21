@@ -2,11 +2,14 @@ import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@luke/features/task-wire";
 import { CHOICE_BAR_LOOK, CHOICE_BAR_SIZE, ChoiceBar } from "@luke/ui";
 import {
   BOARD_PROPERTIES,
+  COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
   DEFAULT_LIST_DISPLAY,
   EARLIER_BOARD_PROPERTIES,
   filteredFields,
+  keptTasksDisplay,
   NO_TASKS_FILTER,
+  TASK_MAKER_ORDER,
   TASK_PROPERTY_ORDER,
   TASKS_GROUPING,
   TASKS_ORDER,
@@ -75,17 +78,19 @@ const storedFilters = Schema.fromJsonString(
       status: Schema.optionalKey(Schema.Array(Schema.Literals(Object.values(TASK_STATUS)))),
       priority: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PRIORITY_ORDER))),
       creator: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
+      madeBy: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_MAKER_ORDER))),
       repository: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
     }),
   ),
 );
 
-/** A display as kept: each choice optional, so one kept by an earlier build reads over the view's own for whatever it lacks. */
+/** A display as kept (`KeptTasksDisplay`): each choice optional, the Done and Canceled switches of an earlier build among them. */
 const storedDisplay = Schema.fromJsonString(
   Schema.Struct({
     grouping: Schema.optionalKey(Schema.Literals(Object.values(TASKS_GROUPING))),
     order: Schema.optionalKey(Schema.Literals(Object.values(TASKS_ORDER))),
     emptyGroups: Schema.optionalKey(Schema.Boolean),
+    completed: Schema.optionalKey(Schema.Literals(Object.values(COMPLETED_WINDOW))),
     done: Schema.optionalKey(Schema.Boolean),
     canceled: Schema.optionalKey(Schema.Boolean),
     pinnedFirst: Schema.optionalKey(Schema.Boolean),
@@ -140,6 +145,7 @@ function ViewSwitch({
 function readDisplay(view: TasksView): TasksDisplay {
   const initial = INITIAL_DISPLAY[view];
   const { offered, ...kept } = readKept(DISPLAY_KEY[view], storedDisplay, {});
+  const display = keptTasksDisplay(kept, initial);
   const properties =
     kept.properties === undefined
       ? initial.properties
@@ -148,7 +154,7 @@ function readDisplay(view: TasksView): TasksDisplay {
           offered ?? EARLIER_OFFERED[view],
           initial.properties,
         );
-  return { ...initial, ...kept, properties };
+  return { ...display, properties };
 }
 
 /** The Tasks page, in the plan's place: the List or the Board, as the reader last chose, under its Filter and View options. */
@@ -217,7 +223,7 @@ export function TasksPage({
     filteredFields(filter).length === 0 ? null : (
       <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />
     );
-  const frame = { toolbar, chips, filter, display };
+  const frame = { toolbar, chips, filter, display, onDisplay };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>

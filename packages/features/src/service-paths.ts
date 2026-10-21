@@ -20,7 +20,8 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_ACCESS: "/api/account/access",
   /**
    * The account's own Anthropic and OpenAI API keys: read what they are
-   * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
+   * (GET), save one (PUT), remove one (DELETE), or turn a connected plan's
+   * default for coding agents (PATCH). No answer carries a key.
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
@@ -86,8 +87,36 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_INBOX: "/api/live/inbox",
   /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
   LIVE_TASK_BOARD: "/api/live/task-board",
+  /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_RECORD: "/api/live/task-record",
+  /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
+  LIVE_TASK_PAGES: "/api/live/task-pages",
+  /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
+  LIVE_TASK_HISTORY: "/api/live/task-history",
+  /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
+  LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
+  /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
+  LIVE_TASK_INBOX: "/api/live/task-inbox",
+  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
+  LIVE_AGENT_INBOX: "/api/live/agent-inbox",
+  /** A workspace's chat under `?workspaceId=`, sealed for following over Neon Realtime (GET) as the account's person reads it, once they have joined it; or `not-found` or `unavailable`. */
+  LIVE_WORKSPACE_CHAT: "/api/live/workspace-chat",
+  /** The task list sealed for following over Neon Realtime (GET): its tasks and every agent of them and with no task, or `unavailable`. `task-list-live.ts` declares the answer. */
+  LIVE_TASKS: "/api/live/tasks",
+  /** A workspace's automations under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `automation-live.ts` declares the answer. */
+  LIVE_AUTOMATIONS: "/api/live/automations",
+  /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
+  /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
+  LIVE_WORKSPACES: "/api/live/workspaces",
+  /** The account's sidebar sections, the tasks in them, and its pinned repositories, sealed for following over Neon Realtime (GET), or their rows inline where polled. */
+  LIVE_SIDEBAR: "/api/live/sidebar",
+  /** One workspace's people under `?workspaceId=`, sealed for following over Neon Realtime (GET): its members and who its work names but left, or `not-found`, or their rows inline where polled. */
+  LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
+  /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
+  LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
@@ -103,12 +132,16 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /** One waiting command, named by its id, claimed for the Mac that heard of it live (POST). `mac-command-wire.ts` declares the bodies. */
+  MAC_COMMAND_CLAIM: "/api/mac-commands/claim",
+  /** That a Mac of the account listens now for the kinds it names (POST), which a Mac following its commands live says on a timer, since its read writes nothing. */
+  MAC_COMMANDS_LISTENING: "/api/mac-commands/listening",
   /**
-   * One browser command's result, posted by the Mac that took it (POST): its
-   * JSON and at most one image, under a body cap of its own that fits the
-   * image. `mac-command-wire.ts` declares the body.
+   * The commands of the kinds named that no Mac of the account has claimed,
+   * sealed for following (GET), or with `?poll=true` their rows inline.
+   * `live-wire.ts` declares the answer.
    */
-  MAC_COMMAND_BROWSER_RESULTS: "/api/mac-commands/browser",
+  LIVE_MAC_COMMANDS: "/api/live/mac-commands",
   /**
    * The account's automations: list them, newest first, or one task's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`

@@ -851,10 +851,19 @@ export const inboxAnswerRequestSchema = EffectSchema.Struct({
 
 export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
 
-/** What an answer comes back as: the item as it then stands, and whether the answer was taken, which it is not where the agent changed the item first. */
+/**
+ * The transaction a member's write on the inbox committed in, as Neon's
+ * mutations guide returns it, which a window following the inbox waits for
+ * on its live view before it answers; left out where the write changed no
+ * row, and by a service from before it, so there is nothing to wait for.
+ */
+const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
+
+/** What an answer comes back as: the item as it then stands, whether the answer was taken, which it is not where the agent changed the item first, and the transaction it was taken in. */
 export const inboxAnsweredSchema = EffectSchema.Struct({
   item: inboxItemSchema,
   taken: EffectSchema.Boolean,
+  ...writtenIn,
 });
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
@@ -914,13 +923,14 @@ export const inboxMessageRequestSchema = EffectSchema.Struct({
 
 export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
-/** What a member's message comes back as: the item as it then stands, its thread with the message on it. */
-export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema });
+/** What a member's message comes back as: the item as it then stands, its thread with the message on it, and, where the message answered the thread's open ask, the transaction it was taken in. */
+export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, ...writtenIn });
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   unread: EffectSchema.Boolean,
+  ...writtenIn,
 });
 
 /**
@@ -934,8 +944,8 @@ export const inboxReadAllRequestSchema = EffectSchema.Struct({
 
 export type InboxReadAllRequest = typeof inboxReadAllRequestSchema.Type;
 
-/** What marking every item read answers: how many items it marked read that were unread. */
-export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber });
+/** What marking every item read answers: how many items it marked read that were unread, and the transaction that marked them. */
+export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber, ...writtenIn });
 
 /** How a member's message on an item's thread opens, in the message that hands it to the agent. */
 export const INBOX_MESSAGE_LEAD = "Inbox message";
@@ -1365,4 +1375,72 @@ export function inboxAnswersReply(answers: InboxAnswers, words: string): InboxRe
     ...(answers.values === undefined ? undefined : { values: answers.values }),
     ...(note === "" ? undefined : { note }),
   };
+}
+
+/** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
+export function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
+  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
+  return EffectSchema.is(inboxAskSchema)(kept) ? kept : undefined;
+}
+
+/**
+ * Whether the item's response still stands for the ask: the ask a response
+ * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
+ * carry. A post from before version 5 rewrites the response and not the
+ * thread, so an ask it posted over stands for it no longer.
+ */
+function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
+  const asked = inboxResponseAsk(response);
+  if (asked === undefined || asked.type !== ask.type) return false;
+  // Note that the two are built apart, so they are compared by their shape rather than by who they are.
+  return asked.type === INBOX_ASK.DO || sameAsk(asked, ask);
+}
+
+/** Whether two asks say the same, key by key, as the held read compared them. */
+const sameAsk = EffectSchema.toEquivalence(inboxAskSchema);
+
+/** Whether the ask held open is still the one the item asks: an ask, or a response, of a type a newer deployment wrote is taken at its word. */
+export function askStillAsked(response: InboxReadResponse, ask: InboxReadAsk): boolean {
+  const known = knownAsk(ask);
+  return known === undefined || !knownResponse(response) || askStandsFor(response, known);
+}
+
+/** Where an item stands, as each ask of its thread is read against it. */
+export interface InboxAskStanding {
+  readonly status: InboxStatus;
+  readonly response: InboxReadResponse;
+  readonly openAskMessageId: string | null;
+  readonly closedReason: string | null;
+}
+
+/**
+ * An ask as a read carries it: as it was kept, unless it was kept open and
+ * the item no longer holds it open, which a deployment from before version
+ * 5 leaves by closing the item without a word to the ask; then withdrawn
+ * with the item's reason where the item closed on it, answered where the
+ * item was answered on it, and replaced where the item holds another or,
+ * posted over from before version 5, asks something else.
+ * Note that an ask withdrawn with no reason is a member's close without an
+ * answer, the item's `closedBy` naming the member while the close stands,
+ * because an agent's close always says why: a reader tells the two closes
+ * apart by the reason alone, as it tells a closed item's.
+ */
+export function standingAsk(
+  ask: InboxReadAsk,
+  messageId: string,
+  item: InboxAskStanding,
+): InboxReadAsk {
+  if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
+  const replaced = { ...ask, status: INBOX_ASK_STATUS.REPLACED };
+  if (messageId !== item.openAskMessageId) return replaced;
+  switch (item.status) {
+    case INBOX_STATUS.OPEN:
+      return askStillAsked(item.response, ask) ? ask : replaced;
+    case INBOX_STATUS.ANSWERED:
+      return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
+    case INBOX_STATUS.CLOSED:
+      return item.closedReason === null
+        ? { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN }
+        : { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: item.closedReason };
+  }
 }

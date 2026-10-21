@@ -33,6 +33,8 @@ export interface CodeFeedCall {
   readonly record: CallRecord | undefined;
   /** The teammate whose call it was, named over its run as the Call tab names it; none for the reader's own or a turn's run. */
   readonly caller: PlanEditor | undefined;
+  /** The agent on the task whose turn the run is, named over it; none for Luke's own or a call's run. */
+  readonly agentId: string | undefined;
 }
 
 /** A reference as a place names it, read from a call's input or a stored note, its lines absent for a whole file. */
@@ -61,17 +63,17 @@ export function fileRefText(ref: NamedLines): string {
 }
 
 /** Whether `line` of the file is one the reference points at. */
-export function isPointed(ref: CodeRef, line: number): boolean {
+function isPointed(ref: CodeRef, line: number): boolean {
   if (ref.startLine === undefined || ref.endLine === undefined) return false;
   return line >= ref.startLine && line <= ref.endLine;
 }
 
 /** What a card's copy carries: the lines pointed at as plain text, or every line the card draws for a whole file. */
-export function copiedLines(code: TaskCode): string {
+export function copiedLines(code: Pick<TaskCode, "ref" | "firstLine" | "lines">): string {
   const kept = code.lines.filter(
     (_line, at) => code.ref.startLine === undefined || isPointed(code.ref, code.firstLine + at),
   );
-  return kept.map((tokens) => tokens.map((token) => token.text).join("")).join("\n");
+  return kept.join("\n");
 }
 
 /**
@@ -99,8 +101,8 @@ function callOf(
  * The feed's code grouped under the calls it was shown on, in the order it
  * was shown, several of one file each its own. Code shown before any call
  * the transcript holds (one whose words were left out of its read, or a
- * transcript not read) stands under its own turn, headed by when the turn
- * began.
+ * transcript not read) stands under its own turn, headed by the agent whose
+ * turn it was, where one is named, and when the turn began.
  */
 export function codeFeedCalls(
   shown: readonly TaskCodeShowing[],
@@ -108,7 +110,11 @@ export function codeFeedCalls(
 ): readonly CodeFeedCall[] {
   const runs = new Map<
     string,
-    { call: Omit<CodeFeedCall, "showings">; showings: TaskCodeShowing[] }
+    {
+      call: Omit<CodeFeedCall, "showings" | "agentId">;
+      onCall: boolean;
+      showings: TaskCodeShowing[];
+    }
   >();
   for (const showing of shown) {
     const call = callOf(showing, calls);
@@ -122,12 +128,18 @@ export function codeFeedCalls(
         record: call?.record,
         caller: call?.caller,
       },
+      onCall: call !== undefined,
       showings: [],
     };
     run.showings.push(showing);
     runs.set(key, run);
   }
-  return [...runs.values()].map(({ call, showings }) => ({ ...call, showings }));
+  // Note that the agent is the first a showing names, because a call's frame names none until the record's copy lands.
+  return [...runs.values()].map(({ call, onCall, showings }) => ({
+    ...call,
+    showings,
+    agentId: onCall ? undefined : showings.find((showing) => showing.agentId)?.agentId,
+  }));
 }
 
 /** A file Luke showed: the newest reference to it, and the commit his checkout stood at, where it was recorded. */

@@ -56,7 +56,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  nativeAgentAccounts: [],
   eveDeploymentSecret: undefined,
 };
 
@@ -143,10 +142,10 @@ function request(bearer: string | undefined, query = "") {
   });
 }
 
-const granted = (admin: boolean, nativeAgents = false): Answer => ({
+const granted = (admin: boolean): Answer => ({
   status: HOSTED_HTTP_STATUS.OK,
   cacheControl: "private, no-store",
-  body: { admin, nativeAgents },
+  body: { admin },
 });
 
 it.layer(getTestDB())("the account's access", (it) => {
@@ -174,19 +173,6 @@ it.layer(getTestDB())("the account's access", (it) => {
       yield* db.update(user).set({ role: null }).where(eq(user.id, member));
       assert.deepEqual(yield* ask(request(member)), granted(false));
     }),
-  );
-
-  it.effect(
-    "an account the native-agents cohort names reads that it is in it, and one it does not that it is not",
-    () =>
-      Effect.gen(function* () {
-        const { admin, member, ask } = yield* openAccounts();
-        // The cohort names the member alone, read from the deployment's environment as it stands.
-        const cohort = { ...NO_ENVIRONMENT, nativeAgentAccounts: [member] };
-        assert.deepEqual(yield* ask(request(member), cohort), granted(false, true));
-        assert.deepEqual(yield* ask(request(admin), cohort), granted(true, false));
-        assert.deepEqual(yield* ask(request(member)), granted(false, false));
-      }),
   );
 
   it.effect("a caller no bearer names is refused, and learns nothing", () =>

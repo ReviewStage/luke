@@ -97,16 +97,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 let root: Root | undefined;
@@ -152,6 +142,8 @@ function shellProps(
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
       onLeaveVersionHistory: ignore,
     },
     sidebar: {
@@ -168,9 +160,9 @@ function shellProps(
     room: SHELL_ROOM.WIDE,
     settingsStep: { listed: true, onList: ignore },
     call: undefined,
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings: SETTINGS,
   };
@@ -209,7 +201,6 @@ function mount(
         listed: false,
         onListed: ignore,
         pages: undefined,
-        onRereadPages: () => undefined,
         onTaskAgents: () => undefined,
       },
       onNewTask: () => setAsked(true),
@@ -848,6 +839,8 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
       onLeaveVersionHistory: ignore,
     },
     sidebar: {
@@ -867,9 +860,9 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       speakerMuted: false,
       controls: callControls(tell, false),
     },
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    notice: {
+      notice: { content: undefined, shown: false },
+      onDismissHint: ignore,
     },
     settings: SETTINGS,
   });
@@ -1025,7 +1018,7 @@ test("walking every place in the window during a call about another plan, the ca
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
   }
   assert.deepEqual(
     standing,
@@ -1049,7 +1042,7 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
     act(() => root?.unmount());
     container.remove();
   }

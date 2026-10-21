@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CALL_KIND, callLine } from "@luke/features/turn-rows";
+import { CALL_KIND, callLine, callPlace } from "@luke/features/turn-rows";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool.js";
@@ -50,6 +50,57 @@ test("a command the model described carries its description on one line for the 
     assert.equal(plain.description, undefined);
     assert.equal(plain.subject, "ls");
   }
+});
+
+test("a browser call says what it did and in which tab, by the title its answer gives, with where it ran beside it; while it runs it names the page it went to, and a call that ran nothing says why", () => {
+  const input = {
+    actions: [
+      { action: "click", tab: "tab-1", ref: "e12" },
+      { action: "type", text: "dean@example.com" },
+      { action: "click", ref: "e14" },
+    ],
+  };
+  const done = toolCallView({
+    tool: "browser",
+    input,
+    output: {
+      status: "ran",
+      steps: [],
+      skipped: 0,
+      tabs: [{ tab: "tab-1", url: "https://app.example.com/login", title: "Sign in · Acme" }],
+    },
+  });
+  const line = callLine(done.kind, done.subject, done.description);
+  assert.deepEqual(line, { verb: "Clicked, typed in", subject: "Sign in · Acme", code: false });
+  assert.equal(callPlace(done.kind), "Browser");
+
+  const running = toolCallView({
+    tool: "browser",
+    input: {
+      actions: [{ action: "open", url: "http://localhost:3000/" }, { action: "screenshot" }],
+    },
+    output: undefined,
+  });
+  assert.deepEqual(callLine(running.kind, running.subject, running.description), {
+    verb: "Opened, took a screenshot in",
+    subject: "localhost:3000",
+    code: false,
+  });
+
+  const refused = toolCallView({
+    tool: "browser",
+    input: { actions: [{ action: "list" }] },
+    output: { status: "not-run", reason: "Not run: your browser could not be reached." },
+  });
+  assert.deepEqual(callLine(refused.kind, refused.subject, refused.description), {
+    verb: "Listed the tabs",
+    subject: "",
+    code: false,
+  });
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Not run: your browser could not be reached.",
+  });
 });
 
 test("a command run on the Mac is the command it ran, described as a command is, and its answer says how it ended: its exit, its timeout, or why it was not run", () => {
@@ -440,27 +491,7 @@ test("a coding agent's hosted public reads draw as the web reads they are: a sea
   });
 });
 
-test("the planning model's own calls draw from their parts as a coding agent's do: a repository command by its command and purpose, its answer or why it ran nothing, a shown range by its file and lines, a question by its words", () => {
-  const ran = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls src", description: "List the sources" },
-    output: { status: "ran", exitCode: 0, stdout: "queue.ts\n", stderr: "" },
-  });
-  assert.equal(ran.kind, CALL_KIND.COMMAND);
-  assert.equal(ran.subject, "ls src");
-  assert.equal(ran.description, "List the sources");
-  assert.deepEqual(ran.output, { kind: TOOL_BLOCK.TEXT, text: "queue.ts" });
-  const refused = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls" },
-    output: { status: "not-run", reason: "Not run: the plan names no repository." },
-  });
-  // The service's reason already says it was not run, so its words stand as they are.
-  assert.deepEqual(refused.output, {
-    kind: TOOL_BLOCK.TEXT,
-    text: "Not run: the plan names no repository.",
-  });
-
+test("an agent's task calls draw from their parts: a shown range by its file and lines, a question by its words", () => {
   const shown = toolCallView({
     tool: "show_code",
     input: { path: "src/invites.ts", startLine: 12, endLine: 30 },

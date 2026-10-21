@@ -8,7 +8,7 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
@@ -58,6 +58,8 @@ const SealedRowSchema = Schema.Struct({
   statusAt: InstantColumnSchema,
   fastAccess: Schema.NullOr(FastAccessSchema),
   accessExpiresAt: Schema.NullOr(InstantColumnSchema),
+  forAgents: Schema.Boolean,
+  limitResetsAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -84,6 +86,8 @@ const ROW_COLUMNS = {
   statusAt: accountProviderKey.statusAt,
   fastAccess: accountProviderKey.fastAccess,
   accessExpiresAt: accountProviderKey.accessExpiresAt,
+  forAgents: accountProviderKey.forAgents,
+  limitResetsAt: accountProviderKey.limitResetsAt,
   createdAt: accountProviderKey.createdAt,
 } as const;
 
@@ -118,7 +122,31 @@ const findEveryRow = SqlSchema.findAll({
     ),
 });
 
-/** The row written, or written over the provider's row of the same kind. */
+/** One account's plan credential, of either provider's plan, for whether any account connected a plan at all. */
+const findAnyPlanRow = SqlSchema.findAll({
+  Request: Schema.Void,
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: () =>
+    Database.use((db) =>
+      db
+        .select({ userId: accountProviderKey.userId })
+        .from(accountProviderKey)
+        .where(
+          inArray(accountProviderKey.kind, [
+            PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+            PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          ]),
+        )
+        .limit(1),
+    ),
+});
+
+/**
+ * The row written, or written over the provider's row of the same kind.
+ * Note that `forAgents` is left out of what is written, because a new row
+ * takes the column's default, on, and a replaced token keeps the choice the
+ * account made for the one before it.
+ */
 const upsertRow = SqlSchema.void({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
@@ -144,6 +172,7 @@ const upsertRow = SqlSchema.void({
       statusAt: write.now,
       fastAccess: write.fastAccess,
       accessExpiresAt: write.accessExpiresAt,
+      limitResetsAt: null,
       createdAt: write.now,
     };
     return Database.use((db) =>
@@ -268,12 +297,52 @@ const updateStatus = SqlSchema.void({
     Database.use((db) =>
       db
         .update(accountProviderKey)
-        .set({ status: write.status, statusAt: write.now })
+        .set({ status: write.status, statusAt: write.now, limitResetsAt: null })
         .where(
           and(
             eq(accountProviderKey.userId, write.userId),
             eq(accountProviderKey.provider, write.provider),
             eq(accountProviderKey.sealedKey, write.sealedKey),
+          ),
+        ),
+    ),
+});
+
+/** The statuses an agent's turn may write on its plan's row, as `setPlanStatus` says. */
+const PlanStatusSchema = Schema.Literals([
+  PROVIDER_KEY_STATUS.VERIFIED,
+  PROVIDER_KEY_STATUS.INVALID,
+  PROVIDER_KEY_STATUS.LIMIT_REACHED,
+  PROVIDER_KEY_STATUS.INELIGIBLE,
+]);
+
+/** A plan's status as a turn found it, on whatever credential the row holds now, as `setPlanStatus` bounds it. */
+const updatePlanStatus = SqlSchema.void({
+  Request: Schema.Struct({
+    ...KindKeySchema.fields,
+    status: PlanStatusSchema,
+    limitResetsAt: Schema.NullOr(Schema.Date),
+    savedBy: Schema.Date,
+    now: Schema.Date,
+  }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ status: write.status, statusAt: write.now, limitResetsAt: write.limitResetsAt })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.kind, write.kind),
+            ne(accountProviderKey.status, PROVIDER_KEY_STATUS.UNREADABLE),
+            lte(accountProviderKey.createdAt, write.savedBy),
+            ...(write.status === PROVIDER_KEY_STATUS.VERIFIED
+              ? [
+                  ne(accountProviderKey.status, PROVIDER_KEY_STATUS.VERIFIED),
+                  ne(accountProviderKey.status, PROVIDER_KEY_STATUS.INVALID),
+                ]
+              : []),
           ),
         ),
     ),
@@ -297,6 +366,25 @@ const updateFastAccess = SqlSchema.void({
             eq(accountProviderKey.sealedKey, write.sealedKey),
           ),
         ),
+    ),
+});
+
+const updateForAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ ...KindKeySchema.fields, forAgents: Schema.Boolean }),
+  Result: Schema.Struct({ provider: ProviderSchema }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ forAgents: write.forAgents })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.kind, write.kind),
+          ),
+        )
+        .returning({ provider: accountProviderKey.provider }),
     ),
 });
 
@@ -424,6 +512,23 @@ export function removeProviderKey(
   return deleteRow({ userId, provider, kind });
 }
 
+/**
+ * Turns the account's default payer for its coding agents on or off for the
+ * provider's credential of this kind; whether a row held it, since a
+ * credential disconnected meanwhile has no default to turn.
+ */
+export function setProviderKeyForAgents(
+  userId: string,
+  provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
+  forAgents: boolean,
+): TaskStoreEffect<boolean> {
+  return Effect.map(
+    updateForAgents({ userId, provider, kind, forAgents }),
+    (rows) => rows.length > 0,
+  );
+}
+
 /** Writes how the provider last answered the key a step ran on, where the row still holds that key. */
 export function setProviderKeyStatus(
   userId: string,
@@ -435,6 +540,40 @@ export function setProviderKeyStatus(
   return updateStatus({ userId, provider, sealedKey, status, now });
 }
 
+/** A status a coding agent's turn found its plan in. */
+export type PlanStatus = typeof PlanStatusSchema.Type;
+
+/**
+ * Writes how the provider answered a coding agent's turn on the account's
+ * plan of this kind, with when its reached limit resets where it said.
+ * `savedBy` is when the turn opened: a credential saved after it, as a
+ * reconnect saves one, ran none of it and is not judged by it.
+ * Note that a row the service cannot read keeps saying so, since only a new
+ * credential mends it; that a turn that ran is no word against a renewal
+ * that found the sign-in ended, so verified never lifts invalid; and that a
+ * plan already verified is not written again, so every turn's success
+ * costs no write.
+ */
+export function setPlanStatus(
+  userId: string,
+  provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
+  status: PlanStatus,
+  limitResetsAt: Date | undefined,
+  savedBy: Date,
+  now: Date,
+): TaskStoreEffect<void> {
+  return updatePlanStatus({
+    userId,
+    provider,
+    kind,
+    status,
+    limitResetsAt: status === PROVIDER_KEY_STATUS.LIMIT_REACHED ? (limitResetsAt ?? null) : null,
+    savedBy,
+    now,
+  });
+}
+
 /** Writes what a fast call on the key a step ran on showed of its organization, where the row still holds that key. */
 export function setProviderKeyFastAccess(
   userId: string,
@@ -443,6 +582,11 @@ export function setProviderKeyFastAccess(
   fastAccess: FastAccess,
 ): TaskStoreEffect<void> {
   return updateFastAccess({ userId, provider, sealedKey, fastAccess });
+}
+
+/** Whether any account keeps a plan credential, a Claude setup-token or a ChatGPT sign-in, whatever its status: what the native agents' template is built ahead for. */
+export function anyPlanConnected(): TaskStoreEffect<boolean> {
+  return Effect.map(findAnyPlanRow(undefined), (rows) => rows.length > 0);
 }
 
 /** Every stored key of every account, sealed, for the rewrap alone. */
