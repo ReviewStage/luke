@@ -132,6 +132,7 @@ test("the agent's pointer stands at its point scaled onto the drawn page, out of
   assert.equal(drawn.style.getPropertyValue("--cloud-browser-cursor-x"), "320px");
   assert.equal(drawn.style.getPropertyValue("--cloud-browser-cursor-y"), "150px");
   assert.ok(drawn.hasAttribute("data-shown"), "shown while the agent is active");
+  assert.equal(drawn.hasAttribute("data-flip-x") || drawn.hasAttribute("data-flip-y"), false);
   assert.ok(drawn.classList.contains("ph-no-capture"), "left out of the recording");
   assert.equal(drawn.getAttribute("aria-hidden"), "true");
   assert.equal(drawn.querySelector("canvas"), null, "never part of the frame");
@@ -147,6 +148,10 @@ test("the agent's pointer stands at its point scaled onto the drawn page, out of
   assert.equal(moved.style.getPropertyValue("--cloud-browser-cursor-x"), "640px");
   assert.equal(moved.style.getPropertyValue("--cloud-browser-cursor-y"), "400px");
   assert.equal(moved.dataset.kind, "type");
+  assert.ok(
+    moved.hasAttribute("data-flip-x") && moved.hasAttribute("data-flip-y"),
+    "at the page's corner the arrow is mirrored about its tip, onto the page",
+  );
   assert.equal(moved.querySelector(".cloud-browser-cursor-ripple"), null, "typing ripples nothing");
 });
 

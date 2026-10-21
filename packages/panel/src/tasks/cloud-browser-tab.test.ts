@@ -5,16 +5,17 @@ import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_LIVE_CLIENT, BROWSER_LIVE_SERVER } from "@luke/features/browser-live-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
+import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserPane } from "./cloud-browser-pane.js";
-import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import { CLOUD_BROWSER_TABS_AGAIN, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   type OpenTask,
   SIDE_PANEL_TAB,
@@ -170,6 +171,47 @@ test("the task's cloud Browser tabs are read once and then followed live, the ag
   panel.rerender(createElement(Probe, { listing: false }));
   await settle();
   assert.ok(follow.closed(), "the follow is let go once no reader stands");
+});
+
+test("a follow the host refused is read and followed again on the beat, so the tabs still move", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const asked: SentPortAct[] = [];
+  const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] }>();
+  let follows = 0;
+  fakeActPortAnswering((request) => {
+    asked.push(request);
+    if (request.kind !== ACT_KIND.TASKS_BROWSER_TABS_FOLLOW) {
+      return Promise.resolve({ tabs: [LISTED] });
+    }
+    follows += 1;
+    // The first follow is refused, as a host the window lost a moment would.
+    if (follows === 1) return Promise.reject(new Error("The host is not answering."));
+    // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+    return Promise.resolve(follow.stream as unknown as WireBoundaryInput);
+  });
+  let read: readonly AgentBrowserTab[] | undefined;
+  function Probe() {
+    read = useCloudBrowserTabs(TASK, true);
+    return null;
+  }
+  try {
+    draw(createElement(Probe));
+    await settle();
+    assert.deepEqual(read, [LISTED]);
+    assert.equal(follows, 1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(Duration.toMillis(CLOUD_BROWSER_TABS_AGAIN));
+    });
+    await settle();
+    assert.equal(follows, 2, "followed again on the beat");
+    const moved: AgentBrowserTab = { ...LISTED, lastActedAt: 4_000 };
+    await act(async () => follow.push({ tabs: [moved] }));
+    await settle();
+    assert.deepEqual(read, [moved]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("a listed cloud Browser tab stands in the strip, stays chosen while the list is on its way, and closes in this window alone", () => {

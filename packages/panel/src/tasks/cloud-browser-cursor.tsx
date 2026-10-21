@@ -11,7 +11,9 @@
  * `--loop-motion` holds still; a click presses it, with a soft ripple at
  * the point, and typing bobs it. It fades once the agent has done nothing
  * for `CLOUD_BROWSER_CURSOR_IDLE`, timed on the renderer's runtime, and back
- * in on its next move. It is hidden while a member drives the tab, since the
+ * in on its next move. Near the page's right or bottom edge it is mirrored
+ * about its tip, so its body stays on the page rather than clipped past it.
+ * It is hidden while a member drives the tab, since the
  * pointer is theirs then. Reduced motion holds it still: no rock, no bob,
  * no press, and a move jumps.
  *
@@ -34,6 +36,9 @@ export const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 
 /** The arrow's outline, its tip at (1.5, 1.5), where the view box starts. */
 const ARROW = "M1.5 1.5v15.2l4.1-3.7 2.9 6.1 2.7-1.3-2.9-6h5.6z";
+
+/** How far the arrow reaches from its tip, in CSS pixels: `--luke-space-20`, its drawn size. */
+const ARROW_REACH = 20;
 
 /** The drawn page's size in CSS pixels of the panel. */
 export interface CloudBrowserCursorFrame {
@@ -88,6 +93,9 @@ export function CloudBrowserCursor({
   const placed = cursor === undefined ? undefined : cursorPlacement(cursor, frame);
   if (cursor === undefined || placed === undefined) return null;
   const shown = !hidden && !idle;
+  // Mirrored about the tip where its body would reach past the page's edge.
+  const flipX = placed.x > frame.width - ARROW_REACH;
+  const flipY = placed.y > frame.height - ARROW_REACH;
   const style = {
     "--cloud-browser-cursor-x": `${placed.x}px`,
     "--cloud-browser-cursor-y": `${placed.y}px`,
@@ -99,6 +107,8 @@ export function CloudBrowserCursor({
       data-shown={shown ? "" : undefined}
       data-still={still ? "" : undefined}
       data-kind={cursor.kind}
+      data-flip-x={flipX ? "" : undefined}
+      data-flip-y={flipY ? "" : undefined}
       style={style}
     >
       <div className="cloud-browser-cursor-rock">

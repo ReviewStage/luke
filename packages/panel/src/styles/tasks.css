@@ -1926,6 +1926,20 @@
   transform-origin: 0 0;
 }
 
+/* Near the page's right or bottom edge the arrow is mirrored about its tip,
+   so its body stays on the page; the rock turns it with `rotate` alone. */
+.cloud-browser-cursor[data-flip-x] .cloud-browser-cursor-rock {
+  scale: -1 1;
+}
+
+.cloud-browser-cursor[data-flip-y] .cloud-browser-cursor-rock {
+  scale: 1 -1;
+}
+
+.cloud-browser-cursor[data-flip-x][data-flip-y] .cloud-browser-cursor-rock {
+  scale: -1 -1;
+}
+
 .cloud-browser-cursor[data-shown]:not([data-still]) .cloud-browser-cursor-rock {
   animation: cloud-browser-cursor-rock 1.2s ease-in-out infinite;
   animation-play-state: var(--loop-motion);

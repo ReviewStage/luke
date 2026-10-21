@@ -6,9 +6,11 @@
  * read once, then followed over Neon Realtime through the host
  * (`TASKS_BROWSER_TABS_FOLLOW`), which polls the read where Realtime fails it
  * and tells the tabs again as a takeover lapses, so the agent's pointer on a
- * tab is drawn within a moment of its move. Every reader of the task shares
- * one read and one follow; a read or a follow the host did not answer keeps
- * the list as it last stood. What a tab says (its address and title) is
+ * tab is drawn within a moment of its move. A follow the host refused, or
+ * one that ended, is read and followed afresh `CLOUD_BROWSER_TABS_AGAIN`
+ * later, so a panel whose follow broke reads the tabs on that beat as it
+ * once did. Every reader of the task shares one read and one follow; a read
+ * or a follow the host did not answer keeps the list as it last stood. What a tab says (its address and title) is
  * drawn and held nowhere past the read: no trace, count, or app state (root
  * `AGENTS.md`'s cloud browser line).
  */
@@ -16,11 +18,14 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { Duration, Effect, Stream } from "effect";
+import { Duration, Effect, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+
+/** How long after a follow broke or ended the tabs are read and followed again. */
+export const CLOUD_BROWSER_TABS_AGAIN = Duration.seconds(5);
 
 /** How long after its agent last acted on a tab the tab says the agent is using it. */
 export const CLOUD_BROWSER_AGENT_RECENT = Duration.seconds(15);
@@ -55,10 +60,14 @@ function followedTabs(taskId: string): Stream.Stream<readonly AgentBrowserTab[] 
   );
 }
 
-/** The task's tabs as the first read answers them, then as each change the follow tells. */
+/**
+ * The task's tabs as a read answers them, then as each change the follow
+ * tells; read and followed again on the beat once the follow ends.
+ */
 const tabsAtom = Atom.family((taskId: string) =>
   rendererRuntime.atom(
     Stream.concat(Stream.fromEffect(readTabs(taskId)), followedTabs(taskId)).pipe(
+      Stream.repeat(Schedule.spaced(CLOUD_BROWSER_TABS_AGAIN)),
       Stream.filter((tabs): tabs is readonly AgentBrowserTab[] => tabs !== undefined),
     ),
   ),
