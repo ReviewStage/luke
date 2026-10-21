@@ -896,7 +896,7 @@ export type TaskFileRequest = typeof taskFileRequestSchema.Type;
  * many lines the whole file has, and the lines, each cut as `show_code`
  * cuts it. A window past the file's end carries no lines.
  */
-const taskFileWindowSchema = EffectSchema.Struct({
+export const taskFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
@@ -907,8 +907,6 @@ const taskFileWindowSchema = EffectSchema.Struct({
     EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
   ).check(EffectSchema.isMaxLength(TASK_FILE_BOUNDS.WINDOW_LINES)),
 });
-
-export type TaskFileWindow = typeof taskFileWindowSchema.Type;
 
 /**
  * Why the File tab's file is not shown, and, where GitHub found nothing at

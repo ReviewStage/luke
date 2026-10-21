@@ -1298,6 +1298,33 @@ it.effect(
 );
 
 it.effect(
+  "a window of a File tab's file is answered as the service read it, its lines plain, since the panel colours code itself",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const window = {
+        path: "src/seats.ts",
+        repository: "acme/relay",
+        branch: "main",
+        firstLine: 1,
+        lineCount: 2,
+        lines: ["const seats = 3;", "export { seats };"],
+      };
+      service.files["src/seats.ts"] = { file: window };
+      const { call } = yield* subject(service);
+
+      const read = yield* call(GATEWAY_METHOD.TASKS_FILE, {
+        taskId: INVITES,
+        path: "src/seats.ts",
+        firstLine: 1,
+        lastLine: 2,
+      });
+
+      assert.deepEqual(read, { file: window });
+    }),
+);
+
+it.effect(
   "a picture the editor took is kept on the service and read back by the id it answered, and one past the plan's bound is refused in so many words",
   () =>
     Effect.gen(function* () {

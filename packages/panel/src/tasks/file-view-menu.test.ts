@@ -180,7 +180,7 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
           commit: HEAD,
           firstLine: 1,
           lineCount: 1,
-          lines: [[{ text: "x" }]],
+          lines: ["x"],
         },
       });
     }

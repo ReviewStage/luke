@@ -243,7 +243,7 @@ test("an inbox item's code draws the lines it read as a Code card's, those it na
       branch: "main",
       firstLine: 2,
       lineCount: 20,
-      lines: [2, 3, 4, 5, 6, 7, 8].map((line) => [{ text: `line ${line}` }]),
+      lines: [2, 3, 4, 5, 6, 7, 8].map((line) => `line ${line}`),
     },
   };
   const container = await draw(

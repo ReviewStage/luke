@@ -1,59 +1,26 @@
-import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
-import type { CodeToken, TaskFileShown } from "@luke/features/tasks-view";
+import type { ShownCode } from "@luke/features/task-wire";
+import type { CodeToken } from "@luke/features/tasks-view";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { Clock, Duration, Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
 
 /**
- * task-code.ts -- code the window draws in this process's colours: a File tab's window of its file and a transcript's fenced block, and the part of a snippet Luke showed that the Code tab's card draws.
+ * task-code.ts -- a transcript's fenced block coloured in this process, and the part of a snippet Luke showed that the Code tab's card draws.
  *
  * Luke names code by place through the brain's `show_code`, and the
  * service reads the lines from the brain session's checkout and sends
  * them whole (`ShownCode`); nothing is read from this Mac's disk. The Code
  * tab's card colours its lines itself, in the diff bundle
  * (`code-snippet.tsx`), so only the part it draws is cut here
- * (`codeExcerpt`). What else is done here is the colouring, which runs in this process rather than in the
+ * (`codeExcerpt`), as a File tab, a page's source, and a file of a message
+ * colour theirs (`@luke/panel`'s `whole-file.tsx`). What else is done here
+ * is a fenced block's colouring, which runs in this process rather than in the
  * window, because the window's content policy refuses WebAssembly and its
  * bundle has a budget; Shiki's JavaScript regex engine runs here and the
  * window draws spans. Every run carries its colour in both of GitHub's
  * themes, so the window follows the appearance as it changes without asking
  * for the code again.
  */
-
-/** The language each file extension is coloured as; any other file is drawn plain. */
-const LANGUAGE_BY_EXTENSION: ReadonlyMap<string, string> = new Map([
-  [".ts", "typescript"],
-  [".mts", "typescript"],
-  [".cts", "typescript"],
-  [".tsx", "tsx"],
-  [".js", "javascript"],
-  [".mjs", "javascript"],
-  [".cjs", "javascript"],
-  [".jsx", "jsx"],
-  [".json", "json"],
-  [".css", "css"],
-  [".html", "html"],
-  [".md", "markdown"],
-  [".py", "python"],
-  [".go", "go"],
-  [".rs", "rust"],
-  [".swift", "swift"],
-  [".java", "java"],
-  [".kt", "kotlin"],
-  [".rb", "ruby"],
-  [".c", "c"],
-  [".h", "c"],
-  [".cc", "cpp"],
-  [".cpp", "cpp"],
-  [".hpp", "cpp"],
-  [".sql", "sql"],
-  [".sh", "bash"],
-  [".bash", "bash"],
-  [".zsh", "bash"],
-  [".yml", "yaml"],
-  [".yaml", "yaml"],
-  [".toml", "toml"],
-]);
 
 /**
  * How much of a window the Code tab's card for it draws: the lines pointed
@@ -179,18 +146,6 @@ function colouredLines(
 }
 
 /**
- * The language a file is coloured as, by its extension: what follows the last
- * dot of its name, where that dot does not open the name. Note that the name is
- * read after the last `/`, because a path the service sends is a repository's
- * POSIX path, and a dot in a directory is no extension.
- */
-function languageOfPath(path: string): string | undefined {
-  const name = path.slice(path.lastIndexOf("/") + 1);
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? LANGUAGE_BY_EXTENSION.get(name.slice(dot).toLowerCase()) : undefined;
-}
-
-/**
  * The language a fenced block in a transcript is coloured as, by the name
  * its fence gives: a language's own name or one of the aliases its grammar
  * declares (`ts`, `py`, `sh`), and none for a name no grammar here answers to.
@@ -227,14 +182,12 @@ export function codeExcerpt(code: ShownCode): ShownCode {
   };
 }
 
-/** The two colourings the window asks for, each over one shared highlighter. */
+/** The colouring the window asks for, over one shared highlighter. */
 export interface TaskCodeColouring {
-  /** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
-  readonly highlightFile: (window: TaskFileWindow) => Effect.Effect<TaskFileShown>;
   /**
    * A fenced block of a transcript's markdown as the window draws it: its code,
-   * line by line, coloured as the language its fence names, as a File tab's
-   * lines are, and plain for a language the highlighter does not know.
+   * line by line, coloured as the language its fence names, and plain for a
+   * language the highlighter does not know.
    */
   readonly highlightSnippet: (language: string, code: string) => Effect.Effect<CodeToken[][]>;
 }
@@ -248,11 +201,6 @@ export function taskCodeColouring(
 ): TaskCodeColouring {
   const sharedHighlighter = sharedHighlighterOf(load);
   return {
-    highlightFile: (window) =>
-      Effect.map(
-        colouredLines(sharedHighlighter, languageOfPath(window.path), window.lines),
-        (lines) => ({ ...window, lines }),
-      ),
     highlightSnippet: (language, code) =>
       Effect.flatMap(languageOfFence(sharedHighlighter, language), (fenced) =>
         colouredLines(sharedHighlighter, fenced, code.split("\n")),
@@ -260,8 +208,8 @@ export function taskCodeColouring(
   };
 }
 
-/** This process's colourings, over Shiki loaded through one dynamic `import()` the first time code is coloured. */
-export const { highlightFile, highlightSnippet } = taskCodeColouring(
+/** This process's colouring, over Shiki loaded through one dynamic `import()` the first time code is coloured. */
+export const { highlightSnippet } = taskCodeColouring(
   Effect.map(
     Effect.tryPromise(() => import("./task-code-highlighter.js")),
     (module) => module.createTaskCodeHighlighter(),
