@@ -378,7 +378,12 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const newest = yield* hostedStoreOrUnavailable(
         transcriptNewest(target, CODER_TOOL_SET, standing, agent),
       );
-      return newestAnswer(newest, agent.title);
+      // The title is read after the page, as the forward read's is, so one that landed while the page was read is told rather than lost to a follow that starts after it.
+      const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
+      return newestAnswer(
+        newest,
+        Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
+      );
     }),
 
     agentWorkerNewest: signedIn.agentWorkerNewest.effect(function* ({ input, context }) {
@@ -409,15 +414,11 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         );
       }
       const started = { createdAt: read.delegation.createdAt };
-      const { newest, titles } = yield* hostedStoreOrUnavailable(
-        Effect.all(
-          {
-            newest: transcriptNewest(worker, CODER_TOOL_SET, started),
-            titles: childTitlesOf(target, [conversationId]),
-          },
-          { concurrency: 2 },
-        ),
+      const newest = yield* hostedStoreOrUnavailable(
+        transcriptNewest(worker, CODER_TOOL_SET, started),
       );
+      // The title is read after the page, since it lands beside the worker's start, which the page's reads may span.
+      const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
       return newestAnswer(newest, titles.get(conversationId) ?? null);
     }),
 
