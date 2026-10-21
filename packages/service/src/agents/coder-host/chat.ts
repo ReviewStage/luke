@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   agentWorkspace,
   attachMessageImages,
@@ -55,7 +56,7 @@ import {
   resolveAskInputSchema,
 } from "@luke/features/chat-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Data, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
@@ -222,6 +223,9 @@ export const CHAT_TOOL_REFUSAL = {
   NO_MEMBER:
     "Not posted: no agent or person of your workspace answers to that link. list_agents and read_chat name them by theirs.",
   TO_SELF: "Not posted: that link names you.",
+  PERSON_CHAT_OFF:
+    "Not posted: that person has not turned Chat on, so they would never read a direct message. Ask the developer " +
+    "through the inbox instead, or the agent that started you where one did.",
   AGENT_ARCHIVED:
     "Not posted: that agent is archived, so it takes no message until it is brought back. list_agents names the agents standing.",
   NO_CHANNEL: "Not read: you see no channel under that name. read_chat lists the channels you see.",
@@ -342,6 +346,9 @@ const POST_REFUSAL = {
   [CHAT_REFUSAL.KEY_TAKEN]: CHAT_TOOL_REFUSAL.UNAVAILABLE,
   [CHAT_REFUSAL.ASK_ELSEWHERE]: ASK_REFUSAL.ELSEWHERE,
 } as const satisfies Record<ChatRefusal, string>;
+
+/** A post the place or the store refused, which undoes what its transaction wrote, the DM it made among it. */
+class PostRefused extends Data.TaggedError("PostRefused")<{ readonly reason: string }> {}
 
 /** The most settled asks a call answers beside the open ones: the latest, enough to see what came of what the agent asked last. */
 const SETTLED_ASKS_SHOWN = 5;
@@ -534,6 +541,9 @@ function dmMemberOf(
     const { userId } = agent;
     const { organizationId } = seat;
     if (subject.kind !== MEMBER_KIND.AGENT) {
+      // A person reads a DM in the window's Chat alone, so one who has not turned it on would never see it.
+      if (!(yield* chatEnabledFor(subject.userId)))
+        return Result.fail(CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF);
       const person = yield* memberOfSubject(userId, organizationId, subject);
       return Option.match(person, {
         onNone: () => Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER),
@@ -775,17 +785,34 @@ export function postAsAgent(
   return Effect.gen(function* () {
     const seat = yield* seatOf(agent);
     if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-    const place = yield* placeOf(agent, seat.value, post);
-    if (Result.isFailure(place)) return chatRejected(place.failure);
+    // The pictures are read before the place, since a DM the place makes must not stand where the post is refused.
     const pictures = yield* postPictures(post, call.clientKey, call.sandbox);
     if (Result.isFailure(pictures)) return chatRejected(pictures.failure);
-    const posted = yield* writePost(agent, seat.value, post, {
-      to: place.success.to,
-      clientKey: call.clientKey,
-      pictures: pictures.success,
-    });
-    if (Result.isFailure(posted)) return chatRejected(POST_REFUSAL[posted.failure]);
-    const line = yield* postedLine(agent, seat.value, posted.success, place.success.named);
+    // A DM made for the post, and the member it seats, stand only with the post: one the store refuses undoes them.
+    const written = yield* inTransaction(
+      Effect.gen(function* () {
+        const place = yield* placeOf(agent, seat.value, post);
+        if (Result.isFailure(place)) return yield* new PostRefused({ reason: place.failure });
+        const posted = yield* writePost(agent, seat.value, post, {
+          to: place.success.to,
+          clientKey: call.clientKey,
+          pictures: pictures.success,
+        });
+        if (Result.isFailure(posted)) {
+          return yield* new PostRefused({ reason: POST_REFUSAL[posted.failure] });
+        }
+        return Result.succeed({ posted: posted.success, named: place.success.named });
+      }),
+    ).pipe(
+      Effect.catchTag("PostRefused", (refused) => Effect.succeed(Result.fail(refused.reason))),
+    );
+    if (Result.isFailure(written)) return chatRejected(written.failure);
+    const line = yield* postedLine(
+      agent,
+      seat.value,
+      written.success.posted,
+      written.success.named,
+    );
     const asks = post.ask === undefined ? undefined : yield* asksOf(agent, seat.value);
     return {
       status: ACTION_RESULT_STATUS.ACCEPTED,

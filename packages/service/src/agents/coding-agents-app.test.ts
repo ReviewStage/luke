@@ -8600,6 +8600,32 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
+    "a DM made for a post the store refuses is undone with it, so neither agent reads an empty DM",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const asked = yield* chat.post(chat.first, QUEUE_ASK);
+        assert.ok("seq" in asked);
+        // The ask's key already stands in the task's channel, so the store refuses it in a DM.
+        const moved = yield* chat.post(chat.first, { ...QUEUE_ASK, to: chat.links.second });
+        assert.deepEqual(moved, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: ASK_REFUSAL.ELSEWHERE,
+        });
+        for (const reader of [chat.first, chat.second]) {
+          const read = yield* chat.read(reader);
+          assert.ok("channels" in read);
+          assert.deepEqual(
+            read.channels.map((channel) => channel.name),
+            ["#teammate-invitations"],
+          );
+        }
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+
+  it.effect(
     "a planless agent posts in its workspace's general channel by default, and an @luke it types names no one",
     () =>
       Effect.gen(function* () {
@@ -8620,7 +8646,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post to a person's link is a DM with them, named back by its link, a person's link in a post's words tells them, and a Luke's link names no member, tells no one, and mints no Luke",
+    "a post to a person's link is a DM with them, named back by its link, and refused for a person who has not turned Chat on; a person's link in a post's words tells them, and a Luke's link names no member, tells no one, and mints no Luke",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -8640,6 +8666,15 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         });
         assert.ok("held" in direct, JSON.stringify(direct));
         assert.deepEqual([direct.in, direct.held], [person.link, [person.link]]);
+        // A teammate who has not turned Chat on would never read a DM, so none is made for them.
+        yield* joinWorkspace(workspace, chat.other);
+        assert.deepEqual(
+          yield* chat.post(chat.first, {
+            text: "Can I take it?",
+            to: `[@Teammate](https://tryluke.dev/acme/person/${chat.other})`,
+          }),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF },
+        );
         const toPerson = yield* chat.post(chat.first, {
           text: `${personLink} can I take the invite file?`,
         });
