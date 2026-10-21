@@ -175,6 +175,11 @@ export const AGENT_INBOX_ACT_KIND = {
   CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
+  /**
+   * A workspace's chat followed while the window holds the stream open: the
+   * chat whole each time it changes, or why there is none.
+   */
+  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
 } as const;
 
 /**

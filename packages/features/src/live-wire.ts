@@ -750,6 +750,8 @@ export const workspaceChatLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
+export type WorkspaceChatLiveAnswer = typeof workspaceChatLiveAnswerSchema.Type;
+
 /** A member as its row delivers it: what it stands for and what it is called null where it has none, and the keys the roster is ordered by. */
 const chatMemberLiveRowSchema = EffectSchema.Struct({
   id: chatMemberSchema.fields.id,

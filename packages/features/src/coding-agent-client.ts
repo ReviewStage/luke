@@ -19,6 +19,7 @@ import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choi
 import {
   CHAT_ATTACHMENT_QUERY,
   CHAT_QUERY,
+  type ChatJoinAnswer,
   type ChatWriteRequest,
   chatWriteRequestSchema,
 } from "./chat-wire.js";
@@ -113,6 +114,7 @@ import {
   type TaskConversationLiveAnswer,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
+  type WorkspaceChatLiveAnswer,
 } from "./live-wire.js";
 import {
   codingAgentDefaultWriteSchema,
@@ -1215,6 +1217,54 @@ export class HostedCodingAgentClient {
       askHosted(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number)),
       ROW_REFUSALS,
     );
+  }
+
+  /**
+   * The account's person joining a workspace's chat: their member and its
+   * `#general` made where they are not yet, which a follow does once before
+   * it seals. Not found where the account is not in the workspace or has
+   * Chat off; unanswered for anything else.
+   */
+  chatJoin(
+    workspaceId: string,
+  ): Effect.Effect<ChatJoinAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.map(
+      hostedAnswer(
+        askHosted(this.#hosted.messages.chatWrite, {
+          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+          body: { join: true },
+        }),
+        ROW_REFUSALS,
+      ),
+      // A write answers no member, which only a join is answered with.
+      (answer) => ("failure" in answer || "self" in answer ? answer : UNANSWERED),
+    );
+  }
+
+  /**
+   * A workspace's chat sealed for following over Neon Realtime for the
+   * account named, answered at once: not found where the account has not
+   * joined it, signed out where the session is another's, unanswered for
+   * anything else, which the caller answers by sealing it again; with
+   * `poll`, its rows inline, held past `after` until they move.
+   */
+  workspaceChatLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceChatLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const named = { workspaceId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.workspaceChat, named, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
   /**
