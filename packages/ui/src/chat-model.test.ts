@@ -10,6 +10,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { TASK_SECTION_ICON_KIND, type TaskSectionIcon } from "@luke/features/task-section-wire";
 import { test } from "vitest";
 import {
   CHAT_RUN_SPAN,
@@ -28,6 +29,9 @@ import {
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
+
+/** A section's icon, an emoji, as the sidebar's section wears it. */
+const ROCKET: TaskSectionIcon = { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🚀" };
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const AGENT = "00000000-0000-4000-8000-0000000000a2";
@@ -442,7 +446,7 @@ test("a topic's name is written as a channel's, and refused where it breaks the 
   assert.equal(topicNameProblem(chat, "alpha", TOPIC.id), undefined, "a topic keeps its own name");
 });
 
-test("the tasks' channels stand as the sidebar groups their tasks: pinned in the pins' order, each section in its order, the rest under Other tasks; and the archived channels apart", () => {
+test("the tasks' channels stand as the sidebar groups their tasks: pinned in the pins' order, each section in its order, the rest under Tasks, each section wearing its own icon; and the archived channels apart", () => {
   const task = (id: string, name: string, archived = false): ChatChannel => ({
     id: `channel-${id}`,
     kind: CHANNEL_KIND.TASK,
@@ -465,14 +469,14 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
   };
   const grouped = chatRail(chat, NAMES, {
     pinned: ["t3"],
-    sections: [{ id: "launch", title: "Launch", taskIds: ["t2", "t3", "t1"] }],
+    sections: [{ id: "launch", title: "Launch", icon: ROCKET, taskIds: ["t2", "t3", "t1"] }],
   });
   assert.deepEqual(
-    grouped.tasks.map((group) => [group.title, group.rows.map((row) => row.label)]),
+    grouped.tasks.map((group) => [group.title, group.icon, group.rows.map((row) => row.label)]),
     [
-      ["Pinned", ["schema"]],
-      ["Launch", ["invites", "billing"]],
-      ["Other tasks", ["zeta"]],
+      ["Pinned", undefined, ["schema"]],
+      ["Launch", ROCKET, ["invites", "billing"]],
+      ["Tasks", undefined, ["zeta"]],
     ],
   );
   assert.deepEqual(
@@ -482,6 +486,6 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
   const flat = chatRail(chat, NAMES);
   assert.deepEqual(
     flat.tasks.map((group) => [group.title, group.rows.length]),
-    [[undefined, 4]],
+    [["Tasks", 4]],
   );
 });

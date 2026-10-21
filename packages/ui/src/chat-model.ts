@@ -23,6 +23,7 @@ import {
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
+import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
@@ -156,12 +157,14 @@ export interface ChatRail {
   readonly direct: readonly ChatRailRow[];
 }
 
-/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or none, and its rows in order. */
+/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or the rest, and its rows in order. */
 interface ChatRailGroup {
   /** The group's own key, which a list draws it under. */
   readonly key: string;
-  /** What heads it; none for the tasks no pin or section holds where nothing else is grouped. */
-  readonly title: string | undefined;
+  /** What heads it, as the sidebar heads the same tasks. */
+  readonly title: string;
+  /** The section's icon, as the sidebar's section head wears it; none for Pinned, the rest, and a section made without one. */
+  readonly icon: TaskSectionIcon | undefined;
   readonly rows: readonly ChatRailRow[];
 }
 
@@ -171,6 +174,7 @@ export interface ChatTaskGrouping {
   readonly sections: readonly {
     readonly id: string;
     readonly title: string;
+    readonly icon: TaskSectionIcon | undefined;
     readonly taskIds: readonly string[];
   }[];
 }
@@ -178,7 +182,7 @@ export interface ChatTaskGrouping {
 /** What a group of task channels is headed by, where the rail draws it. */
 const TASK_GROUP = {
   PINNED: "Pinned",
-  OTHER: "Other tasks",
+  OTHER: "Tasks",
 } as const;
 
 /** The keys of the groups no section names. */
@@ -272,8 +276,8 @@ function messagesIn(chat: ChatAnswer, channelId: string): readonly ChatMessage[]
 /**
  * The task channels grouped as the sidebar groups their tasks: the pinned
  * first, in the pins' order, then each section in its order, then the rest
- * by name, under Other tasks where any group stands above them and headed
- * by nothing where none does. A task stands in its first group only. Note
+ * by name under Tasks, as the sidebar names the tasks no section holds. A
+ * task stands in its first group only. Note
  * that the order within a group is the sidebar's own, so a task is found
  * where the reader keeps it.
  */
@@ -297,10 +301,17 @@ function taskGroups(
   const groups: ChatRailGroup[] = [];
   const pinned = take(grouping?.pinned ?? []);
   if (pinned.length > 0)
-    groups.push({ key: TASK_GROUP_KEY.PINNED, title: TASK_GROUP.PINNED, rows: pinned });
+    groups.push({
+      key: TASK_GROUP_KEY.PINNED,
+      title: TASK_GROUP.PINNED,
+      icon: undefined,
+      rows: pinned,
+    });
   for (const section of grouping?.sections ?? []) {
     const held = take(section.taskIds);
-    if (held.length > 0) groups.push({ key: section.id, title: section.title, rows: held });
+    if (held.length > 0) {
+      groups.push({ key: section.id, title: section.title, icon: section.icon, rows: held });
+    }
   }
   const rest = rows.filter(
     (row) => row.channel.planId === undefined || !placed.has(row.channel.planId),
@@ -308,7 +319,8 @@ function taskGroups(
   if (rest.length > 0) {
     groups.push({
       key: TASK_GROUP_KEY.OTHER,
-      title: groups.length === 0 ? undefined : TASK_GROUP.OTHER,
+      title: TASK_GROUP.OTHER,
+      icon: undefined,
       rows: rest,
     });
   }
