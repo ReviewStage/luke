@@ -1252,9 +1252,10 @@ function headOf(organizationId: string): ChatStoreEffect<number> {
 
 /**
  * The member a post names by what it is: a person, minted where none is
- * yet, and an agent only where it is a member already, because an agent
- * whose starter has Chat off joins no chat; nothing for a subject of
- * another workspace.
+ * yet, and an agent only where it is a member already, because naming an
+ * agent in a channel it does not reach tells it nothing (a DM seats the
+ * agent it goes to itself, `chat.ts`); nothing for a subject of another
+ * workspace.
  */
 function subjectMember(
   userId: string,

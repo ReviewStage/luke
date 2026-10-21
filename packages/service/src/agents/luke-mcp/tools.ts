@@ -27,7 +27,7 @@
  * call; and the turn's count of plan notes and chat posts, which each call
  * starts from nothing, so those caps hold per call. Nor is the list
  * narrowed per agent as eve narrows its own at each turn: a tool eve would
- * not offer (no plan, no repository, Chat off) is refused by its door.
+ * not offer (no plan, no repository) is refused by its door.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";

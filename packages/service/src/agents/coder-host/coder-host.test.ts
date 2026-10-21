@@ -1998,27 +1998,15 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "chat is off for an agent whose starter never turned it on: its tools are not offered and a call is refused; once turned on, they are offered and answer",
+    "an agent whose starter never turned Chat on still has its chat: a read answers, since the chat is how agents message each other",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
-        const { userId, admitted } = yield* openAgent(host);
-        const read = () =>
-          host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-        assert.equal(yield* host.chatOffered(admitted, { chatOn: true }), false);
-        assert.deepEqual(yield* read(), {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: CHAT_TOOL_REFUSAL.OFF,
-        });
-        yield* chatOn(userId);
-        assert.equal(yield* host.chatOffered(admitted, { chatOn: true }), true);
-        // A session started before Chat was on was told nothing of it, so it is offered no chat tool.
-        assert.equal(yield* host.chatOffered(admitted, { chatOn: false }), false);
-        assert.equal(yield* host.chatOffered(admitted, {}), false);
-        const answered = yield* read();
-        assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const { admitted } = yield* openAgent(host);
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
       }),
   );
 

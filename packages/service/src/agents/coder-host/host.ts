@@ -192,7 +192,7 @@ interface CoderSessionPrompt {
   readonly coAuthor: string | undefined;
   /** The step the agent's workspace was written under in the prompt's links (`../written-mentions.ts`). */
   readonly workspace: string;
-  /** Whether the prompt told of the workspace's chat, which only an agent whose starter turned Chat on is. */
+  /** Whether the prompt told of the task's chat as the team's channel, which only an agent whose starter turned Chat on is, though every agent has the chat's tools. */
   readonly chatOn: boolean;
 }
 
@@ -386,17 +386,6 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
-  /**
-   * Whether the agent is offered its chat tools this turn: only where the
-   * account that started it turned Chat on and where the session's prompt,
-   * composed as it started, told of chat; never where that cannot be read.
-   * Note that a session started before Chat was turned on is offered none,
-   * because its instructions do not say when to use them.
-   */
-  chatOffered(
-    admitted: AdmittedConversation,
-    prompt: CoderSessionPromptRecord,
-  ): Effect.Effect<boolean, never, DatabaseServices>;
   /**
    * Runs one of the agent's chat tools (`chat.ts`): a post, told to each
    * agent it addresses through eve as the deployment acting for that agent's
@@ -1027,15 +1016,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     openPullRequest: (admitted, input) => runAgentOpenPullRequest(admitted, input),
 
     comment: (admitted, name, input) => runAgentComment(admitted, name, input),
-    chatOffered: (admitted, prompt) =>
-      (prompt.chatOn === true
-        ? chatEnabledFor(admitted.target.userId)
-        : Effect.succeed(false)
-      ).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.orElseSucceed(() => false),
-      ),
-
     chat: (admitted, call) => runAgentChat(seams, admitted, call),
 
     turnKind: (auth) => turnKindOf(auth.current),

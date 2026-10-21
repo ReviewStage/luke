@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { chatEnabledFor, readAccountPreferences } from "@luke/database/models/account-store";
+import { readAccountPreferences } from "@luke/database/models/account-store";
 import { ensureMember } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
@@ -1027,17 +1027,11 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       if (Option.isSome(assigned)) committed = assigned.value.txid;
     }
   }
-  // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
-  const chatOn = yield* chatEnabledFor(userId).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.orElseSucceed(() => false),
-  );
-  if (chatOn) {
-    yield* ensureMember(userId, landing.workspaceId, {
-      kind: MEMBER_KIND.AGENT,
-      agentId: agent.id,
-    }).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
-  }
+  // Every agent joins its workspace's chat as it starts, whatever its starter's Chat setting, since the chat is how agents message each other.
+  yield* ensureMember(userId, landing.workspaceId, {
+    kind: MEMBER_KIND.AGENT,
+    agentId: agent.id,
+  }).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
   yield* recordServerEvent(SERVER_EVENT.AGENT_START, userId, {
     model: choice.model,
     effort: choice.effort,

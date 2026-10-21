@@ -48,8 +48,9 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * The task's chat, where the agent talks with the plan's other agents and
  * the developer's team (`chat.ts`), is told of beside the
  * developer's inbox, which stays where it asks the developer, only where
- * the agent's starter turned Chat on; where it is off, the instructions are
- * the same text as before Chat, naming no tool the agent is not offered.
+ * the agent's starter turned Chat on, since that starter is who watches the
+ * channel; where it is off, the agent still has the chat's tools, and its
+ * own descriptions say how to message another agent or a person directly.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole.
@@ -423,7 +424,8 @@ function branchWords(startBranch: string | null): BranchWords {
 /**
  * The section that tells the agent of its task's chat and when to use it
  * beside the inbox, worded for what it was handed; only an agent whose
- * starter turned Chat on is told of it, as only it is offered the tools.
+ * starter turned Chat on is told of it, since that starter watches the
+ * channel, though every agent has the chat's tools.
  * The chat is the task's team channel, where the developer watches its
  * agents work together as an engineering team would in Slack, so the agent
  * is pressed to use it heavily: to talk to the other agents there rather
