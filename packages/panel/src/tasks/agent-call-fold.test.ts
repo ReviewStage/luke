@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
@@ -312,6 +313,30 @@ test("a line the developer said while the turn ran stands ahead of what the voic
     "message: reply",
     "message: spoken-turn",
     "fold: 1 tool call, 1 message (closed)",
+    "call ended",
+  ]);
+});
+
+test("a line from elsewhere that reached a spoken turn, as GitHub's, stays where it arrived among the turn's work, splitting its fold", async () => {
+  const github: CodingAgentMessage = {
+    id: "github",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "@devin-ai-integration[bot] reviewed your pull request #3016." }],
+    sentBy: { name: "devin-ai-integration[bot]", kind: CODING_AGENT_SENDER.GITHUB },
+    arrivedIn: { journalId: "spoken-turn", afterStep: 1 },
+  };
+  const container = await drawnTab([TASK, ASKED, ACK, github, SPOKEN_TURN, REPLY]);
+
+  assert.deepEqual(drawnOrder(container), [
+    "message: task",
+    "call begins",
+    "message: asked",
+    "message: ack",
+    "message: reply",
+    "message: spoken-turn",
+    "fold: 1 tool call (closed)",
+    "message: github",
+    "fold: 1 message (closed)",
     "call ended",
   ]);
 });

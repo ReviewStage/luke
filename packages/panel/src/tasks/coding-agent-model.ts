@@ -61,6 +61,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type ChatNoticeMetadata,
@@ -1621,10 +1622,11 @@ export interface SpokenMessage extends PlacedMessage {
  * A transcript's rows with each line the voice said reading a turn aloud
  * moved to that turn, so on a call the tab reads as a conversation: what
  * was said, then the work behind it folded under it, rather than the
- * turn's own answer and then the voice saying it again. The developer's
- * lines that reached such a turn while it ran are drawn ahead of what the
- * voice said, each a row of its own, since the voice answered them too, so
- * no question stands under its answer. A line whose turn is not among the
+ * turn's own answer and then the voice saying it again. The lines said or
+ * typed on the call that reached such a turn while it ran are drawn ahead
+ * of what the voice said, each a row of its own, since the voice answered
+ * them too, so no question stands under its answer; any other line that
+ * reached it, as GitHub's, stays where it arrived among the turn's work. A line whose turn is not among the
  * rows, and a line the service names no turn for, stand where the order
  * puts them, so a transcript with no call reads as it did.
  */
@@ -1647,12 +1649,13 @@ export function spokenMessages(placed: readonly PlacedMessage[]): readonly Spoke
     if (turn !== undefined && turns.has(turn)) return [];
     const lines = said.get(row.message.id);
     if (lines === undefined) return [{ ...row, said: NOTHING_SAID }];
-    const asked = row.arrived.map((line) => ({
-      message: line,
-      arrived: NOTHING_SAID,
-      said: NOTHING_SAID,
-    }));
-    return [...asked, { message: row.message, arrived: NOTHING_SAID, said: lines }];
+    // Note that only a line said or typed on a call is lifted, because a line from anywhere else, as GitHub's, is no ask the voice answered.
+    const asked = row.arrived.filter((line) => callOfLine(line) !== undefined);
+    const kept = row.arrived.filter((line) => !asked.includes(line));
+    return [
+      ...asked.map((line) => ({ message: line, arrived: NOTHING_SAID, said: NOTHING_SAID })),
+      { message: row.message, arrived: kept, said: lines },
+    ];
   });
 }
 
