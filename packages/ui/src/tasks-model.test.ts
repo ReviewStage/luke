@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -16,8 +16,13 @@ import {
   offeredIssues,
   pendingMark,
   positionedView,
+  SETTLED_STATUS,
+  settleChanges,
+  settledNote,
+  settleOffered,
   TASK_MARK,
   taskNameOfIssue,
+  unsettledMarks,
   unsettledPinPositions,
 } from "./tasks-model.js";
 
@@ -258,4 +263,73 @@ test("New task offers at most a handful of issues however many match", () => {
   }));
 
   assert.equal(offeredIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
+});
+
+/** A listed task at a status, or with none, as a service before statuses lists it. */
+function standingTask(id: string, status?: (typeof TASK_STATUS)[keyof typeof TASK_STATUS]) {
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name: "Teammate invitations",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: null,
+    ...(status === undefined ? undefined : { status }),
+  };
+}
+
+test("Mark done asks Done of the task, and its Undo puts back the status it stood at", () => {
+  const working = standingTask(INVITES, TASK_STATUS.IN_PROGRESS);
+
+  const { asked, undo } = settleChanges([working], SETTLED_STATUS.DONE);
+
+  assert.deepEqual(asked, [{ taskId: INVITES, status: TASK_STATUS.DONE }]);
+  assert.deepEqual(undo, [{ taskId: INVITES, status: TASK_STATUS.IN_PROGRESS }]);
+  assert.equal(settledNote(SETTLED_STATUS.DONE, 1, 0), "Marked done");
+});
+
+test("a repository's Mark tasks done asks Done of every task, each Undo putting back its own status, and leaves one already done alone", () => {
+  const tasks = [
+    standingTask("task-backlog", TASK_STATUS.BACKLOG),
+    standingTask("task-todo", TASK_STATUS.TODO),
+    standingTask("task-before-statuses"),
+    standingTask("task-done", TASK_STATUS.DONE),
+  ];
+
+  const { asked, undo } = settleChanges(tasks, SETTLED_STATUS.DONE);
+
+  assert.deepEqual(
+    asked.map(({ status }) => status),
+    [TASK_STATUS.DONE, TASK_STATUS.DONE, TASK_STATUS.DONE],
+  );
+  assert.deepEqual(undo, [
+    { taskId: "task-backlog", status: TASK_STATUS.BACKLOG },
+    { taskId: "task-todo", status: TASK_STATUS.TODO },
+    { taskId: "task-before-statuses", status: TASK_STATUS.TODO },
+  ]);
+  assert.equal(settledNote(SETTLED_STATUS.DONE, 3, 1), "3 tasks marked done, 1 could not be");
+});
+
+test("a task already done is offered no Mark done, and one already canceled no Cancel task", () => {
+  assert.equal(settleOffered(standingTask(INVITES, TASK_STATUS.DONE), SETTLED_STATUS.DONE), false);
+  assert.equal(
+    settleOffered(standingTask(INVITES, TASK_STATUS.CANCELED), SETTLED_STATUS.DONE),
+    true,
+  );
+  assert.equal(
+    settleOffered(standingTask(INVITES, TASK_STATUS.CANCELED), SETTLED_STATUS.CANCELED),
+    false,
+  );
+});
+
+test("a status given here is drawn on the task until the list carries it, then let go", () => {
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  const marks = new Map([[INVITES, { status: TASK_STATUS.DONE }]]);
+
+  assert.equal(markedView(listed, marks).tasks[0]?.status, TASK_STATUS.DONE);
+  assert.equal(unsettledMarks(marks, listed).size, 1);
+  assert.equal(
+    unsettledMarks(marks, _view({ tasks: [standingTask(INVITES, TASK_STATUS.DONE)] })).size,
+    0,
+  );
 });

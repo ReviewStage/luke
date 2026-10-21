@@ -7,7 +7,9 @@ import {
 import {
   type RepositoryPin,
   TASK_BOUNDS,
+  TASK_STATUS,
   type Task,
+  type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
 import {
@@ -388,41 +390,99 @@ export const MARK_UNDOS = {
 } as const satisfies Partial<Record<TaskMark, { note: string; undo: TaskMark }>>;
 
 /**
- * What the toast says once a repository's tasks were archived together, by
- * how many the service kept and how many it refused; one task says what an
- * archive of one says.
+ * The statuses a press of the task menu settles a task at: Mark done, the
+ * gesture Archive used to be, with its chord and its place on the row, and
+ * Cancel task.
  */
-export function archivedTasksNote(landed: number, refused: number): string {
-  const kept = landed === 1 ? MARK_UNDOS[TASK_MARK.ARCHIVE].note : `${landed} tasks archived`;
-  return refused === 0 ? kept : `${kept}, ${refused} could not be`;
+export const SETTLED_STATUS = {
+  DONE: TASK_STATUS.DONE,
+  CANCELED: TASK_STATUS.CANCELED,
+} as const;
+
+export type SettledStatus = (typeof SETTLED_STATUS)[keyof typeof SETTLED_STATUS];
+
+/** One task's status as a press asks for it, or as its Undo puts it back. */
+export interface StatusChange {
+  readonly taskId: string;
+  readonly status: TaskStatus;
 }
 
-/** What the toast says when the service refused every task of a repository's Archive tasks. */
-export function archiveTasksFailedNote(refused: number): string {
-  return refused === 1
-    ? MARK_FAILED_NOTES[TASK_MARK.ARCHIVE]
-    : "The tasks could not be archived. Try again.";
+/** A task's status, Todo for one from a service before statuses. */
+function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
+  return task.status ?? TASK_STATUS.TODO;
 }
 
 /**
- * Whether archiving the tasks asks first: any of them has a coding agent
- * not yet archived, which the archive stops and archives with it. A task
- * whose agents the list has yet to read asks nothing, as one with none.
+ * What settling tasks at a status asks of each, and what its Undo asks: the
+ * status each stood at before. A task already there is left out of both,
+ * since the press changes nothing about it.
  */
-export function archiveAsks(tasks: readonly Pick<TaskSummary, "agents">[]): boolean {
-  return tasks.some((task) => (task.agents?.total ?? 0) > 0);
+export function settleChanges(
+  tasks: readonly Pick<TaskSummary, "id" | "status">[],
+  status: SettledStatus,
+): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
+  const moved = tasks.filter((task) => standingStatus(task) !== status);
+  return {
+    asked: moved.map((task) => ({ taskId: task.id, status })),
+    undo: moved.map((task) => ({ taskId: task.id, status: standingStatus(task) })),
+  };
 }
+
+/** Whether the task menu offers settling the task at a status: not where it already stands there. */
+export function settleOffered(task: Pick<TaskSummary, "status">, status: SettledStatus): boolean {
+  return standingStatus(task) !== status;
+}
+
+/** What the toasts say of tasks settled at each status: one, several, and the refusals. */
+const SETTLE_NOTES = {
+  [SETTLED_STATUS.DONE]: {
+    one: "Marked done",
+    many: "tasks marked done",
+    failedOne: "The task could not be marked done. Try again.",
+    failedMany: "The tasks could not be marked done. Try again.",
+  },
+  [SETTLED_STATUS.CANCELED]: {
+    one: "Task canceled",
+    many: "tasks canceled",
+    failedOne: "The task could not be canceled. Try again.",
+    failedMany: "The tasks could not be canceled. Try again.",
+  },
+} as const satisfies Record<SettledStatus, Record<string, string>>;
+
+/**
+ * What the toast says once tasks were settled at a status, by how many the
+ * service kept and how many it refused; one task says "Marked done".
+ */
+export function settledNote(status: SettledStatus, landed: number, refused: number): string {
+  const notes = SETTLE_NOTES[status];
+  const kept = landed === 1 ? notes.one : `${landed} ${notes.many}`;
+  return refused === 0 ? kept : `${kept}, ${refused} could not be`;
+}
+
+/** What the toast says when the service refused every task a press settled. */
+export function settleFailedNote(status: SettledStatus, refused: number): string {
+  const notes = SETTLE_NOTES[status];
+  return refused === 1 ? notes.failedOne : notes.failedMany;
+}
+
+/** What the toast says when the service refused an Undo putting a status back. */
+export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put back. Try again.";
 
 /** A task's pin and archive as the list carries them, each only where it stands. */
 type MarkStamps = Pick<TaskSummary, "pinnedAt" | "archivedAt">;
 
-/** A pin or an archive given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
+/**
+ * A pin, an archive, or a status given to a task that main's view has yet
+ * to carry: the instant a pin or an archive was asked, or null for one taken
+ * away, and the status a press set.
+ */
 export interface PendingMark {
   readonly pinnedAt?: number | null;
   readonly archivedAt?: number | null;
+  readonly status?: TaskStatus;
 }
 
-/** The pins and archives given to tasks that main's view has yet to carry, by task id. */
+/** The pins, archives, and statuses given to tasks that main's view has yet to carry, by task id. */
 export type PendingMarks = ReadonlyMap<string, PendingMark>;
 
 /** The pending stamps a press asks for, made at `at`. */
@@ -450,7 +510,7 @@ function stampAfter(standing: number | undefined, asked: number | null | undefin
   return standing ?? asked;
 }
 
-/** A row or the open document with its pending pin and archive drawn in place of what it carries; an unpin takes the pin's place with it. */
+/** A row or the open document with its pending pin, archive, and status drawn in place of what it carries; an unpin takes the pin's place with it. */
 function marked<Row extends TaskSummary>(
   row: Row,
   mark: PendingMark | undefined,
@@ -463,10 +523,11 @@ function marked<Row extends TaskSummary>(
     ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
     ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
     ...(archived === undefined ? undefined : { archivedAt: archived }),
+    ...(mark?.status === undefined ? undefined : { status: mark.status }),
   };
 }
 
-/** The view with each pending pin and archive drawn in place, in the list and on the open document alike. */
+/** The view with each pending pin, archive, and status drawn in place, in the list and on the open document alike. */
 export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   if (marks.size === 0) return view;
   const held = view.document.task;
@@ -480,13 +541,14 @@ export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   };
 }
 
-/** Whether the view carries every stamp a pending mark asks for: each standing where it is asked, and gone where it is taken away. */
-function markLanded(row: MarkStamps, mark: PendingMark): boolean {
+/** Whether the view carries everything a pending mark asks for: each stamp standing where it is asked and gone where it is taken away, and the status asked. */
+function markLanded(row: MarkStamps & Pick<TaskSummary, "status">, mark: PendingMark): boolean {
   const pinLanded =
     mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
   const archiveLanded =
     mark.archivedAt === undefined || (mark.archivedAt === null) === (row.archivedAt === undefined);
-  return pinLanded && archiveLanded;
+  const statusLanded = mark.status === undefined || standingStatus(row) === mark.status;
+  return pinLanded && archiveLanded && statusLanded;
 }
 
 /**

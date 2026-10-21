@@ -92,6 +92,13 @@ export const task = pgTable(
      * until no running build reads it, then a later migration drops it.
      */
     pinnedAt: timestamptz("pinned_at"),
+    /**
+     * When the task was finished: the instant its status last moved to Done
+     * or Canceled, which the Tasks page windows its finished work by; null
+     * while it stands in any other status. A write that leaves the status as
+     * it stood leaves this as it stood too (`task-store.ts`).
+     */
+    completedAt: timestamptz("completed_at"),
     /** When the task was archived, which the list leaves out unless asked for it; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     createdAt: createdAt(),

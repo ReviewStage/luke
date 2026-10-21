@@ -12,17 +12,16 @@ import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
-  ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   BUTTON_SIZE,
   Button,
   ComposeIcon,
-  ConfirmDialog,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
   IconButton,
+  MarkDoneIcon,
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
@@ -36,7 +35,6 @@ import {
   Skeleton,
   SkeletonRegion,
   UnpinIcon,
-  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -69,9 +67,14 @@ import {
   sectionOrder,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { archiveAsks, repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import {
+  repositoryPageUrl,
+  SETTLED_STATUS,
+  settleOffered,
+  TASK_MARK,
+  TASKS_PAGE,
+} from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   FactoryIcon,
   FolderPlusIcon,
@@ -118,11 +121,7 @@ import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import {
-  archiveTasksQuestion,
-  type CountNoun,
-  SidebarGroupHeader,
-} from "./sidebar-group-header.js";
+import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
@@ -611,33 +610,37 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Archive tasks puts every task under the header away, and Open on
- * GitHub opens the repository's page, under GitHub's mark rather than the
- * owner's picture, since it is about GitHub. The tasks with no repository
- * have no pin, since they always stand last, and no page to open. A group of
- * archived plans offers no Archive, since its plans are already away, so the
- * plans with no repository offer nothing there.
- * Archive tasks runs through `onArchive`, which asks first where any of the
- * tasks has coding agents the archive would stop and archive with it.
+ * account, Mark tasks done sets every task under the header Done, which the
+ * sidebar's status filter then leaves out, and Open on GitHub opens the
+ * repository's page, under GitHub's mark rather than the owner's picture,
+ * since it is about GitHub. Mark tasks done asks nothing first, since it
+ * stops no agent. The tasks with no repository have no pin, since they
+ * always stand last, and no page to open. A group of archived plans, or of
+ * tasks all done already, offers no Mark tasks done, so the plans with no
+ * repository offer nothing there.
  */
 function repositoryActionGroups(
   group: RepositoryGroup,
   tasks: TasksControl,
   archived: boolean,
-  onArchive: () => void,
 ): MenuAction[][] {
   const { repository } = group;
-  const archive: MenuAction[] =
-    archived || groupTasks(group).length === 0
+  const listed = groupTasks(group);
+  const settle: MenuAction[] =
+    archived || !listed.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
       ? []
       : [
           {
-            label: "Archive tasks",
-            icon: <ArchiveIcon />,
-            onSelect: onArchive,
+            label: "Mark tasks done",
+            icon: <MarkDoneIcon />,
+            onSelect: () =>
+              tasks.onSettleTasks(
+                listed.map(({ id }) => id),
+                SETTLED_STATUS.DONE,
+              ),
           },
         ];
-  if (repository === null) return archive.length === 0 ? [] : [archive];
+  if (repository === null) return settle.length === 0 ? [] : [settle];
   const pin: MenuAction = tasks.pinnedRepositories.includes(repository)
     ? {
         label: "Unpin",
@@ -650,7 +653,7 @@ function repositoryActionGroups(
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => tasks.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [[pin, ...archive], [github]];
+  return [[pin, ...settle], [github]];
 }
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
@@ -699,19 +702,7 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const listed = groupTasks(group);
-  const archiveAll = () => context.tasks.onArchiveTasks(listed.map(({ id }) => id));
-  const archiving = useConfirmDialog(
-    { subject: listed.length > 0, surfaceOpen: context.tasks.shown },
-    () => {
-      archiveAll();
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-  );
-  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived, () => {
-    if (archiveAsks(listed)) archiving.ask();
-    else archiveAll();
-  });
+  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -775,7 +766,6 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, listed.length)} />
       {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );

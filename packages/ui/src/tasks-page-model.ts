@@ -19,8 +19,9 @@ import { TASK_ORDER, taskTime } from "./task-list-model.js";
  * both views, since the List and the Board are two looks at the same
  * tasks. The display says how the tasks that stand are laid out: what
  * groups them (the Board's columns), how each group orders them, whether a
- * group with no task still stands, whether the settled, Done and Canceled,
- * stand beside the open work, whether the pins and the account's sections
+ * group with no task still stands, which of the settled, Done and Canceled,
+ * stand beside the open work (none, those finished in the past week or
+ * month, or all, as Linear's "completed issues" option reads), whether the pins and the account's sections
  * lead the List, and which of a task's properties its row or card draws.
  * The List and the Board each keep a display of their own, because a board
  * wants every column in sight and the finished work in its last one, where a
@@ -29,7 +30,9 @@ import { TASK_ORDER, taskTime } from "./task-list-model.js";
  * A task from a service before statuses stands as Todo, where a task
  * starts, and one before priorities as No priority, for every filter and
  * group alike; a creator nobody can be named for, and no repository, are
- * values of their own (`null`) a filter keeps and a group heads.
+ * values of their own (`null`) a filter keeps and a group heads. A settled
+ * task from a service before it kept when a task was finished counts as
+ * finished at its last save (`updatedAt`).
  */
 
 /** The fields a filter narrows the tasks by. */
@@ -110,20 +113,65 @@ export const BOARD_PROPERTIES: readonly TaskProperty[] = [
   TASK_PROPERTY.CREATOR,
 ];
 
+/** Which of the settled tasks, Done and Canceled, stand: none, those finished within the past week or month, or every one. */
+export const COMPLETED_WINDOW = {
+  NONE: "none",
+  PAST_WEEK: "past-week",
+  PAST_MONTH: "past-month",
+  ALL: "all",
+} as const;
+
+export type CompletedWindow = (typeof COMPLETED_WINDOW)[keyof typeof COMPLETED_WINDOW];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How far back each window that reaches back at all reaches, in milliseconds. */
+const COMPLETED_WINDOW_MS = {
+  [COMPLETED_WINDOW.PAST_WEEK]: 7 * DAY_MS,
+  [COMPLETED_WINDOW.PAST_MONTH]: 30 * DAY_MS,
+} as const;
+
 /** How one view lays the tasks that stand out. */
 export interface TasksDisplay {
   readonly grouping: TasksGrouping;
   readonly order: TasksOrder;
   /** Whether a status's or a priority's group stands with no task in it. */
   readonly emptyGroups: boolean;
-  /** Whether the Done tasks stand. */
-  readonly done: boolean;
-  /** Whether the Canceled tasks stand. */
-  readonly canceled: boolean;
+  /** Which of the Done and Canceled tasks stand, by when each was finished. */
+  readonly completed: CompletedWindow;
   /** Whether the pinned tasks, then the account's sections, lead the List before its groups. */
   readonly pinnedFirst: boolean;
   /** The properties drawn, in `TASK_PROPERTY_ORDER`. */
   readonly properties: readonly TaskProperty[];
+}
+
+/**
+ * A display as a view keeps it: each choice optional, so one kept by an
+ * earlier build reads over the view's own for whatever it lacks, and the Done
+ * and Canceled switches an earlier build kept before the completed window
+ * replaced them.
+ */
+export type KeptTasksDisplay = Partial<TasksDisplay> & {
+  readonly done?: boolean;
+  readonly canceled?: boolean;
+};
+
+/**
+ * The display a view kept, over its own `initial` for whatever it lacks. A
+ * display kept with the earlier switches and no window reads as the past
+ * week where it showed either settled status, and as none where it showed
+ * neither, so nobody's saved view loses or floods its finished work.
+ */
+export function keptTasksDisplay(kept: KeptTasksDisplay, initial: TasksDisplay): TasksDisplay {
+  const { done, canceled, ...rest } = kept;
+  const switched = done !== undefined || canceled !== undefined;
+  const earlier =
+    done === true || canceled === true ? COMPLETED_WINDOW.PAST_WEEK : COMPLETED_WINDOW.NONE;
+  return {
+    ...initial,
+    ...rest,
+    completed: kept.completed ?? (switched ? earlier : initial.completed),
+  };
 }
 
 /** The List until its reader changes it: by status from the work under way, the most pressing first, nothing settled, the pins and sections leading. */
@@ -131,19 +179,17 @@ export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
   grouping: TASKS_GROUPING.STATUS,
   order: TASKS_ORDER.PRIORITY,
   emptyGroups: false,
-  done: false,
-  canceled: false,
+  completed: COMPLETED_WINDOW.NONE,
   pinnedFirst: true,
   properties: TASK_PROPERTY_ORDER,
 };
 
-/** The Board until its reader changes it: a column for every status but Canceled, every one standing, the most pressing first. */
+/** The Board until its reader changes it: a column for every status, every one standing, the most pressing first, the settled finished in the past week. */
 export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
   grouping: TASKS_GROUPING.STATUS,
   order: TASKS_ORDER.PRIORITY,
   emptyGroups: true,
-  done: true,
-  canceled: false,
+  completed: COMPLETED_WINDOW.PAST_WEEK,
   pinnedFirst: false,
   properties: BOARD_PROPERTIES,
 };
@@ -173,6 +219,8 @@ export type TasksGroupHead =
 export interface TasksGroup {
   readonly head: TasksGroupHead;
   readonly tasks: readonly TaskSummary[];
+  /** How many of a settled status's tasks the completed window leaves out as finished before it; absent where it leaves none. */
+  readonly older?: number;
 }
 
 /** A section of the account's as the List is handed it: its id and its tasks' ids, in the section's own order. */
@@ -285,21 +333,57 @@ export function valueCounts(
   return counts;
 }
 
-/** Whether a task's status is one the display lets stand: every open one, and the settled where it shows them. */
-function settledShown(task: TaskSummary, display: TasksDisplay): boolean {
-  const status = statusOf(task);
-  if (status === TASK_STATUS.DONE) return display.done;
-  if (status === TASK_STATUS.CANCELED) return display.canceled;
-  return true;
+/** Whether a status is settled: Done or Canceled. */
+function isSettled(status: TaskStatus): boolean {
+  return status === TASK_STATUS.DONE || status === TASK_STATUS.CANCELED;
 }
 
-/** The tasks that stand: those in the filter, the settled where the display shows them. */
+/** When a settled task was finished: as the service kept it, else its last save, for one from a service before it kept that. */
+function finishedAt(task: TaskSummary): number {
+  return task.completedAt ?? task.updatedAt;
+}
+
+/** Whether a settled task finished at `at` falls within the window, as of `now`. */
+function inWindow(completed: CompletedWindow, at: number, now: number): boolean {
+  switch (completed) {
+    case COMPLETED_WINDOW.NONE:
+      return false;
+    case COMPLETED_WINDOW.ALL:
+      return true;
+    case COMPLETED_WINDOW.PAST_WEEK:
+    case COMPLETED_WINDOW.PAST_MONTH:
+      return now - at <= COMPLETED_WINDOW_MS[completed];
+  }
+}
+
+/** What the filter and the display leave of the tasks: those that stand, and the settled the window leaves out as finished before it. */
+interface StandingTasks {
+  readonly standing: readonly TaskSummary[];
+  readonly older: readonly TaskSummary[];
+}
+
+/**
+ * The tasks that stand: those in the filter, every open one and the settled
+ * the completed window keeps; and beside them the settled it leaves out as
+ * older, none where it keeps no settled task at all.
+ */
 function standingTasks(
   tasks: readonly TaskSummary[],
   filter: TasksFilter,
   display: TasksDisplay,
-): readonly TaskSummary[] {
-  return tasks.filter((task) => inFilter(task, filter) && settledShown(task, display));
+  now: number,
+): StandingTasks {
+  const standing: TaskSummary[] = [];
+  const older: TaskSummary[] = [];
+  for (const task of tasks) {
+    if (!inFilter(task, filter)) continue;
+    if (!isSettled(statusOf(task)) || inWindow(display.completed, finishedAt(task), now)) {
+      standing.push(task);
+    } else if (display.completed !== COMPLETED_WINDOW.NONE) {
+      older.push(task);
+    }
+  }
+  return { standing, older };
 }
 
 /** A priority's rank, the most pressing first. */
@@ -357,12 +441,7 @@ function groupingRule(grouping: TasksGrouping, context: GroupingContext): Groupi
       const statuses = finiteValues(
         statusOrder,
         filterValues(filter, TASKS_FILTER_FIELD.STATUS),
-        (status) =>
-          status === TASK_STATUS.DONE
-            ? display.done
-            : status === TASK_STATUS.CANCELED
-              ? display.canceled
-              : true,
+        (status) => !isSettled(status) || display.completed !== COMPLETED_WINDOW.NONE,
       );
       return {
         keyOf: statusOf,
@@ -425,20 +504,38 @@ interface GroupingContext {
   readonly creatorName: (userId: string) => string;
 }
 
-/** A group from its head and its tasks. */
-function group(head: TasksGroupHead, tasks: readonly TaskSummary[]): TasksGroup {
-  return { head, tasks };
+/** A group from its head and its tasks, with how many older settled tasks it leaves out where it leaves any. */
+function group(head: TasksGroupHead, tasks: readonly TaskSummary[], older = 0): TasksGroup {
+  return older === 0 ? { head, tasks } : { head, tasks, older };
 }
 
-/** The tasks grouped by the grouping chosen, each group in the order chosen, the groups in their own order. */
-function groupedBy(tasks: readonly TaskSummary[], context: GroupingContext): readonly TasksGroup[] {
+/** How many of the tasks hold each status. */
+function countByStatus(tasks: readonly TaskSummary[]): ReadonlyMap<string | null, number> {
+  const counts = new Map<string | null, number>();
+  for (const task of tasks) counts.set(statusOf(task), (counts.get(statusOf(task)) ?? 0) + 1);
+  return counts;
+}
+
+/**
+ * The tasks grouped by the grouping chosen, each group in the order chosen,
+ * the groups in their own order. Grouped by status, a settled status's group
+ * counts the `older` tasks the window left out of it, and stands for them
+ * even with no task of its own, so they are a press away.
+ */
+function groupedBy(
+  { standing: tasks, older }: StandingTasks,
+  context: GroupingContext,
+): readonly TasksGroup[] {
   const { display } = context;
   const ordered = tasks.toSorted(byOrder(display.order));
   const rule = groupingRule(display.grouping, context);
   if (rule === undefined)
     return ordered.length === 0 ? [] : [group({ kind: TASKS_GROUP.ALL }, ordered)];
+  const olderBy =
+    display.grouping === TASKS_GROUPING.STATUS ? countByStatus(older) : new Map<string, number>();
   const held = new Map<string | null, TaskSummary[]>();
   if (display.emptyGroups) for (const value of rule.standing) held.set(value, []);
+  for (const value of olderBy.keys()) if (!held.has(value)) held.set(value, []);
   for (const task of ordered) {
     const value = rule.keyOf(task);
     const members = held.get(value);
@@ -447,7 +544,7 @@ function groupedBy(tasks: readonly TaskSummary[], context: GroupingContext): rea
   }
   return [...held]
     .sort(([a], [b]) => rule.compare(a, b))
-    .map(([value, members]) => group(rule.head(value), members));
+    .map(([value, members]) => group(rule.head(value), members, olderBy.get(value)));
 }
 
 /**
@@ -468,6 +565,7 @@ export function tasksListGroups(
     sections,
     readerId,
     creatorName,
+    now,
   }: {
     filter: TasksFilter;
     display: TasksDisplay;
@@ -477,9 +575,11 @@ export function tasksListGroups(
     readerId: string | undefined;
     /** A creator's name as the page says it, which the creators' groups are ordered by. */
     creatorName: (userId: string) => string;
+    /** Epoch milliseconds now, which the completed window reaches back from. */
+    now: number;
   },
 ): readonly TasksGroup[] {
-  const standing = standingTasks(tasks, filter, display);
+  const { standing, older } = standingTasks(tasks, filter, display, now);
   const groups: TasksGroup[] = [];
   const placed = new Set<string>();
   if (display.pinnedFirst) {
@@ -500,7 +600,7 @@ export function tasksListGroups(
   }
   const rest = standing.filter((task) => !placed.has(task.id));
   const context = { filter, display, statusOrder: TASKS_LIST_STATUS_ORDER, readerId, creatorName };
-  return [...groups, ...groupedBy(rest, context)];
+  return [...groups, ...groupedBy({ standing: rest, older }, context)];
 }
 
 /**
@@ -512,10 +612,19 @@ export function tasksListGroups(
  */
 export function tasksBoardColumns(
   tasks: readonly TaskSummary[],
-  { filter, display }: { filter: TasksFilter; display: TasksDisplay },
+  {
+    filter,
+    display,
+    now,
+  }: {
+    filter: TasksFilter;
+    display: TasksDisplay;
+    /** Epoch milliseconds now, which the completed window reaches back from. */
+    now: number;
+  },
 ): readonly TasksGroup[] {
   const grouping = boardGrouping(display.grouping);
-  return groupedBy(standingTasks(tasks, filter, display), {
+  return groupedBy(standingTasks(tasks, filter, display, now), {
     filter,
     display: { ...display, grouping },
     statusOrder: TASK_STATUS_ORDER,

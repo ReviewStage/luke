@@ -84,8 +84,6 @@ import {
 import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
-  archivedTasksNote,
-  archiveTasksFailedNote,
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
@@ -111,6 +109,12 @@ import {
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
+  type SettledStatus,
+  STATUS_RESTORE_FAILED_NOTE,
+  type StatusChange,
+  settleChanges,
+  settledNote,
+  settleFailedNote,
   sidebarTasks,
   startFailureNote,
   TASK_MARK,
@@ -797,11 +801,12 @@ export interface TasksControl {
    */
   onMarkTask: (taskId: string, mark: TaskMark) => void;
   /**
-   * Archives several tasks at once, as a repository's Archive tasks asks:
-   * each drawn archived at once, and one toast for them all once the
-   * service answered, whose Undo brings back every task it kept.
+   * Sets one task or several at Done or Canceled, as Mark done, Cancel task,
+   * and a group's Mark tasks done ask: each drawn there at once, and one
+   * toast for them all once the service answered, whose Undo puts back the
+   * status each stood at. A task already there is left as it stands.
    */
-  onArchiveTasks: (taskIds: readonly string[]) => void;
+  onSettleTasks: (taskIds: readonly string[], status: SettledStatus) => void;
   /** The repositories the account pinned in the sidebar, newest pinned first, whose groups stand above the rest. */
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
@@ -2162,29 +2167,22 @@ export function useTasksTab(input: {
     }
   };
 
-  // Several tasks archived at once answer with one toast rather than one
-  // each, so its Undo brings back every task the service kept, and opens
-  // again the open task where the archive left it. A task the service
-  // refused goes back where it was, and the toast counts it. Note that the
-  // tasks share one stamp, because they were archived by one press, so they
-  // stand under Archived in the order they were listed rather than in an
-  // order set by whether the clock ticked between two of them.
-  const archiveTasks = (taskIds: readonly string[]) => {
-    if (fixture !== undefined || taskIds.length === 0) return;
-    const at = Date.now();
-    const asked = taskIds.map((taskId) => ({
+  // Each status change is drawn at once and sent, and a refused one goes
+  // back where it was only while no later press replaced it. Answers which
+  // tasks the service kept and how many it refused.
+  const sendStatuses = (changes: readonly StatusChange[]) => {
+    const asked = changes.map(({ taskId, status }) => ({
       taskId,
-      next: { ...marks.get(taskId), ...pendingMark(TASK_MARK.ARCHIVE, at) },
+      next: { ...marks.get(taskId), status },
     }));
     setMarks(
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
-    const answers = asked.map(({ taskId }) =>
-      act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: true }).catch(() => false),
+    const answers = asked.map(({ taskId, next }) =>
+      act(ACT_KIND.TASKS_SET_STANDING, { taskId, status: next.status }).catch(() => false),
     );
-    Promise.all(answers).then((changed) => {
+    return Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
-      const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
       setMarks(
         (held) =>
           new Map(
@@ -2193,30 +2191,57 @@ export function useTasksTab(input: {
             ),
           ),
       );
+      const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
+      return { landed, refused: refused.length };
+    });
+  };
+
+  // Tasks settled by one press answer with one toast rather than one each,
+  // so its Undo puts back the status of every task the service kept, and
+  // says so only where the service refuses that too. The open task stays
+  // open, since a task done or canceled is still read and worked on.
+  const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
+    if (fixture !== undefined) return;
+    const held = tasks.document.task;
+    const listed = taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
+      const task = tasks.tasks.find((each) => each.id === taskId);
+      if (task !== undefined) return [task];
+      return held?.id === taskId ? [held] : [];
+    });
+    const { asked, undo } = settleChanges(listed, status);
+    if (asked.length === 0) return;
+    sendStatuses(asked).then(({ landed, refused }) => {
       if (landed.length === 0) {
         toast({
-          words: archiveTasksFailedNote(refused.length),
+          words: settleFailedNote(status, refused),
           tone: TOAST_TONE.FAILED,
           hold: TOAST_HOLD.FAILED,
         });
         return;
       }
-      const left = landed.find((taskId) => taskId === openNow.current);
-      if (left !== undefined) leaveTask();
       toast({
-        words: archivedTasksNote(landed.length, refused.length),
+        words: settledNote(status, landed.length, refused),
         tone: TOAST_TONE.DONE,
         action: {
           label: UNDO_LABEL,
-          onPress: () => {
-            for (const taskId of landed) {
-              markNow.current(taskId, TASK_MARK.UNARCHIVE, { reopen: taskId === left });
-            }
-          },
+          onPress: () => restoreNow.current(undo.filter(({ taskId }) => landed.includes(taskId))),
         },
       });
     });
   };
+  const restoreStatuses = (changes: readonly StatusChange[]) => {
+    sendStatuses(changes).then(({ refused }) => {
+      if (refused === 0) return;
+      toast({
+        words: STATUS_RESTORE_FAILED_NOTE,
+        tone: TOAST_TONE.FAILED,
+        hold: TOAST_HOLD.FAILED,
+      });
+    });
+  };
+  // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
+  const restoreNow = useRef(restoreStatuses);
+  restoreNow.current = restoreStatuses;
   // An Undo is pressed renders after its archive landed, so it marks, and
   // opens, through the tab as it stands then rather than as it stood.
   const markNow = useRef(markTask);
@@ -3365,7 +3390,7 @@ export function useTasksTab(input: {
     onRenameTask: renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
-    onArchiveTasks: archiveTasks,
+    onSettleTasks: settleTasks,
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
     onPinRepository: pinRepository,
     taskSections,

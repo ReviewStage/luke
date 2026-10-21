@@ -127,7 +127,16 @@ export function UnpinIcon(): React.JSX.Element {
   );
 }
 
-/** A box under its lid: puts a task away under Archived. */
+/** A check, drawn as a button's glyph: marks a task done. */
+export function MarkDoneIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.8 12.6 9.6 17.3 19.2 6.9" />
+    </Glyph>
+  );
+}
+
+/** A box under its lid: puts an agent, or a task left archived, away under Archived. */
 export function ArchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

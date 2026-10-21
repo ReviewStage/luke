@@ -891,12 +891,12 @@ function rowMarks(sidebar: HTMLElement, title: string): string[] {
   );
 }
 
-test("a one-off agent's row draws Pin and Archive at its end as a task's row does, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
+test("a one-off agent's row draws Pin and Archive at its end where a task's row draws Pin and Mark done, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE, shelved]);
   const task = TASKS[0] ?? assert.fail("a task stands");
 
-  assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), rowMarks(sidebar, task.name));
+  assert.deepEqual(rowMarks(sidebar, task.name), ["Pin", "Mark done"]);
   assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), ["Pin", "Archive"]);
   const pin = [
     ...(sidebar.querySelectorAll<HTMLButtonElement>(
