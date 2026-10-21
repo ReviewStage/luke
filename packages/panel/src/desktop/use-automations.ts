@@ -69,8 +69,13 @@ export function useAutomations(workspaceId: string | undefined) {
   // Note that a push that fails keeps the list it would have replaced, so a
   // page drawn from it, an editor's draft among them, stands; only a failure
   // with nothing held yet is said as one.
+  // Note that every list pushed is counted, so a write's answer that lands after a push it was
+  // sent before draws nothing over it: that push may hold a newer write of another window's, and
+  // the write's own commit is pushed after it in any case.
+  const pushes = useRef(0);
   const reload = useFollowedAutomations(workspaceId, (read) => {
     if (workspaceId === undefined) return;
+    if (!("failure" in read)) pushes.current += 1;
     setHeld((was) =>
       "failure" in read &&
       was?.workspaceId === workspaceId &&
@@ -82,7 +87,8 @@ export function useAutomations(workspaceId: string | undefined) {
   });
   /**
    * One write out: counted as its automation's newest, a new one's under
-   * no automation yet, and its answer handed to `land` only while it still is.
+   * no automation yet, and its answer handed to `land` only while it still
+   * is and no list was pushed since it was sent.
    */
   const written = useCallback(
     <Answer>(
@@ -94,8 +100,10 @@ export function useAutomations(workspaceId: string | undefined) {
       writes.current += 1;
       const count = writes.current;
       if (automationId !== undefined) newestWrite.set(automationId, count);
+      const pushedBefore = pushes.current;
       const settled = (answer: Answer): Answer => {
-        if (automationId === undefined || newestWrite.get(automationId) === count) land(answer);
+        const newest = automationId === undefined || newestWrite.get(automationId) === count;
+        if (newest && pushes.current === pushedBefore) land(answer);
         return answer;
       };
       return asked.then(settled, () => settled(refused));

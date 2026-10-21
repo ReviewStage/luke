@@ -586,6 +586,28 @@ test("an older switch's answer landing after a newer one's draws nothing over it
   );
 });
 
+test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  await settle();
+
+  // Another window renames it meanwhile, and the host pushes the list before the switch answers.
+  standing = standing.map((each) =>
+    each.id === SWEEP.id ? { ...each, name: "Sweep, as another window left it" } : each,
+  );
+  pushStanding();
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.equal(
+    page.querySelector(".automation-row-name")?.textContent,
+    "Sweep, as another window left it",
+  );
+});
+
 test("what changed elsewhere is drawn as the host pushes it, and a switch reads nothing again", async () => {
   const page = mount();
   await settle();
