@@ -44,6 +44,7 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -68,7 +69,8 @@ import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { LoneLinkCards } from "./lone-link-card.js";
 import { RelativeTime } from "./relative-time.js";
-import { SentWords } from "./skill-chip.js";
+import { SentWords, SkillFiles } from "./skill-chip.js";
+import type { SkillSource } from "./skill-picker.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -265,6 +267,10 @@ export interface ChatTaskDoors {
   readonly code: InboxCodeDoors;
   /** None where the page drawing the chat hands the task's mentions itself, as the plan's Chat tab stands on the task's page. */
   readonly mentions?: TaskMentionsValue | undefined;
+  /** Where a person's `/skill` is read from and what opens its file, so it draws as its chip; none where the page hands its own, or the task names no repository. */
+  readonly skills?:
+    | { readonly source: SkillSource; readonly onOpen: (skill: SkillOption) => void }
+    | undefined;
 }
 
 /** What the window draws a message with: the chat, the names, the moment, what the composer offers, and the doors a link, a post, and an answer go through. */
@@ -317,7 +323,7 @@ function drawnBlocks(
 /**
  * Hands what is drawn under it the doors of the task whose channel it is:
  * the code doors a link to lines alone on its line reads through, and the
- * task's mentions where the page drawing them does not hand them.
+ * task's mentions and skills where the page drawing them does not hand them.
  */
 function TaskDoorsScope({
   doors,
@@ -327,9 +333,18 @@ function TaskDoorsScope({
   children: React.ReactNode;
 }): React.JSX.Element {
   if (doors === undefined) return <>{children}</>;
+  const { mentions, skills } = doors;
   const cards = <LoneLinkCards doors={doors}>{children}</LoneLinkCards>;
-  if (doors.mentions === undefined) return cards;
-  return <TaskMentions value={doors.mentions}>{cards}</TaskMentions>;
+  const named =
+    skills === undefined ? (
+      cards
+    ) : (
+      <SkillFiles source={skills.source} onOpen={skills.onOpen}>
+        {cards}
+      </SkillFiles>
+    );
+  if (mentions === undefined) return named;
+  return <TaskMentions value={mentions}>{named}</TaskMentions>;
 }
 
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */

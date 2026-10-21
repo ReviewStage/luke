@@ -2019,3 +2019,160 @@ test("outside a task's channel, a code block still names its file and lines, wit
   assert.equal(page.querySelector("[data-inbox-code]"), null);
   assert.match(page.querySelector(".chat-stream")?.textContent ?? "", /invites\.ts/u);
 });
+
+test("in the window's Chat, a person's /skill in a task's channel is drawn as its chip, read from the task's skills, and opens its file in the task", async () => {
+  const shown: [string, CodeRef, string | undefined][] = [];
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () =>
+      Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              path: ".agents/skills/release/SKILL.md",
+            },
+          ],
+        },
+      }),
+  });
+  let seq = 0;
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]);
+      seq = posted.answer.messages.at(-1)?.seq ?? 0;
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    { tasks: [INVITES_TASK], onShowFile: (...asked) => shown.push(asked) },
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  const chip = messageWords(page, seq).querySelector<HTMLElement>("[data-skill-ref]");
+  assert.ok(chip, "the skill is its chip");
+  const press = chip.matches("button") ? chip : chip.querySelector<HTMLElement>("button");
+  act(() => press?.click());
+  assert.deepEqual(shown.at(-1), [
+    FIXTURE_TASK_ID,
+    { path: ".agents/skills/release/SKILL.md" },
+    undefined,
+  ]);
+});
+
+test("a task's skills are read once while the listed tasks change around it, rather than again on every draw", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () => {
+      reads += 1;
+      return Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+        },
+      });
+    },
+  });
+  let seq = 0;
+  // Each draw lists the task anew, as a change to any listed task hands the window a new list.
+  const listing: Partial<TasksControl> = {
+    get tasks() {
+      return [{ ...INVITES_TASK }];
+    },
+  };
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]);
+      seq = posted.answer.messages.at(-1)?.seq ?? 0;
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    listing,
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the skill is its chip");
+  // A post draws the window again over a new list of its tasks.
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "shipping it");
+  pressInComposer(box, "Enter");
+  await settle();
+  assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the chip stands");
+  assert.equal(reads, 1, "the skills are not read again");
+});
+
+test("a task whose repository is let go and chosen again reads its skills afresh", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () => {
+      reads += 1;
+      return Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+        },
+      });
+    },
+  });
+  let repository: string | null = INVITES_TASK.repository;
+  const listing: Partial<TasksControl> = {
+    get tasks() {
+      return [{ ...INVITES_TASK, repository }];
+    },
+  };
+  const page = mount(
+    (chat) =>
+      withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]),
+    ACME,
+    undefined,
+    undefined,
+    listing,
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  const post = async (words: string) => {
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, words);
+    pressInComposer(box, "Enter");
+    await settle();
+  };
+  repository = null;
+  await post("dropping the repository");
+  repository = INVITES_TASK.repository;
+  await post("and choosing it again");
+  assert.equal(reads, 2);
+});
