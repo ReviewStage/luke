@@ -202,3 +202,62 @@ it.effect("a pause holds what arrived in the page until the resume, in the order
     }),
   ),
 );
+
+/** A socket that had opened before the seam listened: its open event long gone. */
+class OpenedSocket extends StandInSocket {
+  override readyState = StandInSocket.OPEN;
+}
+
+/** A socket that had closed before the seam listened, refused before it ever opened. */
+class RefusedSocket extends StandInSocket {
+  override readyState = StandInSocket.CLOSED;
+}
+
+it.effect(
+  "a socket that opened, or closed, before the seam listened is read as it stands, never waited on",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        vi.stubGlobal("WebSocket", OpenedSocket);
+        const opened = yield* openTerminalSocketFromPage(ADDRESS, {});
+        assert.ok("socket" in opened, "an open whose event came first still opens");
+
+        vi.stubGlobal("WebSocket", RefusedSocket);
+        assert.deepEqual(yield* openTerminalSocketFromPage(ADDRESS, {}), { unreachable: true });
+      }),
+    ),
+);
+
+it.effect(
+  "output the host does not take past the bound lets the socket go, and the host hears the close after what was held",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        vi.stubGlobal("WebSocket", StandInSocket);
+        const opening = yield* Effect.forkChild(openTerminalSocketFromPage(ADDRESS, {}));
+        yield* Effect.yieldNow;
+        const socket = standIn();
+        socket.accept();
+        const opened = yield* Fiber.join(opening);
+        assert.ok("socket" in opened);
+
+        // A screen that stopped drawing: paused, and five megabytes of a chatty shell arriving.
+        yield* opened.socket.pause;
+        const megabyte = new Uint8Array(1024 * 1024).buffer;
+        for (let sent = 0; sent < 4; sent += 1) socket.receive(megabyte);
+        assert.equal(socket.closedWith, undefined, "four megabytes are still the page's to hold");
+        socket.receive(megabyte);
+        assert.equal(socket.closedWith, 1000, "past the bound the page lets the socket go");
+        socket.end(1000);
+
+        yield* opened.socket.resume;
+        const arrivals = [...(yield* Stream.runCollect(opened.socket.arrivals))];
+        assert.equal(arrivals.length, 6);
+        assert.deepEqual(
+          arrivals.at(-1),
+          { close: 1000 },
+          "the host reads a drop, and opens again",
+        );
+      }),
+    ),
+);
