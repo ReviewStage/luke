@@ -51,6 +51,8 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  PLAN_REFUSAL,
+  type PlanRefusal,
   RUNTIME_REFUSAL,
   type RuntimeRefusal,
 } from "../brain-host/eve-sessions.js";
@@ -247,13 +249,21 @@ function routed<Turn extends BrainHostTurn>(
 /**
  * What a call that failed answers its caller as: a native harness whose
  * image is still being prepared, which the same request later takes; a
- * native harness this function cannot reach, said by name; or the service
- * down, as every other failure of eve's or a harness's reads.
+ * native harness this function cannot reach, said by name; the starter's
+ * plan refusing the launch, said by name, whose sign-in is signed in again
+ * or whose provider is asked again later, and never turned to another
+ * payer; or the service down, as every other failure of eve's or a
+ * harness's reads.
  */
 export function failedCallRefusal(failed: {
   readonly status: number;
   readonly runtimeRefusal?: RuntimeRefusal | undefined;
+  readonly planRefusal?: PlanRefusal | undefined;
 }): HostedRefusal {
+  if (failed.planRefusal === PLAN_REFUSAL.UNREACHABLE) {
+    return HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE;
+  }
+  if (failed.planRefusal !== undefined) return HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
     return HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.IMAGE_PREPARING) {

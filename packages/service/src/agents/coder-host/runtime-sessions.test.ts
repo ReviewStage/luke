@@ -9,7 +9,11 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
+import {
+  listProviderKeyRows,
+  saveProviderKey,
+  setProviderKeyStatus,
+} from "@luke/database/models/provider-key-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
@@ -20,10 +24,15 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Option, Redacted, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
@@ -43,6 +52,8 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  PLAN_REFUSAL,
+  type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
@@ -66,16 +77,21 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * router itself, for every composition a route, the deployment, the agent
  * doors, and the planner's tools wrap their eve in, and for the paths that
  * run through them: a Start, a message from the composer or an Inbox answer,
- * and a Stop. Where no harness is provided, as in the eve apps, the Claude
- * Code agent is refused by name and nothing reaches eve. Synthetic accounts
- * and words throughout; the store is PGlite.
+ * and a Stop. A Codex agent, paid for by its starter's ChatGPT plan, is
+ * answered by Codex alike, and neither eve nor Claude Code hears it. Where no
+ * harness is provided, as in the eve apps, a native agent is refused by name
+ * and nothing reaches eve. Synthetic accounts and words throughout; the
+ * store is PGlite.
  */
 
 /** The sessions of one runtime, writing down every call it takes. */
 function recording(sessionPrefix: string) {
   const calls: string[] = [];
   const messages: EveMessage[] = [];
-  const answers = { open: EVE_SEND_OUTCOME.ACCEPTED as string, status: 0 };
+  const answers: { open: string; status: number; planRefusal?: PlanRefusal } = {
+    open: EVE_SEND_OUTCOME.ACCEPTED,
+    status: 0,
+  };
   const sessions: AgentSessions = {
     open: (message) =>
       Effect.sync(() => {
@@ -83,13 +99,23 @@ function recording(sessionPrefix: string) {
         messages.push(message);
         return answers.open === EVE_SEND_OUTCOME.ACCEPTED
           ? { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `${sessionPrefix}${randomUUID()}` }
-          : { outcome: EVE_SEND_OUTCOME.FAILED, status: answers.status };
+          : {
+              outcome: EVE_SEND_OUTCOME.FAILED,
+              status: answers.status,
+              ...(answers.planRefusal === undefined ? {} : { planRefusal: answers.planRefusal }),
+            };
       }),
     send: (sessionId, message) =>
       Effect.sync(() => {
         calls.push(`send:${sessionId}`);
         messages.push(message);
-        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() };
+        return answers.planRefusal === undefined
+          ? { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() }
+          : {
+              outcome: EVE_SEND_OUTCOME.FAILED,
+              status: answers.status,
+              planRefusal: answers.planRefusal,
+            };
       }),
     cancel: (sessionId, turnId) =>
       Effect.sync(() => {
@@ -111,24 +137,25 @@ function recording(sessionPrefix: string) {
 
 type Recording = ReturnType<typeof recording>;
 
-/** The two runtimes: eve, and Claude Code behind `NativeAgentSessions`, which writes down whom it acts for. */
+/** The three runtimes: eve, and Claude Code and Codex behind `NativeAgentSessions`, which writes down whom it acts for. */
 function runtimes() {
   const eve = recording("wrun_");
   const claudeCode = recording(`${NATIVE_SESSION_PREFIX.claude_code}000000000001-`);
+  const codex = recording(NATIVE_SESSION_PREFIX.codex);
   const actingFor: string[] = [];
   const native = Layer.succeed(NativeAgentSessions, {
     sessions: (runtime, account) => {
       actingFor.push(account);
-      return runtime === "claude_code"
-        ? Option.some(Effect.succeed(claudeCode.sessions))
-        : Option.none();
+      return Option.some(
+        Effect.succeed(runtime === "codex" ? codex.sessions : claudeCode.sessions),
+      );
     },
   });
-  return { eve, claudeCode, actingFor, native };
+  return { eve, claudeCode, codex, actingFor, native };
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 6 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 16 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
   accountId: 91_000 + index,
@@ -171,18 +198,23 @@ const openTeam = Effect.gen(function* () {
 });
 
 /** An agent of the owner's on the task, on the runtime and payer given. */
-const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code") =>
+const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" | "codex") =>
   Effect.gen(function* () {
     const started = yield* createCodingAgent(owner, {
       taskId,
       idempotencyKey: randomUUID(),
-      model: "anthropic/claude-opus-5.5",
+      model: runtime === "codex" ? "openai/gpt-5.5" : "anthropic/claude-opus-5.5",
       effort: "high",
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       runtime,
-      payer: runtime === "claude_code" ? CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION : undefined,
+      payer:
+        runtime === "claude_code"
+          ? CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+          : runtime === "codex"
+            ? CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION
+            : undefined,
     });
     assert.ok(Option.isSome(started));
     return started.value.agent;
@@ -488,6 +520,107 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
+      "a Codex agent's every call reaches Codex acting for its starter, through the router, the agent doors' composition, a message, and a Stop, and neither eve nor Claude Code hears it",
+      () =>
+        Effect.gen(function* () {
+          const { owner, teammate, taskId } = yield* openTeam;
+          const onCodex = yield* agentOn(owner, taskId, "codex");
+          const { eve, claudeCode, codex, actingFor, native } = runtimes();
+
+          const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
+            Effect.provide(native),
+          );
+          const session = yield* everyCall(sessions, onCodex);
+          assert.ok(session.startsWith(NATIVE_SESSION_PREFIX.codex));
+          assert.deepEqual(heard(codex), ["open", "send", "cancel", "reset"]);
+          assert.deepEqual(actingFor, [owner, owner, teammate, teammate]);
+          assert.equal(
+            yield* recordedRuntimeSession({
+              userId: owner,
+              conversationId: onCodex.conversationId,
+            }),
+            session,
+          );
+
+          // The agent doors' and the planner's router.
+          const route = yield* sessionsRouter.pipe(Effect.provide(native));
+          yield* route(eve.sessions, owner).open(messageTo(onCodex));
+          assert.deepEqual(heard(codex), ["open", "send", "cancel", "reset", "open"]);
+
+          // A message from the composer, under its line's own id.
+          const writer = storeWriter({ tools: CODER_TOOL_SET });
+          assert.equal(
+            yield* steerCodingAgent(sessions, writer, teammate, onCodex, {
+              text: "Also the emails.",
+              clientKey: "key-codex",
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: teammate },
+            }),
+            STEER_OUTCOME.SENT,
+          );
+          assert.equal(codex.messages.at(-1)?.lineId, sentLineId("key-codex"));
+
+          // A Stop names the turn under way by its own id.
+          const turnId = randomUUID();
+          const write = yield* writer;
+          yield* write.enqueueTurn(
+            { userId: owner, conversationId: onCodex.conversationId },
+            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+          );
+          const reach: EveReach = {
+            eveOrigin: () => "https://luke.test",
+            eveAs: () => eve.sessions,
+          };
+          yield* stoppedTurn(reach, writer, new Request("https://luke.test/"), owner, onCodex).pipe(
+            Effect.provide(native),
+          );
+          assert.ok(
+            codex.calls.at(-1)?.startsWith("cancel:") && codex.calls.at(-1)?.endsWith(turnId),
+          );
+
+          assert.deepEqual([eve.calls, claudeCode.calls], [[], []]);
+        }),
+    );
+
+    it.effect(
+      "a Codex agent whose starter's ChatGPT sign-in refuses is refused by name, signed out or OpenAI unreachable, and nothing turns to eve",
+      () =>
+        Effect.gen(function* () {
+          const { owner, taskId } = yield* openTeam;
+          const onCodex = yield* agentOn(owner, taskId, "codex");
+          const { eve, codex, native } = runtimes();
+          yield* claimRuntimeSession(
+            { userId: owner, conversationId: onCodex.conversationId },
+            `${NATIVE_SESSION_PREFIX.codex}${randomUUID()}`,
+            new Date(0),
+          );
+          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const send = Effect.result(
+            steerCodingAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onCodex, {
+              text: "Also the emails.",
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
+          );
+          const refusals: string[] = [];
+          for (const refusal of Object.values(PLAN_REFUSAL)) {
+            codex.answers.planRefusal = refusal;
+            codex.answers.status = refusal === PLAN_REFUSAL.UNREACHABLE ? 503 : 403;
+            const sent = yield* send;
+            assert.ok(Result.isFailure(sent) && "error" in sent.failure, refusal);
+            refusals.push(sent.failure.error);
+          }
+
+          assert.deepEqual(refusals, [
+            HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error,
+            HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error,
+            HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error,
+            HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE.error,
+          ]);
+          assert.deepEqual(eve.calls, []);
+        }),
+    );
+
+    it.effect(
       "where no native harness is provided, as in the eve apps, a Claude Code agent is refused by name and eve hears nothing",
       () =>
         Effect.gen(function* () {
@@ -536,10 +669,19 @@ const CATALOG = modelCatalogOf([
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "medium", "high"],
   },
+  {
+    id: "openai/gpt-5.5-fast",
+    name: "GPT-5.5 (Fast)",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "medium", "high"],
+  },
 ]);
 
-/** A workspace connected to GitHub, its owner keeping a Claude setup-token where asked. */
-const openStarter = (setupToken: boolean) =>
+/** How the owner's ChatGPT sign-in stands: none, one Codex launches on, or one OpenAI signed out. */
+type SignIn = "none" | "signed_in" | "signed_out";
+
+/** A workspace connected to GitHub, its owner keeping a Claude setup-token and a ChatGPT sign-in where asked. */
+const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const workspaceId = yield* openWorkspace(owner);
@@ -563,6 +705,45 @@ const openStarter = (setupToken: boolean) =>
         null,
         new Date(0),
       );
+    }
+    if (chatGpt !== "none") {
+      const ring = parseKeyRing(Redacted.make(RING));
+      assert.ok(Result.isSuccess(ring));
+      const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(
+        ring.success,
+        owner,
+        {
+          clientId: "dynamic-client-fixture",
+          accountId: "chatgpt-subject",
+          accessToken: "access-0",
+          refreshToken: "refresh-0",
+          idToken: "id-token-0",
+          expiresInSeconds: 3600,
+          scopes: [CHATGPT_OAUTH.USAGE_SCOPE, "offline_access", "openid"],
+        },
+        new Date(0),
+      );
+      yield* saveProviderKey(
+        owner,
+        PROVIDER_KEY_PROVIDER.OPENAI,
+        PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+        sealed,
+        hint,
+        null,
+        new Date(0),
+        accessExpiresAt,
+      );
+      if (chatGpt === "signed_out") {
+        const [row] = yield* listProviderKeyRows(owner, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
+        assert.ok(row);
+        yield* setProviderKeyStatus(
+          owner,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          row.sealedKey,
+          PROVIDER_KEY_STATUS.INVALID,
+          new Date(0),
+        );
+      }
     }
     return { owner, workspaceId };
   });
@@ -656,6 +837,133 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
           }
+        }),
+    );
+
+    it.effect(
+      "a cohort account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a fast GPT model, a sign-in OpenAI signed out, none, an account outside the cohort, or a function with no harness starts on eve as today, and a Claude agent is untouched",
+      () =>
+        Effect.gen(function* () {
+          const cases = [
+            {
+              name: "cohort, GPT, signed in",
+              cohort: true,
+              chatGpt: "signed_in",
+              model: "openai/gpt-5.5",
+              native: true,
+              on: "codex",
+            },
+            {
+              name: "a fast GPT model",
+              cohort: true,
+              chatGpt: "signed_in",
+              model: "openai/gpt-5.5-fast",
+              native: true,
+              on: "eve",
+            },
+            {
+              name: "signed out",
+              cohort: true,
+              chatGpt: "signed_out",
+              model: "openai/gpt-5.5",
+              native: true,
+              on: "eve",
+            },
+            {
+              name: "no sign-in",
+              cohort: true,
+              chatGpt: "none",
+              model: "openai/gpt-5.5",
+              native: true,
+              on: "eve",
+            },
+            {
+              name: "outside the cohort",
+              cohort: false,
+              chatGpt: "signed_in",
+              model: "openai/gpt-5.5",
+              native: true,
+              on: "eve",
+            },
+            {
+              name: "no harness here (P11b)",
+              cohort: true,
+              chatGpt: "signed_in",
+              model: "openai/gpt-5.5",
+              native: false,
+              on: "eve",
+            },
+            {
+              name: "a Claude model, no setup-token",
+              cohort: true,
+              chatGpt: "signed_in",
+              model: "anthropic/claude-opus-5.5",
+              native: true,
+              on: "eve",
+            },
+          ] as const;
+          for (const each of cases) {
+            const { owner, workspaceId } = yield* openStarter(false, each.chatGpt);
+            const { eve, claudeCode, codex, native } = runtimes();
+            const layers = Layer.mergeAll(
+              githubReaching(INSTALLATIONS).layer,
+              CATALOG,
+              environment(each.cohort ? [owner] : []),
+              ...(each.native ? [native] : []),
+            );
+            const started = yield* startCodingAgent(
+              routedSessions(eve.sessions, owner),
+              owner,
+              startIn(workspaceId, each.model),
+            ).pipe(Effect.provide(layers));
+
+            const routing = Option.getOrThrow(
+              yield* readCodingAgentRouting(owner, started.agent.id),
+            );
+            assert.deepEqual(
+              [routing.runtime, routing.payer],
+              each.on === "codex"
+                ? ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]
+                : ["eve", null],
+              each.name,
+            );
+            assert.deepEqual(
+              [heard(eve), heard(codex), heard(claudeCode)],
+              each.on === "codex" ? [[], ["open"], []] : [["open"], [], []],
+              each.name,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "a Start on Codex whose ChatGPT sign-in refuses the launch is refused by name, leaving no agent, and never starts on eve",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(false, "signed_in");
+          const { eve, codex, native } = runtimes();
+          codex.answers.open = EVE_SEND_OUTCOME.FAILED;
+          codex.answers.status = 403;
+          codex.answers.planRefusal = PLAN_REFUSAL.SIGNED_OUT;
+          const ask = startIn(workspaceId, "openai/gpt-5.5");
+
+          const refused = yield* Effect.result(
+            startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+              Effect.provide(
+                Layer.mergeAll(
+                  githubReaching(INSTALLATIONS).layer,
+                  CATALOG,
+                  environment([owner]),
+                  native,
+                ),
+              ),
+            ),
+          );
+
+          assert.ok(Result.isFailure(refused) && "error" in refused.failure);
+          assert.equal(refused.failure.error, HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error);
+          assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, ask.idempotencyKey)));
+          assert.deepEqual([heard(codex), eve.calls], [["open"], []]);
         }),
     );
 

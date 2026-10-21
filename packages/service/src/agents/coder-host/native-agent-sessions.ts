@@ -8,10 +8,8 @@
  * both under the deployment's own origin; numbers its events from one past
  * the last the store applied of its conversation (`readNativeSequence`);
  * and runs under Luke's coder instructions, worded for the harness, which
- * names the tools it owns by its own names (`instructions.ts`).
- *
- * Claude Code is the one harness routed to yet; Codex's sessions
- * (`codex-sessions.ts`) are routed by P24.
+ * names the tools it owns by its own names (`instructions.ts`): Claude
+ * Code's appended to its prompt, Codex's as its `developer_instructions`.
  */
 
 import { chatEnabledFor } from "@luke/database/models/account-store";
@@ -29,8 +27,9 @@ import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { agentCiReadable, agentCoAuthor } from "./checkout.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
+import { codexSessions } from "./codex-sessions.js";
 import { CODER_HARNESS, type CoderHarness, coderInstructions } from "./instructions.js";
-import type { RunnerServices, SandboxRunner } from "./runner-sessions.js";
+import type { RunnerServices, RunnerSessionsOptions, SandboxRunner } from "./runner-sessions.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
 export interface NativeAgentSessionsOptions {
@@ -93,29 +92,40 @@ export function nativeAgentSessionsLayer(
     Effect.gen(function* () {
       const context = yield* Effect.context<RunnerServices>();
       const originOf = options.origin ?? deploymentEveOrigin;
+      /** What every harness's sessions are handed, for the account given and worded for the harness. */
+      const optionsFor = (
+        account: string,
+        origin: string,
+        harness: CoderHarness,
+      ): RunnerSessionsOptions => ({
+        userId: account,
+        eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
+        mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
+        instructions: (agent) =>
+          nativeCoderInstructions(account, agent, harness).pipe(Effect.provideContext(context)),
+        // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
+        nextSequence: (conversationId) =>
+          readNativeSequence({ userId: account, conversationId }).pipe(
+            Effect.map(Option.match({ onNone: () => 0, onSome: (last) => last + 1 })),
+            Effect.provideContext(context),
+          ),
+        run: options.run,
+      });
       return {
         sessions: (runtime, account) => {
           const origin = originOf();
-          if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE || origin === undefined) {
-            return Option.none();
+          if (origin === undefined) return Option.none();
+          if (runtime === CONVERSATION_RUNTIME.CODEX) {
+            return Option.some(
+              codexSessions(optionsFor(account, origin, CODER_HARNESS.CODEX)).pipe(
+                Effect.provideContext(context),
+              ),
+            );
           }
           return Option.some(
-            claudeCodeSessions({
-              userId: account,
-              eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
-              mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
-              instructions: (agent) =>
-                nativeCoderInstructions(account, agent, CODER_HARNESS.CLAUDE_CODE).pipe(
-                  Effect.provideContext(context),
-                ),
-              // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
-              nextSequence: (conversationId) =>
-                readNativeSequence({ userId: account, conversationId }).pipe(
-                  Effect.map(Option.match({ onNone: () => 0, onSome: (last) => last + 1 })),
-                  Effect.provideContext(context),
-                ),
-              run: options.run,
-            }).pipe(Effect.provideContext(context)),
+            claudeCodeSessions(optionsFor(account, origin, CODER_HARNESS.CLAUDE_CODE)).pipe(
+              Effect.provideContext(context),
+            ),
           );
         },
       };

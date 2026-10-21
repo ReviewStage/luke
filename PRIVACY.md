@@ -467,6 +467,18 @@ Your plan's token is handed to Claude Code alone, in its process's
 environment: it is never written to that disk, a command Claude Code runs,
 or the conversation's record.
 
+**A coding agent that runs on Codex.** On the same terms, for the accounts in
+the early test of ChatGPT plans, a coding agent your ChatGPT plan pays for
+runs on OpenAI's Codex, in that agent's own Vercel Sandbox. Its sandbox's
+disk holds the agent's checkout and Codex's own thread files (under its
+`CODEX_HOME`): its record of the thread, which it resumes from there when the
+agent is next messaged. Both stay on that disk between turns and in the
+snapshot Vercel keeps when the sandbox stops, and are deleted with the
+sandbox when the task is deleted, as above. Only the plan's short-lived
+access token, never your sign-in's refresh token, is handed to Codex, in its
+process's environment and on its input: it is never written to that disk, a
+command Codex runs, or the conversation's record.
+
 **Code on screen during a call.** When Luke wants to
 show you code, it names a file and lines, and our service reads them from
 the same sandbox checkout. The path, the commit the checkout read it at, the
