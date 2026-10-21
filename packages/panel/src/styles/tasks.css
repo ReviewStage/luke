@@ -1893,7 +1893,9 @@
    --spring-fast, about the beat its action waits; a still pointer jumps.
    While the agent is active it rocks about its tip, and fades once it is
    not. A click presses it once it has arrived, with a ripple at the point;
-   typing bobs it. The rock and the bob are endless loops held by
+   typing bobs it. It is drawn accent on an on-accent line over a dark
+   edge, with a soft dark shadow, so it reads on any page: an accent button,
+   a light page, or a dark one. The rock and the bob are endless loops held by
    --loop-motion, so their periods may be literals (docs/DESIGN.md). */
 .cloud-browser-stage {
   position: relative;
@@ -1934,12 +1936,26 @@
   width: var(--luke-space-20);
   height: var(--luke-space-20);
   overflow: visible;
+  stroke-linejoin: round;
+  filter: drop-shadow(
+      0 calc(var(--luke-space-2) / 2) calc(var(--luke-space-2) / 2) var(--luke-color-shadow-deep)
+    )
+    drop-shadow(0 var(--luke-space-2) var(--luke-space-4) var(--luke-color-shadow-deep));
+  transform-origin: 0 0;
+}
+
+/* The near-black every palette keeps alike, light or dark, for the edge
+   that holds the arrow apart from the page under it. */
+.cloud-browser-cursor-edge {
+  fill: var(--luke-color-tooltip);
+  stroke: var(--luke-color-tooltip);
+  stroke-width: 3.5;
+}
+
+.cloud-browser-cursor-body {
   fill: var(--luke-color-accent);
   stroke: var(--luke-color-on-accent);
   stroke-width: 1.5;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 calc(var(--luke-space-2) / 2) var(--luke-space-2) var(--luke-color-shadow));
-  transform-origin: 0 0;
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {

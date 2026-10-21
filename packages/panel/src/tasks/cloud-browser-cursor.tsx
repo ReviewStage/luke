@@ -32,6 +32,9 @@ import { usePrefersReducedMotion } from "../use-reduced-motion.js";
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 export const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 
+/** The arrow's outline, its tip at (1.5, 1.5), where the view box starts. */
+const ARROW = "M1.5 1.5v15.2l4.1-3.7 2.9 6.1 2.7-1.3-2.9-6h5.6z";
+
 /** The drawn page's size in CSS pixels of the panel. */
 export interface CloudBrowserCursorFrame {
   readonly width: number;
@@ -106,7 +109,9 @@ export function CloudBrowserCursor({
           viewBox="1.5 1.5 20 20"
           aria-hidden="true"
         >
-          <path d="M1.5 1.5v15.2l4.1-3.7 2.9 6.1 2.7-1.3-2.9-6h5.6z" />
+          {/* A dark edge under the accent arrow and its light line, so it reads on any page, accent buttons and dark pages alike. */}
+          <path className="cloud-browser-cursor-edge" d={ARROW} />
+          <path className="cloud-browser-cursor-body" d={ARROW} />
         </svg>
       </div>
       {cursor.kind === BROWSER_CURSOR_KIND.CLICK && shown && !still ? (
