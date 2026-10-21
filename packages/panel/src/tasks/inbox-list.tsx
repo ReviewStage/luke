@@ -29,7 +29,6 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TaskStatusMark as TaskStatusGlyph,
   useMenu,
 } from "@luke/ui";
 import {
@@ -147,6 +146,7 @@ import {
 } from "./inbox-row-media.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
+import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
@@ -543,7 +543,7 @@ function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
         <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
       )}
       <span className="task-card-chip">
-        {task.status === undefined ? <DocumentIcon /> : <TaskStatusGlyph status={task.status} />}
+        <PlanGlyph status={task.status} />
         {task.name}
       </span>
     </div>
@@ -882,7 +882,7 @@ export function InboxItemRow({
 }
 
 /**
- * A holder's glyph as a row's chip draws it: a task's document, an
+ * A holder's glyph as a row's chip draws it: a task's status's mark, an
  * automation's clock tile, and the Factory's glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
@@ -890,7 +890,7 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
-  if (holder.kind === INBOX_HOLDER.TASK) return <DocumentIcon />;
+  if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
   if (holder.automationId === null) return <FactoryIcon />;
   return (
     <ActorMark
@@ -904,7 +904,7 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
 }
 
 /**
- * A holder's group header: a task's document glyph and name; an
+ * A holder's group header: a task's status's mark and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
  * sidebar's row listing every agent, for the agents no automation names,
@@ -927,7 +927,13 @@ function HolderHeader({
   );
   const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
   if (holder.kind === INBOX_HOLDER.TASK) {
-    return <SidebarGroupHeader glyph={<DocumentIcon />} name={holder.task.name} {...shared} />;
+    return (
+      <SidebarGroupHeader
+        glyph={<PlanGlyph status={holder.task.status} />}
+        name={holder.task.name}
+        {...shared}
+      />
+    );
   }
   if (holder.automationId === null) {
     return (

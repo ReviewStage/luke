@@ -63,9 +63,10 @@ import {
 } from "./date-picker.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { PullRequestMark } from "./pull-request-mark.js";
-import { AgentMark } from "./tab-look.js";
+import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { NO_TASK } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
+import { useTaskStatus } from "./use-known-names.js";
 
 /**
  * mention-picker.tsx -- the list an `@` opens: the task's repository's files and folders, the plan's sections, and the task, grouped by kind, narrowed as the word is typed, the pick written as its mention.
@@ -804,6 +805,8 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
 
 /** A row's glyph, as its chip wears it. */
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
+  const planned = "mention" in row && row.mention.kind === MENTION_KIND.TASK;
+  const taskStatus = useTaskStatus(planned ? row.mention.taskId : undefined);
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
   if ("from" in row) return <KindGlyph kind={row.from} />;
   if ("picksDate" in row) return <CalendarIcon aria-hidden="true" />;
@@ -817,7 +820,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
     case MENTION_KIND.TASK:
-      return <DocumentIcon />;
+      return <PlanGlyph status={taskStatus} />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:

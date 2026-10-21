@@ -2537,7 +2537,11 @@ function Crumbs({
     holder.kind === INBOX_HOLDER.TASK
       ? {
           label: holder.task.name,
-          glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name }).icon,
+          glyph: tabLook({
+            kind: TAB_KIND.PLAN,
+            name: holder.task.name,
+            status: holder.task.status,
+          }).icon,
           hint: holder.task.name,
           card: doors.taskCard,
           onPress: () => onOpenHolder?.(),
