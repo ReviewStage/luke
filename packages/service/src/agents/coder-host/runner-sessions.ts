@@ -453,9 +453,22 @@ function liveRunner(
   );
 }
 
-/** The session's sandbox, the one its tag names. */
+/**
+ * The session's sandbox, the one its tag names: the newest where more than
+ * one carries it, since an expired sandbox whose delete Vercel did not
+ * confirm stands beside the replacement that took its place (`send`), and
+ * the replacement is the one that runs.
+ */
 function sandboxOf(api: VercelSandboxApi, sessionId: string) {
-  return Effect.map(api.listTagged(sessionId), (sandboxes) => Option.fromNullishOr(sandboxes[0]));
+  return Effect.map(api.listTagged(sessionId), (sandboxes) =>
+    Option.fromNullishOr(
+      sandboxes.reduce<ListedSandbox | undefined>(
+        (newest, each) =>
+          newest === undefined || (each.createdAt ?? 0) > (newest.createdAt ?? 0) ? each : newest,
+        undefined,
+      ),
+    ),
+  );
 }
 
 /** The status a failure answers as. */
@@ -711,7 +724,8 @@ export const runnerSessions = <
             // gone). The harness's own session files went with the old filesystem, so none is
             // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
             // that fails (the image still preparing, a clone refused) leaves the session standing
-            // for the next message to try again rather than retired.
+            // for the next message to try again rather than retired; a delete that fails leaves
+            // the expired one beside the fresh one, which `sandboxOf` reads past as the older.
             yield* openedSandbox(agent, sessionId, sent);
             yield* api
               .deleteSandbox(found.value.name)
