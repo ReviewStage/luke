@@ -81,17 +81,18 @@ export function initDesktopSentry(options: DesktopSentryOptions): DesktopSentry 
     },
     // A trace of its own rather than a child of whatever is active, so each
     // is sampled at the window's rate on its own, whatever page load or
-    // navigation stands; its attributes are read only where it is kept.
+    // navigation stands; its attributes are read only where it is kept. Its
+    // times go as dates, so the SDK never has to guess a number's unit.
     recordSpan: (span) => {
       startNewTrace(() => {
         const recorded = startInactiveSpan({
           name: span.name,
           op: PANEL_SPAN_OP,
-          startTime: span.startedAt,
+          startTime: new Date(span.startedAt),
           parentSpan: null,
         });
         if (recorded.isRecording()) recorded.setAttributes(span.attributes());
-        recorded.end(span.endedAt);
+        recorded.end(new Date(span.endedAt));
       });
     },
   };
