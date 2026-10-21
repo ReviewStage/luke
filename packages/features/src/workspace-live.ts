@@ -3,6 +3,11 @@ import { pinnedPictureUrl } from "./account-picture.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
 import {
+  INVITATION_ROLE,
+  invitationAcceptUrl,
+  type WorkspaceInvitation,
+} from "./workspace-invitation-wire.js";
+import {
   roleOf,
   WORKSPACE_ROLE,
   type Workspace,
@@ -11,7 +16,7 @@ import {
 } from "./workspace-wire.js";
 
 /**
- * workspace-live.ts -- the account's workspaces, and one workspace's people, as the desktop follows them over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
+ * workspace-live.ts -- the account's workspaces, and one workspace's people and pending invitations, as the desktop follows them over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
  *
  * Neon's guide is followed as `live-wire.ts` follows it: the service builds
  * each statement with the account's id in it and seals it, and the desktop
@@ -203,4 +208,60 @@ export function workspaceMembersOfLiveRows(
     members: ROLE_ORDER.flatMap((role) => members.filter((one) => one.role === role)),
     ...(former.length === 0 ? undefined : { former }),
   };
+}
+
+/**
+ * One workspace's pending invitations sealed for following, for an owner or
+ * an admin of it: the address, the service's own origin each accept link is
+ * built on, and one statement. The service answers `not-found` for a
+ * workspace the account is not in and `not-permitted` for one it neither
+ * owns nor administers; asked to poll, or where Realtime cannot seal it, it
+ * answers the statement's rows inline instead (`LIVE_POLL`).
+ */
+export const workspaceInvitationsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  origin: EffectSchema.String,
+  queries: EffectSchema.Struct({ invitations: sealedLiveQuerySchema }),
+});
+
+/** A workspace's pending invitations as their rows deliver them, expired ones among them. */
+export const workspaceInvitationsLiveRowsSchema = EffectSchema.Struct({
+  invitations: EffectSchema.Array(
+    EffectSchema.Struct({
+      id: EffectSchema.String,
+      email: EffectSchema.String,
+      /** The plugin's role text, null where it holds none. */
+      role: EffectSchema.NullOr(EffectSchema.String),
+      expiresAt: countedNumber,
+    }),
+  ),
+});
+
+/**
+ * The pending invitations as the held read answers them at `now`: those not
+ * yet expired, which the live statement cannot bound, of a role an
+ * invitation may carry, soonest to expire first, each with its accept link
+ * on the service's `origin`.
+ */
+export function workspaceInvitationsOfLiveRows(
+  rows: typeof workspaceInvitationsLiveRowsSchema.Type,
+  origin: string,
+  now: number,
+): readonly WorkspaceInvitation[] {
+  return rows.invitations
+    .filter((one) => one.expiresAt > now)
+    .toSorted((first, second) => first.expiresAt - second.expiresAt)
+    .flatMap((one) => {
+      const role = Object.values(INVITATION_ROLE).find((each) => each === one.role);
+      if (role === undefined) return [];
+      return [
+        {
+          id: one.id,
+          email: one.email,
+          role,
+          expiresAt: new Date(one.expiresAt).toISOString(),
+          acceptUrl: invitationAcceptUrl(origin, one.id, one.email),
+        },
+      ];
+    });
 }

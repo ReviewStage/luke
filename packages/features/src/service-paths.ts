@@ -115,6 +115,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACES: "/api/live/workspaces",
   /** One workspace's people under `?workspaceId=`, sealed for following over Neon Realtime (GET): its members and who its work names but left, or `not-found`, or their rows inline where polled. */
   LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
+  /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
+  LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

@@ -36,6 +36,10 @@
  * workspace's people as two, its members and who its work names but left,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found, as its held read answers.
+ * `GET /api/live/workspace-invitations?workspaceId=` answers its pending
+ * invitations as one, to an owner or an admin of it alone, with the origin
+ * each accept link is built on, which the desktop needs since it builds the
+ * links itself.
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
@@ -66,7 +70,11 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
-import { isWorkspaceMember, workspacesLiveStatements } from "@luke/database/models/workspace-store";
+import {
+  isWorkspaceMember,
+  workspaceOf as workspaceOfAccount,
+  workspacesLiveStatements,
+} from "@luke/database/models/workspace-store";
 import { CODING_AGENT_STATUS, codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -75,9 +83,11 @@ import {
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { joinedMember } from "../agents/coder-host/chat-page.js";
@@ -225,6 +235,9 @@ const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string
   input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
 
 /** The live reads, each to a signed-in caller who is the account it names. */
+/** The roles that read and manage a workspace's invitations, as its held read admits them. */
+const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
+
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
   return {
@@ -406,6 +419,20 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = workspaceMembersLiveStatements(context.userId, input.workspaceId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
+    }),
+    workspaceInvitations: signedIn.workspaceInvitations.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const workspace = yield* hostedStoreOrUnavailable(
+        workspaceOfAccount(context.userId, input.workspaceId),
+      );
+      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (!MANAGING_ROLES.has(workspace.value.role)) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      }
+      const statement = workspaceInvitationsLiveStatement(context.userId, input.workspaceId);
+      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      const sealed = yield* sealedParts({ invitations: statement.value }, input);
+      return { ...sealed, origin: new URL(context.request.url).origin };
     }),
   };
 }
