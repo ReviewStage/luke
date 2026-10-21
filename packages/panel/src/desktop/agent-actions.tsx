@@ -15,6 +15,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
+import { useAgentDelete } from "./agent-delete.js";
 import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
 
 /**
@@ -26,8 +27,10 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * its name's field where the surface draws its name, while nothing it
  * stands under is archived; Open terminal, where the platform runs one,
  * and none for an archived agent, whose sandbox takes no shell; Copy link; its transcript's
- * two copies, read whole from the service; and Archive agent, asked first
- * while it works (`agent-archive.tsx`), or Unarchive once it is archived.
+ * two copies, read whole from the service; Archive agent, asked first
+ * while it works (`agent-archive.tsx`), or Unarchive once it is archived;
+ * and last and alone, Permanently delete, always asked first
+ * (`agent-delete.tsx`), which closes the surface once it landed.
  * Run, which runs the agent's pushed branch on this Mac, stands on its
  * Pull request tab instead (`agent-pull-request-tab.tsx`).
  * The doors that open a terminal are the column's, from where it stands
@@ -38,7 +41,10 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  */
 
 /** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`). */
-type AgentDoors = Pick<TabDoors, "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "copyLink">;
+type AgentDoors = Pick<
+  TabDoors,
+  "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "deletion" | "copyLink"
+>;
 
 /** The doors a column opens an agent's terminals through, by the agent; each none where it is not offered. */
 export interface AgentTerminalDoors {
@@ -50,7 +56,7 @@ export interface AgentTerminalDoors {
   readonly terminals: boolean;
 }
 
-/** An agent's actions as a surface draws them: its doors, its rename where it is renamed, and the question its Archive asks through, drawn beside them. */
+/** An agent's actions as a surface draws them: its doors, its rename where it is renamed, and the questions its Archive and its delete ask through, drawn beside them. */
 export interface AgentActions {
   readonly doors: AgentDoors;
   /** The rename its Rename opens; none while what it stands under is archived. */
@@ -140,14 +146,17 @@ export function useAgentActions(
     /** Whether the surface is on screen, which the Archive's question asks on. */
     readonly shown: boolean;
     readonly terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+    /** Closes what shows the agent, its tab or its page, once its delete landed. */
+    readonly onDeleted?: (() => void) | undefined;
   },
 ): AgentActions {
-  const { label, shown, terminals } = input;
+  const { label, shown, terminals, onDeleted } = input;
   const copied = useTranscriptCopier();
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
+  const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
   // Note that an Unarchive stands while the agent or its task is archived, and neither is renamed then.
   const renamable = agents.onUnarchive === undefined;
   const { onOpenTerminal } = terminals;
@@ -168,9 +177,15 @@ export function useAgentActions(
           ? undefined
           : () => onOpenTerminal(agent.id),
       archive: agent.archivedAt === undefined ? archive.action : unarchive,
+      deletion: deletion.action,
       copyLink,
     },
     rename: renamable ? rename : undefined,
-    dialog: archive.dialog,
+    dialog: (
+      <>
+        {archive.dialog}
+        {deletion.dialog}
+      </>
+    ),
   };
 }

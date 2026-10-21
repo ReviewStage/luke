@@ -816,7 +816,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 4);
+  assert.equal(opened, 5);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -852,7 +852,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin once pinned, and Archive agent last, and an archived one offers no pin nor Rename but Unarchive", async () => {
+test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin once pinned, Archive agent, and Permanently delete last, and an archived one offers no pin nor Rename but Unarchive", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
     TRIAGE,
@@ -865,6 +865,7 @@ test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin 
     "Rename",
     "Pin",
     "Archive agent",
+    "Permanently delete",
   ]);
   await act(async () => menuItem("Pin").click());
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
@@ -872,12 +873,17 @@ test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin 
     "Rename",
     "Unpin",
     "Archive agent",
+    "Permanently delete",
   ]);
   await act(async () => menuItem("Unpin").click());
   assert.deepEqual(pinsAsked, ["a-1:true", "a-2:false"]);
 
   toggleArchived(sidebar);
-  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link", "Unarchive"]);
+  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), [
+    "Copy link",
+    "Unarchive",
+    "Permanently delete",
+  ]);
 });
 
 /** The buttons a sidebar row named `title` draws at its end, by their names. */

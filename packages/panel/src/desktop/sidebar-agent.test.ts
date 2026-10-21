@@ -21,7 +21,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 
 /**
- * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; and hanging its card while rested on.
+ * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; deleted for good once asked, last and alone in its menu; and hanging its card while rested on.
  *
  * The service is a script at the act boundary; synthetic agents throughout.
  */
@@ -51,12 +51,18 @@ let standing: TasklessAgent = RUN;
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Every rename asked, in order. */
 let renames: { agentId: string; title: string }[] = [];
+/** Every delete asked, in order. */
+let deletes: string[] = [];
+/** How many times a delete that landed left the agent's page. */
+let left = 0;
 let root: Root | undefined;
 
 beforeEach(() => {
   standing = RUN;
   archives = [];
   renames = [];
+  deletes = [];
+  left = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
@@ -90,6 +96,10 @@ function mount(
       renames.push({ agentId, title });
       return Promise.resolve(true);
     },
+    onDelete: (agentId) => {
+      deletes.push(agentId);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -108,6 +118,9 @@ function mount(
           shown: true,
           onOpen: () => undefined,
           onPin: agent.archivedAt === undefined ? () => undefined : undefined,
+          onDeleted: () => {
+            left += 1;
+          },
         }),
       ),
     ),
@@ -302,4 +315,55 @@ test("the row's card shows a pull request read since the list was, before the li
 
   const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
   assert.match(corner?.textContent ?? "", /^#43/u);
+});
+
+/** The open dialog's button with these words, or a failure saying it offers none. */
+function dialogAnswer(words: string): HTMLButtonElement {
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("a dialog asks");
+  return (
+    [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === words,
+    ) ?? assert.fail(`the dialog offers ${words}`)
+  );
+}
+
+test("Permanently delete stands last and alone in the row's right-click, asks first naming the agent, and once answered deletes it and leaves its page", async () => {
+  const row = mount(RUN);
+  const items = rightClick(row);
+  assert.equal(items.at(-1)?.textContent, "Permanently delete");
+  act(() => item(items, "Permanently delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [], "nothing goes before it is answered");
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
+  assert.equal(
+    document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
+    "“Remove the stale copy” and its transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
+  );
+  await act(async () => dialogAnswer("Permanently delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [AGENT_ID]);
+  assert.equal(left, 1);
+});
+
+test("an archived agent's row offers Permanently delete too, and Cancel deletes nothing", async () => {
+  const row = mount({ ...RUN, archivedAt: 3 });
+  const remove = item(rightClick(row), "Permanently delete");
+  act(() => remove.click());
+  await settle();
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
+  assert.equal(
+    document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
+    "“Remove the stale copy” and its transcript will be deleted. This can’t be undone.",
+    "an archived agent is out of the way already",
+  );
+  await act(async () => dialogAnswer("Cancel").click());
+  await settle();
+
+  assert.deepEqual(deletes, []);
+  assert.equal(left, 0);
 });

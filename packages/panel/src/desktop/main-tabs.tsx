@@ -171,7 +171,12 @@ function AgentMenuTab({
   shown: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
 }): React.JSX.Element {
-  const actions = useAgentActions(agent, agents, { label: look.label, shown, terminals });
+  const actions = useAgentActions(agent, agents, {
+    label: look.label,
+    shown,
+    terminals,
+    onDeleted: doors.onClose,
+  });
   return (
     <>
       <RenamableTab

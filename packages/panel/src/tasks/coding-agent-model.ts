@@ -563,6 +563,12 @@ const UNARCHIVED_WORDS = {
 /** What a refused archive says of an agent still starting, or with a message awaiting its turn, which has no turn to stop yet. */
 export const ARCHIVE_NOT_READY = "The agent is still starting its turn. Try again in a moment.";
 
+/** What an agent's delete says once it landed, and what it says refused. */
+export const DELETE_WORDS = {
+  done: "Agent deleted",
+  refused: "The agent could not be deleted. Try again.",
+} as const;
+
 /** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a task's do (`MARK_UNDOS`). */
 export function archiveWords(archived: boolean): {
   readonly done: string;

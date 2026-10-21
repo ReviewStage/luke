@@ -49,6 +49,7 @@ import {
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
+  DELETE_WORDS,
   PREPARING_IMAGE,
   RENAME_FAILED,
   SERVERS_FAILED,
@@ -316,6 +317,12 @@ export interface CodingAgentsControl {
    * its dialog or a toast of its own.
    */
   onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
+  /**
+   * Deletes one agent for good, a turn it still runs stopped first, taking
+   * it out of the list and saying so in a toast; a refusal is answered
+   * rather than said, for the dialog that asked to say.
+   */
+  onDelete: (agentId: string) => Promise<ActionResult>;
   /** Reads the task's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
   readAgent: (agentId: string) => Promise<CodingAgentSummary | undefined>;
   /** An agent's transcript page said where it stands now. */
@@ -1244,6 +1251,26 @@ export function useCodingAgents(input: {
   };
   const archiveNow = useRef(onArchive);
   archiveNow.current = onArchive;
+
+  const onDelete = async (agentId: string): Promise<ActionResult> => {
+    const answer = await act(ACT_KIND.CODING_AGENTS_DELETE, { agentId }).catch(() => ({
+      failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+    }));
+    if ("failure" in answer) {
+      const notReady = answer.failure === CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
+      };
+    }
+    setList((was) =>
+      was.agents === undefined
+        ? was
+        : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
+    );
+    toast({ words: DELETE_WORDS.done, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  };
   const sayRefusal = (result: ActionResult) => {
     if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) failed(result.reason);
   };
@@ -1505,6 +1532,7 @@ export function useCodingAgents(input: {
     onOpenApiKeys: () => latest.current.onOpenApiKeys(),
     onRename,
     onArchive,
+    onDelete,
     readAgent,
     onStatus,
     onTitle,

@@ -251,9 +251,11 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
     "Copy concise transcript",
     "Copy full transcript",
     "Archive agent",
+    "Permanently delete",
   ]) {
     assert.ok(agentItems.includes(item), `the agent's right-click offers ${item}`);
   }
+  assert.equal(agentItems.at(-1), "Permanently delete", "the delete stands last");
 });
 
 test("the column's toolbar draws one ⋯, the task's own, on every tab", async () => {

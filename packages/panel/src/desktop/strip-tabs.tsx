@@ -86,6 +86,8 @@ export interface TabDoors {
   onOpenTerminal?: (() => void) | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
+  /** Deletes the agent the tab shows for good, asked first, for an agent's (`agent-delete.tsx`). */
+  deletion?: MenuAction | undefined;
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
   copyLink?: MenuAction | undefined;
   /** What the tab's body offers on what it shows while it is drawn (`useHandedTabActions`), which its toolbar's ⋯ alone offers, first. */
@@ -101,15 +103,17 @@ interface ContentActions {
   terminal: MenuAction[];
   copies: MenuAction[];
   archive: MenuAction[];
+  deletion: MenuAction[];
 }
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
  * itself: an agent's Rename, its Open terminal, Copy link and a transcript's two copies,
- * and an agent's Archive, which takes the tab with it.
+ * an agent's Archive, which takes the tab with it, and its Permanently
+ * delete, alone after it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, onOpenTerminal, archive, copyLink } = doors;
+  const { onCopy, onRename, onOpenTerminal, archive, deletion, copyLink } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
@@ -143,6 +147,7 @@ function contentActions(doors: TabDoors): ContentActions {
           ]),
     ],
     archive: archive === undefined ? [] : [archive],
+    deletion: deletion === undefined ? [] : [deletion],
   };
 }
 
@@ -152,7 +157,8 @@ function contentActions(doors: TabDoors): ContentActions {
  * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
  * takes it out, and a Rename beside it; for an agent's, its Open terminal;
  * Copy link, for a tab whose thing has a link, and a transcript's two
- * copies after it; and last, for an agent's, its Archive. Close others stands dimmed where nothing else would close.
+ * copies after it; then, for an agent's, its Archive, and last and alone its
+ * Permanently delete. Close others stands dimmed where nothing else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
   const { onClose } = doors;
@@ -176,7 +182,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
             ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
             : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
         ];
-  const { rename, terminal, copies, archive } = contentActions(doors);
+  const { rename, terminal, copies, archive, deletion } = contentActions(doors);
   return [
     [
       ...close,
@@ -187,7 +193,9 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
         disabled: doors.onCloseOthers === undefined,
       },
     ],
-    ...[[...pin, ...rename], terminal, copies, archive].filter((group) => group.length > 0),
+    ...[[...pin, ...rename], terminal, copies, archive, deletion].filter(
+      (group) => group.length > 0,
+    ),
   ];
 }
 
@@ -201,8 +209,8 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
  * on as a task's is.
  */
 export function contentActionGroups(doors: TabDoors): MenuAction[][] {
-  const { rename, terminal, copies, archive } = contentActions(doors);
-  return [doors.handed ?? [], rename, terminal, copies, archive].filter(
+  const { rename, terminal, copies, archive, deletion } = contentActions(doors);
+  return [doors.handed ?? [], rename, terminal, copies, archive, deletion].filter(
     (group) => group.length > 0,
   );
 }

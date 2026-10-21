@@ -135,14 +135,17 @@ function AgentPageHeading({
   agents,
   shown,
   terminals,
+  onClose,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  /** Leaves the page, as Escape does, once the agent is deleted. */
+  onClose: () => void;
 }): React.JSX.Element {
   const label = agentTabLabel(agent, agents.models);
-  const actions = useAgentActions(agent, agents, { label, shown, terminals });
+  const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
   const groups = contentActionGroups({
     chosen: true,
@@ -403,6 +406,7 @@ export function DesktopAgentPage({
           agents={control}
           shown={tasks.shown}
           terminals={terminalDoors}
+          onClose={tasks.agentView.onClose}
         />
       )}
     </header>

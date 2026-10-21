@@ -31,6 +31,7 @@ import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-age
 import { RowHint, RowHintOptions } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
+import { useAgentDelete } from "./agent-delete.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
 
@@ -53,7 +54,9 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * pointer is, in a task's row's groups: Copy link and Rename, which turns
  * the row into its name's field until the edit ends; then Pin or Unpin,
  * the reader's own, and Archive agent, asked first while the agent works
- * (`agent-archive.tsx`), or Unarchive. An archived agent offers neither a
+ * (`agent-archive.tsx`), or Unarchive; and last and alone, Permanently
+ * delete, always asked first (`agent-delete.tsx`), which leaves the agent's
+ * page where it is the one standing. An archived agent offers neither a
  * pin nor a rename, as an archived task. Note that the agent is read again
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
@@ -104,6 +107,7 @@ export function SidebarAgent({
   shown,
   onOpen,
   onPin,
+  onDeleted,
 }: {
   agent: TasklessAgent;
   /** The window's agent control, whose archive and rename act on any agent by its id. */
@@ -125,6 +129,8 @@ export function SidebarAgent({
   onOpen: () => void;
   /** Pins the agent for the reader or unpins it; none for an archived agent, which offers no pin. */
   onPin?: ((pinned: boolean) => void) | undefined;
+  /** Leaves the agent's page where it is the one standing, once its delete landed. */
+  onDeleted?: (() => void) | undefined;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
@@ -146,6 +152,7 @@ export function SidebarAgent({
     shown,
   );
   const unarchive = useAgentUnarchive(agent.id, agents);
+  const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
   const archived = agent.archivedAt !== undefined;
   // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
@@ -162,6 +169,7 @@ export function SidebarAgent({
   const groups = [
     [...(copyLink === undefined ? [] : [copyLink]), ...(archived ? [] : [renameItem])],
     [...(pin === undefined ? [] : [pin]), put],
+    [deletion.action],
   ].filter((group) => group.length > 0);
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const pinned = agent.pinnedAt !== undefined;
@@ -252,6 +260,7 @@ export function SidebarAgent({
         />
       )}
       {archive.dialog}
+      {deletion.dialog}
     </>
   );
 }
