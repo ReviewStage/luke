@@ -58,11 +58,17 @@ const openSharedWorkspace = Effect.gen(function* () {
   return { dean, charles, workspace, first, second };
 });
 
+/** A write the test expects taken, answering the sections as they then stand and the transaction it wrote them in. */
+const writtenWithTxid = (userId: string, write: TaskSectionWrite) =>
+  Effect.map(writeTaskSections(userId, write), (answer) =>
+    Option.getOrElse(answer, () => assert.fail("the write was refused")),
+  );
+
 /** A write the test expects taken, answering the sections as they then stand. */
 const written = (userId: string, write: TaskSectionWrite) =>
   Effect.map(
-    writeTaskSections(userId, write),
-    (answer): TaskSections => Option.getOrElse(answer, () => assert.fail("the write was refused")),
+    writtenWithTxid(userId, write),
+    ({ txid: _txid, ...sections }): TaskSections => sections,
   );
 
 const refused = (userId: string, write: TaskSectionWrite) =>
@@ -312,5 +318,78 @@ it.layer(getTestDB())("an account's task sections", (it) => {
       yield* Database.use((db) => db.delete(organization).where(eq(organization.id, workspace)));
       assert.deepEqual(yield* listTaskSections(dean), { sections: [], entries: [] });
     }),
+  );
+
+  it.effect(
+    "a write that changes a row answers the transaction it wrote in, which the live sidebar waits for, and one that changes nothing answers none",
+    () =>
+      Effect.gen(function* () {
+        const { dean, workspace, first } = yield* openSharedWorkspace;
+        const txidOf = (write: TaskSectionWrite) =>
+          Effect.map(writtenWithTxid(dean, write), (answer) => answer.txid);
+        const isTxid = (txid: string | undefined) => txid !== undefined && /^\d+$/u.test(txid);
+        const launch = randomUUID();
+        const icon = { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph: TASK_SECTION_GLYPH.ROCKET };
+        const edit: TaskSectionWrite = {
+          kind: TASK_SECTION_WRITE.EDIT,
+          id: launch,
+          title: "Ship",
+          icon,
+        };
+        const move: TaskSectionWrite = {
+          kind: TASK_SECTION_WRITE.MOVE,
+          id: launch,
+          position: "a0",
+        };
+        const remove: TaskSectionWrite = { kind: TASK_SECTION_WRITE.DELETE, id: launch };
+
+        const made = yield* txidOf(create(workspace, "Launch", launch));
+        const madeAgain = yield* txidOf(create(workspace, "Launch", launch));
+        const edited = yield* txidOf(edit);
+        const editedAgain = yield* txidOf(edit);
+        const moved = yield* txidOf(move);
+        const movedAgain = yield* txidOf(move);
+        const placed = yield* txidOf(place(first, launch));
+        const placedAgain = yield* txidOf(place(first, launch));
+        const placedAt = yield* txidOf(place(first, launch, "a1"));
+        const placedAtAgain = yield* txidOf(place(first, launch, "a1"));
+        const unplaced = yield* txidOf(place(first, null));
+        const unplacedAgain = yield* txidOf(place(first, null));
+        const deleted = yield* txidOf(remove);
+        const deletedAgain = yield* txidOf(remove);
+
+        const changed = [made, edited, moved, placed, placedAt, unplaced, deleted];
+        assert.ok(
+          changed.every(isTxid),
+          `every write that changed a row answers a txid: ${changed}`,
+        );
+        assert.equal(new Set(changed).size, changed.length, "each write is its own transaction");
+        assert.deepEqual(
+          [
+            madeAgain,
+            editedAgain,
+            movedAgain,
+            placedAgain,
+            placedAtAgain,
+            unplacedAgain,
+            deletedAgain,
+          ],
+          Array.from({ length: 7 }, () => undefined),
+        );
+
+        const pinned = yield* setRepositoryPin(dean, "acme/relay", true);
+        const pinnedAgain = yield* setRepositoryPin(dean, "acme/relay", true);
+        const unpinned = yield* setRepositoryPin(dean, "acme/relay", false);
+        const unpinnedAgain = yield* setRepositoryPin(dean, "acme/relay", false);
+        const txids = [pinned, pinnedAgain, unpinned, unpinnedAgain].map(
+          (answer) => Option.getOrThrow(answer).txid,
+        );
+        assert.ok(isTxid(txids[0]) && isTxid(txids[2]) && txids[0] !== txids[2]);
+        assert.deepEqual([txids[1], txids[3]], [undefined, undefined]);
+        assert.deepEqual(
+          Option.getOrThrow(pinnedAgain).pins.map((pin) => pin.repository),
+          ["acme/relay"],
+        );
+      }),
   );
 });

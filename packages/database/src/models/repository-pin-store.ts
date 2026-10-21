@@ -1,5 +1,9 @@
-import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@luke/features/task-wire";
-import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  REPOSITORY_PIN_BOUNDS,
+  type RepositoryPin,
+  type RepositoryPinsWritten,
+} from "@luke/features/task-wire";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
@@ -27,6 +31,17 @@ const PinRowSchema = Schema.Struct({
 
 const PinKeySchema = Schema.Struct({ userId: Schema.String, repository: Schema.String });
 
+/**
+ * The id of the transaction that made a pin, read in the write's own
+ * `RETURNING`, as Neon's mutations guide does it: a follower of the sidebar
+ * waits for it to arrive on its live query. A write that changed no row
+ * returns none, so there is nothing to wait for.
+ */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
+/** The transaction a statement wrote its row in; no row where it changed none. */
+const WrittenSchema = Schema.Struct({ txid: Schema.String });
+
 const findPins = SqlSchema.findAll({
   Request: Schema.String,
   Result: PinRowSchema,
@@ -50,26 +65,30 @@ const lockAccount = SqlSchema.findOneOption({
     ),
 });
 
-const insertPin = SqlSchema.void({
+const insertPin = SqlSchema.findAll({
   Request: Schema.Struct({ ...PinKeySchema.fields, now: Schema.Date }),
+  Result: WrittenSchema,
   execute: (write) =>
     Database.use((db) =>
       db
         .insert(repositoryPin)
         .values({ userId: write.userId, repository: write.repository, pinnedAt: write.now })
-        .onConflictDoNothing(),
+        .onConflictDoNothing()
+        .returning(TXID),
     ),
 });
 
-const deletePin = SqlSchema.void({
+const deletePin = SqlSchema.findAll({
   Request: PinKeySchema,
+  Result: WrittenSchema,
   execute: (key) =>
     Database.use((db) =>
       db
         .delete(repositoryPin)
         .where(
           and(eq(repositoryPin.userId, key.userId), eq(repositoryPin.repository, key.repository)),
-        ),
+        )
+        .returning(TXID),
     ),
 });
 
@@ -101,30 +120,35 @@ export function repositoryPinsLiveStatement(userId: string): Option.Option<LiveS
 
 /**
  * Pins one repository or unpins it, and answers the account's pins as they
- * then stand; nothing where a new pin would hold more than the bound, or the
- * account is gone, with nothing written. A repository already pinned keeps
- * its instant and counts against no bound.
+ * then stand, with the transaction the pin changed a row in; nothing where
+ * a new pin would hold more than the bound, or the account is gone, with
+ * nothing written. A repository already pinned keeps its instant and counts
+ * against no bound, and a pin or unpin that changed no row answers no
+ * transaction, so a follower has nothing to wait for.
  */
 export function setRepositoryPin(
   userId: string,
   repository: string,
   pinned: boolean,
-): TaskStoreEffect<Option.Option<readonly RepositoryPin[]>> {
+): TaskStoreEffect<Option.Option<RepositoryPinsWritten>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const account = yield* lockAccount(userId);
         if (Option.isNone(account)) return Option.none();
-        if (!pinned) {
-          yield* deletePin({ userId, repository });
-          return Option.some(yield* listRepositoryPins(userId));
-        }
+        const answer = (rows: readonly (typeof WrittenSchema.Type)[]) =>
+          Effect.map(listRepositoryPins(userId), (pins) => {
+            const txid = rows[0]?.txid;
+            return Option.some(txid === undefined ? { pins } : { pins, txid });
+          });
+        if (!pinned) return yield* answer(yield* deletePin({ userId, repository }));
         const standing = yield* listRepositoryPins(userId);
-        if (standing.some((pin) => pin.repository === repository)) return Option.some(standing);
+        if (standing.some((pin) => pin.repository === repository)) {
+          return Option.some({ pins: standing });
+        }
         if (standing.length >= REPOSITORY_PIN_BOUNDS.MAX_PINS) return Option.none();
         const now = yield* DateTime.nowAsDate;
-        yield* insertPin({ userId, repository, now });
-        return Option.some(yield* listRepositoryPins(userId));
+        return yield* answer(yield* insertPin({ userId, repository, now }));
       }),
     ),
   );
