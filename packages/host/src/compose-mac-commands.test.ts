@@ -8,6 +8,7 @@ import {
 } from "@luke/features/live-wire";
 import {
   MAC_COMMAND_KIND,
+  type MacBrowserParams,
   type MacCommand,
   type MacCommandKind,
   type MacCommandResult,
@@ -50,6 +51,22 @@ const BROWSER: MacCommand = {
   kind: MAC_COMMAND_KIND.BROWSER,
   params: { act: "open", address: "http://localhost:3000" },
   timeoutSeconds: 30,
+};
+
+/** A browser command whose params read: an open, then a snapshot, on a task. */
+const OPEN: MacCommand = {
+  id: "5b4a3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+  kind: MAC_COMMAND_KIND.BROWSER,
+  params: {
+    taskId: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
+    actions: [{ action: "open", url: "http://localhost:3000/" }, { action: "snapshot" }],
+  },
+  timeoutSeconds: 30,
+};
+
+/** What the scripted Mac's Browser tabs answer every browser command they run. */
+const RAN: MacCommandResult = {
+  output: { steps: [{ action: "open", status: "done", tab: "tab-1" }], skipped: 1 },
 };
 
 const LATER: MacCommand = {
@@ -168,11 +185,19 @@ const machine = (spawner: ReturnType<typeof scriptedSpawner>) =>
     noNetwork,
   );
 
-/** The concern composed over the scripted service, the gate as `gate` holds it. */
+/** The tasks a browser command was run on, and how a run on the tabs goes: answered at once, or never, until cut off. */
+interface Tabs {
+  readonly ranOn: string[];
+  readonly hang?: boolean;
+  interrupted?: boolean;
+}
+
+/** The concern composed over the scripted service, the gate as `gate` holds it, the Browser tab experiment off unless it says on. */
 const subject = (
   service: ReturnType<typeof scriptedService>,
   spawner: ReturnType<typeof scriptedSpawner>,
-  gate: { enabled: boolean; signedIn: boolean; account?: string },
+  gate: { enabled: boolean; signedIn: boolean; account?: string; browser?: boolean },
+  tabs: Tabs = { ranOn: [] },
 ) =>
   composeMacCommands({
     kernel: { runMode: { sendsNetwork: true }, now: () => NOW },
@@ -180,6 +205,19 @@ const subject = (
     accountId: () => gate.account ?? ACCOUNT,
     enabled: Effect.sync(() => gate.enabled),
     client: service.client,
+    browser: {
+      enabled: Effect.sync(() => gate.browser === true),
+      run: (params: MacBrowserParams) =>
+        Effect.suspend(() => {
+          tabs.ranOn.push(params.taskId);
+          if (tabs.hang !== true) return Effect.succeed(RAN);
+          return Effect.onInterrupt(Effect.never, () =>
+            Effect.sync(() => {
+              tabs.interrupted = true;
+            }),
+          );
+        }),
+    },
   }).pipe(Effect.provide(machine(spawner)));
 
 it.effect("with the setting off, or no account signed in, the service is never read", () =>
@@ -203,7 +241,7 @@ it.effect("with the setting off, or no account signed in, the service is never r
 );
 
 it.effect(
-  "over the held poll, each waiting command is claimed by its id, the earliest first, and run or refused by its kind, one queued later is heard within a second or so, and every read names the account and shell alone",
+  "over the held poll, each waiting command is claimed by its id, the earliest first, and run or refused by its kind, one queued later is heard within a second or so, and with the Browser tab experiment off every read names the account and shell alone",
   () =>
     Effect.gen(function* () {
       const spawner = scriptedSpawner(() => ({ stdout: "v24.0.0\n", exitCode: 0 }));
@@ -375,5 +413,89 @@ it.effect(
 
       assert.equal(service.reads[0]?.userId, ACCOUNT);
       assert.ok(service.reads.some((read) => read.userId === "user-other"));
+    }),
+);
+
+it.effect(
+  "with the Browser tab experiment on, every read and beat names browser too, a browser command runs on its task's tabs, and one whose params do not read is refused in words",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      service.queue(BROWSER, NOW - 2_000);
+      service.queue(OPEN, NOW - 1_000);
+      const tabs: Tabs = { ranOn: [] };
+      const gate = { enabled: true, signedIn: true, browser: true };
+      const composer = yield* subject(service, spawner, gate, tabs);
+
+      yield* Effect.scoped(Effect.andThen(composer.lifetime, settled));
+
+      const both = [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER];
+      assert.ok(service.reads.length > 0 && service.beats.length > 0);
+      for (const read of service.reads) assert.deepEqual(read.kinds, both);
+      for (const kinds of service.beats) assert.deepEqual(kinds, both);
+      assert.deepEqual(service.settledResults.get(OPEN.id), RAN);
+      const unread = service.settledResults.get(BROWSER.id);
+      assert.ok(unread !== undefined && "refused" in unread);
+      assert.match(unread.refused, /params could not be read/u);
+      assert.deepEqual(tabs.ranOn, ["9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a"]);
+      assert.deepEqual(spawner.spawned, []);
+    }),
+);
+
+it.effect(
+  "the Browser tab experiment turned on ends the follow, and the next names browser too",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      const gate = { enabled: true, signedIn: true, browser: false };
+      const composer = yield* subject(service, spawner, gate);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* settled;
+          gate.browser = true;
+          yield* TestClock.adjust("15 seconds");
+          yield* settled;
+          yield* TestClock.adjust("5 seconds");
+          yield* settled;
+        }),
+      );
+
+      assert.deepEqual(service.reads[0]?.kinds, [MAC_COMMAND_KIND.SHELL]);
+      assert.deepEqual(service.reads.at(-1)?.kinds, [
+        MAC_COMMAND_KIND.SHELL,
+        MAC_COMMAND_KIND.BROWSER,
+      ]);
+    }),
+);
+
+it.effect(
+  "a browser run stops within a moment of commands on this Mac being switched off, and says why",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      service.queue(OPEN, NOW);
+      const tabs: Tabs = { ranOn: [], hang: true };
+      const gate = { enabled: true, signedIn: true, browser: true };
+      const composer = yield* subject(service, spawner, gate, tabs);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* settled;
+          yield* TestClock.adjust("3 seconds");
+          gate.enabled = false;
+          yield* TestClock.adjust("2 seconds");
+          yield* settled;
+          const result = service.settledResults.get(OPEN.id);
+          assert.ok(result !== undefined && "refused" in result);
+          assert.match(result.refused, /switched off while the browser actions ran/u);
+          assert.equal(tabs.interrupted, true, "the run on the tabs was cut off");
+        }),
+      );
     }),
 );

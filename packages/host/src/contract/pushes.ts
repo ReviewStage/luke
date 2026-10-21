@@ -14,10 +14,13 @@ import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-gra
 import {
   type BrowserFocus,
   type BrowserKey,
+  type BrowserOpened,
   type BrowserPage,
   isBrowserFocus,
   isBrowserKey,
+  isBrowserOpened,
   isBrowserPage,
+  isBrowserView,
 } from "@luke/features/browser-acts";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
@@ -52,6 +55,8 @@ export const PUSH = {
   BROWSER_STATE: "app:browser-state",
   BROWSER_KEY: "app:browser-key",
   BROWSER_FOCUS: "app:browser-focus",
+  BROWSER_OPENED: "app:browser-opened",
+  BROWSER_CLOSED: "app:browser-closed",
   SHOW_LINK: "app:show-link",
   AGENT_ENDED: "app:agent-ended",
   INBOX_ITEM_OPENED: "app:inbox-item-opened",
@@ -196,6 +201,13 @@ export const PUSH_GUARD = {
    */
   [PUSH.BROWSER_FOCUS]: result<BrowserFocus>(isBrowserFocus),
   /**
+   * A Browser tab an agent on a task opened in main, which the panel draws
+   * as a tab of that task, as the "+" opens one, without taking the keyboard.
+   */
+  [PUSH.BROWSER_OPENED]: result<BrowserOpened>(isBrowserOpened),
+  /** A Browser tab whose page an agent closed in main, which the panel lets go. */
+  [PUSH.BROWSER_CLOSED]: result<{ browserId: string }>(isBrowserView),
+  /**
    * A Luke link the system handed the app: the panel is to open the place it
    * names, in the workspace it was written under. An event, as a click is,
    * because it is an ask the window answers once.
@@ -319,6 +331,8 @@ export const PUSH_METHOD = {
   onBrowserState: PUSH.BROWSER_STATE,
   onBrowserKey: PUSH.BROWSER_KEY,
   onBrowserFocus: PUSH.BROWSER_FOCUS,
+  onBrowserOpened: PUSH.BROWSER_OPENED,
+  onBrowserClosed: PUSH.BROWSER_CLOSED,
   onShowLink: PUSH.SHOW_LINK,
   onAgentEnded: PUSH.AGENT_ENDED,
   onInboxItemOpened: PUSH.INBOX_ITEM_OPENED,

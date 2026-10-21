@@ -225,6 +225,8 @@ async function inbox(
       main.focus = listener;
       return () => undefined;
     },
+    onBrowserOpened: () => () => undefined,
+    onBrowserClosed: () => () => undefined,
   });
   handState(experiments);
   function Page() {

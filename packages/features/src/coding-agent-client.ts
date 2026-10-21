@@ -34,7 +34,6 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxReadAllView,
@@ -106,6 +105,7 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
+import type { ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
   LIVE_SIGNED_OUT,
@@ -1041,28 +1041,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One task's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
-  inbox(
-    taskId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.task, { id: taskId, after }, HOSTED_DEADLINE.HELD),
-      ROW_REFUSALS,
-    );
-  }
-
-  /** One agent's inbox past the cursor, an agent with no task as much as one on a task: every item it posted, held by the service while nothing changed. */
-  agentInbox(
-    agentId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD),
-      ROW_REFUSALS,
-    );
-  }
-
   /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
   chat(
     workspaceId: string,
@@ -1120,6 +1098,52 @@ export class HostedCodingAgentClient {
       ),
       {},
     );
+  }
+
+  /**
+   * One plan's inbox sealed for following over Neon Realtime, or with
+   * `poll` its rows inline, answered at once: not found where the account
+   * reaches no such plan, unanswered for anything else, which the caller
+   * answers by asking again. Sealed for the account `userId` names, and
+   * signed out where the session is no longer that account's.
+   */
+  taskInboxLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: taskId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.taskInbox, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
+  /** One agent's inbox sealed for following over Neon Realtime, on the terms a plan's is. */
+  agentInboxLive(
+    agentId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.agentInbox, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
   /**

@@ -7,7 +7,7 @@ import { Effect, Option, Schema, Stream } from "effect";
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
- * task-record-follow.ts -- where an open task's pages and calls stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
+ * task-record-follow.ts -- where an open task's pages, calls, and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
  *
  * The service seals one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
@@ -22,6 +22,7 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 export const TASK_RECORD_PART = {
   PAGES: "pages",
   CALLS: "calls",
+  CODE: "code",
 } as const;
 
 export type TaskRecordPart = (typeof TASK_RECORD_PART)[keyof typeof TASK_RECORD_PART];
@@ -57,9 +58,10 @@ function endedCalls(rows: TaskRecordLiveRows): string {
 
 /**
  * The parts a delivery moved from the one before: the pages where their
- * rows differ, and the calls where an ended call's do, so a call's words
+ * rows differ, the calls where an ended call's do, so a call's words
  * landing as it stands read nothing and its end, its last words, and its
- * metering each read the calls again. The first delivery moves every part.
+ * metering each read the calls again, and the code where the `show_code`
+ * calls the agents' journals answered do. The first delivery moves every part.
  */
 function movedParts(
   before: TaskRecordLiveRows | undefined,
@@ -67,9 +69,11 @@ function movedParts(
 ): readonly TaskRecordPart[] {
   if (before === undefined) return EVERY_TASK_RECORD_PART;
   const pagesOf = (read: TaskRecordLiveRows) => markOf(read.pages, (page) => page.pageId);
+  const codeOf = (read: TaskRecordLiveRows) => markOf(read.code, (journal) => journal.id);
   return [
     ...(pagesOf(before) === pagesOf(rows) ? [] : [TASK_RECORD_PART.PAGES]),
     ...(endedCalls(before) === endedCalls(rows) ? [] : [TASK_RECORD_PART.CALLS]),
+    ...(codeOf(before) === codeOf(rows) ? [] : [TASK_RECORD_PART.CODE]),
   ];
 }
 

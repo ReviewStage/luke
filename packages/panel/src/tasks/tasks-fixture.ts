@@ -239,10 +239,14 @@ function fixtureExcerpt(startLine: number, endLine: number): TaskCode {
   };
 }
 
+/** The coding agent on the fixture's task whose typed turn showed the last of its code. */
+const FIXTURE_CODING_AGENT_ID = "7b3c5d7e-9f1a-4b2c-8d4e-6f8a0b2c4d6e";
+
 /**
- * Every code Luke showed in the fixture's call, a walkthrough of one file in
- * three steps, each with his note: where a link lands, the check he is asking
- * about, and the expiry after it.
+ * Every code shown on the fixture's task: Luke's in its call, a walkthrough
+ * of one file in three steps, each with his note (where a link lands, the
+ * check he is asking about, and the expiry after it), and after the call, one
+ * more from a typed turn of the task's coding agent.
  */
 const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
   {
@@ -270,6 +274,16 @@ const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
     code: {
       ...fixtureExcerpt(9, 9),
       note: "Expiry is checked after that, so a link that is both withdrawn and expired reads as no longer valid.",
+    },
+  },
+  {
+    callId: "fixture-show-4",
+    turnId: "fixture-turn-typed",
+    shownAt: Date.parse("2026-10-07T16:40:00Z"),
+    agentId: FIXTURE_CODING_AGENT_ID,
+    code: {
+      ...fixtureExcerpt(10, 11),
+      note: "The member is added before the invite is marked accepted, so a failure between the two leaves the link good for a second use.",
     },
   },
 ];

@@ -5,15 +5,30 @@ import {
   macCommandsOfLiveRows,
 } from "@luke/features/live-wire";
 import {
+  isMacBrowserCommand,
   isMacShellCommand,
+  MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
+  type MacBrowserCommand,
+  type MacBrowserParams,
   type MacCommandKind,
   type MacCommandRead,
   type MacCommandRefusal,
   type MacCommandResult,
   type MacShellResult,
+  macBrowserParamsSchema,
 } from "@luke/features/mac-command-wire";
-import { Config, Duration, Effect, FiberSet, Option, Schedule, Schema, Stream } from "effect";
+import {
+  Config,
+  Duration,
+  Effect,
+  FiberSet,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
@@ -38,8 +53,12 @@ import type { RunMode } from "./run-mode.js";
  * two Macs of one account follow, only the one it granted runs it. Each
  * claimed command runs on a fiber of its own in the concern's scope, by its
  * kind: a shell command in the login shell from the home folder
- * (`mac-command-runner.ts`), and a command of a kind this Mac cannot run
- * answered with a refusal. Its result is posted back by the route its kind
+ * (`mac-command-runner.ts`), a browser command on the task's Browser tabs
+ * through this Mac's node, which owns the views (`mac-browser-tabs.ts`), and
+ * a command of a kind this Mac cannot run answered with a refusal. Browser
+ * commands are followed only while the Browser tab experiment is on too, so
+ * a Mac with it off is never handed one, and a follow ends as the
+ * experiment moves, to start again naming the kinds it runs now. Its result is posted back by the route its kind
  * takes (`mac-browser-result.ts`), so a long command holds up neither the
  * follow nor the others.
  *
@@ -73,8 +92,14 @@ const DEFAULT_SHELL = "/bin/zsh";
 
 const VARIABLE = { HOME: "HOME", SHELL: "SHELL" } as const;
 
-/** The kinds of command this Mac runs, which every read names: shell alone, for now. */
-const RUNS: readonly MacCommandKind[] = [MAC_COMMAND_KIND.SHELL];
+/** The kinds of command this Mac runs, which every read names: shell always, and browser while the Browser tab experiment is on. */
+const RUNS = {
+  SHELL: [MAC_COMMAND_KIND.SHELL],
+  BROWSER: [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER],
+} as const satisfies Record<string, readonly MacCommandKind[]>;
+
+/** How often a browser run asks whether it may go on. */
+const GATE_POLL = Duration.seconds(1);
 
 /** The service's side of the commands, as this concern asks it. */
 export type MacCommandClient = Pick<HostedMacCommandClient, "live" | "claim" | "listening"> &
@@ -90,6 +115,11 @@ export interface MacCommandsDependencies {
   client: MacCommandClient;
   /** Realtime's client at an address, where the deployment follows over Realtime; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /** The Browser tabs' side: whether the account has the Browser tab experiment on, and one command's actions run on this Mac's tabs. */
+  browser: {
+    enabled: Effect.Effect<boolean>;
+    run: (params: MacBrowserParams) => Effect.Effect<MacCommandResult>;
+  };
 }
 
 export type MacCommandsComposer = Composer;
@@ -109,6 +139,35 @@ const CANNOT_RUN: MacCommandRefusal = {
     "Not run: Luke on the developer's Mac cannot run this kind of command; updating Luke there " +
     "may let it.",
 };
+
+/** What a browser command answers once the Browser tab experiment went off. */
+const BROWSER_OFF: MacCommandRefusal = {
+  refused:
+    "Not run: the Browser tab experiment is off in Luke on the developer's Mac " +
+    "(Settings › Experimental › Browser tab).",
+};
+
+/** What a browser run answers once commands on this Mac, or the experiment, were switched off while it ran. */
+const BROWSER_SWITCHED_OFF: MacCommandRefusal = {
+  refused:
+    "Stopped: commands on this Mac, or the Browser tab experiment, were switched off while the " +
+    "browser actions ran.",
+};
+
+/** What a browser command answers where its params could not be read, and why. */
+function unreadParams(error: Schema.SchemaError): MacCommandRefusal {
+  const words = `Not run: the browser command's params could not be read: ${error.message}`;
+  return { refused: words.slice(0, MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS) };
+}
+
+/** What a browser command answers when its actions outran its time. */
+function outran(seconds: number): MacCommandRefusal {
+  return {
+    refused: `Not run in time: the browser actions did not finish within ${seconds} seconds.`,
+  };
+}
+
+const decodeBrowserParams = Schema.decodeUnknownResult(macBrowserParamsSchema);
 
 /** What a command answers where the environment names no home folder to run it from. */
 const NO_HOME: MacShellResult = {
@@ -141,15 +200,54 @@ export function composeMacCommands(
     const shell = yield* macShell;
     const services = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
     const http = yield* HttpClient.HttpClient;
-    const { kernel, account, enabled, client } = dependencies;
+    const { kernel, account, enabled, client, browser } = dependencies;
     const openLive = dependencies.openLive ?? openRealtimeClient;
     const decode = Schema.decodeUnknownOption(macCommandsLiveRowsSchema);
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideService(call, HttpClient.HttpClient, http);
 
-    /** What one command comes to, by its kind: a shell command run, and any other kind refused. */
+    /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */
+    const gateOpen = Effect.map(
+      enabled,
+      (on) => on && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
+    );
+
+    /** The kinds this Mac runs now, which a follow names for as long as it lasts. */
+    const kindsNow = Effect.map(browser.enabled, (on) => (on ? RUNS.BROWSER : RUNS.SHELL));
+
+    /**
+     * Answers once the gate shuts or the experiment goes off, asked every
+     * `GATE_POLL`, so a browser run stops acting on the tabs within a moment
+     * of the developer withdrawing the permission.
+     */
+    const browserGateShut = Effect.repeat(
+      Effect.zipWith(gateOpen, browser.enabled, (open, on) => open && on),
+      { schedule: Schedule.spaced(GATE_POLL), while: (open) => open },
+    ).pipe(Effect.as<MacCommandResult>(BROWSER_SWITCHED_OFF));
+
+    /**
+     * A browser command's actions run on the task's tabs within its time,
+     * once its params read and while the experiment is still on; refused in
+     * words otherwise.
+     */
+    const ranBrowser = (command: MacBrowserCommand): Effect.Effect<MacCommandResult> =>
+      Effect.gen(function* () {
+        if (!(yield* browser.enabled)) return BROWSER_OFF;
+        const params = decodeBrowserParams(command.params);
+        if (Result.isFailure(params)) return unreadParams(params.failure);
+        return yield* browser.run(params.success).pipe(
+          Effect.timeoutOrElse({
+            duration: Duration.seconds(command.timeoutSeconds),
+            orElse: () => Effect.succeed(outran(command.timeoutSeconds)),
+          }),
+          Effect.raceFirst(browserGateShut),
+        );
+      });
+
+    /** What one command comes to, by its kind: a shell or browser command run, and any other kind refused. */
     const ran = (command: MacCommandRead): Effect.Effect<MacCommandResult> => {
+      if (isMacBrowserCommand(command)) return ranBrowser(command);
       if (!isMacShellCommand(command)) return Effect.succeed(CANNOT_RUN);
       return Option.match(shell, {
         onNone: () => Effect.succeed(NO_HOME),
@@ -162,12 +260,6 @@ export function composeMacCommands(
       Effect.flatMap(ran(command), (result) =>
         Effect.asVoid(asked(settleMacCommandResult(client, command.id, result))),
       );
-
-    /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */
-    const gateOpen = Effect.map(
-      enabled,
-      (on) => on && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
-    );
 
     /**
      * One command heard of, claimed by its id and, once granted, run on a
@@ -199,20 +291,29 @@ export function composeMacCommands(
 
     /**
      * That this Mac listens for its kinds, said every `LISTENING_EVERY` for
-     * as long as the gate stands and the account signed in is the one the
-     * follow is for; it returns once either changes, which ends the follow.
+     * as long as the gate stands, the account signed in is the one the
+     * follow is for, and the kinds it runs are the ones the follow names; it
+     * returns once any changes, which ends the follow.
      */
-    const presence = (userId: string) =>
+    const presence = (userId: string, kinds: readonly MacCommandKind[]) =>
       Effect.gen(function* () {
-        while ((yield* gateOpen) && dependencies.accountId() === userId) {
-          yield* asked(client.listening(RUNS));
+        while (
+          (yield* gateOpen) &&
+          dependencies.accountId() === userId &&
+          (yield* kindsNow) === kinds
+        ) {
+          yield* asked(client.listening(kinds));
           yield* Effect.sleep(LISTENING_EVERY);
         }
       });
 
-    /** The unclaimed commands of this Mac's kinds, sealed or with `poll` inline, for the account `userId` names. */
-    const seal = (userId: string, poll: boolean, after?: string) =>
-      asked(client.live(RUNS, userId, poll, after));
+    /** The unclaimed commands of the kinds named, sealed or with `poll` inline, for the account `userId` names. */
+    const seal = (
+      userId: string,
+      kinds: readonly MacCommandKind[],
+      poll: boolean,
+      after?: string,
+    ) => asked(client.live(kinds, userId, poll, after));
 
     /**
      * The unclaimed commands followed (`live-follow.ts`, which polls the
@@ -223,7 +324,12 @@ export function composeMacCommands(
      * still waiting. A follow ends where the gate shuts, the session signs
      * out, or the account signed in changes.
      */
-    const followed = (running: FiberSet.FiberSet, userId: string, first: MacCommandsLiveAnswer) =>
+    const followed = (
+      running: FiberSet.FiberSet,
+      userId: string,
+      kinds: readonly MacCommandKind[],
+      first: MacCommandsLiveAnswer,
+    ) =>
       Effect.suspend(() => {
         let tried = new Set<string>();
         const claimNew = (commands: readonly MacCommandRead[]) =>
@@ -235,8 +341,8 @@ export function composeMacCommands(
         const rows = liveRows(
           {
             openLive,
-            reseal: () => seal(userId, false),
-            poll: (after) => seal(userId, true, after),
+            reseal: () => seal(userId, kinds, false),
+            poll: (after) => seal(userId, kinds, true, after),
             now: kernel.now,
           },
           first,
@@ -247,7 +353,7 @@ export function composeMacCommands(
             onSome: (read) => claimNew(macCommandsOfLiveRows(read)),
           }),
         );
-        return Effect.raceFirst(following, presence(userId)).pipe(
+        return Effect.raceFirst(following, presence(userId, kinds)).pipe(
           Effect.catch(() => Effect.sleep(LIVE_RESTART)),
         );
       });
@@ -268,9 +374,10 @@ export function composeMacCommands(
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out.
         const userId = dependencies.accountId();
         if (userId === undefined) return yield* Effect.sleep(IDLE);
-        const sealed = yield* seal(userId, false);
+        const kinds = yield* kindsNow;
+        const sealed = yield* seal(userId, kinds, false);
         if ("failure" in sealed) return yield* Effect.sleep(LIVE_RESTART);
-        yield* followed(running, userId, sealed);
+        yield* followed(running, userId, kinds, sealed);
       });
 
     const lifetime = Effect.gen(function* () {

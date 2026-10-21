@@ -1644,7 +1644,16 @@ function TabContent({
           {NO_CODE_LINE}
         </EmptyState>
       ) : (
-        <CodePane shown={shownCode} calls={NO_CODE_CALLS} taskId={taskId} onOpenFile={onOpenFile} />
+        <CodePane
+          shown={shownCode}
+          calls={NO_CODE_CALLS}
+          taskId={taskId}
+          agentLabel={(agentId) => {
+            const agent = agents.agents?.find((each) => each.id === agentId);
+            return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+          }}
+          onOpenFile={onOpenFile}
+        />
       );
     case SIDE_PANEL_TAB.COMMENTS:
       return (

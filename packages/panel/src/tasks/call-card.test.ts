@@ -145,3 +145,35 @@ test("code a turn showed after a call ended stands after that call's closing lin
     "the later code has a divider of its own",
   );
 });
+
+test("code an agent showed on a turn of its own stands under that turn's divider, which names the agent, each turn its own, and a turn of an agent not listed is headed by its time alone", () => {
+  const typed: TaskCodeShowing = {
+    ...shownOn(ENDED_CALL, "show-typed"),
+    shownAt: ENDED_START + 15 * MINUTE_MS,
+    agentId: "agent-invites",
+  };
+  const later: TaskCodeShowing = {
+    ...shownOn(ENDED_CALL, "show-later"),
+    shownAt: ENDED_START + 20 * MINUTE_MS,
+    agentId: "agent-gone",
+  };
+  const codeTab = mounted(
+    createElement(CodePane, {
+      shown: [typed, later],
+      calls: [],
+      agentLabel: (agentId: string) => (agentId === "agent-invites" ? "Invite flow" : undefined),
+      onOpenFile: () => undefined,
+    }),
+  );
+  const order = [...codeTab.querySelectorAll("[data-checkpoint], .code-card")];
+  const words = order.map((element) =>
+    element.matches("[data-checkpoint]")
+      ? (element.textContent ?? "")
+      : element.getAttribute("data-call-id"),
+  );
+  assert.equal(words.length, 4);
+  assert.match(words[0] ?? "", /^Invite flow · /u);
+  assert.equal(words[1], "show-typed");
+  assert.doesNotMatch(words[2] ?? "", /Invite flow/u);
+  assert.equal(words[3], "show-later");
+});
