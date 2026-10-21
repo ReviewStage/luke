@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
+import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { saveGitHubToken } from "@luke/database/models/github-token-store";
@@ -15,6 +15,7 @@ import {
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
 } from "@luke/features/agent-browser-tab-wire";
+import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -222,6 +223,42 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           createdAt: coderTab.createdAt.getTime(),
           lastActedAt: coderTab.lastActedAt.getTime(),
         });
+      }),
+  );
+
+  it.effect(
+    "a tab carries where its agent's pointer last went, once the agent has pointed at it",
+    () =>
+      Effect.gen(function* () {
+        const { starter, taskId, coder, coderTab, ask } = yield* openTask;
+        const cursorOf = Effect.map(ask(request(starter, tabsPath(taskId))), (answered) =>
+          tabsOf(answered).map((tab) => tab.cursor),
+        );
+
+        const before = yield* cursorOf;
+        yield* TestClock.adjust("1 second");
+        const at = (yield* DateTime.nowAsDate).getTime();
+        const pointed = yield* pointBrowserTab(coder.conversationId, {
+          tab: coderTab.targetId,
+          x: 412.5,
+          y: 96,
+          kind: BROWSER_CURSOR_KIND.TYPE,
+          viewport: { width: 1280, height: 800 },
+          at,
+        });
+        const [tab] = tabsOf(yield* ask(request(starter, tabsPath(taskId))));
+
+        assert.deepEqual(before, [undefined, undefined]);
+        assert.equal(pointed, true);
+        assert.deepEqual(tab?.cursor, {
+          x: 412.5,
+          y: 96,
+          kind: BROWSER_CURSOR_KIND.TYPE,
+          viewport: { width: 1280, height: 800 },
+          at,
+        });
+        // A point is an action on the tab: it moves the tab's last action on to it.
+        assert.equal(tab?.lastActedAt, at);
       }),
   );
 

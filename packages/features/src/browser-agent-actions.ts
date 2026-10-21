@@ -132,6 +132,27 @@ export const BROWSER_CONSOLE_LEVEL = {
 /** Whether a step ran or failed. */
 export const BROWSER_STEP_STATUS = { DONE: "done", FAILED: "failed" } as const;
 
+/** What the agent's pointer does at a point: moves there (a wheel turned over it), clicks, or types into what is there. */
+export const BROWSER_CURSOR_KIND = { MOVE: "move", CLICK: "click", TYPE: "type" } as const;
+
+export type BrowserCursorKind = (typeof BROWSER_CURSOR_KIND)[keyof typeof BROWSER_CURSOR_KIND];
+
+/**
+ * One move of the agent's pointer, reported just before its input reaches
+ * the page: the tab, the point in the page's CSS pixels of its visible
+ * area, what it does there, that area's size so a view drawn at another
+ * scale can place it, and when, in epoch milliseconds. A point and a kind
+ * are no page content.
+ */
+export interface BrowserCursorMove {
+  readonly tab: string;
+  readonly x: number;
+  readonly y: number;
+  readonly kind: BrowserCursorKind;
+  readonly viewport: { readonly width: number; readonly height: number };
+  readonly at: number;
+}
+
 /** What starts a ref, before the element's backend node id. */
 const REF_PREFIX = "e";
 

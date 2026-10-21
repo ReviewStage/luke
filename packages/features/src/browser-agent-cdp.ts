@@ -16,15 +16,34 @@
  * Every action is bounded: `wait` by its own timeout, every other by the
  * action timeout. A sequence stops at its first failure, whose reason is in
  * words a model can act on, and answers every step that ran.
+ *
+ * A caller that draws the agent's pointer passes a cursor
+ * (`BrowserCursor`): each click, type, and wheel turn reports its point
+ * just before its input is dispatched, and where someone is watching the
+ * input waits `BROWSER_CURSOR_BEAT` after it, so a pointer drawn gliding to
+ * the point arrives as the action lands. A caller that passes none sends
+ * exactly the commands it always did.
  */
 
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Data, Duration, Effect, Result, Schedule, Schema, type Scope, Stream } from "effect";
+import {
+  Clock,
+  Data,
+  Duration,
+  Effect,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  type Scope,
+  Stream,
+} from "effect";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
   BROWSER_CONSOLE_LEVEL,
+  BROWSER_CURSOR_KIND,
   BROWSER_KEYS,
   BROWSER_MODIFIER,
   BROWSER_SCREENSHOT,
@@ -34,6 +53,8 @@ import {
   type BrowserAgentRun,
   type BrowserAgentStep,
   type BrowserConsoleMessage,
+  type BrowserCursorKind,
+  type BrowserCursorMove,
   backendNodeIdOf,
   cutBrowserText,
 } from "./browser-agent-actions.js";
@@ -48,6 +69,21 @@ import {
 
 /** How often `wait` asks whether what it waits for has come. */
 const WAIT_POLL = Duration.millis(250);
+
+/** How long a watched pointer's input waits after its move is reported: about the glide the panel draws to the point. */
+export const BROWSER_CURSOR_BEAT = Duration.millis(250);
+
+/**
+ * Where a run reports the agent's pointer: `report` is told of each move
+ * just before its input is dispatched, and `watched` says whether someone
+ * is watching the tabs, which holds each input `BROWSER_CURSOR_BEAT` after
+ * its report. Note that a report never fails the action: one that could
+ * not be made is the caller's to swallow.
+ */
+export interface BrowserCursor<R = never> {
+  readonly report: (move: BrowserCursorMove) => Effect.Effect<void, never, R>;
+  readonly watched: boolean;
+}
 
 /** How long a tab's session is given to detach as a sequence ends, so a browser that stopped answering holds no one up. */
 const DETACH_TIMEOUT = Duration.seconds(2);
@@ -114,6 +150,7 @@ const EvaluatedSchema = Schema.Struct({
   result: Schema.Struct({ value: Schema.optional(WireValueSchema) }),
 });
 const CapturedSchema = Schema.Struct({ data: Schema.String });
+const PointSchema = Schema.Struct({ x: Schema.Number, y: Schema.Number });
 const ClosedSchema = Schema.Struct({ success: Schema.optional(Schema.Boolean) });
 const ConsoleCallSchema = Schema.Struct({
   type: Schema.String,
@@ -133,6 +170,15 @@ const LogEntrySchema = Schema.Struct({
 
 const readConsoleCall = readEither(ConsoleCallSchema, { excess: EXCESS_KEYS.DROP });
 const readLogEntry = readEither(LogEntrySchema, { excess: EXCESS_KEYS.DROP });
+const readPoint = readEither(PointSchema, { excess: EXCESS_KEYS.DROP });
+
+/** The middle of the focused element in CSS pixels of the visible page, or null where the page's body has the focus. */
+const FOCUSED_POINT = `(() => {
+  const focused = document.activeElement;
+  if (focused === null || focused === document.body) return null;
+  const box = focused.getBoundingClientRect();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+})()`;
 
 /** A reader of a command's answer, which fails as malformed where the answer is not what the method answers. */
 function answerOf<S extends Schema.ConstraintDecoder<unknown>>(schema: S) {
@@ -334,6 +380,72 @@ function typeText(page: Page, text: string, ref: string | undefined) {
   });
 }
 
+/**
+ * Reports the pointer's move to a point, with the visible page's size, and
+ * holds the input after it for the beat where someone watches. Note that a
+ * page whose size cannot be read reports nothing, since a point the panel
+ * cannot place is no use, and the action goes on as it would have.
+ */
+function pointTo<R>(
+  page: Page,
+  cursor: BrowserCursor<R> | undefined,
+  kind: BrowserCursorKind,
+  point: { readonly x: number; readonly y: number },
+) {
+  return Effect.gen(function* () {
+    if (cursor === undefined) return;
+    const method = "Page.getLayoutMetrics";
+    const metrics = yield* Effect.option(
+      Effect.flatMap(page.send(method), (answer) => readMetrics(method, answer)),
+    );
+    if (Option.isNone(metrics)) return;
+    const view = metrics.value.cssVisualViewport;
+    yield* cursor.report({
+      tab: page.targetId,
+      x: point.x,
+      y: point.y,
+      kind,
+      viewport: { width: view.clientWidth, height: view.clientHeight },
+      at: yield* Clock.currentTimeMillis,
+    });
+    if (cursor.watched) yield* Effect.sleep(BROWSER_CURSOR_BEAT);
+  });
+}
+
+/**
+ * Where typing lands, for the pointer alone: the middle of the element a
+ * ref names, or of the focused one. None where it cannot be told, which
+ * leaves the typing to say what went wrong, if anything did.
+ */
+function typingPointOf(page: Page, ref: string | undefined) {
+  if (ref !== undefined) return Effect.option(pointOfRef(page, ref));
+  const method = "Runtime.evaluate";
+  return Effect.option(
+    page.send(method, { expression: FOCUSED_POINT, returnByValue: true }).pipe(
+      Effect.flatMap((answer) => readEvaluated(method, answer)),
+      Effect.flatMap(({ result }) => {
+        const point = readPoint(result.value ?? null);
+        return Result.isSuccess(point) ? Effect.succeed(point.success) : Effect.fail("none");
+      }),
+    ),
+  );
+}
+
+/** Types the text, the pointer moved to where it lands first where a cursor is drawn. */
+function typeWithCursor<R>(
+  page: Page,
+  cursor: BrowserCursor<R> | undefined,
+  text: string,
+  ref: string | undefined,
+) {
+  if (cursor === undefined) return typeText(page, text, ref);
+  return Effect.gen(function* () {
+    const point = yield* typingPointOf(page, ref);
+    if (Option.isSome(point)) yield* pointTo(page, cursor, BROWSER_CURSOR_KIND.TYPE, point.value);
+    yield* typeText(page, text, ref);
+  });
+}
+
 /** What a key event says of a key, Shift held or not: its name, code, Windows key code, and the text it types. */
 function keyOf(key: string, shifted: boolean) {
   const named = NAMED_KEYS.get(key);
@@ -367,9 +479,10 @@ function pressKey(page: Page, key: string, modifiers: readonly (keyof typeof MOD
 }
 
 /** Scrolls an element into view, or turns the wheel over the middle of the visible page. */
-function scroll(
+function scroll<R>(
   page: Page,
   by: { readonly deltaX?: number; readonly deltaY?: number; readonly ref?: string },
+  cursor: BrowserCursor<R> | undefined,
 ) {
   return Effect.gen(function* () {
     if (by.ref !== undefined) {
@@ -380,10 +493,12 @@ function scroll(
     }
     const method = "Page.getLayoutMetrics";
     const { cssLayoutViewport } = yield* readMetrics(method, yield* page.send(method));
+    const middle = { x: cssLayoutViewport.clientWidth / 2, y: cssLayoutViewport.clientHeight / 2 };
+    yield* pointTo(page, cursor, BROWSER_CURSOR_KIND.MOVE, middle);
     yield* page.send("Input.dispatchMouseEvent", {
       type: "mouseWheel",
-      x: cssLayoutViewport.clientWidth / 2,
-      y: cssLayoutViewport.clientHeight / 2,
+      x: middle.x,
+      y: middle.y,
       deltaX: by.deltaX ?? 0,
       deltaY: by.deltaY ?? 0,
     });
@@ -560,11 +675,12 @@ function consoleOf(cdp: CdpSession, page: Page) {
 }
 
 /** The step an action on a tab answers, once the tab is reached. */
-function onPage(
+function onPage<R>(
   cdp: CdpSession,
   page: Page,
   action: BrowserAgentAction,
-): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure> {
+  cursor: BrowserCursor<R> | undefined,
+): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure, R> {
   const tab = page.targetId;
   switch (action.action) {
     case BROWSER_AGENT_ACTION.NAVIGATE:
@@ -581,19 +697,27 @@ function onPage(
           ? Effect.succeed({ x: action.x ?? 0, y: action.y ?? 0 })
           : pointOfRef(page, action.ref);
       return Effect.as(
-        Effect.flatMap(at, (point) => clickAt(page, point)),
+        Effect.flatMap(at, (point) =>
+          Effect.andThen(
+            pointTo(page, cursor, BROWSER_CURSOR_KIND.CLICK, point),
+            clickAt(page, point),
+          ),
+        ),
         actedOn(action.action, tab),
       );
     }
     case BROWSER_AGENT_ACTION.TYPE:
-      return Effect.as(typeText(page, action.text, action.ref), actedOn(action.action, tab));
+      return Effect.as(
+        typeWithCursor(page, cursor, action.text, action.ref),
+        actedOn(action.action, tab),
+      );
     case BROWSER_AGENT_ACTION.KEY:
       return Effect.as(
         pressKey(page, action.key, action.modifiers ?? []),
         actedOn(action.action, tab),
       );
     case BROWSER_AGENT_ACTION.SCROLL:
-      return Effect.as(scroll(page, action), actedOn(action.action, tab));
+      return Effect.as(scroll(page, action, cursor), actedOn(action.action, tab));
     case BROWSER_AGENT_ACTION.WAIT: {
       const ref = action.ref;
       const check =
@@ -643,12 +767,13 @@ function closeTab(cdp: CdpSession, pages: Pages, tab: string) {
 }
 
 /** The step an action answers, the tab it names or the one before it acted on standing in for a tab it leaves out. */
-function stepOf(
+function stepOf<R>(
   cdp: CdpSession,
   pages: Pages,
   action: BrowserAgentAction,
   tab: string | undefined,
-): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure> {
+  cursor: BrowserCursor<R> | undefined,
+): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure, R> {
   if (action.action === BROWSER_AGENT_ACTION.LIST) {
     return Effect.map(cdp.pages, (listed) => ({
       action: action.action,
@@ -671,7 +796,7 @@ function stepOf(
   if (action.action === BROWSER_AGENT_ACTION.CLOSE) {
     return closeTab(cdp, pages, tab);
   }
-  return Effect.flatMap(pages.page(tab), (page) => onPage(cdp, page, action));
+  return Effect.flatMap(pages.page(tab), (page) => onPage(cdp, page, action, cursor));
 }
 
 /** How long an action may take, and what is said when it takes longer. */
@@ -689,14 +814,15 @@ function boundOf(action: BrowserAgentAction): { readonly millis: number; readonl
 }
 
 /** The step an action answers within its bound, or the failure that says why it could not. */
-function boundedStep(
+function boundedStep<R>(
   cdp: CdpSession,
   pages: Pages,
   action: BrowserAgentAction,
   tab: string | undefined,
+  cursor: BrowserCursor<R> | undefined,
 ) {
   const bound = boundOf(action);
-  return stepOf(cdp, pages, action, tab).pipe(
+  return stepOf(cdp, pages, action, tab, cursor).pipe(
     Effect.timeoutOrElse({
       duration: Duration.millis(bound.millis),
       orElse: () => failed(bound.reason),
@@ -717,12 +843,14 @@ function tabAfter(step: BrowserAgentStep, before: string | undefined): string | 
  * Runs a sequence of actions on the browser, in order, up to the first that
  * fails: every step that ran, the failed one last, and how many never ran.
  * It never fails itself; a browser that cannot be reached is the session's
- * own failure, before any action.
+ * own failure, before any action. A cursor, where given, hears each move
+ * of the agent's pointer just before its input (`BrowserCursor`).
  */
-export function runBrowserActions(
+export function runBrowserActions<R = never>(
   cdp: CdpSession,
   actions: readonly BrowserAgentAction[],
-): Effect.Effect<BrowserAgentRun> {
+  options: { readonly cursor?: BrowserCursor<R> } = {},
+): Effect.Effect<BrowserAgentRun, never, R> {
   return Effect.scoped(
     Effect.gen(function* () {
       const pages = yield* pagesOver(cdp);
@@ -733,7 +861,7 @@ export function runBrowserActions(
           action.action === BROWSER_AGENT_ACTION.LIST || action.action === BROWSER_AGENT_ACTION.OPEN
             ? undefined
             : (action.tab ?? tab);
-        const ran = yield* Effect.result(boundedStep(cdp, pages, action, named));
+        const ran = yield* Effect.result(boundedStep(cdp, pages, action, named, options.cursor));
         if (Result.isFailure(ran)) {
           const error = cutBrowserText(ran.failure, BROWSER_AGENT_LIMITS.ERROR_MAX_CHARS);
           const failedOn = named === undefined ? {} : { tab: named };

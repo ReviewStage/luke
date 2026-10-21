@@ -73,6 +73,12 @@ function reachedTab(agent: ReachedBrowserTab["agent"] | undefined): ReachedBrows
       heldUntil: null,
       createdAt: new Date(0),
       lastActedAt: new Date(0),
+      cursorX: null,
+      cursorY: null,
+      cursorKind: null,
+      cursorViewportW: null,
+      cursorViewportH: null,
+      cursorAt: null,
     },
     agent:
       agent === undefined

@@ -22,6 +22,7 @@
 
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
+import { BROWSER_CURSOR_KIND, type BrowserCursorMove } from "@luke/features/browser-agent-actions";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -41,6 +42,8 @@ const OPENERS = Object.values(AGENT_BROWSER_TAB_OPENER);
 
 const GITHUB_ACCESSES = Object.values(GITHUB_ACCESS);
 
+const CURSOR_KINDS = Object.values(BROWSER_CURSOR_KIND);
+
 /** One tab as its row keeps it. */
 const BrowserTabSchema = Schema.Struct({
   id: Schema.String,
@@ -55,6 +58,12 @@ const BrowserTabSchema = Schema.Struct({
   heldUntil: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   lastActedAt: InstantColumnSchema,
+  cursorX: Schema.NullOr(Schema.Number),
+  cursorY: Schema.NullOr(Schema.Number),
+  cursorKind: Schema.NullOr(Schema.Literals(CURSOR_KINDS)),
+  cursorViewportW: Schema.NullOr(Schema.Number),
+  cursorViewportH: Schema.NullOr(Schema.Number),
+  cursorAt: Schema.NullOr(InstantColumnSchema),
 });
 
 export type AgentBrowserTabRow = typeof BrowserTabSchema.Type;
@@ -99,6 +108,12 @@ const tabColumns = {
   heldUntil: agentBrowserTab.heldUntil,
   createdAt: agentBrowserTab.createdAt,
   lastActedAt: agentBrowserTab.lastActedAt,
+  cursorX: agentBrowserTab.cursorX,
+  cursorY: agentBrowserTab.cursorY,
+  cursorKind: agentBrowserTab.cursorKind,
+  cursorViewportW: agentBrowserTab.cursorViewportW,
+  cursorViewportH: agentBrowserTab.cursorViewportH,
+  cursorAt: agentBrowserTab.cursorAt,
 };
 
 const ReachedTabSchema = Schema.Struct({
@@ -212,6 +227,41 @@ const upsertTab = SqlSchema.findOne({
           set: { address: tab.address, title: tab.title, lastActedAt: now },
         })
         .returning(tabColumns),
+    ),
+});
+
+const pointTab = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    targetId: Schema.String,
+    x: Schema.Number,
+    y: Schema.Number,
+    kind: Schema.Literals(CURSOR_KINDS),
+    width: Schema.Number,
+    height: Schema.Number,
+    at: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ conversationId, targetId, x, y, kind, width, height, at }) =>
+    Database.use((db) =>
+      db
+        .update(agentBrowserTab)
+        .set({
+          cursorX: x,
+          cursorY: y,
+          cursorKind: kind,
+          cursorViewportW: width,
+          cursorViewportH: height,
+          cursorAt: at,
+          lastActedAt: at,
+        })
+        .where(
+          and(
+            eq(agentBrowserTab.conversationId, conversationId),
+            eq(agentBrowserTab.targetId, targetId),
+          ),
+        )
+        .returning({ id: agentBrowserTab.id }),
     ),
 });
 
@@ -416,6 +466,33 @@ export function retargetBrowserTab(
   to: string,
 ): BrowserTabEffect<boolean> {
   return Effect.map(retargetTab({ conversationId, tabId, from, to }), (rows) => rows.length > 0);
+}
+
+/**
+ * Records where the agent's pointer went on a tab of its browser, the
+ * instant it went there standing as the tab's last action, so a member's
+ * window draws it gliding there. Answers whether a kept tab took it: a tab
+ * no row keeps yet, one this call just opened, is drawn by no window, so
+ * its move is dropped. Note that it is one write, with no read before it.
+ */
+export function pointBrowserTab(
+  conversationId: string,
+  move: BrowserCursorMove,
+): BrowserTabEffect<boolean> {
+  return Effect.map(
+    pointTab({
+      conversationId,
+      targetId: move.tab,
+      x: move.x,
+      y: move.y,
+      kind: move.kind,
+      // Note that a visible page's size is whole CSS pixels, as the browser reports it.
+      width: Math.round(move.viewport.width),
+      height: Math.round(move.viewport.height),
+      at: new Date(move.at),
+    }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /** Deletes a tab its agent closed, answering whether the agent's browser held it. */

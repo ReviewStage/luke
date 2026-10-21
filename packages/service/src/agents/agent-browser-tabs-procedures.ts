@@ -30,6 +30,7 @@ import {
 import {
   AGENT_BROWSER_TAB_OPENER,
   type AgentBrowserTab,
+  type AgentBrowserTabCursor,
 } from "@luke/features/agent-browser-tab-wire";
 import { DateTime, Effect, Option } from "effect";
 import {
@@ -48,9 +49,32 @@ export interface AgentBrowserTabsProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
+/** Where the agent's pointer last went on a tab, as the wire carries it; none until every cursor column is written. */
+function cursorOf(tab: ReachedBrowserTab["tab"]): AgentBrowserTabCursor | undefined {
+  const { cursorX, cursorY, cursorKind, cursorViewportW, cursorViewportH, cursorAt } = tab;
+  if (
+    cursorX === null ||
+    cursorY === null ||
+    cursorKind === null ||
+    cursorViewportW === null ||
+    cursorViewportH === null ||
+    cursorAt === null
+  ) {
+    return undefined;
+  }
+  return {
+    x: cursorX,
+    y: cursorY,
+    kind: cursorKind,
+    viewport: { width: cursorViewportW, height: cursorViewportH },
+    at: cursorAt.getTime(),
+  };
+}
+
 /** A reached tab as the wire carries it, its driver only while their takeover stands at `now`. */
 function browserTabOf({ tab, agent }: ReachedBrowserTab, now: Date): AgentBrowserTab {
   const driver = browserTabDriver(tab, now);
+  const cursor = cursorOf(tab);
   return {
     id: tab.id,
     agentId: agent.id,
@@ -64,6 +88,7 @@ function browserTabOf({ tab, agent }: ReachedBrowserTab, now: Date): AgentBrowse
       driver === null ? null : { userId: driver.userId, heldUntil: driver.heldUntil.getTime() },
     createdAt: tab.createdAt.getTime(),
     lastActedAt: tab.lastActedAt.getTime(),
+    ...(cursor === undefined ? {} : { cursor }),
   };
 }
 

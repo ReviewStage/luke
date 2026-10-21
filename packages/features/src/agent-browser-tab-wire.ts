@@ -16,10 +16,16 @@
  * caller's own takeover, and `DELETE` on that path hands it back, each
  * answering the tab as it then stands, so a takeover another member holds
  * answers their name as the driver rather than a refusal.
+ *
+ * A tab the agent has pointed at carries its cursor: where the agent's
+ * pointer last went, in the page's CSS pixels of its visible area, what it
+ * did there, that area's size so a view drawn at another scale places it,
+ * and when. The window draws it over the live view, never in the page.
  */
 
 import { Schema as EffectSchema } from "effect";
 import { BROWSER_SHOWN_MAX_CHARS } from "./browser-acts.js";
+import { BROWSER_CURSOR_KIND } from "./browser-agent-actions.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /** Who opened a tab: the agent whose browser it is in, or a member. */
@@ -52,6 +58,17 @@ const agentBrowserTabDriverSchema = EffectSchema.Struct({
   heldUntil: countedNumber,
 });
 
+/** Where the agent's pointer last went on a tab: the point, what it did there, the visible page's size, and when, in epoch milliseconds. */
+const agentBrowserTabCursorSchema = EffectSchema.Struct({
+  x: EffectSchema.Finite,
+  y: EffectSchema.Finite,
+  kind: EffectSchema.Literals(Object.values(BROWSER_CURSOR_KIND)),
+  viewport: EffectSchema.Struct({ width: countedNumber, height: countedNumber }),
+  at: countedNumber,
+});
+
+export type AgentBrowserTabCursor = typeof agentBrowserTabCursorSchema.Type;
+
 /** One tab open in one of a task's agents' browsers. */
 const agentBrowserTabSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -66,6 +83,8 @@ const agentBrowserTabSchema = EffectSchema.Struct({
   createdAt: countedNumber,
   /** Epoch milliseconds its agent last acted on it. */
   lastActedAt: countedNumber,
+  /** Where the agent's pointer last went on it; absent until it first points. */
+  cursor: EffectSchema.optionalKey(agentBrowserTabCursorSchema),
 });
 
 export type AgentBrowserTab = typeof agentBrowserTabSchema.Type;
