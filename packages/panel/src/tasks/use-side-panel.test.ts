@@ -677,3 +677,18 @@ test("a preview closed lets its preview go, so the same tab opened again by a ch
   act(() => panel.control().onChoose({ changes: AGENT }));
   assert.equal(panel.control().preview, undefined);
 });
+
+test("a preview browsed on to another file stays the preview on that file, so the next link still takes its place", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
+  act(() => panel.control().onPreviewFile({ path: "src/a.ts" }));
+  assert.deepEqual(panel.control().preview, { file: "src/a.ts" });
+  act(() => panel.control().onBrowseFile("src/a.ts", "src/b.ts", false));
+  assert.deepEqual(panel.control().preview, { file: "src/b.ts" });
+
+  act(() => panel.control().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel.control().preview, { changes: AGENT });
+  assert.ok(
+    !panel.control().strip.some((tab) => typeof tab === "object" && "file" in tab),
+    "the browsed preview gave way",
+  );
+});

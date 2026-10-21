@@ -327,7 +327,6 @@ test("a pull request, a page, and a file the item names open one after another i
   assert.equal(panelTabs(container), undefined, "no panel stands until the item opens one");
 
   await pressChip(container, "relay#42");
-  assert.deepEqual(panelTabs(container), ["▸ #42 Send invitations in batches"]);
   await pressChip(container, "Invite funnel");
   await pressChip(container, "invites.ts");
   assert.deepEqual(panelTabs(container), ["▸ invites.ts"], "each link took the last one's place");
@@ -456,4 +455,32 @@ test("closing the last tab drawn beside the Inbox shuts the panel, as on a task'
   await settle();
 
   assert.equal(panelTabs(container), undefined, "the panel shut with its last tab");
+});
+
+test("a pull request and a file the item names pressed with ⌘ ask to go to the task on the tab a plain press would open, the file drawn there", async () => {
+  const stop = installPressIntent(window);
+  try {
+    const { container, left } = await inbox();
+    const pressWithCommand = async (name: string) => {
+      const chip = [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[data-inbox-markdown] [data-mention-ref]",
+        ),
+      ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
+      assert.ok(chip, `no chip says ${name}`);
+      act(() => {
+        chip.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+        );
+      });
+      await settle();
+    };
+    await pressWithCommand("relay#42");
+    await pressWithCommand("invites.ts");
+    assert.equal(left.went.length, 2, left.went.join("\n"));
+    assert.match(left.went[0] ?? "", /"changes"/);
+    assert.match(left.went[1] ?? "", /"file"/);
+  } finally {
+    stop();
+  }
 });

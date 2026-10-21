@@ -44,6 +44,7 @@ import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-pane
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   COLUMN,
+  changesTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
   type SidePanelDrawing,
@@ -320,8 +321,12 @@ function InboxShown({
             ? { path }
             : { path, startLine: lines.startLine, endLine: lines.endLine };
         if (going !== undefined) {
-          if (lines?.commit === undefined) tasks.onShowPanelTab(going, { file: path });
-          else tasks.onShowFile(going, ref, lines.commit);
+          if (lines?.commit !== undefined) tasks.onShowFile(going, ref, lines.commit);
+          else {
+            // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
+            sidePanel.onOpenFile(ref);
+            tasks.onShowPanelTab(going, { file: path });
+          }
         } else sidePanel.onPreviewFile(ref, lines?.commit);
         return true;
       }
@@ -336,7 +341,10 @@ function InboxShown({
         return true;
       case INBOX_PANEL_TARGET.PULL_REQUEST:
         if (going !== undefined) {
-          tasks.onShowPanelTab(going, { changes: target.agentId });
+          // The tab is the one the plain press would open, the pull request's own where it is another than the agent's.
+          const tab = changesTabOf(named, target.agentId, sidePanel.changes, target.number);
+          sidePanel.onPullRequestView(tab, PULL_REQUEST_VIEW.CONVERSATION);
+          tasks.onShowPanelTab(going, tab);
           return true;
         }
         showPullRequest(

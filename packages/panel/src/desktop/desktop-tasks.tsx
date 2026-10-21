@@ -866,7 +866,8 @@ function PlanDocument({
       code={{
         repository: task.repository,
         readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
-        onOpenFile: sidePanel.onOpenFile,
+        // A code card is a link, which opens its file as the panel's preview, as the window's Inbox opens one.
+        onOpenFile: sidePanel.onPreviewFile,
       }}
     />
   );

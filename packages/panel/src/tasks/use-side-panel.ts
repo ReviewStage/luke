@@ -1343,6 +1343,19 @@ function withPreviewKept(held: HeldState, taskId: string, tab?: SidePanelTab): H
   return { ...held, previews: others };
 }
 
+/** The state with the task's preview, where it is the file `from`'s tab, following that tab to `to`, which the tab now shows in its place. */
+function withPreviewMoved(
+  held: HeldState,
+  taskId: string | undefined,
+  from: string,
+  to: string,
+): HeldState {
+  const preview = taskId === undefined ? undefined : held.previews[taskId];
+  if (taskId === undefined || preview === undefined || !sameTab(preview, { file: from }))
+    return held;
+  return { ...held, previews: { ...held.previews, [taskId]: { file: to } } };
+}
+
 /**
  * The state with `tab` opened by `open` as the task's preview, as VS Code
  * opens a file a single click names: the preview standing before it, if
@@ -2009,7 +2022,12 @@ export function useSidePanel(
           return withFileShown(held, path, drawn, taskId);
         }
         const viewed = withChosenViewed(held, { file: path }, drawn);
-        return withFileBrowsed(viewed, taskId, standing, path);
+        return withPreviewMoved(
+          withFileBrowsed(viewed, taskId, standing, path),
+          taskId,
+          from,
+          path,
+        );
       }),
     [update, drawn, taskId],
   );
@@ -2026,7 +2044,13 @@ export function useSidePanel(
         if (to === undefined) return held;
         const open = held.files.find((each) => each.path === to);
         if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId);
-        return withFileStepped(withChosenViewed(held, { file: to }, drawn), taskId, standing, step);
+        const stepped = withFileStepped(
+          withChosenViewed(held, { file: to }, drawn),
+          taskId,
+          standing,
+          step,
+        );
+        return withPreviewMoved(stepped, taskId, from, to);
       }),
     [update, drawn, taskId],
   );
