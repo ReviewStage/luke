@@ -113,6 +113,7 @@ export const QUERY_OPTIONS = {
     failIfUnavailable: true,
     autoAllowBashIfSandboxed: true,
     allowUnsandboxedCommands: false,
+    enableWeakerNestedSandbox: true,
     network: { allowedDomains: ["github.com", "*.github.com", "registry.npmjs.org"] },
     credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
   },
