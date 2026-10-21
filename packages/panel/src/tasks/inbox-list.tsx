@@ -131,6 +131,7 @@ import {
   inboxLineKind,
   inboxMedia,
   inboxPreview,
+  inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
   isDone,
@@ -443,7 +444,7 @@ function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | 
     if (archivedHolder(holder)) return ARCHIVED_WORDS;
     return starter === undefined ? "Waiting" : waitingOn(starter);
   }
-  return item.status === INBOX_STATUS.ANSWERED ? "Answered" : "Closed";
+  return inboxSettledStanding(item);
 }
 
 /**

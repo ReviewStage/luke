@@ -56,6 +56,7 @@ import {
   inboxPlaces,
   inboxPreview,
   inboxReply,
+  inboxSettledStanding,
   inboxSettledWords,
   inboxSteps,
   inboxThreadOf,
@@ -1966,4 +1967,50 @@ test("a settled item's card says how it ended whatever its row's glyph: an answe
 
   const open = item({ id: "s3", thread: [asked] });
   assert.equal(inboxSettledWords(open, previewName), undefined, "an open item has not ended");
+});
+
+test("a settled item's card names its ending in the word its line says it in: answered, resolved by a member, or withdrawn by its agent", () => {
+  const asked = asking({
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "7 days" }, { label: "14 days" }],
+  });
+  const answered = item({ id: "w1", status: INBOX_STATUS.ANSWERED, thread: [asked] });
+  assert.equal(inboxSettledStanding(answered), "Answered");
+
+  const resolved = item({
+    id: "w2",
+    status: INBOX_STATUS.CLOSED,
+    closedBy: CHARLES,
+    thread: [asked],
+  });
+  assert.equal(inboxSettledWords(resolved, previewName), "Charles Pan: Resolved without an answer");
+  assert.equal(inboxSettledStanding(resolved), "Resolved");
+
+  // Note that the service's member close withdraws the ask it left open, saying no why.
+  const resolvedAsked = item({
+    id: "w5",
+    status: INBOX_STATUS.CLOSED,
+    closedBy: CHARLES,
+    thread: [standing(asked, INBOX_ASK_STATUS.WITHDRAWN)],
+  });
+  assert.equal(
+    inboxSettledWords(resolvedAsked, previewName),
+    "Charles Pan: Resolved without an answer",
+  );
+  assert.equal(inboxSettledStanding(resolvedAsked), "Resolved");
+
+  const takenBack = item({
+    id: "w3",
+    status: INBOX_STATUS.CLOSED,
+    thread: [standing(asked, INBOX_ASK_STATUS.WITHDRAWN)],
+  });
+  assert.equal(inboxSettledWords(takenBack, previewName), "Withdrawn");
+  assert.equal(inboxSettledStanding(takenBack), "Withdrawn");
+
+  const before = item({ id: "w4", status: INBOX_STATUS.CLOSED, closedReason: "Merged already." });
+  assert.equal(
+    inboxSettledStanding(before),
+    "Withdrawn",
+    "an agent's close before threads says why",
+  );
 });
