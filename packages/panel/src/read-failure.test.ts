@@ -135,7 +135,14 @@ test("the sidebar's plans that could not be read say so, and Retry reads the lis
         onResize: ignore,
         staged: false,
       },
-      history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
+      history: {
+        canGoBack: false,
+        canGoForward: false,
+        onBack: ignore,
+        onForward: ignore,
+        steps: { back: [], forward: [] },
+        onGoTo: ignore,
+      },
       tasks: tasksControl({
         listFailed: true,
         onRetryList: () => {

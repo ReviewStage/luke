@@ -54,6 +54,7 @@ import { ListedAutomations } from "./desktop/listed-automations.js";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
+import { stepTitle } from "./history-titles.js";
 import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
 import { LinkMenu } from "./link-menu.js";
@@ -587,6 +588,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
+    title: stepTitle(tab, tasks),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

@@ -17,6 +17,7 @@ import {
   BUTTON_SIZE,
   Button,
   ComposeIcon,
+  dropBelowStart,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
@@ -85,7 +86,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -95,7 +96,7 @@ import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import type { NavigationHistory } from "../navigation-history.js";
+import type { HistoryStep, NavigationHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -211,23 +212,137 @@ export function HistoryButtons({
   if (room === SHELL_ROOM.NARROW && window.matchMedia(BROWSER_DISPLAY).matches) return null;
   return (
     <div className="title-bar-controls" data-edge="column">
-      <Tooltip label="Back" command={APP_COMMAND.BACK}>
-        <IconButton
-          icon={<ArrowLeftIcon />}
-          label="Back"
-          disabled={!history.canGoBack}
-          onClick={history.onBack}
-        />
-      </Tooltip>
-      <Tooltip label="Forward" command={APP_COMMAND.FORWARD}>
-        <IconButton
-          icon={<ArrowRightIcon />}
-          label="Forward"
-          disabled={!history.canGoForward}
-          onClick={history.onForward}
-        />
-      </Tooltip>
+      <HistoryButton
+        label="Back"
+        command={APP_COMMAND.BACK}
+        icon={<ArrowLeftIcon />}
+        able={history.canGoBack}
+        onPress={history.onBack}
+        steps={history.steps.back}
+        onGoTo={history.onGoTo}
+      />
+      <HistoryButton
+        label="Forward"
+        command={APP_COMMAND.FORWARD}
+        icon={<ArrowRightIcon />}
+        able={history.canGoForward}
+        onPress={history.onForward}
+        steps={history.steps.forward}
+        onGoTo={history.onGoTo}
+      />
     </div>
+  );
+}
+
+/** How long a press of Back or Forward is held before it opens the list of steps along it, as Safari's are. */
+const HISTORY_HOLD_MS = 450;
+
+/** The steps a list names a step by where nothing named it as the window stood on it. */
+const UNNAMED_STEP = "Earlier page";
+
+/**
+ * The steps along one way of the history as its button's menu lists them:
+ * the nearest first, a page's steps gathered together between rules, each
+ * named as the window called it there, with what it showed under it.
+ */
+function historyGroups(
+  steps: readonly HistoryStep[],
+  onGoTo: (at: number) => void,
+): (readonly MenuAction[])[] {
+  const groups: MenuAction[][] = [];
+  let page: string | undefined;
+  for (const step of steps) {
+    const item: MenuAction = {
+      label: step.title?.label ?? UNNAMED_STEP,
+      detail: step.title?.detail,
+      onSelect: () => onGoTo(step.at),
+    };
+    if (step.page === page) groups.at(-1)?.push(item);
+    else groups.push([item]);
+    page = step.page;
+  }
+  return groups;
+}
+
+/**
+ * Back or Forward: a press takes one step, and a press held, or a
+ * right-click, lists the steps along that way, any of which it goes straight
+ * to, as a browser's Back and Forward do.
+ */
+function HistoryButton({
+  label,
+  command,
+  icon,
+  able,
+  onPress,
+  steps,
+  onGoTo,
+}: {
+  label: string;
+  command: typeof APP_COMMAND.BACK | typeof APP_COMMAND.FORWARD;
+  icon: React.JSX.Element;
+  able: boolean;
+  onPress: () => void;
+  steps: readonly HistoryStep[];
+  onGoTo: (at: number) => void;
+}): React.JSX.Element {
+  const menu = useMenu(able);
+  const button = useRef<HTMLButtonElement>(null);
+  const hold = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Whether the press now lifting opened the list, so its click takes no step as well.
+  const held = useRef(false);
+  const letGo = () => {
+    clearTimeout(hold.current);
+    hold.current = undefined;
+  };
+  useEffect(() => letGo, []);
+  const openList = () => {
+    const element = button.current;
+    if (element !== null && steps.length > 0) menu.show(dropBelowStart(element), element);
+  };
+  return (
+    <span
+      className="title-bar-history"
+      onPointerDown={(event) => {
+        if (event.pointerType !== "mouse" || event.button !== 0 || !able) return;
+        held.current = false;
+        hold.current = setTimeout(() => {
+          held.current = true;
+          openList();
+        }, HISTORY_HOLD_MS);
+      }}
+      onPointerUp={letGo}
+      onPointerLeave={letGo}
+      onClickCapture={(event) => {
+        if (!held.current) return;
+        held.current = false;
+        event.stopPropagation();
+      }}
+    >
+      <Tooltip label={label} command={command}>
+        <IconButton
+          ref={button}
+          icon={icon}
+          label={label}
+          disabled={!able}
+          aria-haspopup="menu"
+          aria-expanded={menu.open !== undefined}
+          onClick={onPress}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            openList();
+          }}
+        />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={`${label} history`}
+          menu={menu.drawn}
+          groups={historyGroups(steps, onGoTo)}
+          onClose={menu.close}
+        />
+      )}
+    </span>
   );
 }
 

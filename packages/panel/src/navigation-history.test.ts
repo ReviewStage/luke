@@ -18,6 +18,7 @@ import { useCopyLink } from "./links-at-hand.js";
 import {
   installWindowHistory,
   MOUSE_BUTTON,
+  type StepTitle,
   useHistoryMouseButtons,
   useWindowHistory,
   type WindowHistory,
@@ -122,6 +123,7 @@ function askingThrough(ask: LeaveAskHolder, base: TasksControl): TasksControl {
 function mount(
   initial: TasksControl,
   held: Parameters<typeof installWindowHistory>[0] = memoryHistory(),
+  titled?: (tasks: TasksControl) => StepTitle | undefined,
 ) {
   installWindowHistory(held);
   let history: WindowHistory | undefined;
@@ -140,6 +142,7 @@ function mount(
       settingsListed: true,
       onSettingsList: () => undefined,
       room: SHELL_ROOM.WIDE,
+      title: titled?.(tasks),
       tasks,
     });
     useHistoryMouseButtons(history, true);
@@ -908,4 +911,51 @@ test("a task opened again before its agents are read keeps the column it was las
   act(() => window.history().onBack());
   act(() => window.history().onBack());
   assert.deepEqual(shown, ["column:agent-c", "column:agent-a"], "home, then C, then A past B");
+});
+
+test("Back's and Forward's steps are listed the nearest first, each named as the window called it there, passing over a step it cannot reach, and a step listed is gone to at once", () => {
+  const shown: string[] = [];
+  const titled = (tasks: TasksControl): StepTitle | undefined => {
+    const column = tasks.mainTabs.tab;
+    return column === undefined || !("agent" in column)
+      ? { label: "Home" }
+      : { label: "Auth refactor", detail: column.agent };
+  };
+  const window = mount(tasksControl(), memoryHistory(), titled);
+  press();
+  window.stand(onTabs({ column: AGENT_A, shown }));
+  press();
+  window.stand(onTabs({ column: AGENT_B, shown }));
+  press();
+  window.stand(onTabs({ column: AGENT_C, shown }));
+
+  const listed = window.history().steps.back;
+  assert.deepEqual(
+    listed.map((step) => step.title),
+    [
+      { label: "Auth refactor", detail: "agent-b" },
+      { label: "Auth refactor", detail: "agent-a" },
+      { label: "Home", detail: undefined },
+    ],
+  );
+  assert.equal(listed[0]?.page, listed[1]?.page, "a task's steps are one page's");
+  assert.notEqual(listed[1]?.page, listed[2]?.page);
+  assert.deepEqual(window.history().steps.forward, []);
+
+  const toA = listed[1]?.at;
+  assert.ok(toA !== undefined);
+  act(() => window.history().onGoTo(toA));
+  assert.deepEqual(shown, ["column:agent-a"], "the step listed is gone to at once");
+  assert.deepEqual(
+    window.history().steps.forward.map((step) => step.title?.detail),
+    ["agent-b", "agent-c"],
+    "and the steps passed lie ahead, the nearest first",
+  );
+
+  // Agent B's tab closed: its step is no longer listed.
+  window.stand(onTabs({ column: AGENT_A, agents: [AGENT_A, AGENT_C], shown }));
+  assert.deepEqual(
+    window.history().steps.forward.map((step) => step.title?.detail),
+    ["agent-c"],
+  );
 });
