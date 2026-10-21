@@ -132,7 +132,12 @@ const findNewestRevision = SqlSchema.findOneOption({
     ),
 });
 
-const insertRevision = SqlSchema.void({
+/** The id of the transaction a write is part of, read in the write's own `RETURNING`, which Realtime names each change it delivers by. */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
+const TxIdSchema = Schema.Struct({ txid: Schema.String });
+
+const insertRevision = SqlSchema.findOne({
   Request: Schema.Struct({
     taskId: Schema.String,
     seq: Schema.Number,
@@ -146,10 +151,12 @@ const insertRevision = SqlSchema.void({
     at: Schema.Date,
     restoredFrom: Schema.NullOr(Schema.Number),
   }),
-  execute: (revision) => Database.use((db) => db.insert(planRevision).values(revision)),
+  Result: TxIdSchema,
+  execute: (revision) =>
+    Database.use((db) => db.insert(planRevision).values(revision).returning(TXID)),
 });
 
-const moveRevisionOn = SqlSchema.void({
+const moveRevisionOn = SqlSchema.findOne({
   Request: Schema.Struct({
     taskId: Schema.String,
     seq: Schema.Number,
@@ -157,12 +164,14 @@ const moveRevisionOn = SqlSchema.void({
     changes: Schema.Number,
     at: Schema.Date,
   }),
+  Result: TxIdSchema,
   execute: ({ taskId, seq, ...moved }) =>
     Database.use((db) =>
       db
         .update(planRevision)
         .set(moved)
-        .where(and(eq(planRevision.taskId, taskId), eq(planRevision.seq, seq))),
+        .where(and(eq(planRevision.taskId, taskId), eq(planRevision.seq, seq)))
+        .returning(TXID),
     ),
 });
 
@@ -441,7 +450,7 @@ function recordEarlier(
           startedAt: at,
           at,
           restoredFrom: null,
-        }),
+        }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
         1,
       ),
   });
@@ -462,26 +471,28 @@ function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
  * the same writer, for the same member, made it lately, a new revision
  * otherwise, kept under the member. Run inside the
  * transaction that holds the task's row, so two saves of one plan never take
- * one number.
+ * one number. Answers the id of the transaction it was written in, which a
+ * reader following the history over Realtime waits for.
  */
 export function recordRevision(
   record: PlanSaveRecord,
-): Effect.Effect<void, RevisionFailure, DatabaseServices> {
+): Effect.Effect<string, RevisionFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { writer, after } = record;
     const newest = yield* findNewestRevision(record.taskId);
     if (Option.isSome(newest) && joins(newest.value, record, now)) {
-      return yield* moveRevisionOn({
+      const moved = yield* moveRevisionOn({
         taskId: record.taskId,
         seq: newest.value.seq,
         document: after,
         changes: newest.value.changes + record.changes,
         at: now,
-      });
+      }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
+      return moved.txid;
     }
     const last = Option.isSome(newest) ? newest.value.seq : yield* recordEarlier(record);
-    yield* insertRevision({
+    const inserted = yield* insertRevision({
       taskId: record.taskId,
       seq: last + 1,
       actor: writer.actor,
@@ -493,7 +504,8 @@ export function recordRevision(
       startedAt: now,
       at: now,
       restoredFrom: restoredOf(writer),
-    });
+    }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
+    return inserted.txid;
   });
 }
 

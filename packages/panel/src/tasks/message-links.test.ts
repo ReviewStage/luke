@@ -26,6 +26,7 @@ import {
   MESSAGE_GONE,
   type MessageReveal,
   MessageRevealProvider,
+  useMessageReveal,
 } from "./message-links.js";
 
 /**
@@ -250,4 +251,42 @@ test("a link to a message a working agent wrote since its last idle page waits f
   assert.deepEqual(waited, { revealed: [], toast: undefined });
   assert.equal(messageNamed(container, "msg-7").hasAttribute("data-message-revealed"), true);
   assert.deepEqual(revealed, [1]);
+});
+
+test("a link to a message older than the page held reads older pages for it, but not again on its own once an older read failed", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const reads: string[] = [];
+  const reveal: MessageReveal = { agentId: AGENT.id, messageId: "m-1", ask: 1 };
+  function Probe(props: { olderFailed: boolean; draws: number }) {
+    useMessageReveal({
+      agentId: AGENT.id,
+      shown: true,
+      caughtUp: true,
+      whole: false,
+      olderFailed: props.olderFailed,
+      loadOlder: () => void reads.push(`read ${props.draws}`),
+      pages: 1,
+      settled: true,
+      drawn: () => false,
+      gone: () => assert.fail("a message older pages may hold is not gone"),
+    });
+    return null;
+  }
+  const draw = (olderFailed: boolean, draws: number) =>
+    act(() =>
+      root.render(
+        createElement(
+          MessageRevealProvider,
+          { value: { reveal, onRevealed: () => undefined } },
+          createElement(Probe, { olderFailed, draws }),
+        ),
+      ),
+    );
+  draw(false, 1);
+  assert.deepEqual(reads, ["read 1"]);
+  draw(true, 2);
+  draw(true, 3);
+  assert.deepEqual(reads, ["read 1"], "a failed older read is not asked again on every draw");
+  act(() => root.unmount());
 });

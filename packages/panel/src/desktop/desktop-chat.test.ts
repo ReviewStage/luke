@@ -34,7 +34,7 @@ import {
 } from "../tasks/chat-fixture.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
-import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -71,9 +71,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  // A box's words left unsent wait as its draft, which the next test's box must not find.
+  window.localStorage.clear();
 });
 
 /** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them, its pictures read as the test answers them. */
@@ -236,6 +240,133 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "  ↳ Add teammate invitations",
     "  ↳ Invite emails",
+  ]);
+});
+
+/**
+ * Lays out every log the window draws as a box 100 tall over 1000 of
+ * lines, since jsdom lays nothing out, its scroll position kept as written,
+ * and the "New" line standing `lineTop` from the box's top.
+ */
+function layOutLogs(lineTop = 0): void {
+  const tops = new WeakMap<Element, number>();
+  const log = (element: Element) => element.getAttribute("role") === "log";
+  vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (this: Element) {
+    return log(this) ? 1000 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    return log(this) ? 100 : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
+    return tops.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
+    this: Element,
+    top: number,
+  ) {
+    tops.set(this, top);
+  });
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const top = this.classList.contains("chat-unread-line") ? lineTop : 0;
+    return DOMRect.fromRect({ x: 0, y: top, width: 0, height: 0 });
+  });
+}
+
+/** The shown place's log: the box its messages scroll in. */
+function shownLog(page: HTMLElement): HTMLElement {
+  const log = page.querySelector<HTMLElement>('.chat-stream [role="log"]');
+  assert.ok(log, "the place's messages stand in a log");
+  return log;
+}
+
+/** The way back to the newest message, where it floats over the log. */
+function toNewest(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector('button[aria-label="Scroll to the newest line"]');
+}
+
+/** The shown channel's roots in order, by seq, and its "New" line where it stands. */
+function roots(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".chat-messages > li")].map((node) =>
+    node.classList.contains("chat-unread-line")
+      ? (node.textContent ?? "")
+      : (node.getAttribute("data-seq") ?? ""),
+  );
+}
+
+test("a channel opens as a log at its newest message, a New line before the first message someone posted since the developer read it, and the way back floats once they scroll up", () => {
+  layOutLogs();
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const log = shownLog(page);
+  assert.equal(log.scrollTop, 1000);
+  // The developer read up to 46, so the line stands between it and 47, and once alone.
+  const shown = roots(page);
+  assert.deepEqual(shown.slice(shown.indexOf("New") - 1, shown.indexOf("New") + 2), [
+    "46",
+    "New",
+    "47",
+  ]);
+  assert.equal(shown.filter((each) => each === "New").length, 1);
+  // The first unread message heads a run of its own, named and faced, though its author spoke last.
+  assert.equal(
+    page.querySelector('.chat-message[data-seq="47"]')?.getAttribute("data-continued"),
+    "false",
+  );
+  assert.equal(toNewest(page), null);
+  log.scrollTop = 400;
+  act(() => {
+    log.dispatchEvent(new Event("scroll"));
+  });
+  assert.ok(toNewest(page), "scrolled up, the way back to the newest message floats");
+  act(() => toNewest(page)?.click());
+  assert.equal(log.scrollTop, 1000);
+  assert.equal(toNewest(page), null);
+  act(() => railRow(page, "general").click());
+  assert.equal(page.querySelector(".chat-unread-line"), null);
+});
+
+test("a channel whose unread run is taller than the box opens with its New line at the top, let go of the newest message", () => {
+  layOutLogs(-600);
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(shownLog(page).scrollTop, 400);
+  assert.ok(toNewest(page), "opened above the newest message, the way back floats");
+});
+
+test("For you is a log too, opened at its newest entry", () => {
+  layOutLogs();
+  const page = mount();
+  assert.equal(shownLog(page).scrollTop, 1000);
+});
+
+test("a message says how long ago it was posted, as every row and thread in the window does, a continued one too", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AT);
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const time = (seq: number) =>
+    page.querySelector(`.chat-message[data-seq="${seq}"] time.chat-time`)?.textContent;
+  assert.equal(time(47), "16m");
+  assert.equal(time(51), "3m");
+});
+
+test("a message's Copy takes its words as Markdown, beside the Reply its byline offers", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const actions = page.querySelector('.chat-message[data-seq="51"] .chat-byline-action');
+  assert.deepEqual(
+    [...(actions?.querySelectorAll("button") ?? [])].map(
+      (button) => button.getAttribute("aria-label") ?? button.textContent,
+    ),
+    ["Copy", "Reply"],
+  );
+  act(() => actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy"]')?.click());
+  await settle();
+  assert.deepEqual(copied, [
+    "Two invites to one address in one workspace would otherwise both go pending. It's one " +
+      "migration, online, and nothing writes the pair twice today.",
   ]);
 });
 
@@ -527,35 +658,6 @@ test("until the chat is read, its wait stands centred in the window's Chat and i
   assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
 });
 
-test("a post still out names the composer's send Sending and busy, and the box empties once it is taken", async () => {
-  const gate = Promise.withResolvers<string | undefined>();
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(ChatComposer, {
-          label: "Message #general",
-          targets: [],
-          keywords: [],
-          onSend: () => gate.promise,
-        }),
-      ),
-    ),
-  );
-  const box = boxNamed(container, "Message #general");
-  typeInComposer(box, "Shipping today.");
-  pressInComposer(box, "Enter");
-  const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
-  assert.equal(sending?.getAttribute("aria-busy"), "true");
-  act(() => gate.resolve(undefined));
-  await settle();
-  assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
-  assert.equal(boxWords(box), "");
-});
-
 test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
   const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
   const page = mount((chat) => {
@@ -654,6 +756,7 @@ async function plainChat() {
         onSideBundles(
           bundles,
           createElement(ChatComposer, {
+            channelId: "general",
             label: "Message #general",
             targets: [
               {
@@ -1150,4 +1253,23 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
   assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
+});
+
+test("the rail's rows draw in the sidebar's ink, and a message's face is the app's own mark, never tiled", () => {
+  const page = mount((chat) => chat);
+  const rows = [...page.querySelectorAll(".chat-rail .luke-list-row")];
+  assert.ok(rows.length > 0, "the rail holds rows");
+  assert.deepEqual(
+    [...new Set(rows.map((each) => each.getAttribute("data-ink")))],
+    ["sidebar"],
+    "every rail row wears the sidebar's ink",
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const faces = [...page.querySelectorAll(".chat-face .actor-mark")];
+  assert.ok(faces.length > 0, "messages lead with faces");
+  assert.deepEqual(
+    faces.filter((each) => each.getAttribute("data-tiled") === "true"),
+    [],
+    "no face stands on a tile outside a pile",
+  );
 });

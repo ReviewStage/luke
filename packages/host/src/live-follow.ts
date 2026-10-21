@@ -74,8 +74,20 @@ interface LiveSubscription {
     }) => void,
   ): () => void;
   renew(query: SealedLiveQueryWire): Promise<void>;
+  /** Settles once the transaction named has arrived on the subscription, or rejects once the timeout passes, as Realtime's own does. */
+  awaitTxId(txid: string, timeout?: number): Promise<void>;
   unsubscribe(): void;
 }
+
+/** How long a write waits for its transaction to reach the read that shows it, as Neon's guide says always to bound it. */
+const TX_WAIT_TIMEOUT = Duration.seconds(10);
+
+/**
+ * A wait for a write's transaction to arrive on a followed read: it settles
+ * once any of the read's parts has it, and fails once the timeout passes,
+ * as Realtime's `awaitTxId` does.
+ */
+export type TxWait = (txid: string, timeout: Duration.Duration) => Effect.Effect<void, LiveBroken>;
 
 /** One socket to Realtime, every part's subscription on it. */
 export interface LiveClient {
@@ -188,6 +200,12 @@ export interface LiveFollowDependencies<Part extends string> {
   ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /**
+   * Hears the read's wait for a write's transaction once its parts are
+   * subscribed over Realtime, and none once they are let go, a polled read
+   * included, which has no transaction to wait on.
+   */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** The earliest any of the read's sealed statements expires, in epoch milliseconds. */
@@ -218,6 +236,24 @@ function realtimeRows<Part extends string>(
         (opened) => Effect.sync(() => opened.close()),
       );
       const rows = new Map<Part, readonly unknown[]>();
+      /**
+       * The read's wait for a write's transaction, handed out once every part
+       * is live (its first result in) and taken back once they are let go.
+       * Note that a write reaches only the parts whose rows it changes, so
+       * the first part it reaches settles the wait.
+       */
+      let standing: ReadonlyArray<readonly [Part, LiveSubscription]> = [];
+      let handed = false;
+      const txWait: TxWait = (txid, timeout) =>
+        Effect.tryPromise({
+          try: () =>
+            Promise.any(
+              standing.map(([, subscription]) =>
+                subscription.awaitTxId(txid, Duration.toMillis(timeout)),
+              ),
+            ),
+          catch: () => new LiveBroken({ reason: "the write's transaction did not arrive" }),
+        });
       const broken = (reason: string) =>
         Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason })));
       const subscriptions = yield* Effect.acquireRelease(
@@ -244,15 +280,20 @@ function realtimeRows<Part extends string>(
               const whole = Object.fromEntries(rows);
               // SAFETY: `rows` holds every part once its size is the parts', and only parts.
               Queue.offerUnsafe(queue, whole as Readonly<Record<Part, readonly unknown[]>>);
+              if (handed) return;
+              handed = true;
+              dependencies.onTxWait?.(txWait);
             });
             return [part, subscription] as const;
           }),
         ),
-        (standing) =>
+        (subscribed) =>
           Effect.sync(() => {
-            for (const [, subscription] of standing) subscription.unsubscribe();
+            if (handed) dependencies.onTxWait?.(undefined);
+            for (const [, subscription] of subscribed) subscription.unsubscribe();
           }),
       );
+      standing = subscriptions;
       let expiresAt = earliestExpiry(first);
       const renewal = Effect.gen(function* () {
         const wait = expiresAt - Duration.toMillis(RENEW_EARLY) - dependencies.now();
@@ -289,6 +330,26 @@ function realtimeRows<Part extends string>(
         ),
       );
     }),
+  );
+}
+
+/**
+ * Confirms a write once its transaction reaches the read that shows it, as
+ * Neon's guide waits on `awaitTxId`: at once where the write changed no row
+ * (no txid) or the read is not subscribed over Realtime (polled, or not yet
+ * subscribed), since a poll shows the write on its next answer anyway. A
+ * transaction that does not arrive within `TX_WAIT_TIMEOUT` is said in the
+ * log and the write confirmed still, since it committed.
+ */
+export function confirmWrite(
+  wait: TxWait | undefined,
+  txid: string | undefined,
+): Effect.Effect<void> {
+  if (wait === undefined || txid === undefined) return Effect.void;
+  return wait(txid, TX_WAIT_TIMEOUT).pipe(
+    Effect.catch((why) =>
+      Effect.logWarning(`live-follow: a write's transaction did not arrive (${why.reason})`),
+    ),
   );
 }
 

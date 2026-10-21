@@ -13,7 +13,7 @@ import {
 } from "@luke/database/models/plan-template-revisions";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
 import type { AccountProcedureSeams } from "./account-procedures.js";
 
@@ -39,7 +39,7 @@ export function accountProcedureSeams(): AccountProcedureSeams {
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
     readRole: readAccountRole,
-    anthropicFastAccess,
+    accountFastOffer,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,
     writePlanTemplate,

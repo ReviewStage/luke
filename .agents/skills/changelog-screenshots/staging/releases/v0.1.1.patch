@@ -237,7 +237,7 @@ index 000000000..b15cbc68b
 + * sessions on acme's work, each worded the way its provider reports it at
 + * 0.1.0: Claude Code and Codex name the tool they run or their parting words,
 + * Cursor its run's result, while Jules and Copilot title a row by its
-+ * repository and say nothing (the row states its own state), and Conductor
++ * repository and say nothing (the row states its own state), and the cloud
 + * titles a lone chat by its workspace. Controls are the ones each adapter
 + * advertises in that state. Ages are minutes before the fixture's own epoch,
 + * which is the clock fixture rows are read against.
@@ -315,18 +315,18 @@ index 000000000..b15cbc68b
 +      actions: [{ id: "approve-plan", label: "Approve the plan" }],
 +    },
 +    {
-+      id: "shot-conductor-audit-export",
++      id: "shot-cloud-audit-export",
 +      title: "Stream audit rows as CSV",
 +      providerId: PROVIDER_ID.CONDUCTOR,
-+      provider: "Conductor",
++      provider: "Cloud",
 +      detail: "",
 +      repository: "acme/relay",
 +      model: CLAUDE_MODEL,
 +      urgency: SESSION_URGENCY.WORKING,
 +      location: SESSION_LOCATION.CLOUD,
 +      observedAt: minutesAgo(14),
-+      workspace: { id: "shot-conductor-audit", name: "audit-log-export" },
-+      // Mid-turn: a Conductor chat takes a steer and offers its stop.
++      workspace: { id: "shot-cloud-audit", name: "audit-log-export" },
++      // Mid-turn: a cloud chat takes a steer and offers its stop.
 +      canMessage: true,
 +      actions: [{ id: "cancel-turn", label: "Stop this turn", kind: SESSION_CONTROL_KIND.STOP }],
 +    },

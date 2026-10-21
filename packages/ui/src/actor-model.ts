@@ -6,6 +6,7 @@ import {
   type PlanEditor,
   type PlanLastEdit,
   type PlanSectionEdit,
+  type TaskOrigin,
 } from "@luke/features/task-wire";
 import {
   type FormerMember,
@@ -336,6 +337,43 @@ export function teammateCreator(
     return undefined;
   }
   return creatorActor(task, reader, undefined);
+}
+
+/** The coding agent that made a task, as the window holds it: its name, harness, where it stands, its task, and the automation whose run started it. */
+export interface OriginAgent {
+  readonly name: string;
+  readonly provider: ModelProvider | undefined;
+  readonly state: ActorState;
+  readonly taskId?: string | undefined;
+  /** The name of the task the agent works on, which a task it made is said to come from. */
+  readonly taskName?: string | undefined;
+  readonly automationName?: string | undefined;
+}
+
+/**
+ * Who made a task for its member, where they did not make it by hand
+ * (`TaskOrigin`): Luke for one made on their call; the automation whose run
+ * started the agent that made it; or that agent, as `agent` names it, or as
+ * a coding agent the window does not hold, on the mark of no known harness.
+ * None for a task its member made by hand, whose creator alone names it.
+ */
+export function originActor(
+  origin: TaskOrigin | undefined,
+  agent: OriginAgent | undefined,
+): Actor | undefined {
+  if (origin === undefined) return undefined;
+  if (origin.actor === PLAN_ACTOR.NOTETAKER) return LUKE_ACTOR;
+  if (agent?.automationName !== undefined) {
+    return { kind: ACTOR_KIND.AUTOMATION, name: agent.automationName, state: ACTOR_STATE.REST };
+  }
+  return {
+    kind: ACTOR_KIND.AGENT,
+    ...(origin.agentId === undefined ? undefined : { agentId: origin.agentId }),
+    ...(agent?.taskId === undefined ? undefined : { taskId: agent.taskId }),
+    name: agent?.name ?? TAB_WORDS.CODING_AGENT,
+    provider: agent?.provider,
+    state: agent?.state ?? ACTOR_STATE.REST,
+  };
 }
 
 /**

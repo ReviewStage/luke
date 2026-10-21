@@ -235,8 +235,10 @@ function readStoredMessages(
 
 /**
  * Reads stored rows back under the vocabulary: the SDK's own structural
- * validation and the registered tools' schemas, then this build's metadata by
- * role and its tool-state set. The registry is the catalog's `tool()`
+ * validation and, at the write door, the registered tools' schemas, then this
+ * build's metadata by role and its tool-state set. A stored-row read is held
+ * to the registry's names but not to each tool's schemas, which its write
+ * already passed. The registry is the catalog's `tool()`
  * declarations keyed by the name a part spells. A tool part naming a tool the
  * registry does not hold is refused or dropped as `unregistered` says, the
  * write door refusing and a stored-row read dropping, and a stored-row read
@@ -261,14 +263,21 @@ export function readStoredUIMessagesEither(
     return Effect.succeed(refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregisteredPart));
   }
   // The SDK's validator answers its refusal as a value, so a rejection is a defect and not a refusal.
+  // Note that a stored row is held to the SDK's structure alone, not to each tool's schemas, because
+  // the write door admitted it under the same registry (`writer.ts`'s `admitted`), and walking every
+  // tool's input and output again on every page is the read's cost, not its safety.
   const validated = Effect.promise(() =>
-    safeValidateUIMessages<ValidatedMessage>({
-      messages,
-      // SAFETY: the SDK types this option for a message whose tool set is known statically, and a
-      // concrete `tool()` is not assignable to its `Tool<unknown, unknown>` (vercel/ai#9147); the
-      // validation itself reads each registered tool's schemas by name, which is what a `ToolSet` is.
-      tools: tools as NonNullable<ValidationOptions["tools"]>,
-    }),
+    safeValidateUIMessages<ValidatedMessage>(
+      storedRow
+        ? { messages }
+        : {
+            messages,
+            // SAFETY: the SDK types this option for a message whose tool set is known statically, and a
+            // concrete `tool()` is not assignable to its `Tool<unknown, unknown>` (vercel/ai#9147); the
+            // validation itself reads each registered tool's schemas by name, which is what a `ToolSet` is.
+            tools: tools as NonNullable<ValidationOptions["tools"]>,
+          },
+    ),
   );
   return Effect.map(validated, (result) =>
     result.success

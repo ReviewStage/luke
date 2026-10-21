@@ -524,6 +524,17 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           },
         });
       }
+      // The menu's New Task brings the window back where it was closed,
+      // since no window's keymap stands to answer ⌘N then.
+      config.showMenuBar({
+        panel: {
+          isPanel: (window) => panels.windows().some((panel) => panel === window),
+          onReopen: (command) => {
+            panels.focusExpanded();
+            panels.broadcast(PUSH.MENU_COMMAND, command);
+          },
+        },
+      });
       panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();

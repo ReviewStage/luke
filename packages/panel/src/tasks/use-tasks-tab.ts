@@ -99,6 +99,7 @@ import {
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
+  type PendingStatuses,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
   pendingMark,
@@ -117,16 +118,19 @@ import {
   settleFailedNote,
   sidebarTasks,
   startFailureNote,
+  statusedView,
   TASK_MARK,
   TASKS_PAGE,
   type TaskMark,
   type TasksPage,
   tasksPage,
+  undoStillDue,
   unsettledAgentPins,
   unsettledMarks,
   unsettledPinPositions,
   unsettledRenames,
   unsettledRepositoryPins,
+  unsettledStatuses,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -145,7 +149,6 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import type { AgentCallDoors } from "./agent-call.js";
-import { useAgentBrowserTabs } from "./browser-pane.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -615,6 +618,10 @@ export interface TasksControl {
   onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a notification's click asks. */
   onShowAgent: (taskId: string, agentId: string) => void;
+  /** Opens a task on a tab of its column, as it last stood: what ⌃Tab's card asks (`tab-switcher.tsx`). */
+  onShowColumnTab: (taskId: string, tab: MainTab) => void;
+  /** Opens a task on a tab of its side panel, opening the panel where it was shut: what ⌃Tab's card asks. */
+  onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab. */
   onShowSource: (taskId: string, source: RevisionSource) => void;
   /** The question an agent's Call press asks before it ends the call standing into another agent. */
@@ -1247,6 +1254,9 @@ export function useTasksTab(input: {
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  // A status given here stands until main's view carries it, apart from the pins and archives.
+  const [statuses, setStatuses] = useState<PendingStatuses>(new Map());
+  useEffect(() => setStatuses((held) => unsettledStatuses(held, viewed)), [viewed]);
   // A repository's pin given here stands until main's view carries it, as a
   // task's does. Note that a sign-out lets every one go, because a pin names
   // a repository rather than a row of this account's own, so one left
@@ -1305,7 +1315,10 @@ export function useTasksTab(input: {
   }, [accountSignedIn, setClosedTabs]);
   const renamed = useMemo(() => renamedView(viewed, renames), [viewed, renames]);
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
-  const marked = useMemo(() => markedView(drafted, marks), [drafted, marks]);
+  const marked = useMemo(
+    () => statusedView(markedView(drafted, marks), statuses),
+    [drafted, marks, statuses],
+  );
   const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
   // else that finds a task, the palette, the inbox, and the history, finds
@@ -1588,10 +1601,6 @@ export function useTasksTab(input: {
     input.room,
     cloudBrowsers,
   );
-  // A Browser tab an agent opens or closes in main is held here, whether or not the side panel is drawn now.
-  const browserOn = useExperiment(EXPERIMENT.BROWSER);
-  const browserOffered = useCapability(HOST_CAPABILITY.BROWSER);
-  useAgentBrowserTabs(sidePanel, browserOn && browserOffered);
   // A task whose column shows no tab stands on its plan: the side panel is
   // shown on its Plan tab, once for each task as it comes to show none, so a
   // tab chosen in the panel since is left where it was. Note that this waits
@@ -2172,15 +2181,27 @@ export function useTasksTab(input: {
     }
   };
 
+  // Each task's status choices made here so far, counted as each is sent,
+  // so an Undo can tell a choice made after its press, answered or not.
+  const statusChoices = useRef(new Map<string, number>());
+  const chooseStatus = (taskId: string) =>
+    statusChoices.current.set(taskId, (statusChoices.current.get(taskId) ?? 0) + 1);
+  // The tasks as the list holds them, or the open document where the list does not hold one yet.
+  const standingTasksOf = (taskIds: readonly string[]) => {
+    const held = tasks.document.task;
+    return taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
+      const task = tasks.tasks.find((each) => each.id === taskId);
+      if (task !== undefined) return [task];
+      return held?.id === taskId ? [held] : [];
+    });
+  };
   // Each status change is drawn at once and sent, and a refused one goes
   // back where it was only while no later press replaced it. Answers which
   // tasks the service kept and how many it refused.
   const sendStatuses = (changes: readonly StatusChange[]) => {
-    const asked = changes.map(({ taskId, status }) => ({
-      taskId,
-      next: { ...marks.get(taskId), status },
-    }));
-    setMarks(
+    for (const { taskId } of changes) chooseStatus(taskId);
+    const asked = changes.map(({ taskId, status }) => ({ taskId, next: { status } }));
+    setStatuses(
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
     const answers = asked.map(({ taskId, next }) =>
@@ -2188,11 +2209,11 @@ export function useTasksTab(input: {
     );
     return Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
-      setMarks(
+      setStatuses(
         (held) =>
           new Map(
-            [...held].filter(([pending, mark]) =>
-              refused.every((each) => each.taskId !== pending || each.next !== mark),
+            [...held].filter(([pending, status]) =>
+              refused.every((each) => each.taskId !== pending || each.next !== status),
             ),
           ),
       );
@@ -2207,15 +2228,12 @@ export function useTasksTab(input: {
   // open, since a task done or canceled is still read and worked on.
   const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
     if (fixture !== undefined) return;
-    const held = tasks.document.task;
-    const listed = taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
-      const task = tasks.tasks.find((each) => each.id === taskId);
-      if (task !== undefined) return [task];
-      return held?.id === taskId ? [held] : [];
-    });
-    const { asked, undo } = settleChanges(listed, status);
+    const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
     if (asked.length === 0) return;
-    sendStatuses(asked).then(({ landed, refused }) => {
+    const sent = sendStatuses(asked);
+    // The status choice each task stood at once this press was sent, which a later choice moves on.
+    const choices = new Map(asked.map(({ taskId }) => [taskId, statusChoices.current.get(taskId)]));
+    sent.then(({ landed, refused }) => {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
@@ -2229,13 +2247,31 @@ export function useTasksTab(input: {
         tone: TOAST_TONE.DONE,
         action: {
           label: UNDO_LABEL,
-          onPress: () => restoreNow.current(undo.filter(({ taskId }) => landed.includes(taskId))),
+          onPress: () =>
+            restoreNow.current(
+              undo.filter(
+                ({ taskId }) =>
+                  landed.includes(taskId) &&
+                  statusChoices.current.get(taskId) === choices.get(taskId),
+              ),
+              status,
+            ),
         },
       });
     });
   };
-  const restoreStatuses = (changes: readonly StatusChange[]) => {
-    sendStatuses(changes).then(({ refused }) => {
+  // Note that an Undo puts back only the tasks given no status since its
+  // press, here or still in flight, and still at the status it undoes, so a
+  // status chosen since, on the Board, the task's chip, or another Mac,
+  // stands.
+  const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
+    const due = undoStillDue(
+      changes,
+      settled,
+      standingTasksOf(changes.map(({ taskId }) => taskId)),
+    );
+    if (due.length === 0) return;
+    sendStatuses(due).then(({ refused }) => {
       if (refused === 0) return;
       toast({
         words: STATUS_RESTORE_FAILED_NOTE,
@@ -2444,8 +2480,16 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
+  // A status chosen here supersedes one a press drew and main's view has
+  // yet to carry, which is let go so the view's answer is drawn.
   const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
+    if (standing.status !== undefined) {
+      chooseStatus(taskId);
+      setStatuses((held) =>
+        held.has(taskId) ? new Map([...held].filter(([pending]) => pending !== taskId)) : held,
+      );
+    }
     return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
   };
 
@@ -3143,6 +3187,8 @@ export function useTasksTab(input: {
     onShowAgent: guard((taskId: string, agentId: string) =>
       showColumnTab(taskId, { agent: agentId }),
     ),
+    onShowColumnTab: guard(showColumnTab),
+    onShowPanelTab: guard(showPanelTab),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     chatShown,

@@ -359,6 +359,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
       'input[aria-label="Claude setup-token"]',
     ) ?? assert.fail("no token field");
   assert.equal(field.type, "password");
+  assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
   await pasteAndSave(field, TOKEN);
   assert.match(dialog.textContent ?? "", /That isn't a Claude setup-token\./u);
   assert.equal(field.value, TOKEN, "a refused paste stands as pasted");
@@ -375,7 +376,12 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     },
   );
   const plan = card(dialog, "Subscription");
-  assert.match(plan.textContent ?? "", /Connected · Not yet checked/u);
+  assert.match(plan.textContent ?? "", /Connected/u);
+  assert.doesNotMatch(
+    dialog.textContent ?? "",
+    /checked/iu,
+    "an unchecked plan reads as a connected one",
+  );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
   assert.ok(radio(dialog, "Subscription").querySelector(".agent-auth-check"));
   assert.equal(rowButton(page, "Claude Code").textContent, "Connected via subscription");
@@ -390,13 +396,17 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   assert.equal(rowButton(page, "Claude Code").textContent, "Connect");
 });
 
-test("a Claude token Anthropic rejected says so in its card and offers Replace token", async () => {
+test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
   const dialog = await open(page, "Claude Code");
   const plan = card(dialog, "Subscription");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
-  assert.ok(button(plan, "Replace token"));
+  await press(plan, "Replace token");
+  const field =
+    plan.querySelector<HTMLInputElement>('input[aria-label="Claude setup-token"]') ??
+    assert.fail("no token field");
+  assert.equal(field.placeholder, "Paste your Claude setup-token", "a saved token needs no hint");
 });
 
 test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {

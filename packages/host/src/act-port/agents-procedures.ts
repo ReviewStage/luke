@@ -33,6 +33,8 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPartParams,
+  type CodingAgentPartView,
   type CodingAgentPinParams,
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
@@ -47,6 +49,9 @@ import {
   type CodingAgentStopParams,
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptOlderParams,
+  type CodingAgentTranscriptPage,
   type CodingAgentWorkspaceListParams,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
@@ -72,9 +77,14 @@ export interface AgentProceduresDependencies {
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
     /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
     transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
     transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    /** The page of a transcript below the oldest message the window holds, read at once. */
+    transcriptOlder(
+      params: CodingAgentTranscriptOlderParams,
+    ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
     onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
     codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
@@ -124,6 +134,7 @@ export interface AgentProceduresDependencies {
     | "observeModels"
     | "observeTaskGone"
     | "shown"
+    | "seen"
     | "shownInbox"
     | "shownChat"
   >;
@@ -167,9 +178,9 @@ function transcriptPages(
   host: AgentProceduresDependencies["host"],
   open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
   transcript: CodingAgentTranscriptKey,
-): Stream.Stream<CodingAgentMessagesAnswerView> {
+): Stream.Stream<CodingAgentTranscriptPage> {
   const key = transcriptKeyOf(transcript);
-  return Stream.callback<CodingAgentMessagesAnswerView>((queue) =>
+  return Stream.callback<CodingAgentTranscriptPage>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() =>
@@ -277,6 +288,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         });
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_PART]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PART].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentPart(input);
+      },
+    ),
     [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actPort[
       AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT
     ].effect(function* ({ input, context, errors }) {
@@ -293,6 +310,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         ),
       );
       return streamed(yield* Stream.toAsyncIterableEffect(pages));
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.transcriptOlder(input);
     }),
     [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MESSAGE].effect(
       function* ({ input, context, errors }) {
@@ -344,6 +367,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         notices.shown(input.agentId);
         notices.shownInbox(input.inboxTaskId);
         notices.shownChat(input.chatShown ?? null);
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SEEN].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        notices.seen(input.agentId);
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PAGE].effect(

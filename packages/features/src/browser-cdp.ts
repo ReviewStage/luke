@@ -3,10 +3,8 @@
  *
  * The session is whatever speaks CDP for a browser: the Chromium in an
  * agent's sandbox, reached over its PTY (`packages/service`'s
- * `agent-browser.ts`), or the Mac's Browser tabs, each a page reached
- * through its own view's debugger (`packages/host`'s `mac-browser-tabs.ts`).
- * The actions run over either alike (`browser-agent-cdp.ts`). Nothing a
- * page holds is kept here; it reaches only the caller.
+ * `agent-browser.ts`). The actions run over it (`browser-agent-cdp.ts`).
+ * Nothing a page holds is kept here; it reaches only the caller.
  */
 
 import type { UnparsedWireValue, WireBoundaryInput } from "@luke/wire";

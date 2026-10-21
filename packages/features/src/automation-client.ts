@@ -104,9 +104,11 @@ function summaryOnly(
 ): AutomationView {
   if ("failure" in read) return read;
   const automation = withWebhookUrl(serviceBaseUrl, read.automation);
-  return read.webhookSecret === undefined
-    ? { automation }
-    : { automation, webhookSecret: read.webhookSecret };
+  return {
+    automation,
+    ...(read.webhookSecret === undefined ? undefined : { webhookSecret: read.webhookSecret }),
+    ...(read.txid === undefined ? undefined : { txid: read.txid }),
+  };
 }
 
 /** A live read's seal, or why there is none: signed out where the session is not the account it names. */
@@ -195,7 +197,12 @@ export class HostedAutomationClient {
   ): Effect.Effect<AutomationDeletedView, never, HttpClient.HttpClient> {
     return Effect.map(
       answered(askHosted(this.#hosted.automations.remove, { id: params.automationId })),
-      (read): AutomationDeletedView => ("failure" in read ? read : { deleted: true }),
+      (read): AutomationDeletedView =>
+        "failure" in read
+          ? read
+          : read.txid === undefined
+            ? { deleted: true }
+            : { deleted: true, txid: read.txid },
     );
   }
 

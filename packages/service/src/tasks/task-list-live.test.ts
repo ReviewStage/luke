@@ -8,10 +8,19 @@ import {
   createCodingAgent,
   listCodingAgents,
   pinCodingAgent,
+  pinCodingAgentCommitted,
   recordCodingAgentPublished,
+  renameCodingAgentCommitted,
 } from "@luke/database/models/coding-agent-store";
 import { linkTaskIssue, unlinkTaskIssue } from "@luke/database/models/task-issue-store";
-import { listTasks, updateTask } from "@luke/database/models/task-store";
+import {
+  assignUnassignedTaskCommitted,
+  beginTaskWorkCommitted,
+  deleteTaskCommitted,
+  listTasks,
+  updateTask,
+  updateTaskCommitted,
+} from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -37,6 +46,7 @@ import {
   taskListLiveRowsSchema,
   taskListOfLiveRows,
 } from "@luke/features/task-list-live";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -234,6 +244,73 @@ const PUBLISHED = {
 };
 
 it.layer(getTestDB())("the plan list's live statements", (it) => {
+  it.effect(
+    "a write that changes the task answers the transaction it committed in, and one that changes nothing answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+
+        const renamed = Option.getOrThrow(
+          yield* updateTaskCommitted(owner, plan.id, { name: "Invitations" }),
+        );
+        const pinned = Option.getOrThrow(
+          yield* updateTaskCommitted(owner, plan.id, { pinned: true }),
+        );
+        const again = Option.getOrThrow(
+          yield* updateTaskCommitted(owner, plan.id, { pinned: true }),
+        );
+
+        assert.match(renamed.txid ?? "", /^[0-9]+$/u);
+        assert.match(pinned.txid ?? "", /^[0-9]+$/u);
+        assert.notEqual(renamed.txid, pinned.txid, "each write is its own transaction");
+        assert.equal(again.txid, undefined, "a pin asked again writes nothing to wait for");
+        assert.equal(renamed.task.name, "Invitations");
+      }),
+  );
+
+  it.effect(
+    "an agent's rename and pin answer the transaction they committed in, a pin asked again none, and a delete its own",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        const loose = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 60_000);
+
+        const renamed = Option.getOrThrow(
+          yield* renameCodingAgentCommitted(owner, loose.id, "Sweep"),
+        );
+        const pinned = Option.getOrThrow(yield* pinCodingAgentCommitted(owner, loose.id, true));
+        const again = Option.getOrThrow(yield* pinCodingAgentCommitted(owner, loose.id, true));
+        const deleted = Option.getOrThrow(yield* deleteTaskCommitted(owner, plan.id));
+        const missing = yield* deleteTaskCommitted(owner, plan.id);
+
+        assert.match(renamed.txid ?? "", /^[0-9]+$/u);
+        assert.equal(renamed.agent.title, "Sweep");
+        assert.match(pinned.txid ?? "", /^[0-9]+$/u);
+        assert.equal(again.txid, undefined, "a pin asked again writes nothing to wait for");
+        assert.match(deleted.txid, /^[0-9]+$/u);
+        assert.ok(Option.isNone(missing), "a task already gone is deleted by nothing");
+      }),
+  );
+
+  it.effect(
+    "a Start's move into progress and its assignment answer their own later transactions, and none asked again",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+
+        const begun = Option.getOrThrow(yield* beginTaskWorkCommitted(owner, plan.id));
+        const assigned = Option.getOrThrow(yield* assignUnassignedTaskCommitted(owner, plan.id));
+
+        assert.match(begun.txid, /^[0-9]+$/u);
+        assert.ok(BigInt(assigned.txid) > BigInt(begun.txid), "the later write's transaction");
+        assert.ok(Option.isNone(yield* beginTaskWorkCommitted(owner, plan.id)));
+        assert.ok(Option.isNone(yield* assignUnassignedTaskCommitted(owner, plan.id)));
+      }),
+  );
+
   it.effect("call only functions Postgres marks immutable, as Realtime requires", () =>
     Effect.gen(function* () {
       const { plans, agents, issues } = Option.getOrThrow(taskListLiveStatements("user-immutable"));
@@ -295,6 +372,15 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* pinCodingAgent(owner, loose.id, true);
         const gone = yield* openAgent(teammate, { workspaceId: plan.workspaceId }, 2 * 60_000);
         yield* archiveCodingAgent(owner, gone.id, true);
+        // Tasks made for the owner by a coding agent, and by Luke on their call.
+        const followUp = yield* startTask(owner, {
+          name: "Invite emails",
+          origin: { actor: PLAN_ACTOR.AGENT, agentId: done.id },
+        });
+        const fromCall = yield* startTask(owner, {
+          name: "Audit log export",
+          origin: { actor: PLAN_ACTOR.NOTETAKER },
+        });
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
@@ -308,6 +394,15 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ]);
         }
         const read = yield* liveListOf(owner, NOW);
+        const originOf = (taskId: string) => read.plans.find((each) => each.id === taskId)?.origin;
+        assert.deepEqual(
+          [originOf(plan.id), originOf(followUp.id), originOf(fromCall.id)],
+          [
+            undefined,
+            { actor: PLAN_ACTOR.AGENT, agentId: done.id },
+            { actor: PLAN_ACTOR.NOTETAKER },
+          ],
+        );
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual([agents?.total, agents?.working, agents?.pullRequestTotal], [7, 2, 1]);
         assert.ok(

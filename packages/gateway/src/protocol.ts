@@ -187,6 +187,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
   /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
   CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
+  /** The page of an agent's or worker's transcript below the oldest message a window holds, read at once: its messages, and where the page older still is read below. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
@@ -334,6 +336,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_PICTURE: "codingAgents.picture",
+  /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
+  CODING_AGENTS_PART: "codingAgents.part",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the

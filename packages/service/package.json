@@ -235,6 +235,7 @@
     "./testing/repository-sandbox": "./src/testing/repository-sandbox.js",
     "./testing/sentry-transport": "./src/testing/sentry-transport.js",
     "./testing/settle": "./src/testing/settle.js",
+    "./testing/session-sandboxes-fake": "./src/testing/session-sandboxes-fake.js",
     "./testing/voice-fakes": "./src/testing/voice-fakes.js",
     "./testing/workspace-plugin": "./src/testing/workspace-plugin.js",
     "./voice/accounts": "./src/voice/accounts.js",

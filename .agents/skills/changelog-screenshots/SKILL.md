@@ -12,12 +12,11 @@ tagged, the head of its version pull request. The
 work is in four parts: plan the shots, stage them in a throwaway patch, build
 and capture on the Mac, then frame and land them.
 
-You need the developer's Mac (Conductor's `RunLocalCommand`): the native build,
-the window capture, and the framer are macOS-only. The cloud workspace writes
-code and reviews pictures; with Conductor's file sync on, anything under the
-workspace's `.context/` appears on the Mac at
-`~/conductor/remote-workspace-sync/luke/<workspace-id>/.context/`, and nothing
-syncs back.
+You need the developer's Mac (a run-on-Mac tool, such as Luke's `run_on_mac`):
+the native build, the window capture, and the framer are macOS-only. The cloud
+workspace writes code and reviews pictures; with the workspace's file sync on,
+anything under its `.context/` appears in the workspace's synced copy on the
+Mac (`$S` below), and nothing syncs back.
 
 ## 1. Plan the shots
 
@@ -142,7 +141,7 @@ worktree of the clone at `LUKE_REPO` (default `~/Developer/luke`); nothing
 touches the developer's own checkout or a running Luke.
 
 ```sh
-S=~/conductor/remote-workspace-sync/luke/<workspace-id>
+S=<the workspace's synced copy on the Mac>
 bash $S/.agents/skills/changelog-screenshots/scripts/build.sh <commit> $S/.context/shots/staging.patch
 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/call.png --profile shot-call
 ```
@@ -217,9 +216,8 @@ crop.
 
 Review every picture in the cloud before showing anyone: make small JPEG
 previews on the Mac (`sips -s format jpeg -Z 1500`), `tar` and `base64` them
-to stdout, and decode the retained output here (`RunLocalCommand` keeps
-output over 32,000 characters in `.context/conductor/`; keep each transfer
-under about 10 MB). Read each one against the spec and the rules above, fix
+to stdout, and decode the output here (a run-on-Mac tool may cut or
+spill long output; keep each transfer under about 10 MB). Read each one against the spec and the rules above, fix
 the staging, rebuild, and capture again; it took 0.12.0 four rounds.
 
 Land the finished PNGs in `apps/web/public/changelog/<version>/`, named for

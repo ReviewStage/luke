@@ -177,6 +177,27 @@ it.layer(getTestDB())("a plan's history", (it) => {
       }),
   );
 
+  it.effect(
+    "a restore answers the transaction its revision was written in, as Realtime names it, and none where it changed nothing",
+    () =>
+      Effect.gen(function* () {
+        const { userId, taskId } = yield* openTask;
+        yield* apart(userId, taskId, [
+          [PLAN_HEADING.CONTEXT, "Only admins can invite."],
+          [PLAN_HEADING.GOAL, "Members invite by email."],
+        ]);
+
+        const restored = yield* restoreRevision({ userId, taskId }, 1);
+        assert.equal(restored.status, PLAN_SAVE_STATUS.SAVED);
+        assert.ok("txid" in restored && restored.txid !== undefined);
+        assert.match(restored.txid, /^\d+$/);
+
+        const again = yield* restoreRevision({ userId, taskId }, 1);
+        assert.ok("txid" in again);
+        assert.equal(again.txid, undefined, "the plan already held the revision's text");
+      }),
+  );
+
   it.effect("another account restores no revision of a plan it does not own", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;

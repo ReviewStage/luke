@@ -129,6 +129,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   executable: Schema.String,
   model: Schema.String,
   effort: Schema.optionalKey(EffortSchema),
+  /** Whether Claude Code's own fast mode is on, for an agent on a model's fast version. */
+  fast: Schema.optionalKey(Schema.Boolean),
   /** Luke's coder instructions, appended to Claude Code's own system prompt. */
   append: Schema.String,
   /** The CLI's session id to resume, where this launch continues one. */
@@ -223,12 +225,14 @@ const StopLineSchema = Schema.Struct({
 /**
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not
- * take is skipped.
+ * take is skipped. `fast` turns Claude Code's own fast mode on or off; Codex
+ * has none and skips it.
  */
 const ModelLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MODEL),
   model: Schema.optionalKey(Schema.String),
   effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
+  fast: Schema.optionalKey(Schema.Boolean),
 });
 /**
  * A refreshed ChatGPT access token, for a Codex launch that reads

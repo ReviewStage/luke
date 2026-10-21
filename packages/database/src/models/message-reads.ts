@@ -706,6 +706,47 @@ export function readMessageByClientId(
   );
 }
 
+const findMessageByIdRow = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    messageId: Schema.String,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.id, options.messageId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The one message its id names in the account's conversation, read back
+ * under the registry like a page, so its parts stand at the indexes a page
+ * of it answered: what a reader fetches a part its page carried cut from.
+ * Answers an empty page where none stands, in a conversation that no
+ * longer stands, and in another account's.
+ */
+export function readMessageById(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  messageId: string,
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+  return Effect.flatMap(findMessageByIdRow({ conversationId, userId, messageId }), (selected) =>
+    readSelected(selected, tools),
+  );
+}
+
 /** The newest turn of a conversation, as a coding agent's status is read from it. */
 export interface LatestTurn {
   readonly conversationId: string;

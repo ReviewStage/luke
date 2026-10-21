@@ -18,6 +18,9 @@ import { createTask } from "../task-store.js";
  * outside the workspace reads none, nor does a member who does not reach
  * the repository of a task on its owner's own GitHub token.
  *
+ * A scene's write answers the id of the transaction that wrote it where it
+ * moved that row, and none where the row stands as it stood.
+ *
  * Synthetic accounts, drawings, and a stand-in for the image throughout.
  */
 
@@ -91,6 +94,42 @@ it.layer(getTestDB())("a board's live statement", (it) => {
           { taskId: task.id, drawingNumber: 1, appliedDrawing: 0, imaged: false },
         ]);
         assert.deepEqual(yield* liveRows(teammate, task.id), []);
+      }),
+  );
+
+  it.effect(
+    "a scene's write answers its committed transaction where it moves the live row, and none where it leaves the row as it stood",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
+        const sql = yield* SqlClient.SqlClient;
+        const statusOf = (txid: string) =>
+          Effect.map(
+            sql<{ readonly status: string }>`select pg_xact_status(${txid}::xid8) as status`,
+            ([row]) => row?.status,
+          );
+
+        const first = Option.getOrThrow(yield* writeScene(owner, task.id, SCENE, 0));
+        assert.ok(first.txid !== undefined, "the board's first write adds its live row");
+        assert.match(first.txid, /^\d+$/);
+        assert.equal(yield* statusOf(first.txid), "committed");
+
+        const moved = [
+          { id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 40, y: 0, width: 200, height: 80 },
+        ];
+        const unmoved = Option.getOrThrow(yield* writeScene(owner, task.id, moved, 0));
+        assert.deepEqual(unmoved, { board: { elements: moved, appliedDrawing: 0 } });
+
+        const same = Option.getOrThrow(yield* writeScene(owner, task.id, moved, 0));
+        assert.equal(same.txid, undefined, "a save that changes nothing answers none");
+
+        yield* writeDrawing(owner, task.id, BOX);
+        const applied = Option.getOrThrow(yield* writeScene(owner, task.id, moved, 1, IMAGE));
+        assert.ok(applied.txid !== undefined, "holding the drawing and its image moves the row");
+        assert.ok(BigInt(applied.txid) > BigInt(first.txid));
+        assert.equal(yield* statusOf(applied.txid), "committed");
       }),
   );
 });

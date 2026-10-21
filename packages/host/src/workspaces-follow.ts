@@ -20,7 +20,13 @@ import {
 } from "@luke/features/workspace-live";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows, type SealedRead } from "./live-follow.js";
+import {
+  LiveBroken,
+  type LiveClient,
+  liveRows,
+  type SealedRead,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's people and pending invitations, followed by the host over Neon Realtime subscriptions.
@@ -44,6 +50,8 @@ export interface LiveReadDependencies<Answer> {
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
+  /** Hears the read's wait for a write's transaction once it is subscribed over Realtime, and none once let go or polled (`live-follow.ts`). */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /**
@@ -65,6 +73,7 @@ function liveMoves<Part extends string, Rows, Built>(
       reseal: dependencies.seal,
       poll: dependencies.poll,
       now: dependencies.now,
+      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
     },
     first,
   ).pipe(

@@ -13,7 +13,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { NO_LOOKS, useReadMarks, useTaskLooks, useUnreadTasks } from "./use-task-looks.js";
+import {
+  NO_LOOKS,
+  useAgentLook,
+  useReadMarks,
+  useTaskLooks,
+  useUnreadTasks,
+} from "./use-task-looks.js";
 
 /**
  * use-task-looks.test.ts -- the sections a reader is shown as changed since
@@ -242,4 +248,33 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
 
   assert.deepEqual(stay(false), ["Approach"]);
   assert.deepEqual(stay(true), []);
+});
+
+test("an agent with no task is looked at as its page opens, which takes back a mark unread by hand, and its row's time moving while open leaves a mark made then", () => {
+  const agent = { id: "agent-looked", activityAt: LOOKED_AT };
+  let marks: ReturnType<typeof useReadMarks> | undefined;
+  function Window({ open }: { open: typeof agent | undefined }) {
+    useAgentLook(open);
+    marks = useReadMarks();
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = (open: typeof agent | undefined) =>
+    act(() => root.render(onRegistry(registry, createElement(Window, { open }))));
+  const kept = () => JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "{}");
+
+  draw(undefined);
+  act(() => marks?.mark({ id: agent.id, updatedAt: agent.activityAt }, true));
+  assert.equal(marks?.markedUnread(agent.id), true);
+
+  draw(agent);
+  assert.equal(marks?.markedUnread(agent.id), false, "opening it takes the mark back");
+  assert.deepEqual(kept(), { [agent.id]: LOOKED_AT });
+
+  act(() => marks?.mark({ id: agent.id, updatedAt: agent.activityAt }, true));
+  draw({ ...agent, activityAt: LOOKED_AT + 5 });
+  assert.equal(marks?.markedUnread(agent.id), true, "a move while it stays open leaves the mark");
+  assert.deepEqual(kept(), { [agent.id]: { at: LOOKED_AT + 5, unread: true } });
 });

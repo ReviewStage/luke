@@ -76,6 +76,22 @@ const microphoneRouteSchema: EffectSchema.Codec<MicrophoneRoute> = EffectSchema.
   builtInName: EffectSchema.optionalKey(EffectSchema.String),
 });
 
+/** The widest or tallest a window's part may be asked for a still of, in CSS pixels: past any display. */
+const CAPTURED_SIDE_MAX = 16_384;
+
+/** One side or corner of the part of a window a still is asked of, in whole CSS pixels. */
+const capturedLength = EffectSchema.Int.check(
+  EffectSchema.isBetween({ minimum: 0, maximum: CAPTURED_SIDE_MAX }),
+);
+
+/** The part of the asking window a still is taken of, from its top left corner. */
+const capturedRect = EffectSchema.Struct({
+  x: capturedLength,
+  y: capturedLength,
+  width: capturedLength,
+  height: capturedLength,
+});
+
 const feedbackResultSchema = EffectSchema.Struct({
   delivered: EffectSchema.Boolean,
   reason: EffectSchema.optionalKey(EffectSchema.String),
@@ -141,6 +157,11 @@ export const windowSurfaceActsContract = {
       exactInput(EffectSchema.Struct({ name: savedFileName, text: textUpTo(FILE_TEXT_MAX_CHARS) })),
     )
     .output(EffectSchema.Boolean),
+  // A still of part of the asking panel, downscaled, as a JPEG's data URL;
+  // none where the part is empty or nothing was drawn there to take.
+  [WINDOW_SURFACE_ACT_KIND.WINDOW_CAPTURE]: actProcedure("Could not take a still of the window.")
+    .input(exactInput(capturedRect))
+    .output(EffectSchema.NullOr(EffectSchema.String)),
   [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: actProcedure("Could not send that on this system.")
     .input(exactInput(EffectSchema.Struct({ submission: feedbackSubmissionSchema })))
     .output(feedbackResultSchema),

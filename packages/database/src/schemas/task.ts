@@ -2,15 +2,27 @@ import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
+  PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
+  type TaskCreatorActor,
   type TaskPriority,
   type TaskStatus,
 } from "@luke/features/task-wire";
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
+import { codingAgent } from "./coding-agent.js";
 
 /**
  * task.ts -- a named task and its plan, its one current document.
@@ -60,6 +72,20 @@ export const task = pgTable(
      * go unassigned rather than taking it with them.
      */
     assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Who made the task, apart from the member it was made for (`user_id`):
+     * that member by hand (`developer`, every task from before this column),
+     * Luke on their call (`notetaker`), or a coding agent acting for them
+     * (`agent`), as `create_task` names its caller.
+     */
+    creatorActor: text("creator_actor")
+      .$type<TaskCreatorActor>()
+      .notNull()
+      .default(PLAN_ACTOR.DEVELOPER),
+    /** The coding agent that made the task; null for any other maker, and once the agent's row is gone. */
+    creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => codingAgent.id, {
+      onDelete: "set null",
+    }),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
