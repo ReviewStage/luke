@@ -61,8 +61,16 @@ afterEach(() => {
   Reflect.deleteProperty(window, "__SENTRY__RENDERER_INIT__");
 });
 
+/** A span as an envelope carries it to main, as far as these tests read it. */
+interface SentSpan {
+  readonly name?: string;
+  readonly start_timestamp?: number;
+  readonly end_timestamp?: number;
+  readonly attributes?: Record<string, { readonly value?: unknown } | undefined>;
+}
+
 /** Every item of every envelope the window handed main, as JSON. */
-function sentItems(): Record<string, unknown>[] {
+function sentItems(): { readonly items?: readonly SentSpan[]; readonly [key: string]: unknown }[] {
   return envelopes.flatMap((body) =>
     body.split("\n").flatMap((line) => {
       try {
@@ -175,10 +183,19 @@ test("a span the panel timed before the SDK loads is sent once it has, with what
   await sentry.settled;
   await getClient()?.flush(1_000);
 
-  const sent = JSON.stringify(sentItems());
-  assert.match(sent, /transcript\.first_paint/);
-  assert.match(sent, /transcript\.message_count/);
-  assert.match(sent, /81920/);
+  const span = sentItems()
+    .flatMap((item) => (Array.isArray(item.items) ? item.items : []))
+    .find((each) => each.name === PANEL_SPAN.TRANSCRIPT_FIRST_PAINT);
+  // Sentry reads span times in seconds: the span starts when the panel said, and lasts 1.2 s.
+  assert.equal(span?.start_timestamp, startedAt / 1_000);
+  assert.equal(span?.end_timestamp, (startedAt + 1_200) / 1_000);
+  assert.deepEqual(
+    [
+      span?.attributes?.[PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]?.value,
+      span?.attributes?.[PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]?.value,
+    ],
+    [42, 81_920],
+  );
 });
 
 test("a span the sample leaves out is never measured", async () => {
