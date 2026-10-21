@@ -1,5 +1,5 @@
 /**
- * window-surface.ts -- what a window asks of the system it is drawn on: the microphone, the notifications, a mail, focus, a copy, a save, and feedback, as procedures.
+ * window-surface.ts -- what a window asks of the system it is drawn on: the microphone, the notifications, a mail, focus, a copy of words or a picture, a save, and feedback, as procedures.
  *
  * Main answers them itself (`apps/desktop/src/main/ipc/window-surface.ts`),
  * since each reaches Electron or the Mac; a browser tab answers the ones a
@@ -33,6 +33,21 @@ export const CONTACT_MAILTO = "mailto:founders@stagereview.app";
  * at least, is no longer.
  */
 const FILE_TEXT_MAX_CHARS = 1024 * 1024;
+
+/**
+ * The longest PNG a picture copies as, in base64: a picture the window
+ * shows is a few megabytes at most, and drawn again as a PNG it may grow
+ * several times over, so this leaves it room while keeping one copy off
+ * the port's whole budget.
+ */
+const COPIED_PNG_MAX_CHARS = 64 * 1024 * 1024;
+
+/** A PNG's bytes in base64, as a picture is copied. */
+const pngBase64 = EffectSchema.String.check(
+  EffectSchema.makeFilter((value) => value.length > 0),
+  EffectSchema.isMaxLength(COPIED_PNG_MAX_CHARS),
+  EffectSchema.isPattern(/^[A-Za-z0-9+/]+={0,2}$/u),
+);
 
 /** A text admitted as written, the empty text among it, up to `max` characters. */
 const textUpTo = (max: number) => EffectSchema.String.check(EffectSchema.isMaxLength(max));
@@ -110,6 +125,12 @@ export const windowSurfaceActsContract = {
         }),
       ),
     )
+    .output(EffectSchema.Void),
+  // A picture the viewer shows, put on the clipboard as a PNG.
+  [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE]: actProcedure(
+    "Could not copy that picture to the clipboard on this system.",
+  )
+    .input(exactInput(EffectSchema.Struct({ png: pngBase64 })))
     .output(EffectSchema.Void),
   // A File tab's file, saved where the developer chooses in the system's
   // save dialog; answers whether it was saved rather than the dialog cancelled.

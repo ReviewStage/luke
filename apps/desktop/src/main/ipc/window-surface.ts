@@ -42,6 +42,8 @@ interface WindowSurfaceDependencies {
   testNotification: () => void;
   /** Writes words to the system's clipboard. */
   copyText: (words: string) => void;
+  /** Writes a PNG, its bytes in base64, to the system's clipboard as a picture; answers false where the bytes draw no picture. */
+  copyImage: (png: string) => boolean;
   /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
   saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
   /** Carries a note to the people who make Luke, answering whether it arrived. */
@@ -111,6 +113,11 @@ export function windowSurfaceProcedures(
     [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_TEXT]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_TEXT
     ].handler(({ input }) => dependencies.copyText(input.words)),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE
+    ].handler(({ input, errors }) => {
+      if (!dependencies.copyImage(input.png)) throw errors.REFUSED();
+    }),
     [WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE
     ].handler(async ({ input, context, errors }) => {
