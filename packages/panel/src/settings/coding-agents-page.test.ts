@@ -176,10 +176,9 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   act(() => root.render(createElement(CodingAgentsPage, { signedIn: true })));
 
   assert.deepEqual(placeholders(page), [
+    ["Loading your keys", 2],
     ["Loading your default", 3],
     ["Loading your chapters model", 1],
-    ["Loading your keys", 2],
-    ["Loading your Claude plan", 1],
   ]);
   await settle();
   assert.deepEqual(placeholders(page), []);
@@ -310,19 +309,19 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   const page = await mount();
   assert.equal(fastSwitch(page).disabled, true);
 
+  const row =
+    [...page.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Connected via API key",
+    ) ?? assert.fail("no Claude Code row button");
+  act(() => row.click());
   act(() =>
     (
-      page.querySelector<HTMLButtonElement>('[aria-label="Anthropic key actions"]') ??
-      assert.fail("no Anthropic key actions")
+      document.querySelector<HTMLButtonElement>('[aria-label="Edit key"]') ??
+      assert.fail("no Edit key")
     ).click(),
   );
-  const edit =
-    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === "Edit key",
-    ) ?? assert.fail("no Edit key");
-  act(() => edit.click());
   const field =
-    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    document.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
     assert.fail("no Anthropic field");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(

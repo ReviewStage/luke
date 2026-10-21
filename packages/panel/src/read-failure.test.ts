@@ -17,7 +17,7 @@ import { DesktopInbox } from "./desktop/desktop-inbox.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse.js";
 import { PANEL_TAB } from "./panel-tabs.js";
-import { ApiKeysSection } from "./settings/api-keys-section.js";
+import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -225,7 +225,7 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
 });
 
 test("Settings says a page's failed read alike in its card's place, the keys and the workspaces both, and Retry reads again", async () => {
-  const keys = await mount(createElement(ApiKeysSection, { signedIn: true, onKeys: ignore }));
+  const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
   const keysFailure = readFailure(keys);
   assertSaidAlike(keysFailure, "Your keys could not be read.");
   answering = true;
