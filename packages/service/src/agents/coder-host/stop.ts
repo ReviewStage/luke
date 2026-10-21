@@ -9,6 +9,7 @@ import {
   nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskArchivedAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
@@ -235,6 +236,9 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   key?: string,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
+  // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
+  // as a stopped CLI's own end with it, so they go whether or not a turn stands to cancel.
+  yield* hostedStoreOrUnavailable(replaceCodingAgentWakeups(agent.id, []));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));

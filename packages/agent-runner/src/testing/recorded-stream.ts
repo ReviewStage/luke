@@ -119,7 +119,7 @@ const BACKGROUND_SLEEP: BackgroundTaskSummary = {
   description: "sleep 45",
   command: `sleep 45 && echo luke-probe-background-${NONCE}`,
 };
-const WAKEUP: SessionCronSummary = {
+export const WAKEUP: SessionCronSummary = {
   id: "cron_1",
   schedule: "17 12 21 10 *",
   recurring: false,
@@ -223,6 +223,65 @@ export const WAKEUP_STOPPED_TURN: readonly Step[] = [
 export const SHORT_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: said("Done.") },
+  { stopHook: NOTHING_IN_FLIGHT },
+  { emit: result("success") },
+];
+
+/** A turn that schedules a wakeup and ends its model turn waiting on it alone, the CLI then held up until the launch ends. */
+export const WAKEUP_WAIT: readonly Step[] = [
+  { emit: INIT },
+  {
+    emit: toolUse("ScheduleWakeup", {
+      delaySeconds: 600,
+      reason: "wait",
+      prompt: "go",
+      noop: false,
+    }),
+  },
+  { stopHook: { background_tasks: [], session_crons: [WAKEUP] } },
+  { emit: result("success") },
+  { untilReleased: true },
+];
+
+/** A recurring task's wait, the CLI then held up until the launch ends. */
+export const RECURRING_WAIT: readonly Step[] = [
+  { emit: INIT },
+  { emit: said("Checking the deploy every two hours.") },
+  {
+    stopHook: {
+      background_tasks: [],
+      session_crons: [{ ...WAKEUP, id: "cron_2", schedule: "3 */2 * * *", recurring: true }],
+    },
+  },
+  { emit: result("success") },
+  { untilReleased: true },
+];
+
+/** A wait on a background command, the CLI then held up until Luke's stop. */
+export const BACKGROUND_WAIT: readonly Step[] = [
+  { emit: INIT },
+  { emit: toolUse("Bash", { command: "sleep 45", run_in_background: true }) },
+  { stopHook: { background_tasks: [BACKGROUND_SLEEP], session_crons: [] } },
+  { emit: result("success") },
+  { untilReleased: true },
+];
+
+/** A wakeup's wait that a message from Luke interrupts: the message's turn runs, held until the test releases it, and ends with nothing pending. */
+export const WAKEUP_WAIT_THEN_MESSAGE: readonly Step[] = [
+  { emit: INIT },
+  {
+    emit: toolUse("ScheduleWakeup", {
+      delaySeconds: 600,
+      reason: "wait",
+      prompt: "go",
+      noop: false,
+    }),
+  },
+  { stopHook: { background_tasks: [], session_crons: [WAKEUP] } },
+  { emit: result("success") },
+  { awaitPrompt: true },
+  { emit: said("Taking the message.") },
+  { untilReleased: true },
   { stopHook: NOTHING_IN_FLIGHT },
   { emit: result("success") },
 ];

@@ -14,7 +14,12 @@ import {
   type WireValue,
 } from "@luke/wire";
 import { Option, Schema } from "effect";
-import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moments.js";
+import {
+  NATIVE_ENDING,
+  NATIVE_MOMENT,
+  type NativeMoment,
+  type NativeWakeup,
+} from "./native-moments.js";
 
 /**
  * runner-moments.ts -- what every harness's reader reads alike: the runner's own events, and a tool's answer as the transcript settles its call.
@@ -38,29 +43,59 @@ const readEnd = Schema.decodeUnknownOption(
   Schema.Struct({
     reason: Schema.Literals(Object.values(RUNNER_END)),
     detail: Schema.optionalKey(Schema.String),
+    wakeups: Schema.optionalKey(
+      Schema.Array(Schema.Struct({ at: Schema.String, prompt: Schema.String })),
+    ),
   }),
 );
 
 /** How each of the runner's endings reads on the turn. */
 const ENDING_OF_RUNNER_END = {
   [RUNNER_END.TURN_ENDED]: NATIVE_ENDING.DONE,
+  [RUNNER_END.RELEASED]: NATIVE_ENDING.DONE,
   [RUNNER_END.STOPPED]: NATIVE_ENDING.STOPPED,
   [RUNNER_END.INPUT_CLOSED]: NATIVE_ENDING.FAILED,
   [RUNNER_END.FAILED]: NATIVE_ENDING.FAILED,
 } as const satisfies Record<RunnerEnd, (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING]>;
+
+/** The ends that are no failure, which carry no detail. */
+const QUIET_ENDS: ReadonlySet<RunnerEnd> = new Set([
+  RUNNER_END.TURN_ENDED,
+  RUNNER_END.RELEASED,
+  RUNNER_END.STOPPED,
+]);
+
+/**
+ * The wakeups an end leaves the agent: a released wait's, each whose
+ * instant reads, or none for a Stop; nothing for any other end, which
+ * leaves the agent's wakeups as they stood.
+ */
+function wakeupsOf(
+  reason: RunnerEnd,
+  wakeups: readonly { readonly at: string; readonly prompt: string }[] | undefined,
+): readonly NativeWakeup[] | undefined {
+  if (reason === RUNNER_END.STOPPED) return [];
+  if (reason !== RUNNER_END.RELEASED) return undefined;
+  return (wakeups ?? []).flatMap(({ at, prompt }) => {
+    const due = Date.parse(at);
+    return Number.isNaN(due) ? [] : [{ at: due, prompt }];
+  });
+}
 
 function endMoments(message: WireValue): readonly NativeMoment[] {
   const read = readEnd(message);
   if (Option.isNone(read)) return [];
   const { reason, detail } = read.value;
   const said = detail === undefined ? reason : `${reason} ${detail}`;
+  const wakeups = wakeupsOf(reason, read.value.wakeups);
   return [
     {
       kind: NATIVE_MOMENT.ENDED,
       ending: ENDING_OF_RUNNER_END[reason],
-      ...(reason === RUNNER_END.TURN_ENDED || reason === RUNNER_END.STOPPED
+      ...(QUIET_ENDS.has(reason)
         ? undefined
         : { detail: redactCredentials(said).slice(0, FAILURE_CHARS) }),
+      ...(wakeups === undefined ? undefined : { wakeups }),
     },
   ];
 }
