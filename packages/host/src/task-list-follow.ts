@@ -9,7 +9,14 @@ import {
 } from "@luke/features/task-list-live";
 import type { TaskListAnswer } from "@luke/features/task-wire";
 import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
-import { LIVE_GONE, LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
+import {
+  LIVE_GONE,
+  LiveBroken,
+  type LiveClient,
+  liveRows,
+  liveShown,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * task-list-follow.ts -- the task list followed over Neon Realtime as Neon's guide says to, built again whenever its rows move and whenever the clock alone moves an agent's status.
@@ -112,7 +119,7 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
       return true;
     }
     // A read the service refused for good, as one under another session, ends the follow rather than starting it again.
-    const gone = yield* Stream.runForEach(liveLists(dependencies, sealed), (read) =>
+    const gone = yield* Stream.runForEach(liveShown(liveLists(dependencies, sealed)), (read) =>
       Effect.sync(() => dependencies.publish(read)),
     ).pipe(
       Effect.as(false),

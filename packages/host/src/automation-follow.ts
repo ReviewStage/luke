@@ -21,6 +21,7 @@ import {
   LiveBroken,
   type LiveClient,
   liveRows,
+  liveShown,
   type SealedRead,
   type TxWait,
 } from "./live-follow.js";
@@ -168,7 +169,7 @@ function followed<Part extends string, Rows, View>(
     );
     // A follow the service ended for good, as one whose automation is gone, ends here at once, rather than starting again.
     const gone = yield* Stream.runForEach(
-      Stream.switchMap(rows, (decoded) => viewsOf(kind, decoded)),
+      liveShown(Stream.switchMap(rows, (decoded) => viewsOf(kind, decoded))),
       (view) => Effect.sync(() => kind.publish(view)),
     ).pipe(
       Effect.as(false),
