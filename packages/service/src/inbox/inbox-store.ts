@@ -250,6 +250,26 @@ export interface InboxFile {
   readonly bytes: Uint8Array;
 }
 
+/**
+ * An item as a member's write on it answers it: the item as it then stands,
+ * and the transaction that wrote it, which a follower of the inbox waits
+ * for on its live view; none where this write changed nothing.
+ */
+export type InboxItemWritten = InboxItem & { readonly txid?: string };
+
+/** A member's read state moved: the transaction that moved it, none where it stood as asked already. */
+export interface InboxMarked {
+  readonly txid?: string;
+}
+
+/**
+ * The id of the transaction that made a write, read in the write's own
+ * `RETURNING`, as Neon's mutations guide does it: a follower of the inbox
+ * waits for it to arrive on its live view. A write that changed no row
+ * returns none, so there is nothing to wait for.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
 /** The types a file of an item's may be served under: a picture's, or any a message's file travels as. */
 const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
 
@@ -1699,7 +1719,7 @@ const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThro
 
 const ReaderItemSchema = Schema.Struct({ userId: Schema.String, itemId: Schema.String });
 
-const MarkedSchema = Schema.Struct({ itemId: Schema.String });
+const MarkedSchema = Schema.Struct({ itemId: Schema.String, txid: Schema.String });
 
 /**
  * The member's marker on the item read through its last change, where the
@@ -1730,7 +1750,7 @@ const upsertRead = SqlSchema.findOneOption({
           set: READ_ON,
           setWhere: READ_MOVES,
         })
-        .returning({ itemId: inboxItemRead.itemId }),
+        .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
     ),
 });
 
@@ -1757,7 +1777,7 @@ const upsertUnread = SqlSchema.findOneOption({
           set: { markedUnread: true },
           setWhere: sql`not ${inboxItemRead.markedUnread}`,
         })
-        .returning({ itemId: inboxItemRead.itemId }),
+        .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
     ),
 });
 
@@ -1818,14 +1838,15 @@ const upsertAllRead = SqlSchema.findAll({
           set: READ_ON,
           setWhere: READ_MOVES,
         })
-        .returning({ itemId: inboxItemRead.itemId }),
+        .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
     ),
 });
 
 /**
  * The answer written on the item where it stands open, at the revision
  * named or holding open the ask named, and no ask held open once it is;
- * its id, or nothing where it does not stand so.
+ * its id and the transaction that wrote it, or nothing where it does not
+ * stand so.
  */
 const answerItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -1837,7 +1858,7 @@ const answerItem = SqlSchema.findOneOption({
     answerKey: Schema.String,
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, txid: Schema.String }),
   execute: ({ userId, itemId, revision, askId, answer, answerKey, now }) =>
     Database.use((db) =>
       db
@@ -1860,7 +1881,7 @@ const answerItem = SqlSchema.findOneOption({
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
         )
-        .returning({ id: inboxItem.id }),
+        .returning({ id: inboxItem.id, txid: TXID }),
     ),
 });
 
@@ -2019,8 +2040,8 @@ function markdownBlocks(words: string): readonly InboxBlock[] {
  * The item closed by the member without an answer where it is open at the
  * revision named, under the key their client sent the close with, kept
  * where an answer's is, so a close sent again finds the one it made and a
- * close taken back finds its own, and no ask held open; its id, or nothing
- * where it is not open there.
+ * close taken back finds its own, and no ask held open; its id and the
+ * transaction that wrote it, or nothing where it is not open there.
  */
 const memberCloseItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -2030,7 +2051,7 @@ const memberCloseItem = SqlSchema.findOneOption({
     closeKey: Schema.String,
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, txid: Schema.String }),
   execute: ({ userId, itemId, revision, closeKey, now }) =>
     Database.use((db) =>
       db
@@ -2052,7 +2073,7 @@ const memberCloseItem = SqlSchema.findOneOption({
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
         )
-        .returning({ id: inboxItem.id }),
+        .returning({ id: inboxItem.id, txid: TXID }),
     ),
 });
 
@@ -2570,28 +2591,39 @@ export function inboxItemArchived(userId: string, itemId: string): InboxStoreEff
   return Effect.map(findArchivedItemTask({ userId, itemId }), Option.isSome);
 }
 
-/** Whether the marker's write found the item: it moved the marker, or the account reaches an item whose marker stood as asked already. */
+/**
+ * What the marker's write came to: the transaction that moved the marker,
+ * none where the account reaches an item whose marker stood as asked
+ * already, and false where it reaches no such item.
+ */
 function markerFound(
   marked: Option.Option<typeof MarkedSchema.Type>,
   request: typeof ReaderItemSchema.Type,
-): InboxStoreEffect<boolean> {
-  if (Option.isSome(marked)) return Effect.succeed(true);
-  return Effect.map(findReachedItem(request), Option.isSome);
+): InboxStoreEffect<InboxMarked | false> {
+  if (Option.isSome(marked)) return Effect.succeed({ txid: marked.value.txid });
+  return Effect.map(findReachedItem(request), (found) => (Option.isSome(found) ? {} : false));
 }
 
 /**
  * The item marked read for the member, read through its last change and
- * no longer marked unread, which is what opening it does; whether the
- * account reaches the item. A read already standing writes nothing, so
- * marking an item read again is one statement and one lookup.
+ * no longer marked unread, which is what opening it does: the transaction
+ * that wrote it, or false where the account reaches no such item. A read
+ * already standing writes nothing and answers no transaction, so marking an
+ * item read again is one statement and one lookup.
  */
-export function markInboxItemRead(userId: string, itemId: string): InboxStoreEffect<boolean> {
+export function markInboxItemRead(
+  userId: string,
+  itemId: string,
+): InboxStoreEffect<InboxMarked | false> {
   const request = { userId, itemId };
   return Effect.flatMap(upsertRead(request), (marked) => markerFound(marked, request));
 }
 
-/** The item marked unread for the member, standing so until they read it again, whatever changes meanwhile; whether the account reaches the item. */
-export function markInboxItemUnread(userId: string, itemId: string): InboxStoreEffect<boolean> {
+/** The item marked unread for the member, standing so until they read it again, whatever changes meanwhile; the transaction as marking it read answers it. */
+export function markInboxItemUnread(
+  userId: string,
+  itemId: string,
+): InboxStoreEffect<InboxMarked | false> {
   const request = { userId, itemId };
   return Effect.flatMap(upsertUnread(request), (marked) => markerFound(marked, request));
 }
@@ -2599,17 +2631,18 @@ export function markInboxItemUnread(userId: string, itemId: string): InboxStoreE
 /**
  * Every item the member's Inbox lists marked read for them, open or
  * settled, in the one workspace named or in every workspace of theirs
- * where none is: how many were unread. An item already read is not
- * written, and another member's markers are never touched.
+ * where none is: how many were unread, and the transaction that marked
+ * them, none where none was. An item already read is not written, and
+ * another member's markers are never touched.
  */
 export function markInboxRead(
   userId: string,
   workspaceId: string | undefined,
-): InboxStoreEffect<number> {
-  return Effect.map(
-    upsertAllRead({ userId, workspaceId: workspaceId ?? null }),
-    (marked) => marked.length,
-  );
+): InboxStoreEffect<InboxMarked & { readonly marked: number }> {
+  return Effect.map(upsertAllRead({ userId, workspaceId: workspaceId ?? null }), (marked) => {
+    const [first] = marked;
+    return first === undefined ? { marked: 0 } : { marked: marked.length, txid: first.txid };
+  });
 }
 
 /**
@@ -2694,14 +2727,14 @@ export function withdrawInboxAnswer(
  * member's close reads on the thread; nothing where it is not open there.
  * The revision stays, as an answer's does. The close is the member's own,
  * so it leaves the item read for them, as an answer does; no message is
- * written for it.
+ * written for it. Answers the transaction it was written in beside the item.
  */
 export function closeInboxItemAsMember(
   userId: string,
   itemId: string,
   revision: number,
   closeKey: string,
-): InboxStoreEffect<Option.Option<InboxItem>> {
+): InboxStoreEffect<Option.Option<InboxItemWritten>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -2716,7 +2749,11 @@ export function closeInboxItemAsMember(
           withdrawnReason: null,
         });
         yield* upsertRead({ userId, itemId });
-        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+        const { txid } = closed.value;
+        return Option.map(yield* findItem({ userId, itemId }), (row) => ({
+          ...storedItem(row).item,
+          txid,
+        }));
       }),
     ),
   );
@@ -2954,7 +2991,8 @@ function keyTaken(itemId: string, clientKey: string): InboxStoreEffect<boolean> 
  * words and the files its own; for an item from before version 5, which
  * holds none, the files kept as the item's answer files. Nothing, and no
  * file kept, where the item is no longer open at that revision. Note that
- * the revision stays, because only what the agent asks moves it.
+ * the revision stays, because only what the agent asks moves it. Answers
+ * the transaction it was written in beside the item.
  */
 export function answerInboxItem(
   userId: string,
@@ -2963,7 +3001,7 @@ export function answerInboxItem(
   answer: InboxReply,
   answerKey: string,
   files: readonly CodingAgentAttachment[] = [],
-): InboxStoreEffect<Option.Option<InboxItem>> {
+): InboxStoreEffect<Option.Option<InboxItemWritten>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -3002,7 +3040,11 @@ export function answerInboxItem(
         const words = answer.note ?? "";
         const askId = current?.id;
         yield* keepAnswer({ userId, itemId, answerKey, words, files, askId, answers, now });
-        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+        const { txid } = answered.value;
+        return Option.map(yield* findItem({ userId, itemId }), (row) => ({
+          ...storedItem(row).item,
+          txid,
+        }));
       }),
     ),
   );
@@ -3032,6 +3074,8 @@ interface InboxAskAnswered {
   readonly refusal?: string;
   /** The ask this write answered, where it took the answer, which the item's thread read may no longer carry. */
   readonly ask?: InboxAsk;
+  /** The transaction this write took the answer in; none where it took none. */
+  readonly txid?: string;
 }
 
 /**
@@ -3128,6 +3172,7 @@ export function answerInboxAsk(
         return Option.some({
           item,
           outcome: INBOX_ASK_ANSWER.TAKEN,
+          txid: answered.value.txid,
           ...(ask === undefined ? undefined : { ask }),
         });
       }),
