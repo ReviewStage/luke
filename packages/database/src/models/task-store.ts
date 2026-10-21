@@ -223,6 +223,7 @@ const TASK_SUMMARY_COLUMNS = {
   repository: task.repository,
   githubAccess: task.githubAccess,
   archivedAt: task.archivedAt,
+  completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
 };
@@ -247,6 +248,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
 });
@@ -510,6 +512,7 @@ function summaryOf(
     ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
+    ...(row.completedAt === null ? undefined : { completedAt: row.completedAt.getTime() }),
     status: row.status,
     priority: row.priority,
     number: row.number,
@@ -535,6 +538,11 @@ const TaskInsertSchema = Schema.Struct({
   now: Schema.Date,
 });
 
+/** When a task that now stands in `status` was finished: now where it is Done or Canceled, none where it is open. */
+function completedAtOf(status: TaskStatus, now: Date): Date | null {
+  return status === TASK_STATUS.DONE || status === TASK_STATUS.CANCELED ? now : null;
+}
+
 /** A task's row as an insert writes it. */
 function taskValues(write: typeof TaskInsertSchema.Type) {
   return {
@@ -544,6 +552,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     name: write.name,
     number: write.number,
     status: write.status,
+    completedAt: completedAtOf(write.status, write.now),
     priority: write.priority,
     assigneeId: write.assigneeId,
     repository: write.repository,
@@ -714,6 +723,7 @@ const TaskColumnChangesSchema = Schema.Struct({
   githubAccess: Schema.optionalKey(GitHubAccessSchema),
   number: Schema.optionalKey(Schema.Number),
   status: Schema.optionalKey(taskStatusSchema),
+  completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
@@ -1076,7 +1086,9 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
 /**
  * The columns of the row the change names, its archive stamped from the one
  * standing; none where it names only a pin. A move takes `movedNumber`, the
- * next number of the workspace it moves to.
+ * next number of the workspace it moves to. A status that moves stamps when
+ * the task was finished (`completedAtOf`); one asked for as it already stands
+ * leaves that stamp where it was.
  */
 function columnChangesOf(
   changes: TaskChanges,
@@ -1095,7 +1107,9 @@ function columnChangesOf(
           repository: changes.repository,
           githubAccess: changes.githubAccess ?? GITHUB_ACCESS.APP,
         }),
-    ...(changes.status === undefined ? undefined : { status: changes.status }),
+    ...(changes.status === undefined || changes.status === standing.status
+      ? undefined
+      : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
     ...(changes.archived === undefined
@@ -1437,7 +1451,7 @@ const beginTask = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(task)
-        .set({ status: TASK_STATUS.IN_PROGRESS })
+        .set({ status: TASK_STATUS.IN_PROGRESS, completedAt: null })
         .where(and(reachableTask(userId, taskId), inArray(task.status, [...NOT_BEGUN])))
         .returning({ id: task.id }),
     ),
