@@ -73,7 +73,6 @@ import { ToastHost } from "../toast.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -2723,18 +2722,14 @@ test("a chat notification's click, listing the workspace its message waits in an
   assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
 });
 
-test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
+test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
   await settle();
   act(() => on.control().onShowChat(TASK.id));
-  assert.ok(on.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
-
-  handState({});
-  const off = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
-  await settle();
-  act(() => off.control().onShowChat(TASK.id));
-  assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+  assert.equal(on.control().sidePanel.tab, SIDE_PANEL_TAB.CHAT);
+  assert.equal(on.control().sidePanel.open, true);
+  assert.deepEqual(on.control().mainTabs.tabs, []);
 });
 
 test("main is told a task's Chat tab on screen shows only its plan's channel, where the window's Chat shows the whole workspace's", async () => {

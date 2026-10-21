@@ -457,6 +457,7 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
     SIDE_PANEL_TAB.PLAN,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
+    SIDE_PANEL_TAB.CHAT,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -553,7 +554,13 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.COMMENTS],
+    [
+      SIDE_PANEL_TAB.PLAN,
+      SIDE_PANEL_TAB.BOARD,
+      SIDE_PANEL_TAB.CODE,
+      SIDE_PANEL_TAB.COMMENTS,
+      SIDE_PANEL_TAB.CHAT,
+    ],
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);

@@ -32,7 +32,7 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
-import { InboxIcon } from "lucide-react";
+import { InboxIcon, MessagesSquareIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -177,7 +177,7 @@ plan); an item has not
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed five. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed six. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   /** The task's plan, its document (`plan-body.tsx`). */
   PLAN: "plan",
@@ -187,6 +187,8 @@ export const SIDE_PANEL_TAB = {
   CODE: "code",
   /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
   COMMENTS: "comments",
+  /** The task's chat channel, where its agents talk as a team (`desktop-chat.tsx`'s `TaskChatTab`). */
+  CHAT: "chat",
 } as const;
 
 /**
@@ -292,6 +294,7 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.BOARD]: { label: "Board", icon: BoardIcon },
   [SIDE_PANEL_TAB.CODE]: { label: "Code", icon: CodeIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
+  [SIDE_PANEL_TAB.CHAT]: { label: TAB_WORDS.CHAT, icon: MessagesSquareIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order the "+" offers them and a task whose order holds none of them stands them in. */
@@ -1593,8 +1596,14 @@ function shownTab(
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
-/** The kinds that stand once something of theirs is held, which every kind but the Inbox does: the Inbox stands only once opened (`drawnFixed`). */
-const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX);
+/**
+ * The kinds whose first hold opens the panel on them, which every kind but the Inbox and the Chat does: the
+ * Inbox stands only once opened (`drawnFixed`), and the Chat stands while the task has a channel but never
+ * opens the panel by itself, since its channel opens as soon as an agent posts.
+ */
+const HELD_KINDS = SIDE_PANEL_TABS.filter(
+  (tab) => tab !== SIDE_PANEL_TAB.INBOX && tab !== SIDE_PANEL_TAB.CHAT,
+);
 
 /** Whether two reads of what a task holds say the same of every kind. */
 function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
