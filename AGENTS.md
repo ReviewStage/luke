@@ -69,7 +69,7 @@ Review places a module and a component alike under this rule.
   trace, a counted event, a fixture, app state, the service, or the voice
   window; the still is left out of the screen recording, and the title and
   address the tab draws are masked there as every word is.
-  And, approved by Dean (the cloud browser), an agent's cloud browser, a Chromium
+  And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
   in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
   address, title, screenshots, and text snapshots to that agent and its workers,
   the model, the agent's transcript (a screenshot reaches the model but is left
