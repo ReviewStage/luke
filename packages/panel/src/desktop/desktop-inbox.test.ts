@@ -1291,32 +1291,43 @@ function answerSend(pane: HTMLElement): HTMLButtonElement {
 }
 
 /**
- * What the open item's box says in its foot around its note line, its
- * presses' words among it: nothing but a notice's Got it, since the box
+ * What the open item's box says outside its controls, its files, and its
+ * note line, its presses' words among it: nothing but a notice's Got it, since the box
  * carries no helper text, its Send held until it holds something to send.
  */
 function footWords(pane: HTMLElement): string {
-  const foot =
-    pane.querySelector("form.inbox-answer .inbox-answer-foot") ?? assert.fail("the box's foot");
-  const copy = foot.cloneNode(true);
+  const box = pane.querySelector("form.inbox-answer") ?? assert.fail("the box");
+  const copy = box.cloneNode(true);
   assert.ok(copy instanceof Element);
-  for (const field of copy.querySelectorAll(".agent-composer-field")) field.remove();
+  for (const part of copy.querySelectorAll(
+    ":scope > :is([data-inbox-draft-ask], .attached-files, .agent-composer-field)",
+  )) {
+    part.remove();
+  }
   return copy.textContent ?? "";
 }
 
 /**
- * The box's foot as a reader meets it, left to right: each press by its
- * name, and the note line, which stands in the foot as its field, by what
- * it asks for.
+ * The open item's box as a reader meets it, top to bottom: "controls" where
+ * the open question's controls stand as its body, the note line by what it
+ * asks for, then the foot's row of presses, left to right, each by its name.
  */
-function footParts(pane: HTMLElement): (string | null)[] {
-  const foot =
-    pane.querySelector("form.inbox-answer .inbox-answer-foot") ?? assert.fail("the box's foot");
-  return [...foot.querySelectorAll<HTMLElement>("button, .composer-editor")].map((part) =>
-    part.matches(".composer-editor")
-      ? `line: ${part.getAttribute("aria-label")}`
-      : (part.getAttribute("aria-label") ?? part.textContent),
-  );
+function boxParts(pane: HTMLElement): string[] {
+  const form = pane.querySelector("form.inbox-answer") ?? assert.fail("the box");
+  return [...form.children].flatMap((part) => {
+    if (part.matches("[data-inbox-draft-ask]")) return ["controls"];
+    if (part.matches(".agent-composer-field")) {
+      const line = part.querySelector(".composer-editor") ?? assert.fail("the line's editor");
+      return [`line: ${line.getAttribute("aria-label")}`];
+    }
+    if (part.matches(".inbox-answer-foot")) {
+      const presses = [...part.querySelectorAll<HTMLElement>("button, .composer-editor")].map(
+        (press) => press.getAttribute("aria-label") ?? press.textContent,
+      );
+      return [`row: ${presses.join(", ")}`];
+    }
+    return [];
+  });
 }
 
 /**
@@ -1388,9 +1399,9 @@ test("Enter on a focused option sends the answer and never presses the option; w
   assert.equal(footWords(pane), "", "the box says nothing of what is missing");
   assert.equal(answerSend(pane).disabled, true, "Send stands held");
   assert.deepEqual(
-    footParts(pane),
-    ["Attach files", "line: Add a note", "Dictate", "Send"],
-    "its foot is one row, the note line in it, under the options",
+    boxParts(pane),
+    ["controls", "line: Add a note", "row: Attach files, Dictate, Send"],
+    "the note line stands on its own under the options, over the row of presses",
   );
   keyOn(openOptions(pane)[0] ?? assert.fail("no option"), "Enter");
   await settle();
@@ -6450,9 +6461,9 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     "the options stand in the draft's box, as its body",
   );
   assert.deepEqual(
-    footParts(pane),
-    ["Attach files", "line: Add a note", "Dictate", "Send"],
-    "under them, one row: +, the note line, the microphone, and Send",
+    boxParts(pane),
+    ["controls", "line: Add a note", "row: Attach files, Dictate, Send"],
+    "under them the note line on its own, and under it the row: +, the microphone, and Send",
   );
   assert.equal(footWords(pane), "", "and no line of help");
   // What the thread draws stands inside the pane's masked region.
@@ -6907,7 +6918,7 @@ test("picking an option in the draft reply stands it picked and lights Send, the
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.deepEqual(draftReply(pane), ["You"], "the draft stands at the end, plain");
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply");
-  assert.deepEqual(footParts(pane), ["Attach files", "line: Reply", "Dictate", "Send"]);
+  assert.deepEqual(boxParts(pane), ["line: Reply", "row: Attach files, Dictate, Send"]);
 });
 
 test("an approve-or-request-changes ask is two small buttons in the draft reply: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
@@ -6961,7 +6972,7 @@ test("an ask of words alone is a plain box with no controls, its line asking for
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000015"));
   assert.deepEqual(draftReply(pane), ["You"], "no controls stand in the box");
   assert.equal(pane.querySelector("[data-inbox-draft-ask]"), null, "and no Answer press");
-  assert.deepEqual(footParts(pane), ["Attach files", "line: Reply", "Dictate", "Send"]);
+  assert.deepEqual(boxParts(pane), ["line: Reply", "row: Attach files, Dictate, Send"]);
   assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
   assert.equal(footWords(pane), "");
 
@@ -7006,6 +7017,11 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     "the draft's box holds the ask's fields and no Submit",
   );
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
+  assert.deepEqual(
+    boxParts(pane),
+    ["controls", "line: Add a note", "row: Attach files, Dictate, Send"],
+    "the note line stands on its own under the form, over the row of presses",
+  );
   assert.equal(sendWords(pane), "Send");
 
   const reason =
