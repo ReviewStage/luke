@@ -91,9 +91,10 @@ export function excalidrawLeftOut(specifier, importer) {
 
 /** Excalidraw's own scripts, for a bundler that filters before it asks. */
 export const EXCALIDRAW_SCRIPT = /[\\/]@excalidraw[\\/]excalidraw[\\/]dist[\\/].+\.js$/;
-// The call that adds the esm.sh address to a face, as both of Excalidraw's builds spell it.
-const FONT_FALLBACK_PUSH =
-  /[\w$]+\.push\(\s*new URL\(\s*[\w$]+\s*,\s*[\w$]+\.ASSETS_FALLBACK_URL\s*\)\s*\)/g;
+// The call that adds the esm.sh address to a face, as both of Excalidraw's
+// builds spell it, which becomes a call that adds nothing. It starts at the
+// literal `.push(` so that no repeated class leads the pattern.
+const FONT_FALLBACK_PUSH = /\.push\(new URL\([\w$]+, ?[\w$]+\.ASSETS_FALLBACK_URL\)\)/g;
 
 /**
  * An Excalidraw script with its fonts' esm.sh address taken out, or undefined
@@ -102,7 +103,7 @@ const FONT_FALLBACK_PUSH =
  */
 export function excalidrawWithoutFontFallback(code) {
   if (!code.includes("ASSETS_FALLBACK_URL")) return undefined;
-  const without = code.replace(FONT_FALLBACK_PUSH, "void 0");
+  const without = code.replace(FONT_FALLBACK_PUSH, ".concat()");
   if (without === code || /\.ASSETS_FALLBACK_URL\b/.test(without)) {
     throw new Error(
       "Excalidraw's font fallback is no longer where the panel's build table takes it out (build-table.mjs).",
