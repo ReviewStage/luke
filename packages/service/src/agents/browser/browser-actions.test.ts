@@ -950,3 +950,336 @@ it.effect(
       );
     }),
 );
+
+/**
+ * An option of a native select as a page holds it. Note that `disabled` is
+ * its own attribute alone, while `:disabled` also holds under a disabled
+ * optgroup, as the DOM has it.
+ */
+class PageOption {
+  selected = false;
+  constructor(
+    readonly label: string,
+    readonly value: string,
+    readonly disabled: boolean,
+    readonly inDisabledGroup: boolean,
+  ) {}
+  matches(selector: string): boolean {
+    return selector === ":disabled" && (this.disabled || this.inDisabledGroup);
+  }
+}
+
+/** How an option's disabledness is set: by its own attribute, or by a disabled optgroup around it. */
+const DISABLED_BY = { ITSELF: "itself", GROUP: "group" } as const;
+
+/**
+ * A native select as a page holds one, for the function the browser is
+ * asked to call on it: its options, which of them is selected, and every
+ * event dispatched on it with whether it bubbles and the value it carried.
+ */
+class PageSelect extends EventTarget {
+  readonly disabled = false;
+  readonly options: PageOption[];
+  /** Whether a disabled fieldset around it disables it, which its own property does not show. */
+  inDisabledFieldset = false;
+  readonly heard: { readonly type: string; readonly bubbles: boolean; readonly value: string }[] =
+    [];
+
+  constructor(
+    options: readonly (readonly [
+      label: string,
+      value: string,
+      disabledBy?: (typeof DISABLED_BY)[keyof typeof DISABLED_BY],
+    ])[],
+  ) {
+    super();
+    this.options = options.map(
+      ([label, value, disabledBy]) =>
+        new PageOption(
+          label,
+          value,
+          disabledBy === DISABLED_BY.ITSELF,
+          disabledBy === DISABLED_BY.GROUP,
+        ),
+    );
+    for (const type of ["input", "change"]) {
+      this.addEventListener(type, (event) => {
+        const value = this.options.find((option) => option.selected)?.value ?? "";
+        this.heard.push({ type: event.type, bubbles: event.bubbles, value });
+      });
+    }
+  }
+
+  matches(selector: string): boolean {
+    return selector === ":disabled" && (this.disabled || this.inDisabledFieldset);
+  }
+}
+
+/** The page's answer to `Runtime.callFunctionOn`: the function the browser was sent, called on the select, its value returned by value. */
+function callOnSelect(select: PageSelect, params: FakeCdpCommand["params"]): FakeCdpAnswer {
+  const declaration = String(params.functionDeclaration);
+  const args = Array.isArray(params.arguments) ? params.arguments : [];
+  // Note that the page's own class is the fake's, so the function's guard reads it as a select.
+  const made: unknown = new Function("HTMLSelectElement", `return (${declaration});`)(PageSelect);
+  assert.equal(typeof made, "function");
+  const called = Reflect.apply(
+    made as (...values: unknown[]) => unknown,
+    select,
+    args.map((arg: { readonly value?: unknown }) => arg.value),
+  );
+  return { result: { result: { type: "object", value: called } } };
+}
+
+/** A page with a dropdown at e7 and a heading at e5, as Chromium's accessibility tree has it, its popup's wrapper among it. */
+const DROPDOWN_TREE = {
+  nodes: [
+    { nodeId: "1", role: { value: "RootWebArea" }, name: { value: "Dropdown" }, childIds: ["2"] },
+    {
+      nodeId: "2",
+      parentId: "1",
+      role: { value: "combobox" },
+      name: { value: "" },
+      value: { value: "Please select an option" },
+      properties: [{ name: "expanded", value: { value: false } }],
+      childIds: ["3"],
+      backendDOMNodeId: 7,
+    },
+    {
+      nodeId: "3",
+      parentId: "2",
+      role: { value: "MenuListPopup" },
+      name: { value: "" },
+      childIds: ["4", "5", "6"],
+      backendDOMNodeId: 10,
+    },
+    ...[
+      ["4", "Please select an option", 14],
+      ["5", "Option 1", 17],
+      ["6", "Option 2", 20],
+    ].map(([nodeId, name, backendDOMNodeId]) => ({
+      nodeId,
+      parentId: "3",
+      role: { value: "option" },
+      name: { value: name },
+      backendDOMNodeId,
+    })),
+  ],
+};
+
+/** A fake Chromium whose page holds the select at e7, a heading at e5, and nothing at e99. */
+function dropdownBrowser(select: PageSelect) {
+  return browser(
+    (command) => {
+      const node = command.params.backendNodeId;
+      if (command.method === "Accessibility.getFullAXTree") return { result: DROPDOWN_TREE };
+      if (command.method === "DOM.resolveNode" && node === 7) {
+        return { result: { object: { objectId: "select-7", className: "HTMLSelectElement" } } };
+      }
+      if (command.method === "DOM.resolveNode" && node === 5) {
+        return { result: { object: { objectId: "heading-5", className: "HTMLHeadingElement" } } };
+      }
+      if (command.method === "DOM.resolveNode") {
+        return { error: { code: -32000, message: "No node with given id found" } };
+      }
+      if (command.method === "DOM.getContentQuads" && node === 7) {
+        return { result: { quads: [[100, 200, 300, 200, 300, 230, 100, 230]] } };
+      }
+      return command.method === "Runtime.callFunctionOn" && command.params.objectId === "select-7"
+        ? callOnSelect(select, command.params)
+        : undefined;
+    },
+    [{ targetId: "page-drop", url: "https://the-internet.test/dropdown", title: "Dropdown" }],
+  );
+}
+
+it.effect(
+  "a snapshot lists a dropdown's options under it, and select chooses one by label or else value, firing input then change",
+  () =>
+    Effect.gen(function* () {
+      const select = new PageSelect([
+        ["Please select an option", "", DISABLED_BY.ITSELF],
+        ["Option 1", "1"],
+        ["Option 2", "2"],
+      ]);
+      const { peer, sent } = yield* dropdownBrowser(select);
+      const tab = "page-drop";
+
+      const ran = yield* run(peer, [
+        { action: BROWSER_AGENT_ACTION.SNAPSHOT, tab },
+        { action: BROWSER_AGENT_ACTION.SELECT, ref: "e7", option: "Option 2" },
+        { action: BROWSER_AGENT_ACTION.SELECT, ref: "e7", option: "1" },
+      ]);
+
+      const [snapshotted, byLabel, byValue] = ran.steps;
+      assert.ok(snapshotted !== undefined && "text" in snapshotted);
+      assert.equal(
+        snapshotted.text,
+        [
+          '- page "Dropdown"',
+          '  - combobox value="Please select an option" [expanded=false, ref=e7]',
+          '    - option "Please select an option" [ref=e14]',
+          '    - option "Option 1" [ref=e17]',
+          '    - option "Option 2" [ref=e20]',
+        ].join("\n"),
+      );
+      assert.deepEqual(byLabel, {
+        action: "select",
+        status: "done",
+        tab,
+        label: "Option 2",
+        value: "2",
+      });
+      assert.deepEqual(byValue, {
+        action: "select",
+        status: "done",
+        tab,
+        label: "Option 1",
+        value: "1",
+      });
+      assert.deepEqual(select.heard, [
+        { type: "input", bubbles: true, value: "2" },
+        { type: "change", bubbles: true, value: "2" },
+        { type: "input", bubbles: true, value: "1" },
+        { type: "change", bubbles: true, value: "1" },
+      ]);
+      assert.deepEqual(
+        select.options.map((option) => option.selected),
+        [false, true, false],
+      );
+      const resolved = sent.find((command) => command.method === "DOM.resolveNode");
+      assert.deepEqual(resolved?.params, { backendNodeId: 7 });
+      assert.equal(resolved?.sessionId, "session-page-drop");
+    }),
+);
+
+it.effect(
+  "a select with no such option lists the labels, capped, and a ref that is no dropdown, or is gone, is refused",
+  () =>
+    Effect.gen(function* () {
+      const select = new PageSelect([
+        ["Please select an option", "", DISABLED_BY.ITSELF],
+        ["Option 1", "1"],
+        ["Option 2", "2"],
+      ]);
+      const { peer, sent } = yield* dropdownBrowser(select);
+      const tab = "page-drop";
+
+      const unmatched = yield* run(peer, [
+        { action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e7", option: "Option 3" },
+      ]);
+      const disabled = yield* run(peer, [
+        { action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e7", option: "Please select an option" },
+      ]);
+      const heading = yield* run(peer, [
+        { action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e5", option: "Option 1" },
+      ]);
+      const gone = yield* run(peer, [
+        { action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e99", option: "Option 1" },
+      ]);
+      const long = new PageSelect(
+        Array.from(
+          { length: 300 },
+          (_, index) => [`Country number ${index}`, String(index)] as const,
+        ),
+      );
+      const { peer: longPeer } = yield* dropdownBrowser(long);
+      const many = yield* run(longPeer, [
+        { action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e7", option: "Atlantis" },
+      ]);
+
+      assert.deepEqual(unmatched.steps, [
+        {
+          action: "select",
+          status: "failed",
+          tab,
+          error:
+            'e7 has no option labelled or valued "Option 3"; its options are ' +
+            '"Please select an option", "Option 1", "Option 2"',
+        },
+      ]);
+      assert.match(failureOf(disabled.steps[0]) ?? "", /is disabled$/u);
+      assert.match(failureOf(heading.steps[0]) ?? "", /^e5 is not a dropdown \(a native select\)/u);
+      assert.match(failureOf(gone.steps[0]) ?? "", /^e99 is not on the page any more/u);
+      const listed = failureOf(many.steps[0]) ?? "";
+      assert.equal(listed.length, BROWSER_AGENT_LIMITS.ERROR_MAX_CHARS);
+      assert.ok(
+        listed.startsWith(
+          'e7 has no option labelled or valued "Atlantis"; its options are "Country number 0"',
+        ),
+      );
+      assert.ok(listed.endsWith("…"));
+      assert.deepEqual(select.heard, []);
+      assert.ok(
+        !sent.some(
+          (command) =>
+            command.method === "Runtime.callFunctionOn" && command.params.objectId !== "select-7",
+        ),
+      );
+    }),
+);
+
+it.effect("a select moves the cursor to the dropdown's middle as a click, before the choice", () =>
+  Effect.gen(function* () {
+    const select = new PageSelect([
+      ["Option 1", "1"],
+      ["Option 2", "2"],
+    ]);
+    const { peer, sent } = yield* dropdownBrowser(select);
+    const { cursor, moves } = cursorInto(sent, false);
+    const tab = "page-drop";
+
+    const ran = yield* run(
+      peer,
+      [{ action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e7", option: "Option 2" }],
+      cursor,
+    );
+
+    assert.equal(ran.steps[0]?.status, BROWSER_STEP_STATUS.DONE);
+    assert.deepEqual(
+      moves.map(({ at: _at, ...move }) => move),
+      [{ tab, x: 200, y: 215, kind: "click", viewport: { width: 1280, height: 800 } }],
+    );
+    const order = sent
+      .map((command) => command.method)
+      .filter((method) => method === "cursor" || method === "Runtime.callFunctionOn");
+    assert.deepEqual(order, ["cursor", "Runtime.callFunctionOn"]);
+  }),
+);
+
+it.effect(
+  "a select refuses an option a disabled optgroup holds, or a select a disabled fieldset holds, and reports what a handler left selected",
+  () =>
+    Effect.gen(function* () {
+      const grouped = new PageSelect([
+        ["Basic", "basic"],
+        ["Old", "old", DISABLED_BY.GROUP],
+      ]);
+      const fenced = new PageSelect([["Basic", "basic"]]);
+      fenced.inDisabledFieldset = true;
+      const reset = new PageSelect([
+        ["Basic", "basic"],
+        ["Premium", "premium"],
+      ]);
+      // The page's own handler takes Premium back, as a page with none left would.
+      reset.addEventListener("change", () => {
+        for (const option of reset.options) option.selected = option.value === "basic";
+      });
+      const tab = "page-drop";
+      const choose = (select: PageSelect, option: string) =>
+        Effect.flatMap(dropdownBrowser(select), ({ peer }) =>
+          run(peer, [{ action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e7", option }]),
+        );
+
+      const old = yield* choose(grouped, "Old");
+      const fenceless = yield* choose(fenced, "Basic");
+      const premium = yield* choose(reset, "Premium");
+
+      assert.match(failureOf(old.steps[0]) ?? "", /is disabled$/u);
+      assert.match(failureOf(fenceless.steps[0]) ?? "", /is disabled$/u);
+      assert.deepEqual(grouped.heard, []);
+      assert.deepEqual(fenced.heard, []);
+      assert.deepEqual(premium.steps, [
+        { action: "select", status: "done", tab, label: "Basic", value: "basic" },
+      ]);
+    }),
+);
