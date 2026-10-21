@@ -11,8 +11,10 @@ import { codingAgent } from "./coding-agent.js";
  * its last event (`@luke/agent-runner/protocol`'s `RUNNER_RELEASE`). One row
  * per wakeup, which the scheduled sweep delivers to the agent as a message
  * once due and deletes once delivered (`native-wakeup-sweep.ts`). A later
- * release replaces the agent's rows, and a Stop deletes them, as a stopped
- * CLI's own wakeups end with it. The rows go with their agent.
+ * release replaces the agent's rows; a Stop deletes them, as a stopped
+ * CLI's own wakeups end with it; and so does any launch of the CLI, which
+ * restores on resume the tasks it can and leaves the agent to own them
+ * again (`coding-agent-wakeups.ts`). The rows go with their agent.
  */
 export const codingAgentWakeup = pgTable(
   "coding_agent_wakeup",

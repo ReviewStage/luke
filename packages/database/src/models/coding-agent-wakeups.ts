@@ -2,20 +2,26 @@
  * coding-agent-wakeups.ts -- the wakeups a native agent's released wait left, kept until the scheduled sweep delivers each.
  *
  * A release replaces the agent's wakeups whole, since the CLI's own list as
- * it waited is the whole of what it would have fired, and a Stop, which the
- * same call writes with no wakeups, deletes them (`../schemas/coding-agent-wakeup.ts`).
+ * it waited is the whole of what it would have fired. The same call with no
+ * wakeups deletes them: on a Stop, which ends a CLI's wakeups with it, and
+ * as any launch starts, since the CLI restores on resume the tasks it can
+ * and the agent then owns them again, a copy Luke kept would fire twice or
+ * after the agent cancelled it (`../schemas/coding-agent-wakeup.ts`).
+ *
  * A claim takes the wakeups due, the longest due first and at most a batch,
  * under row locks a concurrent claim skips rather than waits on, and moves
  * each one's next delivery on before the locks go: Vercel may call the
  * minute's sweep twice, and the second claim must find nothing left. A
- * delivery that lands deletes its wakeup; one that fails is claimed again
- * at its next delivery, until `attempts` reaches the bound the claim is
- * handed, when the claim deletes it instead. An archived agent takes no
- * wakeup, so the claim deletes its wakeups too.
+ * delivery then takes its wakeup, deleting it, before it sends, so one a
+ * Stop or a launch deleted since the claim is not sent; one whose send
+ * fails is put back as claimed, to be claimed again at its next delivery,
+ * until `attempts` reaches the bound the claim is handed, when the claim
+ * deletes it instead. An archived agent takes no wakeup, so the claim
+ * deletes its wakeups too.
  */
 
 import { asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
@@ -119,10 +125,33 @@ const writeNextDelivery = SqlSchema.void({
     ),
 });
 
-const deleteOne = SqlSchema.void({
+const TakenRowSchema = Schema.Struct({
+  id: Schema.String,
+  agentId: Schema.String,
+  prompt: Schema.String,
+  dueAt: Schema.Date,
+  attempts: Schema.Int,
+});
+
+const deleteReturning = SqlSchema.findAll({
   Request: Schema.Struct({ id: Schema.String }),
+  Result: TakenRowSchema,
   execute: ({ id }) =>
-    Database.use((db) => db.delete(codingAgentWakeup).where(eq(codingAgentWakeup.id, id))),
+    Database.use((db) =>
+      db.delete(codingAgentWakeup).where(eq(codingAgentWakeup.id, id)).returning({
+        id: codingAgentWakeup.id,
+        agentId: codingAgentWakeup.agentId,
+        prompt: codingAgentWakeup.prompt,
+        dueAt: codingAgentWakeup.dueAt,
+        attempts: codingAgentWakeup.attempts,
+      }),
+    ),
+});
+
+const insertTaken = SqlSchema.void({
+  Request: TakenRowSchema,
+  execute: (row) =>
+    Database.use((db) => db.insert(codingAgentWakeup).values(row).onConflictDoNothing()),
 });
 
 /** The agent's wakeups replaced by those given, none deleting them all. */
@@ -163,7 +192,17 @@ export function claimDueCodingAgentWakeups(
   );
 }
 
-/** The wakeup delivered, so no claim takes it again. */
-export function deleteCodingAgentWakeup(id: string): WakeupEffect<void> {
-  return deleteOne({ id });
+/** A wakeup a claim took, as a delivery takes it, gone from the table until it is put back. */
+export type TakenCodingAgentWakeup = typeof TakenRowSchema.Type;
+
+/** The wakeup taken for its delivery, deleted so nothing else sends it; none where a Stop, a launch, or another delivery took it since the claim. */
+export function takeCodingAgentWakeup(
+  id: string,
+): WakeupEffect<Option.Option<TakenCodingAgentWakeup>> {
+  return Effect.map(deleteReturning({ id }), (rows) => Option.fromNullishOr(rows[0]));
+}
+
+/** A taken wakeup whose delivery failed, put back as the claim left it, for its next delivery. */
+export function restoreCodingAgentWakeup(taken: TakenCodingAgentWakeup): WakeupEffect<void> {
+  return insertTaken(taken);
 }

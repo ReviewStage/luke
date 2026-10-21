@@ -72,6 +72,7 @@ import {
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { UserContent } from "ai";
@@ -527,6 +528,10 @@ export const runnerSessions = <
       resume: string | undefined,
     ) =>
       Effect.gen(function* () {
+        // A released wait's wakeups go as the CLI starts again: it restores what it can on
+        // resume (`coding-agent-wakeups.ts`), so a copy Luke still held would fire twice, or fire
+        // after the agent cancelled it.
+        yield* replaceCodingAgentWakeups(agent.id, []);
         const credential = yield* harness.launch(agent);
         const bundle = yield* (yield* RunnerBundle).contents;
         const digest = createHash("sha256").update(bundle).digest("hex");

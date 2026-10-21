@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { Duration, Effect, Option, Stream } from "effect";
@@ -16,6 +17,8 @@ import {
   type EveMessage,
   EveUnreachable,
 } from "../agents/brain-host/eve-sessions.js";
+import { cancelledTurn } from "../agents/coder-host/stop.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { githubReaching } from "../testing/github-app-fake.js";
 import { NATIVE_WAKEUP_SWEEP, sweepNativeWakeups } from "./native-wakeup-sweep.js";
 
@@ -92,7 +95,7 @@ const openAgent = Effect.gen(function* () {
     sessionId,
     new Date(DUE.getTime() - 3_600_000),
   );
-  return { agentId: agent.id, sessionId };
+  return { owner, agentId: agent.id, sessionId };
 });
 
 /** One sweep at the instant given, over the eve given. */
@@ -143,5 +146,25 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
       yield* sweepAt(new Date(at), eve);
       assert.deepEqual(sentTo(eve, given.sessionId), [], "given up past the bound");
     }),
+  );
+
+  it.effect(
+    "a Stop after a released wait, with no turn running to cancel, deletes its wakeups so none is told",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agentId, sessionId } = yield* openAgent;
+        yield* replaceCodingAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+
+        const cancelled = yield* cancelledTurn(
+          Effect.succeed({ cancel: () => Effect.die("no turn runs, so nothing is cancelled") }),
+          storeWriter({ tools: CODER_TOOL_SET }),
+          agent,
+        ).pipe(Effect.provide(githubReaching([]).layer));
+        yield* sweepAt(DUE, eve);
+        assert.equal(cancelled, false);
+        assert.deepEqual(sentTo(eve, sessionId), []);
+      }),
   );
 });

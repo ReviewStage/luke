@@ -308,8 +308,12 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   launch: Launch,
   message: SDKMessage,
 ) {
+  // Marked before the message is posted, which may yield, and under the admission a release
+  // takes, so a wait is not released once the CLI has begun a turn of its own.
+  if (TURN_OUTPUT.has(message.type)) {
+    yield* launch.admission.withPermit(Ref.set(launch.turnRunning, true));
+  }
   yield* launch.sink.emit(message);
-  if (TURN_OUTPUT.has(message.type)) yield* Ref.set(launch.turnRunning, true);
   if (message.type !== SDK_MESSAGE.RESULT) return;
   const inFlight = MutableRef.getAndSet(launch.inFlight, undefined);
   if (yield* Ref.get(launch.stopping)) {
@@ -370,19 +374,20 @@ const watchWait = Effect.fn("agent-runner/watchWait")(function* (
     if (earliest !== undefined && earliest - now < RUNNER_RELEASE.SETTLE_MS) return;
     const held = recurring && now - startedAt < RUNNER_RELEASE.IDLE_CAP_MS;
     if (!held && !(yield* processes.agentProcessRuns)) {
-      const releasing = yield* launch.admission.withPermit(
+      // Decided and ended under the admission, so neither a message nor a turn the CLI began
+      // lands between the check and the end.
+      return yield* launch.admission.withPermit(
         Effect.gen(function* () {
           const current =
             (yield* Ref.get(launch.waits)) === wait &&
             !(yield* Ref.get(launch.turnRunning)) &&
             !(yield* Ref.get(launch.stopping)) &&
             !(yield* Deferred.isDone(launch.ended));
-          if (current) yield* Ref.set(launch.released, wakeups);
-          return current;
+          if (!current) return;
+          yield* Ref.set(launch.released, wakeups);
+          yield* Deferred.succeed(launch.ended, RUNNER_END.RELEASED);
         }),
       );
-      if (releasing) yield* Deferred.succeed(launch.ended, RUNNER_END.RELEASED);
-      return;
     }
     if ((yield* Ref.get(launch.waits)) !== wait || (yield* Ref.get(launch.turnRunning))) return;
     yield* Effect.sleep(Duration.millis(RUNNER_RELEASE.RECHECK_MS));

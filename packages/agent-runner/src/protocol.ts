@@ -317,7 +317,9 @@ export interface RunnerWakeup {
  * wakeup came. A launch waiting on one-shot wakeups alone, with no
  * background task and no process of the agent's still running, is ended
  * instead, and Luke delivers each wakeup as a message when it comes due,
- * which relaunches the CLI on the session it resumes.
+ * which relaunches the CLI on the session it resumes. Any launch hands the
+ * wakeups back: Luke drops what it held, the CLI restores on resume the
+ * one-shot tasks the agent made itself, and the agent owns them again.
  */
 export const RUNNER_RELEASE = {
   /**
