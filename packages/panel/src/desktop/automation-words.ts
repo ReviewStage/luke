@@ -44,3 +44,20 @@ export function automationOwnerName(
 ): string {
   return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspaceName ?? "Workspace") : "Personal";
 }
+
+/**
+ * An automation's line under its name in a row with no room for the owner's
+ * and the next run's columns, a phone's: when it runs next, where it is set
+ * to, before what fires it, so the line's end is cut rather than the time.
+ * One turned off or waiting on an event says what fires it alone, its switch
+ * saying the rest.
+ */
+export function automationNarrowLine(
+  automation: AutomationSummary,
+  trigger: string,
+  now: number,
+): string {
+  return automationNext(automation).kind === AUTOMATION_NEXT.AT
+    ? `${automationNextText(automation, now)} · ${trigger}`
+    : trigger;
+}

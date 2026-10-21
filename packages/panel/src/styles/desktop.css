@@ -4866,6 +4866,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   text-overflow: ellipsis;
 }
 
+/* A narrow room's row says when it runs next in the line under its name,
+   a failure's mark leading the line as it leads an agent's end line. */
+.automation-group .luke-list-row-description > .failed-mark {
+  margin-right: var(--luke-space-4);
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
+}
+
 /* The suggested automations, each a card of its own in a grid that wraps
    as more are suggested: the glyph of what fires it on a tile, a plus at
    its corner, its name, and what it does, read whole. The whole card is one
@@ -5059,6 +5066,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .automation-field {
   width: 200px;
   max-width: 100%;
+}
+
+/* The site's pickers stand at their words' width rather than in a column,
+   so a schedule's time stands at a time's width beside them, not a cron's. */
+[data-luke-profile="web"] .automation-time-field {
+  width: calc(10ch + 2 * var(--luke-control-inset)); /* off-scale: "12:00 PM" and its insets */
 }
 
 /* A webhook's address or its shown secret, a little wider to show more of it. */

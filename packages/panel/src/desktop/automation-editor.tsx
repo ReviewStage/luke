@@ -591,7 +591,7 @@ function ScheduleRows({
                   onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
                 />
               ) : (
-                <span className="automation-field">
+                <span className="automation-field automation-time-field">
                   <TextField
                     ref={time}
                     type={TEXT_FIELD_TYPE.TIME}
