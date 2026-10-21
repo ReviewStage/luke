@@ -951,13 +951,26 @@ it.effect(
     }),
 );
 
-/** An option of a native select as a page holds it. */
-interface PageOption {
-  readonly label: string;
-  readonly value: string;
-  readonly disabled: boolean;
-  selected: boolean;
+/**
+ * An option of a native select as a page holds it. Note that `disabled` is
+ * its own attribute alone, while `:disabled` also holds under a disabled
+ * optgroup, as the DOM has it.
+ */
+class PageOption {
+  selected = false;
+  constructor(
+    readonly label: string,
+    readonly value: string,
+    readonly disabled: boolean,
+    readonly inDisabledGroup: boolean,
+  ) {}
+  matches(selector: string): boolean {
+    return selector === ":disabled" && (this.disabled || this.inDisabledGroup);
+  }
 }
+
+/** How an option's disabledness is set: by its own attribute, or by a disabled optgroup around it. */
+const DISABLED_BY = { ITSELF: "itself", GROUP: "group" } as const;
 
 /**
  * A native select as a page holds one, for the function the browser is
@@ -967,23 +980,38 @@ interface PageOption {
 class PageSelect extends EventTarget {
   readonly disabled = false;
   readonly options: PageOption[];
+  /** Whether a disabled fieldset around it disables it, which its own property does not show. */
+  inDisabledFieldset = false;
   readonly heard: { readonly type: string; readonly bubbles: boolean; readonly value: string }[] =
     [];
 
-  constructor(options: readonly (readonly [label: string, value: string, disabled?: boolean])[]) {
+  constructor(
+    options: readonly (readonly [
+      label: string,
+      value: string,
+      disabledBy?: (typeof DISABLED_BY)[keyof typeof DISABLED_BY],
+    ])[],
+  ) {
     super();
-    this.options = options.map(([label, value, disabled = false]) => ({
-      label,
-      value,
-      disabled,
-      selected: false,
-    }));
+    this.options = options.map(
+      ([label, value, disabledBy]) =>
+        new PageOption(
+          label,
+          value,
+          disabledBy === DISABLED_BY.ITSELF,
+          disabledBy === DISABLED_BY.GROUP,
+        ),
+    );
     for (const type of ["input", "change"]) {
       this.addEventListener(type, (event) => {
         const value = this.options.find((option) => option.selected)?.value ?? "";
         this.heard.push({ type: event.type, bubbles: event.bubbles, value });
       });
     }
+  }
+
+  matches(selector: string): boolean {
+    return selector === ":disabled" && (this.disabled || this.inDisabledFieldset);
   }
 }
 
@@ -1069,7 +1097,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const select = new PageSelect([
-        ["Please select an option", "", true],
+        ["Please select an option", "", DISABLED_BY.ITSELF],
         ["Option 1", "1"],
         ["Option 2", "2"],
       ]);
@@ -1129,7 +1157,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const select = new PageSelect([
-        ["Please select an option", "", true],
+        ["Please select an option", "", DISABLED_BY.ITSELF],
         ["Option 1", "1"],
         ["Option 2", "2"],
       ]);
@@ -1216,4 +1244,42 @@ it.effect("a select moves the cursor to the dropdown's middle as a click, before
       .filter((method) => method === "cursor" || method === "Runtime.callFunctionOn");
     assert.deepEqual(order, ["cursor", "Runtime.callFunctionOn"]);
   }),
+);
+
+it.effect(
+  "a select refuses an option a disabled optgroup holds, or a select a disabled fieldset holds, and reports what a handler left selected",
+  () =>
+    Effect.gen(function* () {
+      const grouped = new PageSelect([
+        ["Basic", "basic"],
+        ["Old", "old", DISABLED_BY.GROUP],
+      ]);
+      const fenced = new PageSelect([["Basic", "basic"]]);
+      fenced.inDisabledFieldset = true;
+      const reset = new PageSelect([
+        ["Basic", "basic"],
+        ["Premium", "premium"],
+      ]);
+      // The page's own handler takes Premium back, as a page with none left would.
+      reset.addEventListener("change", () => {
+        for (const option of reset.options) option.selected = option.value === "basic";
+      });
+      const tab = "page-drop";
+      const choose = (select: PageSelect, option: string) =>
+        Effect.flatMap(dropdownBrowser(select), ({ peer }) =>
+          run(peer, [{ action: BROWSER_AGENT_ACTION.SELECT, tab, ref: "e7", option }]),
+        );
+
+      const old = yield* choose(grouped, "Old");
+      const fenceless = yield* choose(fenced, "Basic");
+      const premium = yield* choose(reset, "Premium");
+
+      assert.match(failureOf(old.steps[0]) ?? "", /is disabled$/u);
+      assert.match(failureOf(fenceless.steps[0]) ?? "", /is disabled$/u);
+      assert.deepEqual(grouped.heard, []);
+      assert.deepEqual(fenced.heard, []);
+      assert.deepEqual(premium.steps, [
+        { action: "select", status: "done", tab, label: "Basic", value: "basic" },
+      ]);
+    }),
 );

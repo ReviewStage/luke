@@ -138,18 +138,22 @@ const CHOICE = {
  * would: the option whose label is the one wanted, or else whose value is,
  * selected alone, then an `input` and a `change` that bubble, as
  * Playwright's `selectOption` fires them. Answers what it came to, and every
- * option's label where none matched.
+ * option's label where none matched. Note that disabled is read as
+ * `:disabled`, which a disabled fieldset or optgroup around it sets where
+ * the property does not, and that the option reported is the one selected
+ * once the events ran, since a page's handler may have changed it.
  */
 const CHOOSE_OPTION = `function (wanted) {
   if (!(this instanceof HTMLSelectElement)) return { kind: ${JSON.stringify(CHOICE.NOT_SELECT)} };
   const options = Array.from(this.options);
   const chosen = options.find((option) => option.label === wanted) ?? options.find((option) => option.value === wanted);
   if (chosen === undefined) return { kind: ${JSON.stringify(CHOICE.UNMATCHED)}, labels: options.map((option) => option.label) };
-  if (this.disabled || chosen.disabled) return { kind: ${JSON.stringify(CHOICE.DISABLED)} };
+  if (this.matches(":disabled") || chosen.matches(":disabled")) return { kind: ${JSON.stringify(CHOICE.DISABLED)} };
   for (const option of options) option.selected = option === chosen;
   this.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   this.dispatchEvent(new Event("change", { bubbles: true }));
-  return { kind: ${JSON.stringify(CHOICE.CHOSEN)}, label: chosen.label, value: chosen.value };
+  const now = Array.from(this.options).find((option) => option.selected);
+  return { kind: ${JSON.stringify(CHOICE.CHOSEN)}, label: now === undefined ? "" : now.label, value: now === undefined ? "" : now.value };
 }`;
 
 /** The page events that say a frame began or committed a navigation, stopped loading or was removed, or the page loaded. */
