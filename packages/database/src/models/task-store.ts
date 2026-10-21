@@ -1280,6 +1280,22 @@ const lockStandingAgents = SqlSchema.findAll({
 });
 
 /**
+ * The task's standing agents with their conversations locked, once any
+ * hand-over to eve under way in them has been waited out, in the
+ * conversations' order (`dispatch-lock.ts`): a line eve took then stands
+ * awaiting when the caller's guard reads each agent idle or not, as it did
+ * when a hand-over held the row lock. An agent started meanwhile has none
+ * under way.
+ */
+const lockStandingAgentsAfterHandOvers = Effect.fnUntraced(function* (taskId: string) {
+  const standing = yield* findStandingConversations({ taskId });
+  yield* Effect.forEach(standing, ({ conversationId }) =>
+    waitOutConversationDispatch(conversationId),
+  );
+  return yield* lockStandingAgents({ taskId });
+});
+
+/**
  * Changes the task, a new name with its document's heading, a repository or
  * none, pinned or not, its workspace, where it stands, and answers it as
  * changed, or nothing where the account reaches no such task. The changes
@@ -1562,7 +1578,7 @@ export function finishTaskWork<R = never>(
           return false;
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
-        const agents = yield* lockStandingAgents({ taskId });
+        const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
         const standings = yield* Effect.forEach(agents, idle);
         if (standings.includes(false)) return false;
         const now = yield* DateTime.nowAsDate;
