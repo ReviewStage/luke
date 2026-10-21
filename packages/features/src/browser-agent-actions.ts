@@ -1,9 +1,8 @@
 /**
  * browser-agent-actions.ts -- what an agent may do to a browser's tabs and what it hears back: the actions, a short sequence of them, each step's result, and the caps every result is held to.
  *
- * The vocabulary speaks of tabs and pages, never of where the browser runs,
- * so the browser in an agent's sandbox and the Mac's Browser tabs are driven
- * by the same words. A tab is named by its id, the DevTools protocol's
+ * The vocabulary speaks of tabs and pages, never of where the browser runs.
+ * A tab is named by its id, the DevTools protocol's
  * target id as `list` and `open` answer it; an action that names none acts
  * on the tab the action before it in the same sequence acted on, so a
  * sequence can open a tab and go on in it. An element is named by a ref a

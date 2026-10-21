@@ -3,9 +3,8 @@
  *
  * The vocabulary is `browser-agent-actions.ts`; this is its one
  * implementation over CDP (`browser-cdp.ts`), which the browser in an
- * agent's sandbox speaks (`packages/service`'s `agent-browser.ts`) and the
- * Mac's Browser tabs speak through their views' debuggers
- * (`packages/host`'s `mac-browser-tabs.ts`). A tab is a page target, reached through a session
+ * agent's sandbox speaks (`packages/service`'s `agent-browser.ts`). A tab
+ * is a page target, reached through a session
  * of its own attached flattened (`Target.attachToTarget`) the first time a
  * sequence acts on it and detached as the sequence ends. Clicks, keys, and
  * scrolls are the browser's own input events, typing is inserted text, an
@@ -674,8 +673,7 @@ function bytesOf(base64: string): number {
 /**
  * One capture of the visible page. Note that a refusal is asked again for a
  * moment, because a tab just opened refuses until it has drawn its first
- * frame (the Mac's view says it draws nothing yet), and that frame comes a
- * moment later.
+ * frame, and that frame comes a moment later.
  */
 function capture(page: Page, params: CdpParams) {
   const method = "Page.captureScreenshot";

@@ -276,8 +276,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpenBrowser: ignore,
       onCloseBrowsers: ignore,
       onBrowserOpened: ignore,
-      onAgentBrowser: ignore,
-      onBrowserGone: ignore,
     },
     unreadTabs: [],
     board: undefined,

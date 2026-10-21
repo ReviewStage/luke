@@ -227,8 +227,6 @@ async function inbox(
       main.focus = listener;
       return () => undefined;
     },
-    onBrowserOpened: () => () => undefined,
-    onBrowserClosed: () => () => undefined,
   });
   fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(experiments);

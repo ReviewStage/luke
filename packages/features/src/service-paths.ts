@@ -143,12 +143,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   LIVE_MAC_COMMANDS: "/api/live/mac-commands",
   /**
-   * One browser command's result, posted by the Mac that took it (POST): its
-   * JSON and at most one image, under a body cap of its own that fits the
-   * image. `mac-command-wire.ts` declares the body.
-   */
-  MAC_COMMAND_BROWSER_RESULTS: "/api/mac-commands/browser",
-  /**
    * The account's automations: list them, newest first, or one task's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`
    * declares the bodies.

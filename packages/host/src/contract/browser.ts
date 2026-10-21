@@ -1,5 +1,5 @@
 /**
- * browser.ts -- a Browser tab's view as the panel reaches it: opened, sent on, stepped, placed, caught as a still, closed, and kept from an agent, as procedures.
+ * browser.ts -- a Browser tab's view as the panel reaches it: opened, sent on, stepped, placed, caught as a still, and closed, as procedures.
  *
  * Main answers them itself (`apps/desktop/src/main/ipc/browser-acts.ts`),
  * since the views hang over its windows; a browser tab refuses every one.
@@ -7,7 +7,6 @@
 
 import {
   browserAddressParamsSchema,
-  browserOpenParamsSchema,
   browserPageSchema,
   browserPlaceParamsSchema,
   browserStepParamsSchema,
@@ -19,7 +18,7 @@ import { BROWSER_ACT_KIND } from "./kinds.js";
 
 export const browserActsContract = {
   [BROWSER_ACT_KIND.BROWSER_OPEN]: actProcedure("Could not open that page.")
-    .input(exactInput(browserOpenParamsSchema))
+    .input(exactInput(browserAddressParamsSchema))
     .output(browserPageSchema),
   [BROWSER_ACT_KIND.BROWSER_NAVIGATE]: actProcedure("Could not open that page.")
     .input(exactInput(browserAddressParamsSchema))
@@ -35,10 +34,6 @@ export const browserActsContract = {
     .input(exactInput(browserViewParamsSchema))
     .output(EffectSchema.NullOr(EffectSchema.String)),
   [BROWSER_ACT_KIND.BROWSER_CLOSE]: actProcedure("Could not close the page.")
-    .input(exactInput(browserViewParamsSchema))
-    .output(EffectSchema.Void),
-  // The bar's Stop: the agent driving the page is cut off, and every agent's action on it refused until the developer clicks into it.
-  [BROWSER_ACT_KIND.BROWSER_STOP]: actProcedure("Could not stop the agent.")
     .input(exactInput(browserViewParamsSchema))
     .output(EffectSchema.Void),
 };

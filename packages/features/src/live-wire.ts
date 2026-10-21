@@ -40,7 +40,7 @@ import {
   inboxReplySchema,
   standingAsk,
 } from "./inbox-wire.js";
-import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
+import { type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 import {
@@ -492,17 +492,17 @@ export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
 
 export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
 
-const [macShellCommandSchema, macBrowserCommandSchema] = macCommandSchema.members;
+const [macShellCommandSchema] = macCommandSchema.members;
 
 /**
  * One unclaimed command as its row delivers it: the command of its kind, and
- * when it was queued in epoch milliseconds. Note that the column the other
- * kind leaves null is read past, as every key a struct does not name is.
+ * when it was queued in epoch milliseconds. Note that a column its kind
+ * leaves null is read past, as every key a struct does not name is.
  */
-const macCommandLiveRowSchema = EffectSchema.Union([
-  EffectSchema.Struct({ ...macShellCommandSchema.fields, queuedAt: countedNumber }),
-  EffectSchema.Struct({ ...macBrowserCommandSchema.fields, queuedAt: countedNumber }),
-]);
+const macCommandLiveRowSchema = EffectSchema.Struct({
+  ...macShellCommandSchema.fields,
+  queuedAt: countedNumber,
+});
 
 /** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const macCommandsLiveRowsSchema = EffectSchema.Struct({
@@ -518,10 +518,12 @@ export function macCommandsOfLiveRows(
       a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
     )
     .map(
-      (row): MacCommand =>
-        row.kind === MAC_COMMAND_KIND.SHELL
-          ? { id: row.id, kind: row.kind, command: row.command, timeoutSeconds: row.timeoutSeconds }
-          : { id: row.id, kind: row.kind, params: row.params, timeoutSeconds: row.timeoutSeconds },
+      (row): MacCommand => ({
+        id: row.id,
+        kind: row.kind,
+        command: row.command,
+        timeoutSeconds: row.timeoutSeconds,
+      }),
     );
 }
 

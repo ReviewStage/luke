@@ -4,10 +4,9 @@ import type { CallCredential } from "./account-call.js";
 import { askHosted, askLive, type HostedClient, hostedClient } from "./hosted-link.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY, type MacCommandsLiveAnswer } from "./live-wire.js";
 import {
-  type MacBrowserResult,
   type MacCommand,
   type MacCommandKind,
-  type MacCommandSettleResult,
+  type MacCommandResult,
   macCommandKindsQuery,
 } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
@@ -24,8 +23,7 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * signed out is `LIVE_SIGNED_OUT` and any other unanswered a failure the
  * caller asks again, a claim refused is `MAC_COMMAND_NOT_CLAIMED` and one
  * unanswered nothing, and a presence or a result not taken is false, its
- * call having given up on it. A browser
- * command's result, which may carry an image, is posted to its own route.
+ * call having given up on it.
  */
 
 /** What a claim the service refused answers: another Mac took the command, or it waited past the claim window. */
@@ -51,20 +49,9 @@ export class HostedMacCommandClient {
   /** One command's result posted back; whether the service took it. */
   settle(
     id: string,
-    result: MacCommandSettleResult,
+    result: MacCommandResult,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.macCommands.settle, { id, result }).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
-    );
-  }
-
-  /** One browser command's result, image and all, posted back; whether the service took it. */
-  settleBrowser(
-    id: string,
-    result: MacBrowserResult,
-  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macCommands.settleBrowser, { id, result }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
