@@ -37,7 +37,7 @@ import {
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { type AgentCallHistory, agentCallHistory } from "./agent-history.js";
-import { backendToolsOf, callBackendOf } from "./call-backend.js";
+import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
 import { frameText, type VoiceSocket } from "./socket.js";
@@ -75,8 +75,8 @@ type AdmittedAccount =
       accountId: string;
       /** The task the call is about, read as the account holds it. */
       task: Task;
-      /** The agent of the task the call speaks into, where the frame named one. */
-      agent: HeldVoiceAgent | undefined;
+      /** The agent of the task the call speaks into. */
+      agent: HeldVoiceAgent;
     }
   | Refusal;
 
@@ -93,8 +93,8 @@ type Opened =
       accountId: string;
       /** The task the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
       taskId: string;
-      /** The agent of the task the call speaks into, as the creation named it or the row reads it back; none for a call about the task alone. */
-      agentId: string | undefined;
+      /** The agent of the task the call speaks into, as the creation named it or the row reads it back. */
+      agentId: string;
       /** This connection's own name on the session's row, which a detach it writes must still match. */
       attachId: string;
       /** The store's own id for the session's row, which its avatar rows name; none where the row is another account's. */
@@ -393,7 +393,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
   const admitAccount = (
     admission: Admission,
     taskId: string,
-    agentId: string | undefined,
+    agentId: string,
   ): Effect.Effect<AdmittedAccount, SessionFailure, DatabaseServices> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
@@ -402,9 +402,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const task = yield* record.heldTask({ userId: accountId, taskId });
       if (task === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
       if (task.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);
-      const agent =
-        agentId === undefined ? undefined : yield* record.heldAgent({ userId: accountId, agentId });
-      if (agentId !== undefined && (agent?.taskId !== taskId || agent.archived)) {
+      const agent = yield* record.heldAgent({ userId: accountId, agentId });
+      if (agent === undefined || agent.taskId !== taskId || agent.archived) {
         return refused(HOSTED_API_ERROR.NOT_FOUND);
       }
       yield* accounts.spend(accountId);
@@ -435,20 +434,13 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (input === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const account = yield* admitAccount(admission, frame.planId, frame.agentId);
       if ("refusal" in account) return account;
-      const agentId = account.agent?.agentId;
-      const earlier = yield* record.earlierCalls({
-        userId: account.accountId,
-        taskId: frame.planId,
-        agentId,
-      });
-      const agentHistory =
-        account.agent === undefined
-          ? undefined
-          : yield* agentCallHistory(account.agent.conversation);
+      const { agentId } = account.agent;
+      const earlier = yield* record.earlierCalls({ agentId });
+      const agentHistory = yield* agentCallHistory(account.agent.conversation);
       const config = liveSessionConfig({
         model: options.model,
         voice: frame.voice,
-        backendTools: backendToolsOf(callBackendOf(agentId)),
+        backendTools: backendToolsOf(CALL_BACKEND),
         input: startupInput(input, account.task, earlier, agentHistory),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,
@@ -500,10 +492,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * only when the session named was created for that very account. A session
    * this deployment never created, or another account's, is refused as the
    * bearer's own failure rather than as a hint that the id exists. The task
-   * the call is bound to is read off the same row, so the re-attached
-   * exchange lands in the task the session was created about, and in the
-   * agent it named where it named one; a task archived since takes the call
-   * back no more.
+   * and the agent the call is bound to are read off the same row, so the
+   * re-attached exchange lands in the agent the session was created for; a
+   * task archived since takes the call back no more, and neither does a
+   * session that names no agent, a call about a task's own Luke from before
+   * every call named one, or one whose agent was deleted since.
    */
   const openAttached = (
     upstream: LiveUpstream,
@@ -518,8 +511,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (Option.isNone(account) || owned === undefined) {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
-      // A session no task was bound to is no call this service still runs.
-      if (owned.taskId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+      // A session no task or no agent was bound to is no call this service still runs.
+      if (owned.taskId === undefined || owned.agentId === undefined) {
+        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+      }
       const accountId = account.value;
       const task = yield* record.heldTask({ userId: accountId, taskId: owned.taskId });
       if (task?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);

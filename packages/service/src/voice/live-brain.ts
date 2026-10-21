@@ -43,7 +43,6 @@ import {
 import { SqlClient } from "effect/sql";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
-import { BRAIN_DELEGATION_TOOLS } from "../agents/brain-host/brain.js";
 import {
   ASK_REFUSAL,
   type AskInput,
@@ -55,7 +54,6 @@ import {
   type StopOutcome,
   stopAsk,
 } from "../agents/brain-host/brain-ask.js";
-import { RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
 import { journalAfterStep, projectTurnEvents } from "../agents/turn-events.js";
 import {
   ASK_ORIGIN,
@@ -76,12 +74,13 @@ import { subagentRecordsByCall } from "../tasks/child-models.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import {
   callsSendingToEarlierTasks,
+  DELEGATION_TOOLS,
   SUBAGENT_JOURNALS,
   type SubagentJournal,
   taskWorkOf,
   workerSessionCallsOf,
 } from "../tasks/task-work.js";
-import { brainDelegationJournalsOf } from "../tasks/task-work-store.js";
+import { delegationJournalsOf } from "../tasks/task-work-store.js";
 import type { CallBackend } from "./call-backend.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
@@ -385,11 +384,8 @@ class ByTurnPart<Value> {
   }
 }
 
-/** The calls that run a shell command in a checkout: the brain's read of the task's repository, and an agent's own shell. */
-const SHELL_TOOL_NAMES: ReadonlySet<string> = new Set([
-  RUN_IN_REPOSITORY_TOOL.name,
-  AGENT_TOOL.BASH,
-]);
+/** The calls that run a shell command in a checkout: an agent's own shell. */
+const SHELL_TOOL_NAMES: ReadonlySet<string> = new Set([AGENT_TOOL.BASH]);
 
 const isShellCommand = Schema.is(Schema.Struct({ command: Schema.String }));
 
@@ -424,7 +420,7 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
 function delegatedOf(journal: StoredUIMessage | undefined): boolean {
   return (journal?.parts ?? [])
     .filter(isStoredToolPart)
-    .some((part) => BRAIN_DELEGATION_TOOLS.has(storedToolName(part)));
+    .some((part) => DELEGATION_TOOLS.has(storedToolName(part)));
 }
 
 /** The calls about the task's questions rather than its work. */
@@ -475,10 +471,10 @@ function cancelOf(outcome: StopOutcome): LiveBrainCancel {
 export interface HostedLiveBrainOptions {
   /** The account the voice session was opened for, resolved at the handshake: every ask is admitted as theirs. */
   readonly accountId: string;
-  /** The conversation every ask lands in: the task's or the agent's, the same one its record writes, under the member who opened it. */
+  /** The conversation every ask lands in: the agent's, the same one its record writes, under the member who started it. */
   readonly conversation: ConversationTarget;
-  /** Who answers the asks in that conversation: the tools its journals are read under, and the ask a fresh call explores with, where it explores. */
-  readonly backend: Pick<CallBackend, "tools" | "explore">;
+  /** Who answers the asks in that conversation: the tools its journals are read under. */
+  readonly backend: Pick<CallBackend, "tools">;
   /** The developer's time zone, handed with every ask so the turn reads the day in it; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The ask door's seams: the ask record, and eve under the deployment principal for this account, which sends a spoken ask and nothing else. */
@@ -749,7 +745,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * earlier turn started was started; none where they could not be read.
    */
   const workerJournalsOf = (conversationId: string) =>
-    brainDelegationJournalsOf(
+    delegationJournalsOf(
       options.conversation.userId,
       conversationId,
       options.backend.tools,
@@ -1143,47 +1139,18 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         ask.revision,
       );
     },
-    // Note that the plan's first call is the one whose conversation no ask
-    // has yet reached eve in: it explores, under the session's id as the
-    // ask's client id, because one session starts once, so a second start
-    // explores nothing twice; the ask names no voice session, because it
-    // answers no delegation a re-attached connection could take up, and it
-    // is followed under revision zero, below every spoken ask's, so the
-    // developer's first ask tells a turn the two share. Every later call
-    // takes up what earlier calls left instead, and asks eve nothing, and so
-    // does every call into an agent, which explores nothing of its own.
-    join(sessionId) {
-      return Effect.gen(function* () {
-        const explore = options.backend.explore;
-        if (explore === undefined) return yield* takeUp();
-        const latest = yield* options.asks.asks.latestSession(
-          options.conversation.userId,
-          options.conversation.conversationId,
-        );
-        if (latest !== undefined) return yield* takeUp();
-        const explored = yield* submit(
-          {
-            accountId: options.accountId,
-            userId: options.conversation.userId,
-            question: explore,
-            origin: ASK_ORIGIN.SPOKEN,
-            clientId: sessionId,
-            conversationId: options.conversation.conversationId,
-            timeZone: options.timeZone,
-          },
-          0,
-        );
-        if (explored.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return nothingJoined(false);
-        return { ...nothingJoined(false), runs: [explored.runId] };
-      }).pipe(
+    // Note that a call takes up what earlier calls left, and asks eve
+    // nothing of its own, because an agent was started on its own work and
+    // a call joins it there.
+    join() {
+      return takeUp().pipe(
         Effect.provideService(SqlClient.SqlClient, sql),
         Effect.provideService(Database, database),
-        // The record could not be read: the call starts with nothing taken up
-        // and nothing set off, rather than exploring a plan it may have explored.
+        // The record could not be read: the call starts with nothing taken up.
         Effect.tapError(logStoreFailure),
         Effect.catch(() =>
           Effect.sync(() => {
-            options.report("A fresh call could not read the plan's earlier work");
+            options.report("A fresh call could not read the agent's earlier work");
             return nothingJoined(false);
           }),
         ),

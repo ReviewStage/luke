@@ -142,13 +142,11 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
         yield* callWith(userId, task.id, sibling.id, ["Fix the flaky test.", "On it."]);
         yield* callWith(userId, task.id, undefined, ["What is left?", "The export."]);
 
-        const earlier = yield* record.earlierCalls({ userId, taskId: task.id, agentId: agent.id });
+        const earlier = yield* record.earlierCalls({ agentId: agent.id });
         assert.deepEqual(
           earlier.map((line) => line.text),
           ["Ship the CSV first.", "Starting on it."],
         );
-        // A call about the task alone still reads back every call about it.
-        assert.equal((yield* record.earlierCalls({ userId, taskId: task.id })).length, 6);
 
         const transcript = Option.getOrThrow(yield* readAgentTranscript(userId, agent.id));
         assert.deepEqual(

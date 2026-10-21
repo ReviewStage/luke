@@ -1,5 +1,5 @@
 /**
- * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, its history, its transcript and work, its linked issues, and Luke's Stop.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, its history, and its linked issues.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
@@ -16,7 +16,6 @@ import { BOARD_BOUNDS, boardAnswerSchema, boardSaveRequestSchema } from "../boar
 import { MAXIMUM_START_BODY_BYTES } from "../coding-agent-wire.js";
 import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { wireUuidSchema } from "../service-wire.js";
 import {
   taskIssueChoiceSchema,
   taskIssueLinkAnswerSchema,
@@ -38,8 +37,6 @@ import {
   taskStartAnswerSchema,
   taskUpdateRequestSchema,
 } from "../task-wire.js";
-import { taskWorkAnswerSchema } from "../tasks-view.js";
-import { taskTranscriptAnswerSchema } from "../transcript-wire.js";
 import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
 
 /** A change is a name and a repository's name at most, so a body past this is none. */
@@ -76,9 +73,6 @@ const linkParams = { ...taskParams, link: EffectSchema.String };
 const revisionSeqText = EffectSchema.NumberFromString.pipe(
   EffectSchema.decodeTo(planRevisionSeqSchema),
 );
-
-/** What Luke's Stop answers: nothing beyond that it was asked. */
-const stopAnswerSchema = EffectSchema.Struct({});
 
 /** The statuses a start answers: created, or a retry answered with what its first request made. */
 export const TASK_START_STATUS = {
@@ -145,15 +139,6 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/edit`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), planEditRequestSchema))
     .output(EffectSchema.flip(planEditAnswerSchema)),
-  transcript: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: `${PLAN}/transcript` }))
-    .input(EffectSchema.Struct(taskParams))
-    .output(EffectSchema.flip(taskTranscriptAnswerSchema)),
-  /** A page of the plan's work, before the turn `before` names where it names one. */
-  work: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: `${PLAN}/work` }))
-    .input(EffectSchema.Struct({ ...taskParams, before: EffectSchema.optionalKey(wireUuidSchema) }))
-    .output(EffectSchema.flip(taskWorkAnswerSchema)),
   /** A page of the plan's history, before the revision `before` names where it names one. */
   revisions: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISIONS }))
@@ -192,9 +177,4 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: ISSUE }))
     .input(EffectSchema.Struct(linkParams))
     .output(EffectSchema.flip(taskIssueUnlinkAnswerSchema)),
-  /** Luke's turn on the plan stopped. */
-  stop: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/stop` }))
-    .input(EffectSchema.Struct(taskParams))
-    .output(EffectSchema.flip(stopAnswerSchema)),
 };

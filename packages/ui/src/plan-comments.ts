@@ -1,6 +1,5 @@
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
-  PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
@@ -55,7 +54,6 @@ const COMMENT_NOTE = {
   NOT_YOURS: "Only its writer can change this comment.",
   GONE: "This comment is no longer in the thread.",
   AGENT_AWAY: "That agent isn't running, so it couldn't take the thread.",
-  LUKE_AWAY: "Luke couldn't take the thread. Try again in a moment.",
 } as const;
 
 /** How one read is asked: the plan and the cursor to read past. */
@@ -92,13 +90,10 @@ export function openThread(thread: PlanCommentThread): boolean {
   return thread.status === PLAN_COMMENT_STATUS.OPEN;
 }
 
-/** What a comment's answer says of the ones its mentions asked who could not take the thread, Luke first; nothing where every one did. */
+/** What a comment's answer says of the agents its mentions asked who could not take the thread; nothing where every one did. */
 function unsentWords(answer: TasksCommentAnswer): string | undefined {
   const unsent = "thread" in answer ? (answer.unsent ?? []) : [];
-  if (unsent.length === 0) return undefined;
-  return unsent.some((asked) => asked.actor === PLAN_COMMENT_ACTOR.LUKE)
-    ? COMMENT_NOTE.LUKE_AWAY
-    : COMMENT_NOTE.AGENT_AWAY;
+  return unsent.length === 0 ? undefined : COMMENT_NOTE.AGENT_AWAY;
 }
 
 /** The words a refusal is said in on its thread. */

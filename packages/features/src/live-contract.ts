@@ -338,13 +338,15 @@ const callTimeZone = Schema.optionalKey(
 
 /**
  * The desktop's opening frame: the offer, the voice, the seed, the id of
- * the saved task the call is about, and the developer's time zone, which a
- * desktop released before it sends none of. The service checks the task is the
- * account's, creates the session under the planning scene, lands its asks in
- * the task's conversation, and writes the binding on the session's row, so a
- * later `session.attach` is bound to the same task by that row and never by
- * anything the attaching connection says. The id names the task and nothing
- * of its document.
+ * the saved task the call is about and of its agent the call speaks into,
+ * and the developer's time zone, which a desktop released before it sends
+ * none of. The service checks the task and the agent are the account's,
+ * creates the session under the planning scene, lands its asks in the
+ * agent's conversation, and writes the binding on the session's row, so a
+ * later `session.attach` is bound to the same agent by that row and never by
+ * anything the attaching connection says. The ids name the task and the
+ * agent and nothing of the task's document. A frame that names no agent is
+ * no request at all, and the service refuses it as one.
  */
 export const sessionCreateFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
@@ -352,12 +354,8 @@ export const sessionCreateFrameSchema = Schema.Struct({
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
   planId: wireUuidSchema,
-  /**
-   * The agent of the task the call speaks into: its asks run in that agent's
-   * conversation and its transcript is that agent's. None is a call about the
-   * task alone, which lands in the task's own conversation.
-   */
-  agentId: Schema.optionalKey(wireUuidSchema),
+  /** The agent of the task the call speaks into: its asks run in that agent's conversation and its transcript is that agent's. */
+  agentId: wireUuidSchema,
   timeZone: callTimeZone,
 });
 

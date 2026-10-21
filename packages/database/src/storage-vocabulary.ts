@@ -3,6 +3,7 @@ export const CONVERSATION_KIND = {
   MAIN: "main",
   OBSERVED: "observed",
   CHILD: "child",
+  /** A task's own Luke's, who is gone: no conversation of the kind is opened now, and the ones that stand are read only to be retired or purged. */
   TASK: "plan",
   /** A coding agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
   CODING_AGENT: "coding_agent",

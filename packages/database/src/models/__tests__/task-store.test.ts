@@ -26,7 +26,6 @@ import {
   deleteTask,
   listTasks,
   nameUntitledTask,
-  openTaskConversation,
   readTask,
   readTaskHeader,
   readTaskWorkspace,
@@ -361,7 +360,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 
   it.effect(
-    "a plan's header names where it stands and whose it is to every member, follows its archive and its conversation, and names nothing to an account outside it or for a plan that is none",
+    "a plan's header names where it stands and whose it is to every member, follows its archive, and names nothing to an account outside it or for a plan that is none",
     () =>
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
@@ -373,7 +372,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           name: SHARED_TASK.name,
           repository: null,
           archived: false,
-          conversationId: undefined,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -381,10 +379,9 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
         assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
 
-        const { conversationId } = Option.getOrThrow(yield* openTaskConversation(charles, taskId));
         yield* updateTask(dean, taskId, { archived: true });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, { ...started, archived: true, conversationId });
+        assert.deepEqual(header, { ...started, archived: true });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -393,7 +390,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           name: whole.task.name,
           repository: whole.task.repository,
           archived: whole.task.archivedAt !== undefined,
-          conversationId: whole.conversationId,
         });
       }),
   );

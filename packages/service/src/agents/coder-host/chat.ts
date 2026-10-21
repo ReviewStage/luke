@@ -76,16 +76,14 @@ import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./c
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
- * chat.ts -- the chat tools of a coding agent and of its plan's Luke: post a message in the workspace's chat, and read it.
+ * chat.ts -- the chat tools of a coding agent: post a message in the workspace's chat, and read it.
  *
  * A coding agent is a member of its plan's workspace's chat, minted the
  * first time it posts or reads (`chat-store.ts`), and talks there with the
- * other agents, the plan's Luke, and the people of the workspace. Every
- * member is named to it by its mention link, as the rest of the app names a
- * person, an agent, or a task's Luke (`chat-names.ts`), which is how it
- * addresses one in its words and names a DM by. The plan's Luke runs the
- * same tools as the agent of this module's words, bound in the planner's
- * own host (`../brain-host/chat.ts`). A post goes to the agent's plan
+ * other agents and the people of the workspace. Every member is named to it
+ * by its mention link, as the rest of the app names a person or an agent
+ * (`chat-names.ts`), which is how it addresses one in its words and names a
+ * DM by. A post goes to the agent's plan
  * channel, or a planless agent's to its workspace's general channel, unless
  * it names a channel by `#name`, which a name no channel holds opens as a
  * topic channel, a member's DM by the member's mention link, or a message
@@ -118,7 +116,7 @@ export const CHAT_TOOLS = {
   POST: {
     name: CHAT_TOOL.POST,
     description:
-      "Post a message in your workspace's chat, where the other coding agents, Luke, and the developer's team talk. " +
+      "Post a message in your workspace's chat, where the other coding agents and the developer's team talk. " +
       `text is Markdown, at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters. ` +
       "to is where it goes: #name for a channel, where a name no channel holds opens a topic channel under it, or a member's " +
       "mention link as read_chat lists it, [@Name](link), or its link alone, for a direct message to one member; leave it " +
@@ -288,8 +286,8 @@ export type ChatToolResult =
     }
   | { readonly status: typeof ACTION_RESULT_STATUS.REJECTED; readonly reason: string };
 
-/** Who a call speaks as: a coding agent, or the plan's Luke. */
-type ChatSelf = Exclude<ChatMemberSubject, { readonly kind: typeof MEMBER_KIND.HUMAN }>;
+/** Who a call speaks as: a coding agent. */
+type ChatSelf = Extract<ChatMemberSubject, { readonly kind: typeof MEMBER_KIND.AGENT }>;
 
 /** The agent a read is made for: the account whose standing reaches the chat, the plan the agent is on, none for a planless agent, and the member it speaks as. */
 export interface ChatReader {
@@ -439,8 +437,6 @@ function inTransaction<A, E, R>(
 function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.gen(function* () {
     if (agent.taskId !== null) return yield* ensureTaskChannel(agent.userId, agent.taskId);
-    // Only a coding agent is planless; a plan's Luke always stands on its plan.
-    if (agent.self.kind !== MEMBER_KIND.AGENT) return Option.none();
     const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
     if (Option.isNone(workspace)) return Option.none();
     return yield* ensureGeneral(agent.userId, workspace.value);
@@ -500,15 +496,13 @@ function channelName(
   return other === undefined ? "" : names.mention(other);
 }
 
-/** Whether the member stands for the subject: a person by their account, an agent by its id, a Luke by his task. */
+/** Whether the member stands for the subject: a person by their account, an agent by its id. */
 function standsFor(member: ChatMemberRow, subject: ChatMemberSubject): boolean {
   switch (subject.kind) {
     case MEMBER_KIND.HUMAN:
       return member.kind === MEMBER_KIND.HUMAN && member.userId === subject.userId;
     case MEMBER_KIND.AGENT:
       return member.kind === MEMBER_KIND.AGENT && member.agentId === subject.agentId;
-    case MEMBER_KIND.LUKE:
-      return member.kind === MEMBER_KIND.LUKE && member.taskId === subject.taskId;
   }
 }
 
@@ -563,8 +557,7 @@ function channelForPost(
 /**
  * The DM between the agent and the member a mention link names, made where
  * it is not yet, and that member; refused where the link names no member,
- * or names the agent itself. A task's Luke is minted by the first link that
- * names him, as a post's words mint him (`memberOfSubject`).
+ * or names the agent itself.
  */
 function dmWith(
   agent: ChatReader,

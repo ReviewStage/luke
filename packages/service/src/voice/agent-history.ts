@@ -65,7 +65,7 @@ export function agentCallHistory(
   conversation: ConversationTarget,
 ): Effect.Effect<AgentCallHistory | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(
-    readRecentMessages(conversation, CALL_BACKEND.AGENT.tools, AGENT_HISTORY.READ),
+    readRecentMessages(conversation, CALL_BACKEND.tools, AGENT_HISTORY.READ),
     agentCallHistoryOf,
   );
 }

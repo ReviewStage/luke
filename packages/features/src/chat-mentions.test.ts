@@ -17,23 +17,22 @@ const agent = `[@Invite emails](${encodeMention({ kind: MENTION_KIND.AGENT, agen
 const luke = `[@Luke](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK }, PLACE)})`;
 const task = `[@Teammate invitations](${encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK }, PLACE)})`;
 
-test("a message names the people, agents, and Lukes its links write, and an @word outside any link names no one", () => {
+test("a message names the people and agents its links write, and a task's Luke or an @word outside any link names no one", () => {
   const read = chatMentionsIn(`${person} and ${agent}, ask ${luke} and @maria about ${task}`);
   assert.deepEqual(
     read.members.map(({ mention, label }) => [mention.kind, label]),
     [
       [MENTION_KIND.PERSON, "@Ada Lovelace"],
       [MENTION_KIND.AGENT, "@Invite emails"],
-      [MENTION_KIND.LUKE, "@Luke"],
     ],
   );
 });
 
-test("a `to` names the member its mention link names, written whole or as its address, and nothing for a channel, a task, or a handle", () => {
+test("a `to` names the member its mention link names, written whole or as its address, and nothing for a channel, a task, a Luke, or a handle", () => {
   const address = encodeMention({ kind: MENTION_KIND.PERSON, userId: USER }, PLACE);
   assert.deepEqual(chatTargetMember(person), { kind: MENTION_KIND.PERSON, userId: USER });
   assert.deepEqual(chatTargetMember(address), { kind: MENTION_KIND.PERSON, userId: USER });
-  assert.deepEqual(chatTargetMember(luke), { kind: MENTION_KIND.LUKE, taskId: TASK });
+  assert.equal(chatTargetMember(luke), undefined);
   assert.equal(chatTargetMember(task), undefined);
   assert.equal(chatTargetMember("#general"), undefined);
   assert.equal(chatTargetMember("@agent-2"), undefined);
@@ -52,7 +51,7 @@ test("a member named after many references is still read, however many reference
 test("a member's link is written as its name alone, its address written bare too, and a link to anything else stays as written", () => {
   assert.equal(
     withoutMemberLinks(`${person}, ${agent} and ${luke}: see ${task}`),
-    `@Ada Lovelace, @Invite emails and @Luke: see ${task}`,
+    `@Ada Lovelace, @Invite emails and ${luke}: see ${task}`,
   );
   const bare = encodeMention({ kind: MENTION_KIND.PERSON, userId: USER }, PLACE);
   const plan = encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK }, PLACE);

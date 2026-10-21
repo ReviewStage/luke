@@ -35,9 +35,9 @@ import {
 } from "./eve-sessions.js";
 
 /**
- * The ask door: a spoken question handed to Luke's judgment, admitted before
- * eve is reached — the conversation it names stands and the caller reaches
- * it, its own or its workspace's task's, or it is refused as not found, a
+ * The ask door: a spoken question handed to an agent's judgment, admitted
+ * before eve is reached — the conversation it names stands and the caller
+ * reaches it, its own or its workspace's agent's, or it is refused as not found, a
  * stranger's and none at all answering alike — and then handed to the one eve session the conversation runs in,
  * or the session opened for it. eve folds asks that arrive while a turn runs
  * into the next turn and names no turn at accept time, so the ask stands on
@@ -442,18 +442,4 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
   const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
   if (Result.isFailure(stamped)) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
   return Result.succeed({ status: turn.status, cancelRequestedAt: at.getTime() });
-});
-
-/** Stops a conversation's newest turn, the one eve may be running, under its owner; nothing where it has none. */
-export const stopConversation = /* @__PURE__ */ Effect.fn("web/stopConversation")(function* (
-  seams: StopSeams,
-  ownerId: string,
-  conversationId: string,
-): Effect.fn.Return<
-  StopOutcome | undefined,
-  QueryError | EffectSchema.SchemaError,
-  DatabaseServices
-> {
-  const newest = (yield* latestTurnsOf(ownerId, [conversationId])).get(conversationId);
-  return newest === undefined ? undefined : yield* stopAsk(seams, ownerId, newest.id);
 });

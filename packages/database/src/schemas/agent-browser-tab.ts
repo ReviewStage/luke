@@ -11,8 +11,7 @@ import { task } from "./task.js";
  * An agent runs one browser in its own sandbox, and a row stands for each
  * tab open in it, written as the agent acts on the tab and deleted as it
  * closes. The agent is named by its own conversation, the one its sandbox
- * is kept for: a coding agent's (`coding_agent.conversation_id`), or the
- * task's for Luke (`task.conversation_id`), and a worker's tabs are its
+ * is kept for (`coding_agent.conversation_id`), and a worker's tabs are its
  * parent's, whose sandbox it works in. So a tab goes with its agent's
  * conversation, however that conversation is removed, the thirty-day purge
  * of a deleted one among them, and with its task.
@@ -29,7 +28,7 @@ export const agentBrowserTab = pgTable(
   "agent_browser_tab",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The conversation of the agent whose browser holds the tab: a coding agent's, or the task's for Luke. */
+    /** The conversation of the coding agent whose browser holds the tab. */
     conversationId: uuid("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),

@@ -12,7 +12,7 @@ import { messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { toolPartType } from "@luke/features/brain";
-import { and, eq, isNotNull, max, sql } from "drizzle-orm";
+import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 import { ACTION_RESULT_STATUS, TOOL_PART_STATE } from "../core.js";
 import { SHOW_CODE_TOOL } from "./show-code.js";
@@ -29,7 +29,7 @@ import { SHOW_CODE_TOOL } from "./show-code.js";
  * alone, so it moves as a call's lines land and not as the rest of a running
  * turn's journal is written in batches around them. The board is followed on its own (`boardLiveStatement`).
  * Each statement reads what its held read reads (`listPages`,
- * `readTranscript`, `readTaskCode`), the account joined through its membership of the
+ * `readTaskCode`), the account joined through its membership of the
  * task's workspace and held to the task's GitHub access, as the board's
  * live read is, so a task the account does not reach is no rows. None reads
  * the clock, as Realtime requires.
@@ -72,24 +72,14 @@ function pagesStatement(userId: string, taskId: string) {
 }
 
 /**
- * Each call `readTranscript` reads, marked: one with words, since a call
- * with none reads as no call; how it ended, what it metered, and its model,
- * as its session row holds them; its last fragment, since fragments are
- * only ever appended; and how many rows the voice wrote for it in the task's
- * conversation, which name its lines.
+ * Each call about the task, marked: one with words, since a call with none
+ * reads as no call; how it ended, what it metered, and its model, as its
+ * session row holds them; and its last fragment, since fragments are only
+ * ever appended. Note that `spoken`, the rows the voice wrote for it in the
+ * task's own conversation, is always none now that every call speaks into
+ * an agent's; it stands so a desktop that still reads it decodes the part.
  */
 function callsStatement(userId: string, taskId: string) {
-  const spoken = queryBuilder
-    .select({ count: sql<number>`count(*)::int` })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.userId, userId),
-        eq(messages.conversationId, task.conversationId),
-        sql`${messages.metadata}->>'voice_session_id' = ${voiceSessions.id}::text`,
-        isNotNull(sql`${messages.metadata}->>'from_ms'`),
-      ),
-    );
   return queryBuilder
     .select({
       ...liveSelection(
@@ -102,7 +92,7 @@ function callsStatement(userId: string, taskId: string) {
         { closedAt: voiceSessions.closedAt },
       ),
       lastSegment: max(voiceTranscriptSegments.seq).as("lastSegment"),
-      spoken: sql<number>`(${spoken})`.as("spoken"),
+      spoken: sql<number>`0`.as("spoken"),
     })
     .from(voiceSessions)
     .innerJoin(task, eq(task.id, voiceSessions.taskId))

@@ -1,5 +1,5 @@
 import type { MessageStreamEvent } from "eve/client";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
+import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { stampedEveEvent } from "./eve-events.js";
 
 /**
@@ -39,8 +39,8 @@ export function spokenTurn(
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: RUN_IN_REPOSITORY_TOOL.name,
-            input: { command: REPOSITORY_COMMAND },
+            toolName: AGENT_TOOL.BASH,
+            input: { command: REPOSITORY_COMMAND, description: "List the latest commits" },
           },
         ],
       },
@@ -55,8 +55,8 @@ export function spokenTurn(
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: RUN_IN_REPOSITORY_TOOL.name,
-          output: { status: REPOSITORY_SHELL_STATUS.NOT_RUN, reason: "No sandbox." },
+          toolName: AGENT_TOOL.BASH,
+          output: { exitCode: 0, stdout: "", stderr: "" },
         },
       },
     }),

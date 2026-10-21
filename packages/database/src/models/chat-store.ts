@@ -119,11 +119,15 @@ export const CHAT_REFUSAL = {
 
 export type ChatRefusal = (typeof CHAT_REFUSAL)[keyof typeof CHAT_REFUSAL];
 
-/** Who a member stands for: a person in the workspace, a coding agent on one of its tasks, or one of its tasks' Luke. */
+/**
+ * Who a member stands for: a person in the workspace, or a coding agent on
+ * one of its tasks. A task's Luke, a member of kind `MEMBER_KIND.LUKE` minted
+ * while a task had one, is read back for the messages that name him, and no
+ * subject mints one now.
+ */
 export type ChatMemberSubject =
   | { readonly kind: typeof MEMBER_KIND.HUMAN; readonly userId: string }
-  | { readonly kind: typeof MEMBER_KIND.AGENT; readonly agentId: string }
-  | { readonly kind: typeof MEMBER_KIND.LUKE; readonly taskId: string };
+  | { readonly kind: typeof MEMBER_KIND.AGENT; readonly agentId: string };
 
 /** The most messages a window's read past its cursor answers with; the rest are read from the cursor it hands back. */
 const MAX_PAST = 200;
@@ -224,7 +228,7 @@ export interface ChatPost {
   readonly clientKey: string;
 }
 
-/** A member a post's words name by what it is, a person, an agent, or a task's Luke, as its mention link writes it. */
+/** A member a post's words name by what it is, a person or an agent, as its mention link writes it. */
 export interface ChatNamedSubject {
   readonly subject: ChatMemberSubject;
   readonly label: string;
@@ -344,7 +348,7 @@ const lockWorkspace = SqlSchema.findOneOption({
 
 const SubjectKeySchema = Schema.Struct({
   organizationId: Schema.String,
-  kind: Schema.Literals(Object.values(MEMBER_KIND)),
+  kind: Schema.Literals([MEMBER_KIND.HUMAN, MEMBER_KIND.AGENT]),
   subjectId: Schema.String,
 });
 
@@ -352,7 +356,6 @@ const SubjectKeySchema = Schema.Struct({
 const SUBJECT_COLUMN = {
   [MEMBER_KIND.HUMAN]: chatMember.userId,
   [MEMBER_KIND.AGENT]: chatMember.agentId,
-  [MEMBER_KIND.LUKE]: chatMember.taskId,
 } as const;
 
 const findMemberOfSubject = SqlSchema.findOneOption({
@@ -458,15 +461,6 @@ const findReachableTask = SqlSchema.findOneOption({
         })
         .from(task)
         .where(and(eq(task.id, taskId), taskReachableBy(userId))),
-    ),
-});
-
-const findTaskWorkspace = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: OrganizationKeySchema,
-  execute: (taskId) =>
-    Database.use((db) =>
-      db.select({ organizationId: task.organizationId }).from(task).where(eq(task.id, taskId)),
     ),
 });
 
@@ -1089,10 +1083,6 @@ function subjectInWorkspace(
       return Effect.map(findAgentWorkspace(subject.agentId), (found) =>
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
-    case MEMBER_KIND.LUKE:
-      return Effect.map(findTaskWorkspace(subject.taskId), (found) =>
-        Option.exists(found, (row) => row.organizationId === organizationId),
-      );
   }
 }
 
@@ -1103,8 +1093,6 @@ function subjectId(subject: ChatMemberSubject): string {
       return subject.userId;
     case MEMBER_KIND.AGENT:
       return subject.agentId;
-    case MEMBER_KIND.LUKE:
-      return subject.taskId;
   }
 }
 
@@ -1116,7 +1104,6 @@ function mintHandle(
 ): ChatStoreEffect<string> {
   return Effect.gen(function* () {
     if (subject.kind === MEMBER_KIND.AGENT) return `agent-${ordinal}`;
-    if (subject.kind === MEMBER_KIND.LUKE) return LUKE_HANDLE;
     const account = yield* findAccountName(subject.userId);
     const held = new Set((yield* findHandles({ organizationId })).map((row) => row.handle));
     const stem = personStem(Option.match(account, { onNone: () => "", onSome: (row) => row.name }));
@@ -1195,9 +1182,8 @@ function headOf(organizationId: string): ChatStoreEffect<number> {
 }
 
 /**
- * The member a post names by what it is: a person or a task's Luke, minted
- * where none is yet, so a Luke is a member from the first link that names
- * him, and an agent only where it is a member already, because an agent
+ * The member a post names by what it is: a person, minted where none is
+ * yet, and an agent only where it is a member already, because an agent
  * whose starter has Chat off joins no chat; nothing for a subject of
  * another workspace.
  */
@@ -1268,7 +1254,7 @@ export function ensureMember(
         kind: subject.kind,
         userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
         agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-        taskId: subject.kind === MEMBER_KIND.LUKE ? subject.taskId : null,
+        taskId: null,
         handle,
         ordinal,
         now,
@@ -1653,8 +1639,8 @@ export function leave(
 
 /**
  * The member a mention link names in the workspace, as a post names one
- * (`subjectMember`): a person or a task's Luke minted where none is yet, an
- * agent only where it is a member already; nothing where the account is not
+ * (`subjectMember`): a person minted where none is yet, an agent only
+ * where it is a member already; nothing where the account is not
  * in the workspace or the subject is not of it.
  */
 export function memberOfSubject(
@@ -1844,8 +1830,8 @@ function answerBlocks(reply: ChatReply): readonly ChatBlock[] {
  * Posts a message as a member of the workspace: in the channel named, or
  * as a reply in the thread of the message named by its place, under that
  * thread's root and in its channel. The mention links are resolved to
- * members as it lands, a task's Luke minted where he is not yet, and the
- * labels of those that name no one are answered. A post repeated under its
+ * members as it lands, and the labels of those that name no one are
+ * answered. A post repeated under its
  * key in its channel answers the message it made. Refused where the author
  * or the channel is not of the workspace, the author is another person
  * than the account, the channel is a DM the author is not one of, where
@@ -2987,7 +2973,7 @@ const findChannelMessages = SqlSchema.findAll({
     ),
 });
 
-/** The members a task's move takes along: its Luke, and the agents of the task, in the workspace it leaves. */
+/** The members a task's move takes along: the agents of the task, and its Luke where one was minted, in the workspace it leaves. */
 const findTaskMembers = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, organizationId: Schema.String }),
   Result: ChatMemberRowSchema,
@@ -3121,9 +3107,9 @@ const advanceSequence = SqlSchema.void({
 
 /**
  * The member a moved message's author or mention becomes in the workspace
- * the plan moved to: the plan's planner and its agents minted there again,
- * a person their member there, minted as having left where they are not
- * in it; and anyone else, an agent of another plan or one since deleted,
+ * the plan moved to: the plan's agents minted there again, a person their
+ * member there, minted as having left where they are not in it; and anyone
+ * else, the plan's Luke, an agent of another plan, or one since deleted,
  * minted there as a former member of its kind that has left, so no moved
  * message still names a member of the workspace the plan left, whose
  * deletion would otherwise take the message with it.
@@ -3131,7 +3117,6 @@ const advanceSequence = SqlSchema.void({
 function memberAcross(
   member: ChatMemberRow,
   ofTask: boolean,
-  taskId: string,
   organizationId: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   return Effect.gen(function* () {
@@ -3147,13 +3132,10 @@ function memberAcross(
       }
       return Option.some(minted);
     }
-    const subject = !ofTask
-      ? undefined
-      : member.kind === MEMBER_KIND.LUKE
-        ? ({ kind: MEMBER_KIND.LUKE, taskId } as const)
-        : member.agentId === null
-          ? undefined
-          : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
+    const subject =
+      !ofTask || member.kind !== MEMBER_KIND.AGENT || member.agentId === null
+        ? undefined
+        : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
     if (subject === undefined) return Option.some(yield* mintFormer(organizationId, member, now));
     yield* releaseMember({ memberId: member.id, now });
     return Option.some(yield* mint(organizationId, subject));
@@ -3202,7 +3184,7 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
       kind: subject.kind,
       userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
       agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-      taskId: subject.kind === MEMBER_KIND.LUKE ? subject.taskId : null,
+      taskId: null,
       handle,
       ordinal,
       now,
@@ -3265,7 +3247,7 @@ export function moveTaskChat(taskId: string, organizationId: string): ChatStoreE
         ...ours.map((row) => [row, true] as const),
         ...others.map((row) => [row, false] as const),
       ]) {
-        const moved = yield* memberAcross(member, ofTask, taskId, organizationId);
+        const moved = yield* memberAcross(member, ofTask, organizationId);
         if (Option.isSome(moved)) across.set(member.id, moved.value.id);
       }
       const held = new Set(

@@ -21,12 +21,7 @@ import {
   type WireValue,
 } from "@luke/wire";
 import { Schema } from "effect";
-import {
-  BRAIN_DELEGATE_TOOL,
-  BRAIN_DELEGATION_TOOLS,
-  EVE_DELEGATION_INPUT,
-  EVE_DELEGATION_TOOL,
-} from "../agents/brain-host/brain.js";
+import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { turnRecordOf } from "../agents/turn-record.js";
 import {
   isStoredToolPart,
@@ -59,8 +54,29 @@ import {
 /** The most of a subagent's turns one read of its session takes, the newest: a worker's task is a turn, and each follow-up it was handed another. */
 export const SUBAGENT_JOURNALS = 10;
 
-const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
-const isDelegateInput = Schema.is(BRAIN_DELEGATE_TOOL.storedInputSchema);
+/**
+ * eve's own subagent tool, named by its declared worker's directory, which
+ * transcripts written before every delegation went through \`delegate\` name.
+ */
+const EVE_WORKER_TOOL = "worker";
+
+/** An agent's delegations by every name one was made under: its own \`delegate\`, and eve's \`worker\`. */
+export const DELEGATION_TOOLS: ReadonlySet<string> = new Set([AGENT_TOOL.DELEGATE, EVE_WORKER_TOOL]);
+
+/** What eve's \`worker\` call carries: the message, and the task of the child to continue or steer. */
+const WORKER_CALL_INPUT = Schema.Struct({
+  message: Schema.String,
+  taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
+/** What a \`delegate\` call carries as stored: the job, and the id a call that sends a running worker more adds. */
+const DELEGATE_CALL_INPUT = Schema.Struct({
+  task: Schema.String,
+  taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
+const isWorkerInput = Schema.is(WORKER_CALL_INPUT);
+const isDelegateInput = Schema.is(DELEGATE_CALL_INPUT);
 const isText = Schema.is(Schema.String);
 /** The envelope the record answers a call with that nothing answered (`writer.ts`): its effect is unknown. */
 const isUnknownOutcome = Schema.is(
@@ -72,8 +88,8 @@ type WorkerInput = { readonly message: string; readonly taskId?: string | null }
 
 /**
  * A worker call's input in that shape, whichever name the call was made
- * under: eve's own `worker` carries it as it is, and the brain's
- * `delegate` names the message its task.
+ * under: eve's own `worker` carries it as it is, and `delegate` names
+ * the message its task.
  */
 function workerInputOf(input: StoredToolPart["input"]): WorkerInput | undefined {
   if (isWorkerInput(input)) return input;
@@ -132,7 +148,7 @@ function turnStateOf(turn: StoredTurnRecord): TaskWorkState {
 
 /** Whether a call started a worker or sent one more work, under either name. */
 function isWorkerCall(part: StoredToolPart): boolean {
-  return BRAIN_DELEGATION_TOOLS.has(storedToolName(part));
+  return DELEGATION_TOOLS.has(storedToolName(part));
 }
 
 /**

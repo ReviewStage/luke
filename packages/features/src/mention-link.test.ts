@@ -904,7 +904,7 @@ test("Luke on a task is mentioned by the task's link and `/luke`, read back by e
   }
 });
 
-test("a comment's words ask the Luke and the agents they mention with `@`, each once, and no bare link", () => {
+test("a comment's words ask the agents they mention with `@`, each once, and no bare link or Luke", () => {
   const words = [
     "[@Luke](https://tryluke.dev/acme/plan/plan-1/luke), and",
     "[@Wire it](https://tryluke.dev/acme/plan/plan-1/agent/agent-1) with",
@@ -913,19 +913,18 @@ test("a comment's words ask the Luke and the agents they mention with `@`, each 
     "[this one](https://tryluke.dev/acme/plan/plan-1/agent/agent-3) or `[@code](https://tryluke.dev/acme/plan/plan-1/agent/agent-4)`.",
   ].join(" ");
 
-  assert.deepEqual(askedInWords(words, "plan-1"), { luke: true, agentIds: ["agent-1", "agent-2"] });
-  assert.equal(askedInWords(words, "plan-2").luke, false, "another task's Luke is a reference");
+  assert.deepEqual(askedInWords(words), ["agent-1", "agent-2"]);
 });
 
-test("a comment's words ask Luke though twenty other mentions come before him", () => {
+test("a comment's words ask an agent though twenty other mentions come before it", () => {
   const files = Array.from(
     { length: 20 },
     (_, index) => `[@f${index}.ts](https://github.com/acme/relay/blob/main/f${index}.ts)`,
   ).join(" ");
 
   assert.deepEqual(
-    askedInWords(`${files} [@Luke](https://tryluke.dev/acme/plan/plan-1/luke)`, "plan-1"),
-    { luke: true, agentIds: [] },
+    askedInWords(`${files} [@Wire it](https://tryluke.dev/acme/plan/plan-1/agent/agent-1)`),
+    ["agent-1"],
   );
 });
 

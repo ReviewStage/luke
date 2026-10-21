@@ -27,10 +27,8 @@ import { conversations } from "./storage.js";
  * like the conversation, readable by an operator and kept the developer's
  * own by the account it is keyed by.
  *
- * The conversation a task resumes in is the one row it names, attached once
- * the brain opens it, and a purged conversation leaves the task
- * standing with none. The row cascades with its account, so deleting an
- * account is still one statement, and with its workspace.
+ * The row cascades with its account, so deleting an account is still one
+ * statement, and with its workspace.
  */
 export const task = pgTable(
   "task",
@@ -113,6 +111,12 @@ export const task = pgTable(
     pinnedAt: timestamptz("pinned_at"),
     /** When the task was archived, which the list leaves out unless asked for it; null while it is not. */
     archivedAt: timestamptz("archived_at"),
+    /**
+     * @deprecated The conversation of the task's own Luke, who is gone:
+     * every call and every turn is an agent's now, and nothing writes or
+     * reads this. It stands, with the conversations it names, until a later
+     * migration drops it.
+     */
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),

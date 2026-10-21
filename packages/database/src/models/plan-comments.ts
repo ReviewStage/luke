@@ -65,10 +65,13 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * that workspace (`readPlanCommentFile`).
  */
 
-/** Who writes to a thread: the account it acts for, and whether it is that member, Luke on their turn, or a coding agent on it. */
+/**
+ * Who writes to a thread: the account it acts for, and whether it is that
+ * member or a coding agent on it. Luke is read back from entries written
+ * while a task had one, and nothing writes as him now.
+ */
 export type PlanCommentWriterRef =
   | { readonly actor: typeof PLAN_COMMENT_ACTOR.MEMBER; readonly userId: string }
-  | { readonly actor: typeof PLAN_COMMENT_ACTOR.LUKE; readonly userId: string }
   | {
       readonly actor: typeof PLAN_COMMENT_ACTOR.AGENT;
       readonly userId: string;

@@ -180,19 +180,17 @@ export interface ChatNamed {
   readonly subjects: readonly ChatNamedSubject[];
 }
 
-/** The member a mention link names, as the store finds one: a person by their account, an agent by its id, a Luke by his task. */
+/** The member a mention link names, as the store finds one: a person by their account, an agent by its id. */
 export function subjectOf(mention: ChatMemberMention): ChatMemberSubject {
   switch (mention.kind) {
     case MENTION_KIND.PERSON:
       return { kind: MEMBER_KIND.HUMAN, userId: mention.userId };
     case MENTION_KIND.AGENT:
       return { kind: MEMBER_KIND.AGENT, agentId: mention.agentId };
-    case MENTION_KIND.LUKE:
-      return { kind: MEMBER_KIND.LUKE, taskId: mention.taskId };
   }
 }
 
-/** Whom words name: each person, agent, or Luke a mention link writes, with its label as written, which names it where it names no member. */
+/** Whom words name: each person or agent a mention link writes, with its label as written, which names it where it names no member. */
 export function namedIn(words: string): ChatNamed {
   return {
     subjects: chatMentionsIn(words).members.map(({ mention, label }) => ({

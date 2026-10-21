@@ -27,9 +27,9 @@ import { observedSideband } from "./live-sideband.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
- * one task call, in the task's conversation whichever member of its
- * workspace opened it: the brain answered in process through the ask door under
- * the eve client the caller composed for the account, and the record over the
+ * one call into an agent, in the agent's conversation whichever member of
+ * its workspace started it: the agent answered in process through the ask
+ * door under the eve client the caller composed for the account, and the record over the
  * voice writer with the sideband observed so the writer sees each event once
  * ahead of the service. The writers, the ask record, and the reads all stand
  * on the ambient client, so they hold one client over one database. The
@@ -54,11 +54,11 @@ export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake: it owns the voice row, is metered, and the deployment acts for it at eve's door. */
   readonly accountId: string;
   readonly liveSessionId: string;
-  /** The conversation the spoken asks and the record land in: the task's, or the agent's the call names, under the member who opened it, whoever is calling. */
+  /** The conversation the spoken asks and the record land in: the agent's the call names, under the member who started it, whoever is calling. */
   readonly conversation: ConversationTarget;
-  /** Who answers the call's asks in that conversation: the task's brain, or the agent (`call-backend.ts`). */
+  /** Who answers the call's asks in that conversation: the agent (`call-backend.ts`). */
   readonly backend: CallBackend;
-  /** The developer's time zone, which every spoken ask hands the brain's turn; none reads UTC. */
+  /** The developer's time zone, which every spoken ask hands the agent's turn; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The store writer, which the voice writer writes through. */
   readonly writer: StoreWriter;
@@ -86,11 +86,11 @@ export interface HostedLiveExchangeOptions {
 export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
-  /** The task the call is bound to, whose conversation its asks and its record land in where it names no agent. */
+  /** The task the call is bound to. */
   readonly taskId: string;
-  /** The agent of the task the call speaks into, whose conversation its asks and its record land in instead; none for a call about the task alone. */
-  readonly agentId?: string | undefined;
-  /** The developer's time zone as the connection's opening frame named it, which the brain's turns read the day in; none reads UTC. */
+  /** The agent of the task the call speaks into, whose conversation its asks and its record land in. */
+  readonly agentId: string;
+  /** The developer's time zone as the connection's opening frame named it, which the agent's turns read the day in; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The socket the service attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
