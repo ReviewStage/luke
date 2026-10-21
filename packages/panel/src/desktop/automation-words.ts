@@ -8,7 +8,7 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { dayAndTimeText } from "../tasks/task-time.js";
+import { dayAndTimeText, momentText } from "../tasks/task-time.js";
 
 /** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
 export const READING_AUTOMATIONS = "Reading your automations…";
@@ -49,15 +49,18 @@ export function automationOwnerName(
  * An automation's line under its name in a row with no room for the owner's
  * and the next run's columns, a phone's: when it runs next, where it is set
  * to, before what fires it, so the line's end is cut rather than the time.
- * One turned off or waiting on an event says what fires it alone, its switch
- * saying the rest.
+ * A run due in another year names its year, since the row has no hint to
+ * say it whole as the wide row's column does. One turned off or waiting on an
+ * event says what fires it alone, its switch saying the rest.
  */
 export function automationNarrowLine(
   automation: AutomationSummary,
   trigger: string,
   now: number,
 ): string {
-  return automationNext(automation).kind === AUTOMATION_NEXT.AT
-    ? `${automationNextText(automation, now)} · ${trigger}`
-    : trigger;
+  const next = automationNext(automation);
+  if (next.kind !== AUTOMATION_NEXT.AT) return trigger;
+  const sameYear = new Date(next.at).getFullYear() === new Date(now).getFullYear();
+  const when = sameYear ? automationNextText(automation, now) : `Next ${momentText(next.at)}`;
+  return `${when} · ${trigger}`;
 }
