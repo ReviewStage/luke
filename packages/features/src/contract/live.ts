@@ -27,6 +27,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
+import { automationRunsLiveAnswerSchema, automationsLiveAnswerSchema } from "../automation-live.js";
 import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
@@ -140,6 +141,21 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS }))
     .input(liveReadSchema)
     .output(EffectSchema.flip(taskListLiveAnswerSchema)),
+  automations: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AUTOMATIONS }))
+    .input(
+      EffectSchema.Struct({
+        workspaceId: EffectSchema.String,
+        [LIVE_POLL.QUERY]: pollField,
+        [LIVE_POLL.AFTER]: afterField,
+        [LIVE_USER_QUERY]: userField,
+      }),
+    )
+    .output(EffectSchema.flip(automationsLiveAnswerSchema)),
+  automationRuns: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_RUNS }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(automationRunsLiveAnswerSchema)),
   agentTranscript: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)

@@ -154,7 +154,7 @@ const CONTEXT_OVERFLOW_WORDS: readonly string[] = [
 ];
 
 /** The host's refusal sentences, and a provider's words for a prompt past the window, a failed turn's detail may carry, by the word the wire says for each. */
-const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
+export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
   [
     CODING_AGENT_FAILURE.GITHUB,
     [
