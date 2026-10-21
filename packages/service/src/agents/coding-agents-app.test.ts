@@ -4585,6 +4585,63 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a model change of a Claude Code agent is refused another provider's model, a fast version, or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
+    () =>
+      Effect.gen(function* () {
+        const onEve = yield* startedAgent(fakeEve(), undefined);
+        const onClaudeCode = yield* startedAgent(fakeEve(), undefined);
+        const stored = Option.getOrThrow(
+          yield* readCodingAgent(onClaudeCode.owner, onClaudeCode.agent.id),
+        );
+        yield* Database.use((db) =>
+          db
+            .update(conversations)
+            .set({ runtime: "claude_code" })
+            .where(eq(conversations.id, stored.conversationId)),
+        );
+        const change = (
+          started: typeof onEve,
+          body: { model: string; effort: string; contextWindow?: string },
+        ) =>
+          started.ask(
+            request(AGENT, started.owner, { method: "PATCH", id: started.agent.id, body }),
+          );
+
+        const refused = [
+          yield* change(onClaudeCode, { model: SOL, effort: "low" }),
+          yield* change(onClaudeCode, { model: `${SMALL_WINDOW.model}-fast`, effort: "low" }),
+          yield* change(onClaudeCode, {
+            model: SMALL_WINDOW.model,
+            effort: "low",
+            contextWindow: "standard",
+          }),
+        ];
+        const taken = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "low" }),
+        ).agent;
+        const onEveTaken = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change(onEve, { model: SOL, effort: "low" }),
+        ).agent;
+
+        for (const answered of refused) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.deepEqual(
+          [taken.model, taken.effort, taken.runtime],
+          [SMALL_WINDOW.model, "low", "claude_code"],
+        );
+        assert.deepEqual([onEveTaken.model, onEveTaken.runtime], [SOL, undefined]);
+      }),
+  );
+
+  it.effect(
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
       Effect.gen(function* () {

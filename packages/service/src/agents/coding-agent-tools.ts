@@ -8,6 +8,7 @@ import {
   continuationsOf,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
+  nativeRuntimesOfReached,
   pinCodingAgent,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
@@ -41,6 +42,11 @@ import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
+  runtimeChoiceRefusal,
+  runtimeChoiceRefusalWords,
+  runtimeModels,
+} from "@luke/features/agent-runtime-models";
+import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -50,6 +56,7 @@ import {
   type CodingAgentStatus,
   contextWindowSchema,
   disabledServersSchema,
+  type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
 import {
   GITHUB_ACCESS,
@@ -110,6 +117,7 @@ import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
+import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   accountModelChoices,
   placeOfAgent,
@@ -452,6 +460,7 @@ export const START_CODING_AGENT_REFUSAL = {
 /** Why a list of the models answered none, in words the model can act on. */
 export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
+  UNREADABLE: `Not listed: name an agent, if any, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
 } as const;
 
 /** Whether the caller may write to the agent under the plan's policy (`agent-reach.ts`'s `writesToAgent`), its payer read now. */
@@ -522,6 +531,19 @@ const AGENT_ID = describeWire(
 );
 
 const READ_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
+
+/** A list of models names, at most, the agent whose change it is for, whose runtime narrows it. */
+const LIST_MODELS_INPUT = Schema.Struct({
+  agentId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `An agent of your workspace, by the id ${AGENT_TOOL.LIST_AGENTS} answered, to list what it ` +
+        `may move to with ${AGENT_TOOL.UPDATE_AGENT}; leave it out for what a start takes.`,
+    ),
+  ),
+});
+
+const readListModelsAsked = Schema.decodeUnknownResult(LIST_MODELS_INPUT);
 
 /** A coding agent's read names the agent and, at most, how long a tail it wants. */
 const CODER_READ_AGENT_INPUT = Schema.Struct({
@@ -830,8 +852,10 @@ export const LIST_MODELS_TOOL = {
     "model takes, the model's name to say it by, and the efforts it lists, one of which its " +
     "effort takes; and the member's default model and effort, which a start naming neither runs " +
     "on, and whether it is still offered. Call it before you name a model or an effort to " +
-    `${AGENT_TOOL.START_AGENT}, such as one the developer named in their own words.`,
-  inputSchema: Schema.Struct({}),
+    `${AGENT_TOOL.START_AGENT}, such as one the developer named in their own words. Name an ` +
+    `agentId to list instead what that agent may move to with ${AGENT_TOOL.UPDATE_AGENT}: an ` +
+    "agent on Claude Code runs Claude models alone, and no fast version.",
+  inputSchema: LIST_MODELS_INPUT,
 } as const;
 
 export const UPDATE_TASK_TOOL = {
@@ -1237,6 +1261,12 @@ export const callerWorkspace = (caller: AgentCaller) =>
     : agentWorkspace(caller.agent.userId, caller.agent);
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
+/** The provider's own harness the agent runs on; none on eve. */
+const agentRuntimeOf = (agent: CodingAgent) =>
+  Effect.map(nativeRuntimesOfReached([agent.conversationId]), (runtimes) =>
+    runtimes.get(agent.conversationId),
+  );
+
 const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
   Effect.gen(function* () {
     const workspace = yield* callerWorkspace(caller);
@@ -2384,6 +2414,14 @@ export function runUpdateAgent(
         model === undefined || effort === undefined
           ? undefined
           : { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) };
+      // A provider's own harness takes only what it runs (`agent-runtime-models.ts`).
+      const runtime = asked === undefined ? undefined : yield* agentRuntimeOf(found.value.agent);
+      const refused = asked === undefined ? undefined : runtimeChoiceRefusal(runtime, asked);
+      if (refused !== undefined) {
+        return agentToolRejected(
+          `${UPDATE_CHOICE_LEAD}: ${runtimeChoiceRefusalWords(runtime, refused)}`,
+        );
+      }
       const accepted = asked === undefined ? undefined : validateModelChoice(offered, asked);
       if (asked !== undefined && accepted !== undefined && Result.isFailure(accepted)) {
         return agentToolRejected(choiceRefusal(asked, offered, UPDATE_CHOICE_LEAD));
@@ -2420,6 +2458,8 @@ export function runUpdateAgent(
         ),
       );
       if (Result.isFailure(written)) return agentToolRejected(written.failure);
+      // A native agent's runner that runs is handed the change now; eve reads the row at its next step.
+      if (choice !== undefined) yield* runnerChoiceApplied(found.value.agent);
       // The agent as it now stands, its archive among it, which a change left unwritten does not answer.
       const now = Option.isSome(written.success)
         ? written.success
@@ -2524,25 +2564,42 @@ export function runListTasks(
  */
 export function runListModels(
   call: CodingAgentCall,
-  _input: UnparsedWireValue,
+  input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  return Effect.match(accountModelChoices(callerUserId(call.caller)), {
-    onFailure: () => agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE),
-    onSuccess: ({ offered, defaultChoice }) => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      models: offered.map((model) => ({
-        id: model.id,
-        name: modelLabel(model.id, offered),
-        efforts: [...model.efforts],
-      })),
-      default: {
-        model: defaultChoice.model,
-        modelName: modelLabel(defaultChoice.model, offered),
-        effort: defaultChoice.effort,
-        offered: Result.isSuccess(validateModelChoice(offered, defaultChoice)),
-      },
+  const asked = readListModelsAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(LIST_MODELS_REFUSAL.UNREADABLE));
+  }
+  const { agentId } = asked.success;
+  const { caller } = call;
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      // The agent named, whose runtime narrows the list to what it may move to.
+      let runtime: NativeCodingAgentRuntime | undefined;
+      if (agentId !== undefined) {
+        const found = yield* workspaceAgentOf(caller, agentId);
+        if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+        runtime = yield* agentRuntimeOf(found.value.agent);
+      }
+      const choices = yield* Effect.result(accountModelChoices(callerUserId(caller)));
+      if (Result.isFailure(choices)) return agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE);
+      const { offered, defaultChoice } = choices.success;
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        models: runtimeModels(offered, runtime).map((model) => ({
+          id: model.id,
+          name: modelLabel(model.id, offered),
+          efforts: [...model.efforts],
+        })),
+        default: {
+          model: defaultChoice.model,
+          modelName: modelLabel(defaultChoice.model, offered),
+          effort: defaultChoice.effort,
+          offered: Result.isSuccess(validateModelChoice(offered, defaultChoice)),
+        },
+      };
     }),
-  });
+  );
 }
 
 /** A page's HTML as a read answers it, and how many characters of it were left out. */

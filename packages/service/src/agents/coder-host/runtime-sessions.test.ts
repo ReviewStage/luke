@@ -46,7 +46,14 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
-import { NativeAgentSessions, routedSessions, sessionsRouter } from "./runtime-sessions.js";
+import {
+  NativeAgentSessions,
+  type NativeSessions,
+  RUNNER_CHOICE,
+  routedSessions,
+  runnerChoiceApplied,
+  sessionsRouter,
+} from "./runtime-sessions.js";
 import { startCodingAgent } from "./start.js";
 import { STEER_OUTCOME, steerCodingAgent } from "./steer.js";
 import { type EveReach, eveFor, stoppedTurn } from "./stop.js";
@@ -76,7 +83,12 @@ function recording(sessionPrefix: string) {
   const calls: string[] = [];
   const messages: EveMessage[] = [];
   const answers = { open: EVE_SEND_OUTCOME.ACCEPTED as string, status: 0 };
-  const sessions: AgentSessions = {
+  const sessions: NativeSessions = {
+    retune: (sessionId, conversationId) =>
+      Effect.sync(() => {
+        calls.push(`retune:${sessionId}:${conversationId}`);
+        return RUNNER_CHOICE.WRITTEN;
+      }),
     open: (message) =>
       Effect.sync(() => {
         calls.push(`open:${message.conversationId}`);
@@ -212,6 +224,47 @@ const heard = (each: Recording) => each.calls.map((call) => call.split(":")[0]);
 it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a coding agent's sessions answered by its runtime",
   (it) => {
+    it.effect(
+      "a change of model reaches a Claude Code agent's runner through its harness, acting for its starter, and nothing of an eve agent's",
+      () =>
+        Effect.gen(function* () {
+          const { owner, teammate, taskId } = yield* openTeam;
+          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
+          const { eve, claudeCode, actingFor, native } = runtimes();
+          const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
+            Effect.provide(native),
+          );
+          const eveOpened = yield* sessions.open(messageTo(onEve));
+          const nativeOpened = yield* sessions.open(messageTo(onClaudeCode));
+          assert.ok(eveOpened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+          assert.ok(nativeOpened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+          yield* claimRuntimeSession(
+            { userId: owner, conversationId: onEve.conversationId },
+            eveOpened.sessionId,
+            new Date(0),
+          );
+          actingFor.length = 0;
+
+          const onEveApplied = yield* runnerChoiceApplied(onEve).pipe(Effect.provide(native));
+          const onClaudeCodeApplied = yield* runnerChoiceApplied(onClaudeCode).pipe(
+            Effect.provide(native),
+          );
+          // Where this function reaches no harness, the next message carries the change instead.
+          const unreached = yield* runnerChoiceApplied(onClaudeCode);
+
+          assert.deepEqual(
+            [onEveApplied, onClaudeCodeApplied, unreached],
+            [RUNNER_CHOICE.NOT_LIVE, RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE],
+          );
+          assert.deepEqual(heard(eve), ["open"]);
+          assert.deepEqual(claudeCode.calls.slice(1), [
+            `retune:${nativeOpened.sessionId}:${onClaudeCode.conversationId}`,
+          ]);
+          assert.deepEqual(actingFor, [owner]);
+        }),
+    );
+
     it.effect(
       "an eve agent's every call reaches eve, handed what it was handed, and a Claude Code agent's reaches the harness acting for its starter, whoever calls",
       () =>

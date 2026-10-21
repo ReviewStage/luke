@@ -50,7 +50,7 @@ import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-cre
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { type AgentSessions, PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
+import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -61,6 +61,7 @@ import {
   type RunnerSessionsOptions,
   runnerSessions,
 } from "./runner-sessions.js";
+import type { NativeSessions } from "./runtime-sessions.js";
 
 /** What the sessions reach: the shared launch's services, OpenAI's token endpoint among them. */
 export type CodexServices = RunnerServices;
@@ -197,5 +198,5 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 /** The sessions for one account, over the calling fiber's services. */
 export const codexSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: CodexSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, CodexServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, CodexServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(codex(options), options);

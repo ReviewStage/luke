@@ -84,7 +84,6 @@ import {
 } from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
-  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
@@ -117,6 +116,7 @@ import {
   openWorkingFolder,
 } from "./checkout.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -476,7 +476,7 @@ export const runnerSessions = <
 >(
   harness: RunnerHarness<E>,
   options: RunnerSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, RunnerServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<RunnerServices>();
     const api = yield* vercelSandboxApi(deploymentOidcToken);
@@ -604,7 +604,7 @@ export const runnerSessions = <
         status: failedStatus(failure),
       });
 
-    const sessions: AgentSessions<Turn> = {
+    const sessions: NativeSessions<Turn> = {
       open: (message) =>
         Effect.gen(function* () {
           const agent = yield* agentOf(message.conversationId);
@@ -752,6 +752,31 @@ export const runnerSessions = <
 
       // The runner posts its events to Luke itself, so there is no stream of a session's to follow here.
       stream: () => Stream.empty,
+
+      // A change of model or effort goes to a runner that runs as the harness's `model` lines alone,
+      // which it takes at its next model call; a runner not up takes it at the next message's launch.
+      retune: (sessionId, conversationId) =>
+        Effect.gen(function* () {
+          const found = yield* sandboxOf(api, sessionId);
+          if (Option.isNone(found)) return RUNNER_CHOICE.NOT_LIVE;
+          const agent = yield* agentOf(conversationId);
+          if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return RUNNER_CHOICE.NOT_LIVE;
+          const live = yield* liveRunner(api, found.value);
+          if (live === undefined) return RUNNER_CHOICE.NOT_LIVE;
+          const ahead = yield* harness.ahead(agent, live.stamp);
+          const model = ahead.lines.filter((each) => each.type === INPUT_LINE.MODEL);
+          if (model.length === 0) return RUNNER_CHOICE.NOT_LIVE;
+          yield* api.writeStdin(live.sandboxSessionId, live.commandId, model.map(line).join(""));
+          return RUNNER_CHOICE.WRITTEN;
+        }).pipe(
+          Effect.catch((failure) =>
+            Effect.as(
+              Effect.logWarning(`A ${harness.name} model change failed: ${failure._tag}`),
+              RUNNER_CHOICE.FAILED,
+            ),
+          ),
+          Effect.provideContext(context),
+        ),
     };
     return sessions;
   });

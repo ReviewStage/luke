@@ -15,6 +15,7 @@ import {
   FAST_WORD,
   fastRestingNote,
   longWindowNote,
+  type ModelChoiceRead,
   modelLabel,
   offeredModels,
   readModelChoice,
@@ -116,6 +117,8 @@ export function ModelMenu(props: {
   onClose: () => void;
   /** Focus left the menu for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
+  /** Whether the Fast switch is pinned under the list: not for an agent whose harness runs no fast version. */
+  offersFast?: boolean | undefined;
   /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
   footNote?: string | undefined;
   /** Rows pinned after the model's own, each a press of its own: Start's New voice chat. */
@@ -176,6 +179,26 @@ export function ModelMenu(props: {
     ];
   };
 
+  /** The Fast switch, where the menu offers one. */
+  const fastRow = (read: ModelChoiceRead, chosen: ModelChoice): FootRow[] => {
+    if (props.offersFast === false || models === undefined) return [];
+    return [
+      {
+        id: FOOT_ROW.FAST,
+        label: FAST_WORD,
+        toggle: {
+          on: read.fast,
+          onToggle: () => {
+            if (offered === undefined) return;
+            const next = choiceAt(choiceModelId(offered, !read.fast), chosen.effort);
+            if (next !== undefined) onChoose(next);
+          },
+        },
+        disabled: fastRestingNote(read.base, offered, models),
+      },
+    ];
+  };
+
   const foot: FootRow[] | undefined =
     chosen === undefined || read === undefined || models === undefined
       ? undefined
@@ -195,19 +218,7 @@ export function ModelMenu(props: {
             },
           },
           ...contextRow(chosen, models),
-          {
-            id: FOOT_ROW.FAST,
-            label: FAST_WORD,
-            toggle: {
-              on: read.fast,
-              onToggle: () => {
-                if (offered === undefined) return;
-                const next = choiceAt(choiceModelId(offered, !read.fast), chosen.effort);
-                if (next !== undefined) onChoose(next);
-              },
-            },
-            disabled: fastRestingNote(read.base, offered, models),
-          },
+          ...fastRow(read, chosen),
         ];
 
   return (
