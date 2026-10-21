@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -283,7 +283,7 @@ function sharedTab(me: string, tab: MainTab | undefined = undefined): TasksContr
     tasks: [SHARED_TASK, OTHER],
     activeTaskId: SHARED_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: SHARED_TASK },
-    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.CHAT], tab },
+    mainTabs: { ...base.mainTabs, tabs: tab === undefined ? [] : [tab], tab },
   });
 }
 
@@ -371,7 +371,6 @@ test("Start and the task's ⋯ stand in the task's toolbar whichever tab its col
   };
 
   assert.deepEqual(drawn(undefined), ["Start a coding agent", "Task actions"]);
-  assert.deepEqual(drawn(MAIN_TAB.CHAT), ["Start a coding agent", "Task actions"]);
 });
 
 /** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */

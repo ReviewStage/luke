@@ -77,7 +77,7 @@ import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
@@ -579,7 +579,7 @@ function PlanDocument({
       case TOOL_TARGET.INBOX:
         return openPanelTab(SIDE_PANEL_TAB.INBOX);
       case TOOL_TARGET.CHAT:
-        return chatOn ? openColumnTab(MAIN_TAB.CHAT) : undefined;
+        return chatOn ? openPanelTab(SIDE_PANEL_TAB.CHAT) : undefined;
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -949,7 +949,6 @@ function PlanDocument({
                             }}
                             keys={tasks.shown && !sideFocused}
                             shown={tasks.shown}
-                            chat={chatOn && tasks.chatView.available}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
                             onOpenOnMac={terminalDoors.onOpenOnMac}
                             onNewVoiceChat={tasks.onNewVoiceChat}
@@ -1027,16 +1026,7 @@ function PlanDocument({
                               }
                             />
                           ) : null}
-                          {tab === MAIN_TAB.CHAT && chatOn ? (
-                            <section
-                              className="desktop-task-chat"
-                              role="tabpanel"
-                              aria-label="Chat"
-                            >
-                              <TaskChatTab tasks={tasks} taskId={task.id} />
-                            </section>
-                          ) : null}
-                          {tab === undefined || tab === MAIN_TAB.CHAT ? null : (
+                          {tab === undefined ? null : (
                             <CallCaptions.Provider value={captions}>
                               <AgentPane
                                 call={tasks.calls}
@@ -1099,6 +1089,13 @@ function PlanDocument({
                           waiting: inbox.board.open.length,
                           drafted: inbox.drafted,
                         }}
+                        chat={
+                          chatOn && tasks.chatView.available ? (
+                            <section className="desktop-task-chat" aria-label="Chat">
+                              <TaskChatTab tasks={tasks} taskId={task.id} />
+                            </section>
+                          ) : undefined
+                        }
                       />
                     ) : null}
                     {stranded.dialog}

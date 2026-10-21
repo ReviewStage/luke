@@ -75,6 +75,44 @@ function launch(stood: Stood) {
   };
 }
 
+test("the Chat stands opened on a task with no channel yet and once its channel is held, never while Chat is off, and again as it was left once Chat is back on", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ chat }: { chat: boolean | undefined }) {
+    control = useSidePanel(
+      undefined,
+      { id: TASK, holds: { ...usedTask(TASK).holds, [SIDE_PANEL_TAB.CHAT]: chat } },
+      [],
+      [],
+      [],
+      [],
+      [],
+    );
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (chat: boolean | undefined) =>
+    act(() => root.render(createElement(Probe, { chat })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  // Chat on and no channel yet: the Chat stands only once opened, on its empty state.
+  render(undefined);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "no channel opens no Chat by itself");
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CHAT));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(false);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat off draws no Chat tab");
+  assert.notEqual(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.ok(panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat back on draws it again");
+});
+
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
@@ -457,6 +495,7 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
     SIDE_PANEL_TAB.PLAN,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
+    SIDE_PANEL_TAB.CHAT,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -553,7 +592,13 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.COMMENTS],
+    [
+      SIDE_PANEL_TAB.PLAN,
+      SIDE_PANEL_TAB.BOARD,
+      SIDE_PANEL_TAB.CODE,
+      SIDE_PANEL_TAB.COMMENTS,
+      SIDE_PANEL_TAB.CHAT,
+    ],
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
