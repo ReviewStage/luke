@@ -5,6 +5,7 @@
  * (`App` is where session replay starts) and the one that runs Luke's
  * avatar, so neither the voice window's nor the call window's entry mounts
  * either. The avatar's voice plays beside `App`, so no tab it shows cuts it.
+ * It is also the one window whose page Sentry watches for freezes.
  */
 
 import { App } from "@luke/panel/app";
@@ -27,6 +28,8 @@ mountWindow(
     <PanelAvatarVoice />
     <App />
   </>,
+  // The panel is the window a person waits on, so it alone reports a freeze.
+  { reportsFreezes: true },
 );
 
 // The avatar is subscribed to before anything is drawn, because main hands

@@ -11,7 +11,14 @@ import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/codi
 import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import {
+  installPanelSpanRecorder,
+  jsonBytes,
+  PANEL_SPAN,
+  PANEL_SPAN_ATTRIBUTE,
+  type PanelSpan,
+} from "../panel-spans.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import {
   type AgentTranscriptControl,
@@ -37,6 +44,7 @@ const OTHER: CodingAgentTranscriptKey = { ...AGENT, callId: "call-7" };
 let root: Root | undefined;
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -246,4 +254,63 @@ test("an agent that ended stays followed while its tab is shown, so the lines a 
   );
   assert.equal(seen.current?.pageStatus, CODING_AGENT_STATUS.COMPLETED);
   assert.deepEqual(asked, ["follow:own"], "the ended agent's stream is never let go while shown");
+});
+
+test("a follow is timed to its first page drawn and to the page that caught it up, by what they held", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(1_000_000);
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  const { follower, push } = scriptedFollower();
+  const { draw } = drawn(follower);
+
+  draw(true);
+  vi.setSystemTime(1_000_400);
+  const first = pageOf("m-1", "Reading the invites.");
+  push(AGENT, first);
+  vi.setSystemTime(1_000_900);
+  const caughtUp: CodingAgentMessagesAnswerView = { ...pageOf("m-1", "x"), messages: [] };
+  push(AGENT, caughtUp);
+  push(AGENT, pageOf("m-2", "Writing the expiry."));
+  uninstall();
+
+  assert.deepEqual(
+    spans.map((span) => ({
+      name: span.name,
+      waited: span.endedAt - span.startedAt,
+      attributes: span.attributes(),
+    })),
+    [
+      {
+        name: PANEL_SPAN.TRANSCRIPT_FIRST_PAINT,
+        waited: 400,
+        attributes: {
+          [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 1,
+          [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(first),
+        },
+      },
+      {
+        name: PANEL_SPAN.TRANSCRIPT_CAUGHT_UP,
+        waited: 900,
+        attributes: {
+          [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 1,
+          [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(caughtUp),
+        },
+      },
+    ],
+  );
+});
+
+test("a follow let go before its first page landed is timed by no span", () => {
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  const { follower, push } = scriptedFollower();
+  const { draw } = drawn(follower);
+
+  draw(true);
+  draw(false);
+  push(AGENT, pageOf("m-1", "Not heard."));
+  uninstall();
+
+  assert.deepEqual(spans, []);
 });

@@ -65,6 +65,12 @@ import {
   useWindowHistory,
   type WindowHistoryLists,
 } from "../navigation-history.js";
+import {
+  installPanelSpanRecorder,
+  PANEL_SPAN,
+  PANEL_SPAN_ATTRIBUTE,
+  type PanelSpan,
+} from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
@@ -3117,4 +3123,50 @@ test("an agent's Call press opens a call into it at once, and over another agent
     { agentId: AGENT_ID },
     { agentId: AGENT_ID },
   ]);
+});
+
+test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(2_000_000);
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  let opens = true;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(opens) },
+  );
+
+  act(() => tab.control().onSelect(TASK.id));
+  vi.setSystemTime(2_000_650);
+  tab.stand({ tasks: OPEN });
+
+  // The task open already is no wait; another refused is no span.
+  act(() => tab.control().onSelect(TASK.id));
+  opens = false;
+  act(() => tab.control().onSelect(OTHER_TASK_ID));
+  await act(async () => undefined);
+  tab.stand({
+    tasks: {
+      ...OPEN,
+      activeTaskId: OTHER_TASK_ID,
+      document: { status: TASKS_READ.READY, task: { ...TASK, id: OTHER_TASK_ID } },
+    },
+  });
+  uninstall();
+  vi.useRealTimers();
+
+  assert.deepEqual(
+    spans.map((span) => ({
+      name: span.name,
+      waited: span.endedAt - span.startedAt,
+      attributes: span.attributes(),
+    })),
+    [
+      {
+        name: PANEL_SPAN.TASK_OPEN,
+        waited: 650,
+        attributes: { [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: TASK.document.body.length },
+      },
+    ],
+  );
 });

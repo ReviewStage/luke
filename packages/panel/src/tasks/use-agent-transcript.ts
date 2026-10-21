@@ -16,6 +16,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
+import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
 
 /**
@@ -32,7 +33,8 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * ring draws, and when its run and each worker it waits on began, which the
  * working line and a subagent's row count from. A page that says the
  * transcript could not be read says so, with Try again, which follows it
- * anew; the messages held stand meanwhile.
+ * anew; the messages held stand meanwhile. Each follow is timed to its
+ * first page drawn and to the page that caught it up (`panel-spans.ts`).
  */
 
 /** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
@@ -213,6 +215,36 @@ function joined(was: Held, page: CodingAgentMessagesAnswerView): Held {
   };
 }
 
+/**
+ * One follow, as it is timed: when it opened, how many readable pages it
+ * has heard and the last of them, and which of its two spans ended.
+ */
+interface FollowTiming {
+  readonly startedAt: number;
+  heard: number;
+  page: CodingAgentMessagesAnswerView | undefined;
+  painted: boolean;
+  caughtUp: boolean;
+}
+
+/** Ends one of a follow's spans now, measured by the messages held and the page that ended it. */
+function endFollowSpan(
+  name: typeof PANEL_SPAN.TRANSCRIPT_FIRST_PAINT | typeof PANEL_SPAN.TRANSCRIPT_CAUGHT_UP,
+  timing: FollowTiming,
+  messageCount: number,
+): void {
+  const { page } = timing;
+  recordPanelSpan({
+    name,
+    startedAt: timing.startedAt,
+    endedAt: Date.now(),
+    attributes: () => ({
+      [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: messageCount,
+      [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: page === undefined ? 0 : jsonBytes(page),
+    }),
+  });
+}
+
 export function useAgentTranscript(input: {
   /** Which transcript: the agent's own, one of its workers' by the call that started it, or a task's planning worker's. */
   transcript: CodingAgentTranscriptKey;
@@ -234,17 +266,50 @@ export function useAgentTranscript(input: {
   const [attempt, setAttempt] = useState(0);
   const latest = useRef({ follower, onStatus, onTitle });
   latest.current = { follower, onStatus, onTitle };
+  // The follow standing, as it is timed; none while the tab follows nothing.
+  const timing = useRef<FollowTiming | undefined>(undefined);
 
   useEffect(() => {
     if (!shown) return;
     const { agentId } = transcript;
-    return latest.current.follower(transcript, (page) => {
+    const timed: FollowTiming = {
+      startedAt: Date.now(),
+      heard: 0,
+      page: undefined,
+      painted: false,
+      caughtUp: false,
+    };
+    timing.current = timed;
+    const stop = latest.current.follower(transcript, (page) => {
       setHeld((was) => (sameTranscript(was.transcript, transcript) ? joined(was, page) : was));
       if ("failure" in page) return;
+      timed.heard += 1;
+      timed.page = page;
       latest.current.onStatus(agentId, page);
       latest.current.onTitle(agentId, page.title);
     });
+    return () => {
+      if (timing.current === timed) timing.current = undefined;
+      stop();
+    };
   }, [shown, transcript, attempt]);
+
+  // Note that a span ends once the page that ends it has been drawn, since
+  // this runs after the commit that joined it, and never for a follow let go
+  // before its page landed.
+  const messageCount = held.messages.length;
+  useEffect(() => {
+    const timed = timing.current;
+    if (timed === undefined || timed.heard === 0) return;
+    if (!timed.painted) {
+      timed.painted = true;
+      endFollowSpan(PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, timed, messageCount);
+    }
+    if (held.caughtUp && !timed.caughtUp) {
+      timed.caughtUp = true;
+      endFollowSpan(PANEL_SPAN.TRANSCRIPT_CAUGHT_UP, timed, messageCount);
+    }
+  }, [held.pages, held.caughtUp, messageCount]);
 
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));
