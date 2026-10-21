@@ -22,6 +22,7 @@ import {
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
+  type CodingAgentPartView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
@@ -43,6 +44,7 @@ import {
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
   codingAgentPageParamsSchema,
+  codingAgentPartParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
   codingAgentPullRequestActionParamsSchema,
@@ -148,6 +150,7 @@ export type CodingAgentClient = Pick<
   | "start"
   | "startFrom"
   | "messagesNow"
+  | "agentPart"
   | "agentTranscriptLive"
   | "message"
   | "choose"
@@ -544,7 +547,8 @@ function composed(
           ? followTranscript(
               transcripts,
               key,
-              (after) => asked(client.messagesNow(key.agentId, after, key.callId)),
+              // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens.
+              (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
               tell,
             )
           : tell(UNANSWERED);
@@ -823,6 +827,16 @@ function composed(
         );
         const answer = yield* asked(client.agentPicture(agentId, pictureId, callId));
         return carried<CodingAgentInboxAttachmentView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PART]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, messageId, index, callId } = yield* read(
+          codingAgentPartParamsSchema,
+          params,
+          "reading a part of an agent's transcript names the agent, the message, and the part",
+        );
+        const answer = yield* asked(client.agentPart(agentId, messageId, index, callId));
+        return carried<CodingAgentPartView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>
       Effect.gen(function* () {

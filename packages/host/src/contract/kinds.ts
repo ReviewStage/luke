@@ -115,6 +115,8 @@ export const AGENT_ACT_KIND = {
    * from the start and each later one what moved past the last.
    */
   CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
+  /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
+  CODING_AGENTS_PART: "codingAgents.part",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",

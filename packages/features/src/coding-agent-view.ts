@@ -13,6 +13,7 @@ import {
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPartAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -642,6 +643,21 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
+
+/** One part of a message of an agent's transcript, or one of its workers' where `callId` names the delegation call that started it, by the message's id and the part's index among its parts: what the page carried cut (`cutParts`). */
+export const codingAgentPartParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+  index: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  callId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentPartParams = typeof codingAgentPartParamsSchema.Type;
+
+/** The part whole, as the window hears it, or why there is none. */
+export const codingAgentPartViewSchema = EffectSchema.Union([codingAgentPartAnswerSchema, failed]);
+
+export type CodingAgentPartView = typeof codingAgentPartViewSchema.Type;
 
 /** One picture a chat message carries, as the window asks it: the workspace, the message, and the attachment its image block names. */
 export const codingAgentChatAttachmentParamsSchema = EffectSchema.Struct({
