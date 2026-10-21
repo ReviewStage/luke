@@ -273,12 +273,13 @@ export function CloudBrowserPane({
       if (!yours) return;
       const chord = {
         key: event.key,
+        meta: event.metaKey,
         shift: event.shiftKey,
         alt: event.altKey,
         control: event.ctrlKey,
       };
-      // A Command chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
-      if (event.metaKey && chordIsWindows(chord)) return;
+      // A chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
+      if (chordIsWindows(chord)) return;
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "v")
         return;
       event.preventDefault();

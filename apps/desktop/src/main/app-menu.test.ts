@@ -44,6 +44,9 @@ describe("the menu bar's gate", () => {
       "-",
       "Back",
       "Forward",
+      "-",
+      "Next Recent Tab",
+      "Previous Recent Tab",
     ]);
   });
 
@@ -53,7 +56,16 @@ describe("the menu bar's gate", () => {
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Automations", "-", "Back", "Forward"]);
+    assert.deepEqual(labelsOf(withoutInbox, "Go"), [
+      "Home",
+      "Automations",
+      "-",
+      "Back",
+      "Forward",
+      "-",
+      "Next Recent Tab",
+      "Previous Recent Tab",
+    ]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
@@ -63,7 +75,13 @@ describe("the menu bar's gate", () => {
         command !== APP_COMMAND.INBOX &&
         command !== APP_COMMAND.AUTOMATIONS,
     );
-    assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);
+    assert.deepEqual(labelsOf(withoutPlaces, "Go"), [
+      "Back",
+      "Forward",
+      "-",
+      "Next Recent Tab",
+      "Previous Recent Tab",
+    ]);
   });
 });
 

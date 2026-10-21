@@ -328,8 +328,14 @@ export function createBrowserViews(dependencies: BrowserViewsDependencies): Brow
     // Note that the panel is handed the keyboard with the chord, because
     // what a chord opens, ⌘K's palette among them, takes its keys there.
     contents.on("before-input-event", (event, input) => {
-      if (input.type !== "keyDown" || !input.meta) return;
-      const chord = { key: input.key, shift: input.shift, alt: input.alt, control: input.control };
+      if (input.type !== "keyDown") return;
+      const chord = {
+        key: input.key,
+        meta: input.meta,
+        shift: input.shift,
+        alt: input.alt,
+        control: input.control,
+      };
       if (!chordIsWindows(chord) || sender.isDestroyed()) return;
       event.preventDefault();
       sender.focus();

@@ -1,7 +1,8 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
+ * Every shortcut but Escape, the Inbox's J and K, and the tab switcher's
+ * ⌃Tab holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
  * frontmost. J
  * and K are a letter alone, as Linear's and Superhuman's are, and R, which
@@ -94,6 +95,8 @@ export const APP_COMMAND = {
   SHOW_ARCHIVED_TASKS: "show-archived-tasks",
   HIDE_ARCHIVED_TASKS: "hide-archived-tasks",
   INSERT_PICTURE: "insert-picture",
+  NEXT_RECENT_TAB: "next-recent-tab",
+  PREVIOUS_RECENT_TAB: "previous-recent-tab",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -215,6 +218,8 @@ export const SHORTCUT_KEY = {
   // the Mac's own Return mark, centred on the capitals as ⌘ is, and has no ↩:
   // a ↩ is borrowed from another face and sits off the line beside it.
   ENTER: { accelerator: "Enter", glyph: "⏎", key: "Enter", code: "Enter" },
+  // ⌃Tab and ⌃⇧Tab are the tab switcher's own; a bare Tab moves focus, as everywhere.
+  TAB: { accelerator: "Tab", glyph: "⇥", key: "Tab", code: "Tab" },
   ESCAPE: { accelerator: "Escape", glyph: "Esc", key: "Escape", code: "Escape" },
   OPEN_BRACKET: { accelerator: "[", glyph: "[", key: "[", code: "BracketLeft" },
   CLOSE_BRACKET: { accelerator: "]", glyph: "]", key: "]", code: "BracketRight" },
@@ -262,8 +267,12 @@ function modifierGlyph(name: string): string {
  * `plain` chord is a letter alone too, which the keymap answers itself, but
  * only where the press is not typing into a field, and which no menu item
  * carries, since a menu's bare key would take the letter from every field.
- * Control joins only the system's own ⌃⌘F, since a Control chord is
- * otherwise a text field's caret move.
+ * Control joins only the system's own ⌃⌘F, and the `switching` chords,
+ * since a Control chord is otherwise a text field's caret move. A
+ * `switching` chord is Control and its key without Command, ⌃Tab as every
+ * browser's and editor's tab switcher has it: the switcher answers it
+ * itself, from the press to the ⌃'s release (`tab-switcher.tsx` in
+ * `@luke/panel`), so the keymap leaves it, as it leaves the layered Escape.
  */
 export interface ShortcutChord {
   key: ShortcutKey;
@@ -272,11 +281,12 @@ export interface ShortcutChord {
   shift?: true;
   bare?: true;
   plain?: true;
+  switching?: true;
 }
 
-/** Whether a chord is pressed without Command: the window's layered Escape, or a letter alone. */
+/** Whether a chord is pressed without Command: the window's layered Escape, a letter alone, or the tab switcher's ⌃Tab. */
 function commandless(chord: ShortcutChord): boolean {
-  return chord.bare === true || chord.plain === true;
+  return chord.bare === true || chord.plain === true || chord.switching === true;
 }
 
 /** One command as the menu, the hover, and the shortcuts page name it, and the chord that runs it. */
@@ -303,7 +313,8 @@ export interface AppShortcut {
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
- * Safari have them, ⇧⌘H for home as Finder has it, ⇧⌘⏎ to fill the window
+ * Safari have them, ⌃Tab and ⌃⇧Tab through the tabs used last as VS Code
+ * and Chrome have them, ⇧⌘H for home as Finder has it, ⇧⌘⏎ to fill the window
  * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
@@ -482,6 +493,17 @@ export const APP_SHORTCUTS = {
     label: "Insert image",
     chord: { key: SHORTCUT_KEY.I, option: true },
   },
+  // Note that ⌃Tab is a desktop app's alone, because a browser keeps it for its own tabs.
+  [APP_COMMAND.NEXT_RECENT_TAB]: {
+    label: "Next recent tab",
+    chord: { key: SHORTCUT_KEY.TAB, control: true, switching: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.PREVIOUS_RECENT_TAB]: {
+    label: "Previous recent tab",
+    chord: { key: SHORTCUT_KEY.TAB, control: true, shift: true, switching: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -556,6 +578,8 @@ export const APP_SHORTCUT_GROUPS = [
     commands: [
       APP_COMMAND.BACK,
       APP_COMMAND.FORWARD,
+      APP_COMMAND.NEXT_RECENT_TAB,
+      APP_COMMAND.PREVIOUS_RECENT_TAB,
       APP_COMMAND.PREVIOUS_TASK,
       APP_COMMAND.NEXT_TASK,
     ],
@@ -883,6 +907,11 @@ export function chaptersKeyFor(event: ShortcutKeyPress): ChaptersKey | undefined
 /** Whether the keymap leaves the chord to the window's own Escape, which steps back a layer at a time. */
 export function shortcutLayered(chord: ShortcutChord): boolean {
   return chord.bare === true;
+}
+
+/** Whether the keymap leaves the chord to the tab switcher, which holds it until the ⌃ is let go. */
+export function shortcutSwitching(chord: ShortcutChord): boolean {
+  return chord.switching === true;
 }
 
 /** Whether a field taking typing already answers the chord, so it is left to the field: a key it edits with, or a letter alone. */

@@ -251,19 +251,22 @@ test("the bar's steps follow how main says the page stands, and a typed line mov
   ]);
 });
 
-test("a chord pressed over the page answers on the window, and ⌘L takes the address", async () => {
+test("a chord pressed over the page answers on the window as pressed, and ⌘L takes the address", async () => {
   const doors = main();
   const tab = mount("https://example.com/");
   await act(async () => undefined);
   const heard: string[] = [];
   window.addEventListener("keydown", (event) => {
-    heard.push(`${event.metaKey ? "⌘" : ""}${event.shiftKey ? "⇧" : ""}${event.key}`);
+    heard.push(
+      `${event.ctrlKey ? "⌃" : ""}${event.metaKey ? "⌘" : ""}${event.shiftKey ? "⇧" : ""}${event.key}`,
+    );
   });
 
   doors.hands({
     browserId: tab.browserId,
     key: "k",
     code: "KeyK",
+    meta: true,
     shift: false,
     alt: false,
     control: false,
@@ -272,6 +275,7 @@ test("a chord pressed over the page answers on the window, and ⌘L takes the ad
     browserId: OTHER_TAB,
     key: "w",
     code: "KeyW",
+    meta: true,
     shift: false,
     alt: false,
     control: false,
@@ -280,12 +284,24 @@ test("a chord pressed over the page answers on the window, and ⌘L takes the ad
     browserId: tab.browserId,
     key: "l",
     code: "KeyL",
+    meta: true,
     shift: false,
     alt: false,
     control: false,
   });
 
-  assert.deepEqual(heard, ["⌘k", "⌘l"]);
+  // ⌃Tab, the tab switcher's, is handed back with no Command, as it was pressed.
+  doors.hands({
+    browserId: tab.browserId,
+    key: "Tab",
+    code: "Tab",
+    meta: false,
+    shift: true,
+    alt: false,
+    control: true,
+  });
+
+  assert.deepEqual(heard, ["⌘k", "⌘l", "⌃⇧Tab"]);
   assert.equal(document.activeElement, tab.field());
 });
 

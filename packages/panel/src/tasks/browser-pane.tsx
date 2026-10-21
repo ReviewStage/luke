@@ -351,13 +351,13 @@ function focusHere(body: HTMLElement | null): void {
   body?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 }
 
-/** Presses on this window a Command chord pressed over the tab's page, so its keymap answers it as over any tab. */
+/** Presses on this window a chord of the window's pressed over the tab's page, so its keymap, or ⌃Tab's switcher, answers it as over any tab. */
 function pressHere(key: BrowserKey): void {
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
       key: key.key,
       code: key.code,
-      metaKey: true,
+      metaKey: key.meta,
       shiftKey: key.shift,
       altKey: key.alt,
       ctrlKey: key.control,

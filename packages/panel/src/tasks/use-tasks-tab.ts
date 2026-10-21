@@ -611,6 +611,10 @@ export interface TasksControl {
   onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a notification's click asks. */
   onShowAgent: (taskId: string, agentId: string) => void;
+  /** Opens a task on a tab of its column, as it last stood: what ⌃Tab's card asks (`tab-switcher.tsx`). */
+  onShowColumnTab: (taskId: string, tab: MainTab) => void;
+  /** Opens a task on a tab of its side panel, opening the panel where it was shut: what ⌃Tab's card asks. */
+  onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab. */
   onShowSource: (taskId: string, source: RevisionSource) => void;
   /** The question an agent's Call press asks before it ends the call standing into another agent. */
@@ -3118,6 +3122,8 @@ export function useTasksTab(input: {
     onShowAgent: guard((taskId: string, agentId: string) =>
       showColumnTab(taskId, { agent: agentId }),
     ),
+    onShowColumnTab: guard(showColumnTab),
+    onShowPanelTab: guard(showPanelTab),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     chatShown,

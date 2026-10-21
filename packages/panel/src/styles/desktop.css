@@ -7518,6 +7518,173 @@ polygon.factory-campus-edge[data-edge="selected"] {
   }
 }
 
+/* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
+   as a row of cards over the window, drawn as ⌘K's palette is, its ground,
+   edge, corner, shadow, and scrim, and stood in the middle of the stage, as
+   ⌘Tab's are. A card is its preview over its glyph and name, its task and
+   strip under them; the card chosen is lit as a menu's row is, its edge
+   drawn in the selected border, and the card of the stop here is dimmed. A
+   preview is a still of the tab, or its glyph large until it has one, and
+   the session recording leaves it out by its class (`ph-no-capture`). */
+.tab-switcher-backdrop {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  inset: 0;
+  background: var(--luke-color-scrim);
+  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+}
+
+.tab-switcher {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) / 2);
+  left: 50%;
+  display: flex;
+  max-width: calc(100vw - 2 * var(--luke-space-24));
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-dialog-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  color: var(--luke-color-text);
+  overflow: clip;
+  transform: translate(-50%, -50%);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    tab-switcher-rise var(--duration-fast) var(--spring-fast) backwards;
+}
+
+[data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher-cards {
+  display: flex;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  overflow-x: auto;
+}
+
+.tab-switcher-card {
+  display: flex;
+  width: 176px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6);
+  border: 1px solid transparent;
+  border-radius: var(--luke-radius-10);
+  cursor: default;
+}
+
+.tab-switcher-card[aria-selected="true"] {
+  border-color: var(--luke-color-border-selected);
+  background: var(--luke-color-fill-strong);
+}
+
+.tab-switcher-preview {
+  display: flex;
+  height: 110px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-surface);
+  overflow: hidden;
+}
+
+.tab-switcher-card[data-here="true"] .tab-switcher-preview {
+  opacity: 0.55;
+}
+
+/* A still fills the preview from its top left, as the tab it was taken of stands. */
+.tab-switcher-still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+/* A stop with no still yet wears its glyph, large and quiet, in the preview's middle. */
+.tab-switcher-glyph {
+  display: inline-flex;
+  --state-glyph-size: 28px;
+  color: var(--luke-color-text-subtle);
+}
+
+.tab-switcher-glyph :is(svg, img, .state-glyph) {
+  width: 28px;
+  height: 28px;
+}
+
+.tab-switcher-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-2);
+  white-space: nowrap;
+}
+
+.tab-switcher-name > :is(svg, img, .state-glyph) {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  --state-glyph-size: var(--luke-menu-glyph);
+  color: var(--luke-color-text-muted);
+}
+
+.tab-switcher-name > .luke-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The task and strip under the name, inset to the name's words; the line stands empty where a place has none, so every card is one height. */
+.tab-switcher-detail {
+  display: flex;
+  min-height: calc(var(--luke-type-caption-size) * 1.4);
+  padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
+  white-space: nowrap;
+}
+
+.tab-switcher-detail > .luke-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The keys' hints along the foot, as ⌘K's foot has them. */
+.tab-switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-16);
+  height: 36px;
+  padding: 0 var(--luke-space-16);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.tab-switcher-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+.tab-switcher-footer .shortcut {
+  --shortcut-ink: var(--luke-color-text-muted);
+}
+
+@keyframes tab-switcher-rise {
+  from {
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
 /* Start ------------------------------------------------------------------ */
 
 /* The toolbar's Start, a shared SplitButton, and the note beside it. */
