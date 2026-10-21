@@ -16,11 +16,29 @@
  * Every action is bounded: `wait` by its own timeout, every other by the
  * action timeout. A sequence stops at its first failure, whose reason is in
  * words a model can act on, and answers every step that ran.
+ *
+ * A `wait` right after an action that may navigate (a click, Enter, a
+ * navigation, a step through history) on the same tab first waits out the
+ * navigation that action started, where one starts within a short grace,
+ * since the document it would otherwise ask about is still the old one. A
+ * screenshot of a tab that has drawn nothing yet, such as one just opened,
+ * is asked again for a moment before it fails.
  */
 
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Data, Duration, Effect, Result, Schedule, Schema, type Scope, Stream } from "effect";
+import {
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  type Scope,
+  Stream,
+} from "effect";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
@@ -48,6 +66,33 @@ import {
 
 /** How often `wait` asks whether what it waits for has come. */
 const WAIT_POLL = Duration.millis(250);
+
+/**
+ * How long a `wait` after an action that may navigate gives that action's
+ * navigation to start before it asks about the page as it stands.
+ */
+const NAVIGATION_GRACE = Duration.millis(500);
+
+/** How often, and how many times more, a screenshot of a tab that has drawn nothing yet is asked for: two seconds in all. */
+const CAPTURE_RETRY = Duration.millis(250);
+const CAPTURE_RETRIES = 8;
+
+/** The actions that may start a navigation, a key's only by Enter. */
+const NAVIGATING_ACTIONS: ReadonlySet<BrowserAgentActionName> = new Set([
+  BROWSER_AGENT_ACTION.NAVIGATE,
+  BROWSER_AGENT_ACTION.BACK,
+  BROWSER_AGENT_ACTION.FORWARD,
+  BROWSER_AGENT_ACTION.CLICK,
+  BROWSER_AGENT_ACTION.KEY,
+]);
+
+/** The page events that say a frame began or committed a navigation, stopped loading, or the page loaded. */
+const NAVIGATION_EVENT = {
+  STARTED: "Page.frameStartedLoading",
+  NAVIGATED: "Page.frameNavigated",
+  STOPPED: "Page.frameStoppedLoading",
+  LOADED: "Page.loadEventFired",
+} as const;
 
 /** How long a tab's session is given to detach as a sequence ends, so a browser that stopped answering holds no one up. */
 const DETACH_TIMEOUT = Duration.seconds(2);
@@ -130,9 +175,15 @@ const ConsoleCallSchema = Schema.Struct({
 const LogEntrySchema = Schema.Struct({
   entry: Schema.Struct({ level: Schema.String, text: Schema.String, timestamp: Schema.Number }),
 });
+/** A frame event: `frameId` on a load's start and stop, `frame.id` on a commit. */
+const FrameEventSchema = Schema.Struct({
+  frameId: Schema.optional(Schema.String),
+  frame: Schema.optional(Schema.Struct({ id: Schema.String })),
+});
 
 const readConsoleCall = readEither(ConsoleCallSchema, { excess: EXCESS_KEYS.DROP });
 const readLogEntry = readEither(LogEntrySchema, { excess: EXCESS_KEYS.DROP });
+const readFrameEvent = readEither(FrameEventSchema, { excess: EXCESS_KEYS.DROP });
 
 /** A reader of a command's answer, which fails as malformed where the answer is not what the method answers. */
 function answerOf<S extends Schema.ConstraintDecoder<unknown>>(schema: S) {
@@ -183,9 +234,57 @@ interface Pages {
   readonly page: (targetId: string) => Effect.Effect<Page, ActionFailed | CdpFailure>;
   /** Forgets a tab that is closed, which has no session left to detach. */
   readonly forget: (targetId: string) => void;
+  /** Hears the tab's navigations from now on, for the `wait` after the action about to run. */
+  readonly watch: (page: Page) => Effect.Effect<void>;
+  /** Waits out a navigation heard on the tab since its watch began, where one starts within the grace; nothing where the tab is not watched. */
+  readonly settle: (targetId: string) => Effect.Effect<void>;
+}
+
+/** A tab's navigations as a watch hears them: whether one started, and whether every frame it started has stopped loading. */
+interface Watched {
+  readonly targetId: string;
+  readonly started: Deferred.Deferred<void>;
+  readonly settled: Deferred.Deferred<void>;
 }
 
 const readAttached = answerOf(AttachedSchema);
+
+/**
+ * Hears one navigation event: a frame that starts loading or commits marks
+ * the navigation started and is loading until it stops; once none is, or the
+ * page fires its load, the navigation is settled. Note that a stop or a load
+ * before anything started is the end of an earlier load, so it settles
+ * nothing.
+ */
+function hearNavigation(event: CdpEvent, watched: Watched, loading: Set<string>) {
+  return Effect.gen(function* () {
+    const read = readFrameEvent(event.params);
+    const frame = Result.isFailure(read)
+      ? undefined
+      : (read.success.frameId ?? read.success.frame?.id);
+    if (event.method === NAVIGATION_EVENT.STARTED || event.method === NAVIGATION_EVENT.NAVIGATED) {
+      if (frame !== undefined) loading.add(frame);
+      yield* Deferred.succeed(watched.started, undefined);
+      return;
+    }
+    if (!(yield* Deferred.isDone(watched.started))) return;
+    const stopped =
+      event.method === NAVIGATION_EVENT.STOPPED && frame !== undefined && loading.delete(frame);
+    if (event.method === NAVIGATION_EVENT.LOADED || (stopped && loading.size === 0)) {
+      yield* Deferred.succeed(watched.settled, undefined);
+    }
+  });
+}
+
+/** Waits out a watched navigation: none where nothing started within the grace, else until it settles. */
+function settleWatched(watched: Watched) {
+  return Deferred.await(watched.started).pipe(
+    Effect.timeoutOption(NAVIGATION_GRACE),
+    Effect.flatMap((started) =>
+      Option.isSome(started) ? Deferred.await(watched.settled) : Effect.void,
+    ),
+  );
+}
 
 /**
  * The tabs a sequence acts on, each attached once. Note that a closed tab is
@@ -193,7 +292,9 @@ const readAttached = answerOf(AttachedSchema);
  */
 function pagesOver(cdp: CdpSession): Effect.Effect<Pages, never, Scope.Scope> {
   return Effect.gen(function* () {
+    const scope = yield* Effect.scope;
     const attached = new Map<string, Page>();
+    let watching: Watched | undefined;
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
         [...attached.values()],
@@ -237,6 +338,30 @@ function pagesOver(cdp: CdpSession): Effect.Effect<Pages, never, Scope.Scope> {
           return page === undefined ? attach(targetId) : Effect.succeed(page);
         }),
       forget: (targetId) => void attached.delete(targetId),
+      watch: (page) =>
+        Effect.gen(function* () {
+          const watched: Watched = {
+            targetId: page.targetId,
+            started: yield* Deferred.make<void>(),
+            settled: yield* Deferred.make<void>(),
+          };
+          const loading = new Set<string>();
+          const own = Stream.filter(cdp.events, (event) => event.sessionId === page.sessionId);
+          yield* Effect.forkIn(
+            Stream.runForEach(own, (event) => hearNavigation(event, watched, loading)),
+            scope,
+          );
+          yield* Effect.yieldNow;
+          // Note that a browser that will not send the page's events leaves the wait to its own check.
+          const enabled = yield* Effect.result(page.send("Page.enable"));
+          watching = Result.isSuccess(enabled) ? watched : undefined;
+        }),
+      settle: (targetId) =>
+        Effect.suspend(() => {
+          const watched = watching;
+          watching = undefined;
+          return watched?.targetId === targetId ? settleWatched(watched) : Effect.void;
+        }),
     };
   });
 }
@@ -418,6 +543,24 @@ function bytesOf(base64: string): number {
 }
 
 /**
+ * One capture of the visible page. Note that a refusal is asked again for a
+ * moment, because a tab just opened refuses until it has drawn its first
+ * frame (the Mac's view says it draws nothing yet), and that frame comes a
+ * moment later.
+ */
+function capture(page: Page, params: CdpParams) {
+  const method = "Page.captureScreenshot";
+  return page.send(method, params).pipe(
+    Effect.retry({
+      schedule: Schedule.spaced(CAPTURE_RETRY),
+      times: CAPTURE_RETRIES,
+      while: (failure) => failure.kind === CDP_FAILURE.REFUSED,
+    }),
+    Effect.flatMap((answer) => readCaptured(method, answer)),
+  );
+}
+
+/**
  * The visible page as a JPEG no longer than the longest side and no larger
  * than the byte cap, trying each quality in turn. The tab is brought to the
  * front first, because a tab behind another draws no frame to capture.
@@ -457,14 +600,12 @@ function screenshot(cdp: CdpSession, page: Page) {
       scale,
     };
     for (const quality of BROWSER_SCREENSHOT.QUALITIES) {
-      const method = "Page.captureScreenshot";
-      const answer = yield* page.send(method, {
+      const { data } = yield* capture(page, {
         format: "jpeg",
         quality,
         clip,
         captureBeyondViewport: false,
       });
-      const { data } = yield* readCaptured(method, answer);
       if (bytesOf(data) <= BROWSER_SCREENSHOT.MAX_BYTES) {
         return {
           mime: BROWSER_SCREENSHOT.MIME,
@@ -562,6 +703,7 @@ function consoleOf(cdp: CdpSession, page: Page) {
 /** The step an action on a tab answers, once the tab is reached. */
 function onPage(
   cdp: CdpSession,
+  pages: Pages,
   page: Page,
   action: BrowserAgentAction,
 ): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure> {
@@ -600,7 +742,10 @@ function onPage(
         ref === undefined
           ? loaded(page)
           : Effect.map(quadsOf(page, ref), (quads) => quads.length > 0);
-      return Effect.as(waitUntil(check), actedOn(action.action, tab));
+      return Effect.as(
+        Effect.andThen(pages.settle(tab), waitUntil(check)),
+        actedOn(action.action, tab),
+      );
     }
     case BROWSER_AGENT_ACTION.SCREENSHOT:
       return Effect.map(screenshot(cdp, page), (image) => ({
@@ -642,12 +787,17 @@ function closeTab(cdp: CdpSession, pages: Pages, tab: string) {
   });
 }
 
-/** The step an action answers, the tab it names or the one before it acted on standing in for a tab it leaves out. */
+/**
+ * The step an action answers, the tab it names or the one before it acted on
+ * standing in for a tab it leaves out; where a `wait` follows it on that
+ * tab, its navigations are heard from before it acts.
+ */
 function stepOf(
   cdp: CdpSession,
   pages: Pages,
   action: BrowserAgentAction,
   tab: string | undefined,
+  watched: boolean,
 ): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure> {
   if (action.action === BROWSER_AGENT_ACTION.LIST) {
     return Effect.map(cdp.pages, (listed) => ({
@@ -671,7 +821,9 @@ function stepOf(
   if (action.action === BROWSER_AGENT_ACTION.CLOSE) {
     return closeTab(cdp, pages, tab);
   }
-  return Effect.flatMap(pages.page(tab), (page) => onPage(cdp, page, action));
+  return Effect.flatMap(pages.page(tab), (page) =>
+    Effect.andThen(watched ? pages.watch(page) : Effect.void, onPage(cdp, pages, page, action)),
+  );
 }
 
 /** How long an action may take, and what is said when it takes longer. */
@@ -694,9 +846,10 @@ function boundedStep(
   pages: Pages,
   action: BrowserAgentAction,
   tab: string | undefined,
+  watched: boolean,
 ) {
   const bound = boundOf(action);
-  return stepOf(cdp, pages, action, tab).pipe(
+  return stepOf(cdp, pages, action, tab, watched).pipe(
     Effect.timeoutOrElse({
       duration: Duration.millis(bound.millis),
       orElse: () => failed(bound.reason),
@@ -705,6 +858,17 @@ function boundedStep(
       failure instanceof CdpFailure ? wordsOfCdp(failure) : failure.reason,
     ),
   );
+}
+
+/** Whether an action may navigate its tab and a `wait` on that same tab comes right after it, which then waits out that navigation. */
+function watchedFor(
+  action: BrowserAgentAction,
+  tab: string | undefined,
+  next: BrowserAgentAction | undefined,
+): boolean {
+  if (!NAVIGATING_ACTIONS.has(action.action)) return false;
+  if (action.action === BROWSER_AGENT_ACTION.KEY && action.key !== "Enter") return false;
+  return next?.action === BROWSER_AGENT_ACTION.WAIT && (next.tab === undefined || next.tab === tab);
 }
 
 /** The tab a step leaves the next action on: the one it acted on, none once that is closed, and the one before for a list. */
@@ -728,12 +892,13 @@ export function runBrowserActions(
       const pages = yield* pagesOver(cdp);
       const steps: BrowserAgentStep[] = [];
       let tab: string | undefined;
-      for (const action of actions) {
+      for (const [at, action] of actions.entries()) {
         const named =
           action.action === BROWSER_AGENT_ACTION.LIST || action.action === BROWSER_AGENT_ACTION.OPEN
             ? undefined
             : (action.tab ?? tab);
-        const ran = yield* Effect.result(boundedStep(cdp, pages, action, named));
+        const watched = watchedFor(action, named, actions[at + 1]);
+        const ran = yield* Effect.result(boundedStep(cdp, pages, action, named, watched));
         if (Result.isFailure(ran)) {
           const error = cutBrowserText(ran.failure, BROWSER_AGENT_LIMITS.ERROR_MAX_CHARS);
           const failedOn = named === undefined ? {} : { tab: named };
