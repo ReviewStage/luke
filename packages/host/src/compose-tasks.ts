@@ -928,32 +928,78 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /**
-   * Reads the active task's document. A copy of the same task already held
-   * stays drawn while the read is out, and stays drawn through a read that
-   * failed, so a save redraws in place and a moment offline blanks nothing;
-   * with no copy held, the failure is what the panel draws.
+   * The active task's document as a read of it left it. A copy of the same
+   * task already `held` stays drawn through a read that failed, so a moment
+   * offline blanks nothing; with no copy held, the failure is what the panel
+   * draws.
    */
-  function readDocument(taskId: string) {
+  function documentAfter(
+    opened: Effect.Success<ReturnType<typeof client.open>>,
+    held: Task | undefined,
+  ): TasksView["document"] {
+    if (opened.ok) return { status: TASKS_READ.READY, task: opened.answer };
+    if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return { status: TASKS_READ.MISSING };
+    return held === undefined
+      ? { status: TASKS_READ.FAILED }
+      : { status: TASKS_READ.READY, task: held };
+  }
+
+  /** The view with the task's code as a read answered it: what it holds laid with what a call showed, or the read said to have failed. */
+  function withCodeRead(
+    was: TasksView,
+    stored: Effect.Success<ReturnType<typeof client.readCode>>,
+  ): TasksView {
+    if (stored === undefined) return { ...was, codeStatus: TASKS_READ.FAILED };
+    // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
+    return { ...was, shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY };
+  }
+
+  /** The view with the task's pages as a read answered them; a failed read keeps the pages held. */
+  function withPagesRead(
+    was: TasksView,
+    pages: Effect.Success<ReturnType<typeof client.readPages>>,
+  ): TasksView {
+    if (pages === undefined) return was;
+    const { pages: _held, ...rest } = was;
+    return pages.length === 0 ? rest : { ...rest, pages };
+  }
+
+  /**
+   * Reads what the active task's page draws, its document, board, code, and
+   * pages, all at once, and tells the window them in one view, so the page
+   * lands whole rather than a part at a time, each part reflowing what the
+   * one before laid out. A copy of the same task already held stays drawn
+   * while the reads are out and through a document read that failed, so a
+   * save redraws in place; a failed board, code, or pages read keeps what is
+   * held of it, as their own reads do. The document and the code say they
+   * are reading only where nothing of them is held, which a switch has
+   * already told (`TASKS_OPEN`).
+   */
+  function readOpened(taskId: string) {
     return Effect.gen(function* () {
       const held = heldTaskOf(taskId);
-      if (held === undefined) write({ document: { status: TASKS_READ.READING } });
-      const opened = yield* served(client.open(taskId));
-      // Another task opened while this read was out: its answer is not the panel's any more.
-      if (view.activeTaskId !== taskId) return;
-      if (opened.ok) {
-        write({ document: { status: TASKS_READ.READY, task: opened.answer } });
-        return;
-      }
-      if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) {
-        write({ document: { status: TASKS_READ.MISSING } });
-        return;
-      }
       write({
-        document:
-          held === undefined
-            ? { status: TASKS_READ.FAILED }
-            : { status: TASKS_READ.READY, task: held },
+        ...(held === undefined ? { document: { status: TASKS_READ.READING } } : undefined),
+        ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
       });
+      const [opened, board, stored, pages] = yield* Effect.all(
+        [
+          served(client.open(taskId)),
+          served(client.readBoard(taskId)),
+          served(client.readCode(taskId)),
+          served(client.readPages(taskId)),
+        ],
+        { concurrency: "unbounded" },
+      );
+      // Another task opened while these reads were out: their answers are not the panel's any more.
+      if (view.activeTaskId !== taskId) return;
+      const read: TasksView = {
+        ...view,
+        document: documentAfter(opened, held),
+        ...(board === undefined ? undefined : { board }),
+      };
+      view = withPagesRead(withCodeRead(read, stored), pages);
+      publish();
     });
   }
 
@@ -1001,9 +1047,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function readPages(taskId: string) {
     return Effect.gen(function* () {
       const pages = yield* served(client.readPages(taskId));
-      if (pages === undefined || view.activeTaskId !== taskId) return;
-      const { pages: _held, ...rest } = view;
-      view = pages.length === 0 ? rest : { ...rest, pages };
+      if (view.activeTaskId !== taskId) return;
+      view = withPagesRead(view, pages);
       publish();
     });
   }
@@ -1021,12 +1066,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }
       const stored = yield* served(client.readCode(taskId));
       if (view.activeTaskId !== taskId) return;
-      if (stored === undefined) {
-        write({ codeStatus: TASKS_READ.FAILED });
-        return;
-      }
-      // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
-      write({ shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY });
+      view = withCodeRead(view, stored);
+      publish();
     });
   }
 
@@ -1365,10 +1406,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const tasks = serial(
           Effect.gen(function* () {
             const taskId = view.activeTaskId;
-            if (taskId !== undefined) yield* readDocument(taskId);
-            if (taskId !== undefined) yield* readBoard(taskId);
-            if (taskId !== undefined) yield* readShownCode(taskId);
-            if (taskId !== undefined) yield* readPages(taskId);
+            if (taskId !== undefined) yield* readOpened(taskId);
           }),
         );
         yield* followWorkspaces;
@@ -1394,23 +1432,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // because the call outlives the task on screen: moving it to this
         // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
+          // Note that the code says it is reading in the same view, so the
+          // page is told twice in all: that it is reading, then what it read.
           view = {
             ...withoutActivity(view),
             activeTaskId: taskId,
             document: { status: TASKS_READ.READING },
+            codeStatus: TASKS_READ.READING,
           };
           publish();
         }
         yield* openBoard(taskId);
         yield* openRecord(taskId);
-        yield* serial(
-          Effect.gen(function* () {
-            yield* readDocument(taskId);
-            yield* readBoard(taskId);
-            yield* readShownCode(taskId);
-            yield* readPages(taskId);
-          }),
-        );
+        yield* serial(readOpened(taskId));
         return { opened: true };
       }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
