@@ -99,7 +99,7 @@ export function stepTitle(
   if (tasks.automationsView.open) return { label: "Automations" };
   if (tasks.chatView.open) return { label: "Chat" };
   if (tasks.boardView.open) return { label: "Tasks" };
-  if (tasks.boundFor === undefined) return { label: "Home" };
+  if (tasks.boundFor === undefined) return { label: "Welcome" };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;
   if (tasks.history.open) return { label: name, detail: "Version history" };

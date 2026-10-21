@@ -91,14 +91,17 @@ sidebar, one page at a time:
  └──────────────────────────────────────────────────────────────┘
 ```
 
-- **New task page**: the tab's home, whenever no task is open. The task
-  list is the window's sidebar, so there is no empty page in between.
+- **Resting page**: whenever no task is open the window shows what the
+  sidebar does not list: the Inbox beside the task list, and under the
+  inbox-first sidebar the newest thread waiting, or the Tasks page where
+  nothing waits. An account with nothing yet sees a welcome with New task's
+  composer instead (`resting-page.ts`). There is no empty page in between.
 - **Document page**: the open task's saved document. Its header and its
   microphone row hold still, and only the document scrolls between them.
 
 Escape unwinds one page at a time, after any open microphone has been muted
 (Escape mutes first, as it does for any call): the document page back to the
-new-task page, which leaves the task, and the new-task page closes the panel. Escape on the Settings tab's front page comes back to Tasks.
+resting page, which leaves the task, and the resting page closes nothing. Escape on the Settings tab's front page comes back to Tasks.
 
 ### Opening, leaving, and calls
 

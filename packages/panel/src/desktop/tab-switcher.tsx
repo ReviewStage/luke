@@ -71,7 +71,7 @@ import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {
   FactoryIcon,
-  HouseIcon,
+  type HouseIcon,
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
@@ -142,7 +142,6 @@ const BROWSER_PAGE = ".side-panel .browser-view-body";
 
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
-  [SWITCHER_PLACE.HOME]: { icon: HouseIcon, label: "Home" },
   [SWITCHER_PLACE.INBOX]: { icon: InboxIcon, label: TAB_WORDS.INBOX },
   [SWITCHER_PLACE.CHAT]: { icon: MessagesSquareIcon, label: TAB_WORDS.CHAT },
   [SWITCHER_PLACE.BOARD]: { icon: ListTodoIcon, label: "Tasks" },
@@ -740,9 +739,6 @@ function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_K
 /** Opens a place through its own door. */
 function openPlace(tasks: TasksControl, place: SwitcherPlace): void {
   switch (place) {
-    case SWITCHER_PLACE.HOME:
-      tasks.onGoHome();
-      return;
     case SWITCHER_PLACE.INBOX:
       tasks.inboxView.onOpen();
       return;
