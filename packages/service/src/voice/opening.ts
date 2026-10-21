@@ -5,6 +5,7 @@ import type {
   HeldVoiceAgent,
   VoiceSessionRecord,
 } from "@luke/database/models/voice-session-record";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import type { Task } from "@luke/features/task-wire";
 import {
@@ -386,9 +387,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * creates nothing, and so is an archived task, which no call is about until
    * it is brought back. An agent is refused as not found where the account
    * does not reach it, where it works on another task than the one named, or
-   * where it is archived and so takes nothing; a teammate's agent the account
-   * reaches takes the call, which runs on its starter's key as its every
-   * turn does.
+   * where it is archived and so takes nothing; an agent on a native harness
+   * (Claude Code or Codex) is refused by name, since a call runs on eve
+   * alone; a teammate's agent the account reaches takes the call, which runs
+   * on its starter's key as its every turn does.
    */
   const admitAccount = (
     admission: Admission,
@@ -406,6 +408,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         agentId === undefined ? undefined : yield* record.heldAgent({ userId: accountId, agentId });
       if (agentId !== undefined && (agent?.taskId !== taskId || agent.archived)) {
         return refused(HOSTED_API_ERROR.NOT_FOUND);
+      }
+      // A call runs on eve alone: an agent on a native harness is refused before anything is
+      // counted, so eve never answers its conversation beside the harness that does.
+      if (agent !== undefined && agent.runtime !== CONVERSATION_RUNTIME.EVE) {
+        return refused(HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE);
       }
       yield* accounts.spend(accountId);
       return { accountId, task, agent };
