@@ -171,6 +171,8 @@ const ChatChannelRowSchema = Schema.Struct({
   purpose: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  /** The transaction that wrote it, where this row is a write's own answer; none on a row read. */
+  txid: Schema.optionalKey(Schema.String),
 });
 
 /** One channel as the store keeps it. */
@@ -197,6 +199,8 @@ const ChatMessageRowSchema = Schema.Struct({
   answerKey: Schema.NullOr(Schema.String),
   answeredByMemberId: Schema.NullOr(Schema.String),
   closedReason: Schema.NullOr(Schema.String),
+  /** The transaction that wrote it, where this row is a write's own answer; none on a row read. */
+  txid: Schema.optionalKey(Schema.String),
 });
 
 /** One message as the store keeps it. */
@@ -261,6 +265,11 @@ export interface ChatHistoryQuery {
   readonly limit?: number | undefined;
 }
 
+/** A channel's cursor moved: the transaction that moved it, none where it already stood there. */
+export interface ChatReadMoved {
+  readonly txid: string | undefined;
+}
+
 /** A window's read past its cursor: what changed past it, oldest first, and the cursor to read on from. */
 export interface ChatPast {
   readonly messages: readonly ChatMessageRow[];
@@ -316,6 +325,20 @@ const MESSAGE_COLUMNS = {
   answeredByMemberId: chatMessage.answeredByMemberId,
   closedReason: chatMessage.closedReason,
 };
+
+/**
+ * The id of the transaction that made a write, read in the write's own
+ * `RETURNING`, as Neon's mutations guide does it: a follower of the chat
+ * waits for it to arrive on its live query. A write that changed no row
+ * returns none, so there is nothing to wait for.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
+/** A message's columns as a write returns them: the row, and the transaction that wrote it. */
+const WRITTEN_COLUMNS = { ...MESSAGE_COLUMNS, txid: TXID };
+
+/** A channel's columns as a write returns them, on the same terms. */
+const WRITTEN_CHANNEL_COLUMNS = { ...CHANNEL_COLUMNS, txid: TXID };
 
 const OrganizationKeySchema = Schema.Struct({ organizationId: Schema.String });
 
@@ -619,7 +642,7 @@ const insertChannel = SqlSchema.findAll({
           createdAt: row.now,
         })
         .onConflictDoNothing()
-        .returning(CHANNEL_COLUMNS),
+        .returning(WRITTEN_CHANNEL_COLUMNS),
     ),
 });
 
@@ -757,7 +780,7 @@ const insertMessage = SqlSchema.findOne({
                 askStatus: ASK_STATUS.OPEN,
               }),
         })
-        .returning(MESSAGE_COLUMNS),
+        .returning(WRITTEN_COLUMNS),
     ),
 });
 
@@ -826,7 +849,7 @@ const rewriteAsk = SqlSchema.findOne({
           touchedAt: row.now,
         })
         .where(eq(chatMessage.id, row.id))
-        .returning(MESSAGE_COLUMNS),
+        .returning(WRITTEN_COLUMNS),
     ),
 });
 
@@ -859,7 +882,7 @@ const settleAsk = SqlSchema.findOne({
           touchedAt: row.now,
         })
         .where(eq(chatMessage.id, row.id))
-        .returning(MESSAGE_COLUMNS),
+        .returning(WRITTEN_COLUMNS),
     ),
 });
 
@@ -940,33 +963,41 @@ const moveCursor = SqlSchema.void({
     ),
 });
 
-/** Moves a member's cursor in one channel on to the place given, never back, and lets go of the notice in that channel it passed. */
-const moveChannelCursor = SqlSchema.void({
+/**
+ * Moves a member's cursor in one channel on to the place given, never back,
+ * and lets go of the notice in that channel it passed. Answers the
+ * transaction that moved the cursor; none where it already stood there.
+ */
+const moveChannelCursor = SqlSchema.findAll({
   Request: Schema.Struct({ ...ReadKeySchema.fields, channelId: Schema.String, to: Schema.Number }),
+  Result: Schema.Struct({ txid: Schema.String }),
   execute: (key) =>
-    Effect.andThen(
+    Effect.tap(
       Database.use((db) =>
         db
           .insert(chatRead)
           .values({ memberId: key.readerId, channelId: key.channelId, readSeq: key.to })
           .onConflictDoUpdate({
             target: [chatRead.memberId, chatRead.channelId],
-            set: { readSeq: sql`greatest(${chatRead.readSeq}, excluded.read_seq)` },
-          }),
+            set: { readSeq: sql`excluded.read_seq` },
+            setWhere: sql`${chatRead.readSeq} < excluded.read_seq`,
+          })
+          .returning({ txid: TXID }),
       ),
-      Database.use((db) =>
-        db
-          .update(chatMember)
-          .set({ noticeSeq: null, noticeChannelId: null })
-          .where(
-            and(
-              eq(chatMember.id, key.readerId),
-              eq(chatMember.organizationId, key.organizationId),
-              eq(chatMember.noticeChannelId, key.channelId),
-              sql`${chatMember.noticeSeq} <= ${key.to}`,
+      () =>
+        Database.use((db) =>
+          db
+            .update(chatMember)
+            .set({ noticeSeq: null, noticeChannelId: null })
+            .where(
+              and(
+                eq(chatMember.id, key.readerId),
+                eq(chatMember.organizationId, key.organizationId),
+                eq(chatMember.noticeChannelId, key.channelId),
+                sql`${chatMember.noticeSeq} <= ${key.to}`,
+              ),
             ),
-          ),
-      ),
+        ),
     ),
 });
 
@@ -1542,8 +1573,15 @@ const updateTopicChannel = SqlSchema.findAll({
       db
         .update(chatChannel)
         .set({ name: row.name, purpose: row.purpose, archivedAt: row.archivedAt })
-        .where(and(eq(chatChannel.id, row.channelId), eq(chatChannel.kind, CHANNEL_KIND.TOPIC)))
-        .returning(CHANNEL_COLUMNS),
+        .where(
+          and(
+            eq(chatChannel.id, row.channelId),
+            eq(chatChannel.kind, CHANNEL_KIND.TOPIC),
+            // An edit that leaves the channel as it stands writes nothing, so there is nothing to wait for.
+            sql`(${chatChannel.name}, ${chatChannel.purpose}, ${chatChannel.archivedAt}) is distinct from (${row.name}::text, ${row.purpose}::text, ${row.archivedAt?.toISOString() ?? null}::timestamptz)`,
+          ),
+        )
+        .returning(WRITTEN_CHANNEL_COLUMNS),
     ),
 });
 
@@ -1605,7 +1643,8 @@ export function editTopicChannel(
         purpose: edit.purpose === undefined ? channel.purpose : edit.purpose,
         archivedAt,
       });
-      return updated === undefined ? Result.fail(CHAT_REFUSAL.NOT_FOUND) : Result.succeed(updated);
+      // An edit that changed nothing answers the channel as it stands.
+      return Result.succeed(updated ?? channel);
     }),
   );
 }
@@ -2273,9 +2312,9 @@ export function readThrough(
  * Marks the channel read to the place given, never past the workspace's
  * head and never back, letting go of a notice in it the place passes: what
  * a window does when the developer has read a channel on screen. Answers
- * whether the reader may see the channel; false where the account is not
- * in the workspace, the member is not of it, or the channel is not one it
- * may see.
+ * the transaction that moved the cursor, none where it already stood
+ * there; false where the account is not in the workspace, the member is not
+ * of it, or the channel is not one it may see.
  */
 export function readTo(
   userId: string,
@@ -2283,14 +2322,14 @@ export function readTo(
   readerId: string,
   channelId: string,
   seq: number,
-): ChatStoreEffect<boolean> {
+): ChatStoreEffect<ChatReadMoved | false> {
   return transaction(
     Effect.gen(function* () {
       const reader = yield* readerIn(userId, organizationId, readerId);
       if (Option.isNone(reader) || !(yield* seesChannel(reader.value, channelId))) return false;
       const to = Math.min(Math.floor(seq), yield* headOf(organizationId));
-      yield* moveChannelCursor({ readerId, organizationId, channelId, to });
-      return true;
+      const [moved] = yield* moveChannelCursor({ readerId, organizationId, channelId, to });
+      return { txid: moved?.txid };
     }),
   );
 }
