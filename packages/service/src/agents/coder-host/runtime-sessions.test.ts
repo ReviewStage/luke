@@ -87,7 +87,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * run through them: a Start, a message from the composer or an Inbox answer,
  * and a Stop. A Codex agent, paid for by its starter's ChatGPT plan, is
  * answered by Codex alike, and neither eve nor Claude Code hears it. Where no
- * harness is provided, as in the eve apps, a native agent is refused by name
+ * harness is provided, nor a relay to one, a native agent is refused by name
  * and nothing reaches eve. Synthetic accounts and words throughout; the
  * store is PGlite.
  */
@@ -675,7 +675,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where no native harness is provided, as in the eve apps, a Claude Code agent is refused by name and eve hears nothing",
+      "where no native harness is provided, nor a relay to one, a Claude Code agent is refused by name and eve hears nothing",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -877,7 +877,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               on: "eve",
             },
             {
-              name: "no harness here (P11b)",
+              name: "no harness here, nor a relay to one",
               cohort: true,
               token: true,
               model: "anthropic/claude-opus-5.5",
@@ -973,7 +973,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               on: "eve",
             },
             {
-              name: "no harness here (P11b)",
+              name: "no harness here, nor a relay to one",
               cohort: true,
               chatGpt: "signed_in",
               model: "openai/gpt-5.5",

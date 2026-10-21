@@ -71,6 +71,8 @@
     "./agents/coder-host/codex-sessions": "./src/agents/coder-host/codex-sessions.js",
     "./agents/coder-host/runner-bundle": "./src/agents/coder-host/runner-bundle.js",
     "./agents/coder-host/native-agent-sessions": "./src/agents/coder-host/native-agent-sessions.js",
+    "./agents/coder-host/native-relay": "./src/agents/coder-host/native-relay.js",
+    "./agents/coder-host/native-relay-app": "./src/agents/coder-host/native-relay-app.js",
     "./agents/coder-host/runtime-sessions": "./src/agents/coder-host/runtime-sessions.js",
     "./agents/coder-host/context": "./src/agents/coder-host/context.js",
     "./agents/coder-host/context-estimate": "./src/agents/coder-host/context-estimate.js",

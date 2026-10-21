@@ -111,7 +111,7 @@ export const HOSTED_REFUSAL = {
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
   AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
-  /** The agent runs on a native harness this function cannot reach (the eve apps', until P11b); nothing was written, and nothing fell through to eve. */
+  /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },

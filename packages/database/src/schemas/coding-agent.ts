@@ -257,6 +257,13 @@ export const codingAgent = pgTable(
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
     payer: text("payer").$type<CodingAgentPayer>(),
+    /**
+     * The digest of the bearer the agent's runner presents at Luke's MCP server and its events
+     * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
+     * than its conversation's, because a launch writes it while a message's hand-over holds the
+     * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
+     */
+    runnerTokenHash: text("runner_token_hash"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
@@ -274,6 +281,11 @@ export const codingAgent = pgTable(
       .where(sql`${table.taskId} is null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
+    // Luke's MCP server and the events route find the agent a runner's bearer stands for by the
+    // bearer's digest, on every call; one digest names one agent.
+    uniqueIndex("coding_agent_runner_token_hash")
+      .on(table.runnerTokenHash)
+      .where(sql`${table.runnerTokenHash} is not null`),
   ],
 );
 

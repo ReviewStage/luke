@@ -7,8 +7,9 @@
  * - Claude Code, paid for by the account's Claude plan, for an account in
  *   `LUKE_NATIVE_AGENT_ACCOUNTS`, on a Claude model Claude Code runs (no
  *   fast variant), where the account keeps a Claude setup-token and this
- *   function can launch the runner (`NativeAgentSessions`; TODO(P11b): the
- *   eve apps cannot yet, so an agent their tools start decides eve).
+ *   function reaches a harness (`NativeAgentSessions`: a web function's own,
+ *   or the eve app's relay to one, so a Start from an eve agent decides as
+ *   the panel's does).
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
  *   GPT model (no fast variant), where the account keeps a ChatGPT sign-in
  *   (`chatgpt_oauth`) that OpenAI has not signed out and the deployment can
