@@ -22,6 +22,7 @@ import {
   type LiveClient,
   liveRows,
   type SealedRead,
+  type TxWait,
 } from "./live-follow.js";
 
 /**
@@ -68,6 +69,8 @@ export interface AutomationFollowDependencies {
   readonly serviceBaseUrl: string;
   /** What was followed, each time it moves. */
   readonly publish: (followed: AutomationFollowed) => void;
+  /** Hears the follow's wait for a write's transaction once it is subscribed, and none once it is let go or polled. */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /** One kind of follow: how it is read, decoded, built, and published. */
@@ -152,6 +155,7 @@ function followed<Part extends string, Rows, View>(
         reseal: () => Effect.map(kind.live(false), noted),
         poll: (after) => Effect.map(kind.live(true, after), noted),
         now: dependencies.now,
+        ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
       },
       sealed,
     ).pipe(
