@@ -869,7 +869,9 @@ export interface TasksControl {
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
-   * task back to the home page.
+   * task left for the page the window rests on. The window's Escape takes an open task back
+   * through its history instead (`navigation-history.ts`'s `throughHistory`),
+   * to the page it was opened from.
    */
   back: () => boolean;
   /** The window's one ask before leaving a page whose unsaved work would be lost. */
@@ -3324,7 +3326,7 @@ export function useTasksTab(input: {
     sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.PLAN);
   };
 
-  // The home page is where the tab rests, so only an open task steps back,
+  // The tab rests on no task, so only an open task steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
     if (page !== TASKS_PAGE.DOCUMENT) return false;

@@ -19,9 +19,10 @@ import {
   installWindowHistory,
   MOUSE_BUTTON,
   type StepTitle,
+  throughHistory,
   useHistoryMouseButtons,
   useWindowHistory,
-  type WindowHistory,
+  type WindowHistoryLists,
 } from "./navigation-history.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { SHELL_ROOM } from "./shell-room.js";
@@ -126,7 +127,8 @@ function mount(
   titled?: (tasks: TasksControl) => StepTitle | undefined,
 ) {
   installWindowHistory(held);
-  let history: WindowHistory | undefined;
+  let history: WindowHistoryLists | undefined;
+  let shown: TasksControl | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;
   function Probe() {
     const [tasks, setTasks] = useState(initial);
@@ -146,6 +148,8 @@ function mount(
       tasks,
     });
     useHistoryMouseButtons(history, true);
+    // The Tasks tab as the shell hands it on, its Escape through the history.
+    shown = throughHistory(tasks, history.lists);
     return null;
   }
   const container = document.createElement("div");
@@ -160,6 +164,8 @@ function mount(
       return history;
     },
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
+    /** Presses Escape where it reaches the Tasks tab, as the window's own listener hands it on. */
+    escape: () => act(() => void shown?.back()),
     /** The address of every step held, oldest first. */
     addresses: () => held.current().entries.map((entry) => entry.address),
     /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
@@ -365,6 +371,103 @@ test("a move landing on an entry holding no step opens Home, as a page loaded th
   window.stand(tasksControl());
   act(() => held.land({ entries: [], at: -1 }));
   assert.deepEqual(window.addresses(), ["/app"], "the window on Home writes its step there");
+});
+
+/** The window on the Inbox, or on the task `onTask` stands, each Inbox opened recorded in `inboxes` and each task left in `left`. */
+function inboxOrTask(
+  onTask: boolean,
+  inboxes: string[],
+  left: string[],
+  ask: LeaveAskHolder = { current: undefined },
+): TasksControl {
+  const base = tasksControl();
+  return askingThrough(
+    ask,
+    tasksControl({
+      ...(onTask ? { page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID } : {}),
+      onLeaveTask: () => left.push(TASK_ID),
+      inboxView: {
+        ...base.inboxView,
+        open: !onTask,
+        onOpen: () => inboxes.push("inbox"),
+      },
+    }),
+  );
+}
+
+test("Escape on a task opened from the Inbox returns to the Inbox, as Back does, rather than leaving the task for the home page", () => {
+  const inboxes: string[] = [];
+  const left: string[] = [];
+  const window = mount(inboxOrTask(false, inboxes, left));
+  window.stand(inboxOrTask(true, inboxes, left));
+
+  window.escape();
+
+  assert.deepEqual(inboxes, ["inbox"]);
+  assert.deepEqual(left, [], "the task is not left for the home page");
+  assert.equal(window.history().canGoBack, false, "Escape took the one step back");
+  assert.equal(window.history().canGoForward, true, "which Forward takes again");
+});
+
+test("Escape on a task opened from a person's page returns to that page", () => {
+  const reopened: string[] = [];
+  const left: string[] = [];
+  const standing = (userId: string | undefined, rest: Partial<TasksControl> = {}) =>
+    tasksControl({
+      ...rest,
+      onLeaveTask: () => left.push(TASK_ID),
+      personView: {
+        userId,
+        name: undefined,
+        workspaceId: undefined,
+        onOpen: (id) => reopened.push(id),
+        onClose: () => undefined,
+      },
+    });
+  const window = mount(standing("user-charles"));
+  window.stand(
+    standing(undefined, { page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
+  );
+
+  window.escape();
+
+  assert.deepEqual(reopened, ["user-charles"]);
+  assert.deepEqual(left, []);
+});
+
+test("Escape on a task with no step behind it, as a launch or a link opens one on, leaves the task once", () => {
+  const left: string[] = [];
+  const window = mount(
+    tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: TASK_ID,
+      boundFor: TASK_ID,
+      onLeaveTask: () => left.push(TASK_ID),
+    }),
+  );
+
+  window.escape();
+
+  assert.deepEqual(left, [TASK_ID]);
+});
+
+test("Escape on a task whose step back is cancelled at the leave ask moves nothing, and Leave takes that step", () => {
+  const asked: (() => void)[] = [];
+  const ask: LeaveAskHolder = { current: undefined };
+  const inboxes: string[] = [];
+  const left: string[] = [];
+  const window = mount(inboxOrTask(false, inboxes, left, ask));
+  window.stand(inboxOrTask(true, inboxes, left, ask));
+
+  ask.current = (leave) => asked.push(leave);
+  window.escape();
+  assert.deepEqual(inboxes, [], "the step waits on the ask");
+  assert.deepEqual(left, [], "and the task is not left in its place");
+  assert.equal(window.history().canGoBack, true, "and the trail has not moved");
+
+  act(() => asked[0]?.());
+  assert.deepEqual(inboxes, ["inbox"], "Leave takes the step it asked about");
+  assert.deepEqual(left, []);
 });
 
 test("a person's page is a step of its own, which Back from a plan opened after it returns to, and another person's is another step", () => {
