@@ -2901,11 +2901,7 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     section: { id: growth, title: "Growth" },
     tasksBackUnderTasks: 1,
   });
-  assert.deepEqual(await sectionsOf(caller.userId, workspaceId), {
-    sections: [],
-    entries: [],
-    agentEntries: [],
-  });
+  assert.deepEqual(await sectionsOf(caller.userId, workspaceId), { sections: [], entries: [] });
   const stillThere = await database.run(readTask(teammates.userId, taskIds.billing));
   assert.ok(Option.isSome(stillThere), "deleting a section deletes none of its tasks");
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
