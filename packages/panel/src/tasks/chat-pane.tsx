@@ -14,15 +14,7 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import {
-  EmptyState,
-  TEXT_BUTTON_TONE,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-  TextButton,
-} from "@luke/ui";
+import { EmptyState, TEXT_BUTTON_TONE, TEXT_ELEMENT, TEXT_TONE, Text, TextButton } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import {
   CHAT_PLACE,
@@ -45,7 +37,6 @@ import {
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import type { SkillOption } from "@luke/ui/skill-mention";
-import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
@@ -55,17 +46,20 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
-import { FadingWords } from "../fading-words.js";
+import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
+import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
+import { ChannelName, channelTitle } from "./chat-channel-name.js";
 import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
 import { useChatMentions } from "./chat-mention-source.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { FileRef } from "./file-ref.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
+import { NEEDS_YOU } from "./inbox-model.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { LoneLinkCards } from "./lone-link-card.js";
 import { RelativeTime } from "./relative-time.js";
@@ -105,9 +99,15 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * opens the file in its task.
  * For you lists what waits on the developer (`chat-model.ts`'s `forYou`),
  * each row saying the channel it was posted in, or that it is a direct
- * message, and answered or replied to where it stands. A place with
+ * message, pressed to open it there, and answered or replied to where it
+ * stands. A channel is named as the rail names it: a task's by its glyph
+ * and name, as a task is named everywhere (`PlanGlyph`), a topic by its
+ * `#name`, and a direct message by who it is with. A place's head is a
+ * page's toolbar, its name in the toolbar's title. A place with
  * nothing in it says so under its rail glyph, as an empty pane does
- * (`EmptyState`). Every word an agent, Luke, or a person wrote draws through the
+ * (`EmptyState`). An archived topic's foot offers to bring it back where
+ * its box stood, as an archived task's composer does
+ * (`ArchivedComposerNote`). Every word an agent, Luke, or a person wrote draws through the
  * panel, so the masking keeps all of it out of a session recording, and
  * the stream is out of it whole besides (`ph-no-capture`).
  */
@@ -115,18 +115,19 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /** The tasks of a window that lists none. */
 const NO_TASKS: readonly TaskSummary[] = [];
 
-/** What For you says with nothing waiting. */
-const NOTHING_WAITS = "Nothing waits on you.";
-
 /** What a channel says before anything is posted in it. */
 const NOTHING_POSTED = "Nothing posted here yet.";
 
-/** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others. */
-const ARCHIVED_CHANNEL = "This channel is archived.";
+/** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others; and the press that brings an archived topic back. */
+const ARCHIVED_CHANNEL = "This channel is archived";
+const BRING_BACK_CHANNEL = "Bring back channel";
 const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
 
 /** What a row says of a block this build does not know. */
 const NEWER_LUKE = "Open this in a newer Luke to see the rest.";
+
+/** Where For you says a direct message was posted, in a channel's name's place. */
+const DIRECT_MESSAGE = "direct message";
 
 /** What a channel's head says of it beside its name, by its kind. */
 const CHANNEL_META = {
@@ -139,6 +140,9 @@ const REPLIERS_DRAWN = 3;
 
 /** What a folded thread's faces are, to a screen reader. */
 const REPLIERS_LABEL = "Replies from";
+
+/** What For you is called, at its head and in the rail. */
+const FOR_YOU_TITLE = "For you";
 
 /** What a thread's press says: how many replies a folded one holds, Reply where it holds none, Hide once open. */
 function threadToggleWords(open: boolean, count: number): string {
@@ -298,6 +302,8 @@ interface MessageContext {
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
   /** The doors of the task whose channel the channel named is; none for any other channel, or a task not at hand. */
   readonly doorsIn: (channelId: string) => ChatTaskDoors | undefined;
+  /** Shows a place of the chat, as For you's row opens the channel it was posted in; none where no other place is shown here. */
+  readonly onOpen: ((place: ChatPlace) => void) | undefined;
 }
 
 /** Whether a person wrote the message, whose words are drawn as typed and whose pictures lead them. */
@@ -403,7 +409,8 @@ function Byline({
 }: {
   actor: Actor;
   at: number;
-  where: string | undefined;
+  /** Where it was said, as For you names a message's channel; none in the channel itself. */
+  where: React.ReactNode;
   now: number;
   /** The presses at the line's end, shown while the message is hovered or one has the keyboard. */
   action?: React.ReactNode;
@@ -428,7 +435,9 @@ function Byline({
           <ActorRef actor={actor} nameOnly />
         )}
       </span>
-      {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
+      {where === undefined ? null : (
+        <FadingWords className="chat-byline-where">{where}</FadingWords>
+      )}
       <RelativeTime className="chat-time" at={at} now={now} />
       {action}
     </div>
@@ -519,7 +528,7 @@ function ThreadRow({
   continued = false,
 }: {
   thread: ChatThread;
-  where: string | undefined;
+  where: React.ReactNode;
   context: MessageContext;
   /** Whether the root continues its author's run, drawn under the name the run began with (`continuesRun`). */
   continued?: boolean;
@@ -684,47 +693,78 @@ function postOf(text: string, attachments: readonly CodingAgentAttachment[]): Ch
   };
 }
 
-/** Where For you says a message was posted: its channel, or a direct message. */
-function whereWords(chat: ChatAnswer, names: ChatNames, entry: ForYouEntry): string {
+/** Where For you says a message was posted: in its channel, or a direct message, pressed to open it there. */
+function ForYouWhere({
+  entry,
+  context,
+}: {
+  entry: ForYouEntry;
+  context: MessageContext;
+}): React.JSX.Element {
+  const { channel } = entry;
+  const { onOpen } = context;
   // Note that the channel decides, not the reason, since an ask in a direct message is listed as an ask.
-  if (entry.channel.kind === CHANNEL_KIND.DM) return "direct message";
-  return `in #${channelLabel(chat, names, entry.channel)}`;
+  const direct = channel.kind === CHANNEL_KIND.DM;
+  const name = direct ? (
+    DIRECT_MESSAGE
+  ) : (
+    <ChannelName chat={context.chat} names={context.names} channel={channel} />
+  );
+  return (
+    <>
+      {direct ? null : "in "}
+      {onOpen === undefined ? (
+        name
+      ) : (
+        <TextButton
+          tone={TEXT_BUTTON_TONE.LINK}
+          onClick={() => onOpen({ kind: CHAT_PLACE.CHANNEL, channelId: channel.id })}
+        >
+          {name}
+        </TextButton>
+      )}
+    </>
+  );
 }
 
-/** The head over a place: its name, and what it says beside that. */
+/** The head over a place, a page's toolbar: the way back where it stands alone, its name as the toolbar's title, what it says beside that, and its menu. */
 function PlaceHead({
   title,
+  name,
   meta,
   lead,
   actions,
 }: {
+  /** The place's name in words, which the title is measured by. */
   title: string;
+  /** The place's name as drawn, a task's glyph before it. */
+  name: React.ReactNode;
   meta: string | undefined;
   lead: React.ReactNode;
-  /** The place's own presses at the head's end, a topic's menu. */
+  /** The place's own presses at the head's end, a channel's menu. */
   actions?: React.ReactNode;
 }): React.JSX.Element {
-  const [titleBox, titleClipped] = useClipped(title);
   return (
     <header className="desktop-toolbar chat-head">
       {lead}
-      {/* Note that the title's words are cut by a box of their own inside the heading, which fades them rather than ending them in the heading's ellipsis. */}
-      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
-        <span ref={titleBox} className="chat-head-title" data-overflow={String(titleClipped)}>
-          {title}
-        </span>
-      </Text>
-      {meta === undefined ? null : (
-        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
-          {meta}
-        </Text>
-      )}
-      {actions === undefined ? null : <span className="chat-head-actions">{actions}</span>}
+      <div className="desktop-toolbar-heading">
+        <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={title}>
+          {name}
+        </FadingWords>
+        {meta === undefined ? null : (
+          <span className="chat-head-meta">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
+              {meta}
+            </Text>
+          </span>
+        )}
+      </div>
+      {actions === undefined ? null : <div className="desktop-toolbar-actions">{actions}</div>}
     </header>
   );
 }
 
-/** What a channel's head says beside its name: a plan channel's plan, a DM's other member's agent or plan. */
+/** What a channel's head says beside its name: a topic's purpose, a DM's other member's agent or plan; nothing of a task's, whose name is its title. */
 function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string | undefined {
   switch (channel.kind) {
     case CHANNEL_KIND.GENERAL:
@@ -732,7 +772,7 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
     case CHANNEL_KIND.TOPIC:
       return channel.purpose ?? CHANNEL_META[channel.kind];
     case CHANNEL_KIND.TASK:
-      return channel.planId === undefined ? undefined : names.tasks.get(channel.planId);
+      return undefined;
     case CHANNEL_KIND.DM: {
       const other = channel.members?.find((id) => id !== chat.self);
       if (other === undefined) return undefined;
@@ -745,12 +785,6 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
 /** A direct message's two, each by name, as its foot names them where the reader is neither. */
 function dmPair(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
   return (channel.members ?? []).map((id) => chatWho(chat, names, id).name).join(" and ");
-}
-
-/** A channel's title as its head says it: `# name`, or a DM by who it is with, both of its two's names where the reader is neither (`channelLabel`). */
-function channelTitle(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
-  const label = channelLabel(chat, names, channel);
-  return channel.kind === CHANNEL_KIND.DM ? label : `# ${label}`;
 }
 
 /** What a channel's composer is called: "Message" and the channel's `#name`, or who a DM is with. */
@@ -773,6 +807,8 @@ export function ChatPane({
   readPicture,
   lead,
   channelActions,
+  onOpen,
+  onBringBack,
   hidden,
   taskDoors,
 }: {
@@ -793,8 +829,12 @@ export function ChatPane({
   readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
   /** What leads the place's head: the way back to the rail, where the place stands alone. */
   lead?: React.ReactNode;
-  /** The presses a channel's head ends on, a topic's menu; none where the channel offers none. */
+  /** The presses a channel's head ends on, its menu; none where the channel offers none. */
   channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
+  /** Shows a place of the chat, as For you's row opens its channel; none where no other place is shown here. */
+  onOpen?: ((place: ChatPlace) => void) | undefined;
+  /** Asks to bring an archived topic back, from its foot; none where it is not offered. */
+  onBringBack?: ((channel: ChatChannel) => void) | undefined;
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
   /** The doors of a task, by its id, that its channel's messages read their code and open their files through; none where the task is not at hand. */
@@ -821,15 +861,16 @@ export function ChatPane({
     onAnswer,
     readPicture,
     doorsIn,
+    onOpen,
   };
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);
     return (
       <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
-        <PlaceHead title="For you" meta={undefined} lead={lead} />
+        <PlaceHead title={FOR_YOU_TITLE} name={FOR_YOU_TITLE} meta={undefined} lead={lead} />
         {entries.length === 0 ? (
-          <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
+          <EmptyState icon={<AtSignIcon />}>{NEEDS_YOU.NONE}</EmptyState>
         ) : (
           <Conversation>
             <ConversationContent className="chat-stream-body">
@@ -839,7 +880,7 @@ export function ChatPane({
                   <TaskDoorsScope key={entry.message.id} doors={doorsIn(entry.channel.id)}>
                     <ThreadRow
                       thread={entry}
-                      where={whereWords(chat, names, entry)}
+                      where={<ForYouWhere entry={entry} context={context} />}
                       context={context}
                     />
                   </TaskDoorsScope>
@@ -859,6 +900,7 @@ export function ChatPane({
     <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
       <PlaceHead
         title={title}
+        name={<ChannelName chat={chat} names={names} channel={channel} />}
         meta={channelMeta(chat, names, channel)}
         lead={lead}
         actions={channelActions?.(channel)}
@@ -884,7 +926,14 @@ export function ChatPane({
             onPost({ ...postOf(text, attachments), channelId: channel.id })
           }
         />
+      ) : channel.archived && channel.kind === CHANNEL_KIND.TOPIC && onBringBack !== undefined ? (
+        <ArchivedComposerNote
+          words={ARCHIVED_CHANNEL}
+          action={BRING_BACK_CHANNEL}
+          onUnarchive={() => onBringBack(channel)}
+        />
       ) : (
+        // Note that a task's channel comes back with its task, and a DM between two others is only read, so neither offers a press.
         <div className="chat-closed-foot">
           <Text tone={TEXT_TONE.MUTED}>
             {channel.archived ? ARCHIVED_CHANNEL : OTHERS_DM(dmPair(chat, names, channel))}

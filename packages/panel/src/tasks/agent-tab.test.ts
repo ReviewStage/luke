@@ -836,7 +836,7 @@ function channelOf(seq: number): string | undefined {
   return chat.answer.messages.find((message) => message.seq === seq)?.channelId;
 }
 
-test("a line a chat notice wrote draws as a card from its sender, naming the channel and the message's place, its words the message's own, and Open in Chat opens the channel", () => {
+test("a line a chat notice wrote draws as a card from its sender, naming the channel, a task's by its glyph and name, and the message's place, its words the message's own, and Open in Chat opens the channel", () => {
   const { container, opened } = noticeDrawn(true);
   const card = container.querySelector<HTMLElement>("[data-chat-notice]");
   assert.ok(card, "the notice draws as a card");
@@ -848,7 +848,11 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   );
   assert.match(
     card.querySelector(".chat-notice-place")?.textContent ?? "",
-    /^in #teammate-invitations · m 43 · /u,
+    /^in teammate-invitations · m 43 · /u,
+  );
+  assert.ok(
+    card.querySelector(".chat-notice-place .chat-channel-glyph svg"),
+    "the task's channel wears its glyph",
   );
   assert.match(
     card.querySelector(".chat-notice-words")?.textContent ?? "",

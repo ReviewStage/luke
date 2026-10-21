@@ -77,7 +77,11 @@ beforeAll(installEditorLayout);
 
 let root: Root | undefined;
 
+/** The tasks opened from Chat, in the order asked. */
+let selected: string[] = [];
+
 beforeEach(() => {
+  selected = [];
   fakeAppPlatform(QUIET_PANEL);
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -123,6 +127,7 @@ function mount(
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
+        onSelect: (taskId) => selected.push(taskId),
         ...control,
         chatView: {
           open: true,
@@ -173,8 +178,8 @@ function rail(page: HTMLElement): string[] {
   ].map((node) => {
     if (node.closest(".sidebar-repository-header") !== null) return `# ${headName(node)}`;
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
-    // For you says under its name how many wait on the reader, which it is read by.
-    const waiting = /^(\d+) waits? on you$/u.exec(
+    // For you says under its name how many need the reader, in the Inbox's words, which it is read by.
+    const waiting = /^(\d+) needs? you$/u.exec(
       node.querySelector(".luke-list-row-description")?.textContent ?? "",
     )?.[1];
     if (waiting !== undefined) return `${shown}${railName(node)} (${waiting})`;
@@ -183,12 +188,20 @@ function rail(page: HTMLElement): string[] {
   });
 }
 
+/** Words as a reader sees them, a task's glyph drawn as `▣ ` before its name. */
+function seen(node: Element | null | undefined): string | undefined {
+  if (node === null || node === undefined) return undefined;
+  const copy = node.cloneNode(true) as Element;
+  for (const glyph of copy.querySelectorAll(".chat-channel-glyph")) glyph.replaceWith("▣ ");
+  return copy.textContent ?? "";
+}
+
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
 function stream(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
     const byline = node.querySelector(":scope > .chat-message-body > .chat-byline");
     const author = byline?.querySelector(".chat-byline-name")?.textContent ?? "";
-    const where = byline?.querySelector(".chat-byline-where")?.textContent;
+    const where = seen(byline?.querySelector(".chat-byline-where"));
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
     return `${indent}${author}${where === undefined ? "" : ` ${where}`}`;
   });
@@ -229,17 +242,17 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "Maria Chen",
   ]);
   assert.deepEqual(stream(page), [
-    "Add teammate invitations in #teammate-invitations",
-    "Invite emails in #teammate-invitations",
-    "Invite emails in #teammate-invitations",
-    "Add teammate invitations in #teammate-invitations",
+    "Add teammate invitations in ▣ teammate-invitations",
+    "Invite emails in ▣ teammate-invitations",
+    "Invite emails in ▣ teammate-invitations",
+    "Add teammate invitations in ▣ teammate-invitations",
   ]);
 });
 
 test("a press on a channel shows its messages in the order posted, a thread folded under its root until a press opens it", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
-  assert.equal(page.querySelector(".chat-head h2")?.textContent, "# teammate-invitations");
+  assert.equal(seen(page.querySelector(".chat-head h1")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
     "Invite emails",
@@ -434,9 +447,9 @@ test("an ask posted in a direct message is listed among For you's asks as a dire
     },
   }));
   assert.deepEqual(stream(page).slice(0, 3), [
-    "Add teammate invitations in #teammate-invitations",
+    "Add teammate invitations in ▣ teammate-invitations",
     "Invite emails direct message",
-    "Invite emails in #teammate-invitations",
+    "Invite emails in ▣ teammate-invitations",
   ]);
 });
 
@@ -901,11 +914,19 @@ function mountTaskTabReading(): HTMLElement {
   return container;
 }
 
-test("until the chat is read, its wait stands centred in the window's Chat and in the plan's Chat tab, rather than as a ring in the corner", () => {
+test("until the chat is read, the window's Chat keeps its titled bar with New channel over placeholder rows saying it is read, and the plan's Chat tab's wait stands centred, rather than as a ring in the corner", () => {
   const chat = mount(() => undefined);
-  const windowWait = chat.querySelector('.chat-stream [role="status"]');
+  const bar = chat.querySelector(".chat-rail .desktop-toolbar");
+  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  assert.ok(
+    bar?.querySelector('button[aria-label="New channel"]'),
+    "New channel stands while it is read",
+  );
+  const windowWait = chat.querySelector('.chat-rail [role="status"]');
   assert.ok(windowWait, "the window's Chat says it is waiting");
-  assert.ok(windowWait.closest(".luke-spinner-region"), "the wait fills the window's Chat");
+  assert.equal(windowWait.querySelector(".luke-visually-hidden")?.textContent, "Reading chat…");
+  assert.ok(windowWait.querySelector(".luke-list-row"), "the wait stands as the rail's rows");
+  assert.equal(chat.querySelector(".luke-spinner-region"), null);
   act(() => root?.unmount());
 
   const tab = mountTaskTabReading();
@@ -969,7 +990,7 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(pair?.querySelectorAll(".inbox-row-mark .actor-stack .actor-mark").length, 2);
   act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
   assert.equal(
-    page.querySelector(".chat-head h2")?.textContent,
+    page.querySelector(".chat-head h1")?.textContent,
     "Add teammate invitations ↔ Invite emails",
   );
   assert.equal(page.querySelector(".chat-composer"), null);
@@ -1284,7 +1305,7 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   await settle();
   assert.equal(openDialog(), null);
   act(() => railRow(page, "release-train").click());
-  assert.equal(page.querySelector(".chat-head h2")?.textContent, "# release-train");
+  assert.equal(page.querySelector(".chat-head h1")?.textContent, "#release-train");
   assert.match(page.querySelector(".chat-head")?.textContent ?? "", /What ships Friday/u);
 
   const actions = page.querySelector<HTMLButtonElement>(
@@ -1298,44 +1319,128 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   act(() => archive?.click());
   act(() => dialogButton("Archive channel").click());
   await settle();
-  // The topic archived while it is read keeps its row in sight, under the folded archive, still the one shown.
+  // The topic archived while it is read keeps its row in sight, under Archived, still the one shown.
   const archivedRows = () =>
     [...page.querySelectorAll(".chat-rail .sidebar-repository")]
       .filter((group) => group.textContent?.startsWith("Archived"))
       .flatMap((group) => [...group.querySelectorAll("li .luke-list-row-main")].map(railName));
   assert.deepEqual(archivedRows(), ["release-train"]);
   assert.ok(rail(page).includes("▸ release-train"));
+  // Its foot offers to bring it back where its box stood.
+  const foot = page.querySelector<HTMLElement>(".chat-stream .agent-composer");
+  assert.match(foot?.textContent ?? "", /This channel is archived/u);
   act(() => railRow(page, "general").click());
-  assert.deepEqual(archivedRows(), [], "the fold holds it once another place is shown");
+  assert.deepEqual(archivedRows(), [], "the archived leave the rail once another place is shown");
 
-  // Archived channels fold apart, and a topic among them is brought back from its own menu.
-  const archived = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find((each) =>
-    each.textContent?.startsWith("Archived"),
-  );
-  assert.ok(archived, "the archive stands folded in the rail");
-  act(() => archived.click());
+  // View options shows the archived channels, and a topic among them is brought back from its foot.
+  pickViewOption(page, "Show archived channels");
+  assert.deepEqual(archivedRows(), ["release-train"]);
   act(() => railRow(page, "release-train").click());
-  const back = page.querySelector<HTMLButtonElement>(
-    '.chat-head button[aria-label="#release-train actions"]',
-  );
-  act(() => back?.click());
-  const bring = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (item) => item.textContent === "Bring back channel",
-  );
-  act(() => bring?.click());
+  const bring = [
+    ...page.querySelectorAll<HTMLButtonElement>(".chat-stream .agent-composer button"),
+  ].find((each) => each.textContent === "Bring back channel");
+  assert.ok(bring, "the archived topic's foot offers to bring it back");
+  act(() => bring.click());
   act(() => dialogButton("Bring back").click());
   await settle();
   assert.ok(
     rail(page).includes("▸ release-train"),
     "the topic stands among the channels again, shown",
   );
-  assert.equal(
-    [...page.querySelectorAll(".chat-rail button")].some((each) =>
-      each.textContent?.startsWith("Archived"),
-    ),
-    false,
-    "nothing is left archived",
+  assert.deepEqual(archivedRows(), [], "nothing is left archived");
+  assert.ok(boxNamed(page, "Message #release-train"), "its box stands again");
+});
+
+/** Picks an item of the rail's View options by its words. */
+function pickViewOption(page: HTMLElement, label: string): void {
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>('.chat-rail-bar button[aria-label="View options"]')
+      ?.click(),
   );
+  const item = [
+    ...document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'),
+  ].find((each) => each.textContent?.includes(label));
+  assert.ok(item, `no ${label} in View options`);
+  act(() => item.click());
+}
+
+/** The items of the menu a channel's head ends on, as its words, the disabled marked `(off)`. */
+function channelMenu(page: HTMLElement): string[] {
+  const actions = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label$=" actions"]',
+  );
+  assert.ok(actions, "the channel's head ends on its menu");
+  act(() => actions.click());
+  return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((item) => {
+    const off = item.getAttribute("aria-disabled") === "true" || item.hasAttribute("disabled");
+    return `${item.textContent ?? ""}${off ? " (off)" : ""}`;
+  });
+}
+
+/** Presses an item of the open menu by its words. */
+function pressMenuItem(label: string): void {
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(item, `no ${label} in the menu`);
+  act(() => item.click());
+}
+
+test("every channel's head ends on its menu: Mark as read and Copy link for each, Open task for a task's, Edit and Archive for a topic's", () => {
+  const page = mount(undefined, ACME);
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.deepEqual(channelMenu(page), ["Mark as read", "Copy link", "Open task"]);
+  // Mark as read takes the unread dot off its row, and is offered no more.
+  pressMenuItem("Mark as read");
+  assert.ok(rail(page).includes("▸ teammate-invitations"));
+  assert.deepEqual(channelMenu(page), ["Mark as read (off)", "Copy link", "Open task"]);
+  pressMenuItem("Open task");
+  assert.deepEqual(selected, [FIXTURE_TASK_ID], "Open task opens the channel's task");
+
+  act(() => railRow(page, "Maria Chen").click());
+  assert.deepEqual(channelMenu(page), ["Mark as read (off)", "Copy link"]);
+  act(() => railRow(page, "members-schema").click());
+  assert.deepEqual(channelMenu(page), [
+    "Mark as read (off)",
+    "Copy link",
+    "Edit channel",
+    "Archive channel",
+  ]);
+});
+
+test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag, View options, New channel, and Send feedback; Mark all as read takes every unread dot off", () => {
+  const page = mount();
+  const bar = page.querySelector(".chat-rail-bar");
+  assert.equal(bar?.querySelector("h1.desktop-toolbar-title")?.textContent, "Chat");
+  assert.equal(bar?.querySelector(".experiment-tag")?.textContent, "Experimental");
+  assert.deepEqual(
+    [...(bar?.querySelectorAll(".desktop-toolbar-actions button") ?? [])].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    ),
+    ["View options", "New channel", "Send feedback"],
+  );
+  assert.ok(
+    rail(page).some((row) => row.endsWith(" •")),
+    "something waits unread",
+  );
+  pickViewOption(page, "Mark all as read");
+  assert.deepEqual(
+    rail(page).filter((row) => row.endsWith(" •")),
+    [],
+    "nothing waits unread",
+  );
+});
+
+test("a For you row names a task's channel by its glyph and name, and a press on it opens the channel", () => {
+  const page = mount();
+  const where = page.querySelector<HTMLElement>(".chat-message .chat-byline-where");
+  assert.ok(where?.querySelector(".chat-channel-glyph svg"), "the task's glyph");
+  const link = where?.querySelector<HTMLButtonElement>("button");
+  assert.equal(seen(link), "▣ teammate-invitations");
+  act(() => link?.click());
+  assert.equal(seen(page.querySelector(".chat-head h1")), "▣ teammate-invitations");
+  assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
 });
 
 test("a fixture chat opens no topic past the bound, and an archive frees a place for one", () => {
