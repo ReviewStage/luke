@@ -71,6 +71,8 @@ import {
   CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
+  type CodingAgentNewestAnswer,
+  type CodingAgentOlderAnswer,
   type CodingAgentPinRequest,
   type CodingAgentRenameRequest,
   type CodingAgentServersRequest,
@@ -732,6 +734,55 @@ export class HostedCodingAgentClient {
         ? askHosted(this.#hosted.messages.agent, { id: agentId, after, wait })
         : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, after, wait });
     return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
+  }
+
+  /**
+   * One agent's transcript, or a worker's, read back from its end at once:
+   * its newest page, with all the page past a cursor carries, the cursor
+   * `messagesNow` follows on from with nothing written meanwhile missed, and
+   * where the next older page is read below (`messagesBefore`); none where
+   * nothing older stands.
+   */
+  messagesNewest(
+    agentId: string,
+    callId?: string,
+  ): Effect.Effect<CodingAgentNewestAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.map(
+      hostedAnswer(this.#newest(agentId, callId), ROW_REFUSALS),
+      // Note that a read naming no `before` is answered the newest page, which an older page alone is not.
+      (answer) => ("failure" in answer || "status" in answer ? answer : UNANSWERED),
+    );
+  }
+
+  /**
+   * The page of an agent's transcript, or a worker's, below the oldest row
+   * a reader holds, as `messagesNewest` or this answered `before`: its
+   * messages, oldest first, and where the page older still is read below;
+   * none where nothing older stands.
+   */
+  messagesBefore(
+    agentId: string,
+    before: string,
+    callId?: string,
+  ): Effect.Effect<CodingAgentOlderAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.map(
+      hostedAnswer(this.#newest(agentId, callId, before), ROW_REFUSALS),
+      (answer): CodingAgentOlderAnswer | Failed =>
+        "failure" in answer
+          ? answer
+          : {
+              messages: answer.messages,
+              ...(answer.before === undefined ? undefined : { before: answer.before }),
+            },
+    );
+  }
+
+  /** A transcript read back from its end, the agent's or its worker's, below `before` where it names one. */
+  #newest(agentId: string, callId?: string, before?: string) {
+    const page = before === undefined ? {} : { before };
+    return callId === undefined
+      ? askHosted(this.#hosted.messages.agentNewest, { id: agentId, ...page })
+      : askHosted(this.#hosted.messages.agentWorkerNewest, { id: agentId, call: callId, ...page });
   }
 
   /**

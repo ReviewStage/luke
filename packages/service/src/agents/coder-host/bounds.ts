@@ -63,6 +63,12 @@ export const CODER = {
   /** How often a held transcript read looks for a new message. */
   MESSAGES_POLL: Duration.millis(500),
   /**
+   * How many of a transcript read's independent queries run at once. The
+   * function's pool holds five connections (`db/index.ts`), so one read
+   * takes at most four and leaves one for the request's other reads.
+   */
+  READ_CONCURRENCY: 4,
+  /**
    * How often a held read of what waits across the account looks for a
    * change. Slower than `MESSAGES_POLL`, because a desktop holds that read
    * for as long as it is signed in, and an item heard a moment later costs

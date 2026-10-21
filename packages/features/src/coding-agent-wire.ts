@@ -1984,6 +1984,40 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
 export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
 
 /**
+ * Where a reader of a transcript read back from its end stands: the lowest
+ * message sequence it holds, in decimal. The next older page is the
+ * messages below it.
+ */
+export const codingAgentBeforeSchema = EffectSchema.String.check(EffectSchema.isPattern(/^\d+$/u));
+
+/**
+ * The transcript's newest page, read at once: the newest messages, oldest
+ * first, with everything the page past a cursor carries, its `cursor` the
+ * one a reader follows on from with nothing written meanwhile missed, and
+ * `before` the place the next older page is read below; absent where
+ * nothing older stands.
+ */
+export const codingAgentNewestAnswerSchema = EffectSchema.Struct({
+  ...codingAgentMessagesAnswerSchema.fields,
+  before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+});
+
+export type CodingAgentNewestAnswer = typeof codingAgentNewestAnswerSchema.Type;
+
+/**
+ * An older page of the transcript, read below `before`: its messages,
+ * oldest first, and where the page older still is read below; absent where
+ * nothing older stands. It carries nothing of the agent as a whole, which
+ * the newest page told.
+ */
+export const codingAgentOlderAnswerSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(codingAgentMessageSchema),
+  before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+});
+
+export type CodingAgentOlderAnswer = typeof codingAgentOlderAnswerSchema.Type;
+
+/**
  * A page of an agent's messages joined to the ones held: a message heard
  * again that says something new replaces the one held under its id, in
  * place, and a new one joins at the end, so a journal that grows in place is

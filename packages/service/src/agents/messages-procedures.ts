@@ -23,6 +23,13 @@
  * with whether the held read would have held on it and how soon the clock
  * alone may end that hold, for a reader following
  * its live statements (`live-wire.ts`).
+ *
+ * Beside them, the same two transcripts read back from their end, at once
+ * (`GET /api/agents/{id}/messages/newest`, and its worker's under
+ * `subagents/{call}`): the newest page, with the cursor a reader follows
+ * on from past it, or, where `before` names the oldest row a reader holds,
+ * the page below it, so a desktop opening a long transcript draws its end
+ * first and reads back only as far as it is scrolled.
  */
 
 import { childTitlesOf } from "@luke/database/models/child-titles";
@@ -36,6 +43,9 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
+  type CodingAgentNewestAnswer,
+  type CodingAgentOlderAnswer,
+  codingAgentBeforeSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
 } from "@luke/features/coding-agent-wire";
@@ -67,9 +77,13 @@ import {
   NO_TITLE_EDGE,
   type TitleAwaited,
   type TitleEdge,
+  type TranscriptNewest,
+  type TranscriptOlder,
   type TranscriptPage,
   titleMayLand,
   titleWindowEdge,
+  transcriptBefore,
+  transcriptNewest,
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
@@ -125,6 +139,17 @@ const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readEither(codingAgentCursorSchema)(unparsedWire(after));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
+});
+
+/** Where a read back from the end names it reads below, or none for the newest page; refused where it names something else. */
+const beforeNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+  before: string | undefined,
+): Effect.fn.Return<number | undefined, HostedRefusal> {
+  if (before === undefined) return undefined;
+  const read = readEither(codingAgentBeforeSchema)(unparsedWire(before));
+  const seq = Result.isFailure(read) ? Number.NaN : Number(read.success);
+  if (!Number.isSafeInteger(seq)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return seq;
 });
 
 /**
@@ -195,6 +220,22 @@ function transcriptAnswer(
   };
 }
 
+/** A transcript's newest page as the wire answers it, with where the page before it is read below. */
+function newestAnswer(newest: TranscriptNewest, title: string | null): CodingAgentNewestAnswer {
+  return {
+    ...transcriptAnswer(newest.page, title),
+    ...(newest.before === undefined ? undefined : { before: String(newest.before) }),
+  };
+}
+
+/** An older page of a transcript as the wire answers it. */
+function olderAnswer(older: TranscriptOlder): CodingAgentOlderAnswer {
+  return {
+    messages: wireMessages(older.messages),
+    ...(older.before === undefined ? undefined : { before: String(older.before) }),
+  };
+}
+
 /** A detailed input whose body's words run past the bound, whatever else it carries: refused as too long rather than as a body that does not read. */
 const isTooLong = Schema.is(
   Schema.Struct({
@@ -224,7 +265,7 @@ const tooLongMiddleware = middlewareGen<HostedContext>(function* ({ next }, inpu
   );
 });
 
-/** The messages resource: its five held reads and the two writes on their paths, each to a signed-in caller. */
+/** The messages resource: its five held reads, the two transcripts read back from their end, and the two writes on their paths, each to a signed-in caller. */
 export function messagesProcedures(seams: MessagesProcedureSeams) {
   const signedIn = hosted.messages.use(accountMiddleware(seams.resolveUserId));
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -323,6 +364,62 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
       return transcriptAnswer(page, titles.get(conversationId) ?? null, holds, wakeIn);
+    }),
+
+    agentNewest: signedIn.agentNewest.effect(function* ({ input, context }) {
+      const before = yield* beforeNamed(input.before);
+      const { agent, target } = yield* reachedAgent(context.userId, input.id);
+      if (before !== undefined) {
+        return olderAnswer(
+          yield* hostedStoreOrUnavailable(transcriptBefore(target, CODER_TOOL_SET, before)),
+        );
+      }
+      const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
+      const newest = yield* hostedStoreOrUnavailable(
+        transcriptNewest(target, CODER_TOOL_SET, standing, agent),
+      );
+      // The title is read after the page, as the forward read's is, so one that landed while the page was read is told rather than lost to a follow that starts after it.
+      const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
+      return newestAnswer(
+        newest,
+        Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
+      );
+    }),
+
+    agentWorkerNewest: signedIn.agentWorkerNewest.effect(function* ({ input, context }) {
+      const before = yield* beforeNamed(input.before);
+      const callId = yield* callNamed(input.call);
+      const { agent, target } = yield* reachedAgent(context.userId, input.id);
+      const conversationId = childConversationId(agent.conversationId, callId);
+      const read = yield* hostedStoreOrUnavailable(delegationNow(target, conversationId, agent));
+      if (read.delegation === undefined) {
+        if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+        // The call's record has not landed yet, so its worker has written nothing.
+        if (before !== undefined) return olderAnswer({ messages: [] });
+        return newestAnswer(
+          {
+            page: {
+              messages: [],
+              cursor: cursorOfWire(CODING_AGENT_CURSOR_START),
+              status: CODING_AGENT_STATUS.STARTING,
+            },
+          },
+          null,
+        );
+      }
+      const worker = { userId: agent.userId, conversationId };
+      if (before !== undefined) {
+        return olderAnswer(
+          yield* hostedStoreOrUnavailable(transcriptBefore(worker, CODER_TOOL_SET, before)),
+        );
+      }
+      const started = { createdAt: read.delegation.createdAt };
+      const newest = yield* hostedStoreOrUnavailable(
+        transcriptNewest(worker, CODER_TOOL_SET, started),
+      );
+      // The title is read after the page, since it lands beside the worker's start, which the page's reads may span.
+      const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
+      return newestAnswer(newest, titles.get(conversationId) ?? null);
     }),
 
     chat: signedIn.chat.effect(function* ({ input, context }) {

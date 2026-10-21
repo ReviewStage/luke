@@ -29,6 +29,8 @@ import {
   CODING_AGENT_BOUNDS,
   codingAgentAnswerSchema,
   codingAgentMessageRequestSchema,
+  codingAgentNewestAnswerSchema,
+  codingAgentOlderAnswerSchema,
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../coding-agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
@@ -69,6 +71,15 @@ const agentTranscriptAnswerSchema = EffectSchema.Struct({
   holds: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
+/** An agent's or a worker's transcript read back from its end: the newest page, or the page below `before`. */
+const newestQuery = { before: queryValue };
+
+/** The newest page with all it carries, or an older page, as the read named `before` or not. */
+const newestAnswerSchema = EffectSchema.Union([
+  codingAgentNewestAnswerSchema,
+  codingAgentOlderAnswerSchema,
+]);
+
 /** A workspace's chat, named in the query, with any key beside it taken as it comes. */
 const chatQuery = EffectSchema.StructWithRest(EffectSchema.Struct({ workspaceId: queryValue }), [
   EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
@@ -98,6 +109,21 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
     .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
     .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
+  /** One agent's transcript read back from its end, at once: its newest page, or, with `before`, the page below it. */
+  agentNewest: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/messages/newest" }))
+    .input(EffectSchema.Struct({ ...byId, ...newestQuery }))
+    .output(EffectSchema.flip(newestAnswerSchema)),
+  /** One agent's worker's transcript read back from its end, at once: its newest page, or, with `before`, the page below it. */
+  agentWorkerNewest: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.GET,
+        path: "/api/agents/{id}/subagents/{call}/messages/newest",
+      }),
+    )
+    .input(EffectSchema.Struct({ ...byCall, ...newestQuery }))
+    .output(EffectSchema.flip(newestAnswerSchema)),
   /** A workspace's chat past the cursor, held while nothing moved. */
   chat: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT }))
