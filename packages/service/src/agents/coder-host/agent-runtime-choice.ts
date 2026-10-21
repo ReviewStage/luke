@@ -2,11 +2,11 @@
  * agent-runtime-choice.ts -- the runtime a new coding agent runs on and who pays for it, decided once as it starts.
  *
  * An agent runs on a native harness when, and only when, that provider's
- * plan pays for it. For Release 1's cohort the plan is offered:
+ * plan pays for it. The plan is offered to every account that connected it:
  *
- * - Claude Code, paid for by the account's Claude plan, for an account in
- *   `LUKE_NATIVE_AGENT_ACCOUNTS`, on a Claude model Claude Code runs (no
- *   fast variant), where the account keeps a Claude setup-token and this
+ * - Claude Code, paid for by the account's Claude plan, on a Claude model
+ *   Claude Code runs (no fast variant), where the account keeps a Claude
+ *   setup-token and this
  *   function reaches a harness (`NativeAgentSessions`: a web function's own,
  *   or the eve app's relay to one, so a Start from an eve agent decides as
  *   the panel's does).
@@ -23,8 +23,8 @@
  * since that is the key eve's steps run on (`account-keys.ts`), so a pick of
  * either names eve and the payer recorded is the one eve bills. A pick of
  * the other provider's plan is no pick of this one's. Where no plan is
- * offered, the agent runs on eve exactly as before, with no payer recorded,
- * whatever was picked.
+ * offered, as for an account that connected none, the agent runs on eve
+ * exactly as before, with no payer recorded, whatever was picked.
  *
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
@@ -127,14 +127,11 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   model: string,
   picked?: CodingAgentPayer,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure, DatabaseServices> {
-  const environment = yield* Effect.serviceOption(HostedEnvironment);
-  const cohort =
-    Option.isSome(environment) && environment.value.nativeAgentAccounts.includes(userId);
-  if (!cohort) return ON_EVE;
   const provider = providerModelOf(model);
   if (provider === undefined || provider.fast) return ON_EVE;
   if (Option.isNone(yield* Effect.serviceOption(NativeAgentSessions))) return ON_EVE;
-  const ring = environment.value.providerKeyEncryptionKeys;
+  const environment = yield* Effect.serviceOption(HostedEnvironment);
+  const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
   const plan = yield* keptPlan(userId, provider.provider, ring);
   if (plan === undefined) return ON_EVE;
   const onPlan = onPlanOf(provider.provider);

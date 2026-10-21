@@ -8,7 +8,7 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { and, asc, eq, lte, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
@@ -119,6 +119,25 @@ const findEveryRow = SqlSchema.findAll({
           asc(accountProviderKey.provider),
           asc(accountProviderKey.kind),
         ),
+    ),
+});
+
+/** One account's plan credential, of either provider's plan, for whether any account connected a plan at all. */
+const findAnyPlanRow = SqlSchema.findAll({
+  Request: Schema.Void,
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: () =>
+    Database.use((db) =>
+      db
+        .select({ userId: accountProviderKey.userId })
+        .from(accountProviderKey)
+        .where(
+          inArray(accountProviderKey.kind, [
+            PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+            PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          ]),
+        )
+        .limit(1),
     ),
 });
 
@@ -563,6 +582,11 @@ export function setProviderKeyFastAccess(
   fastAccess: FastAccess,
 ): TaskStoreEffect<void> {
   return updateFastAccess({ userId, provider, sealedKey, fastAccess });
+}
+
+/** Whether any account keeps a plan credential, a Claude setup-token or a ChatGPT sign-in, whatever its status: what the native agents' template is built ahead for. */
+export function anyPlanConnected(): TaskStoreEffect<boolean> {
+  return Effect.map(findAnyPlanRow(undefined), (rows) => rows.length > 0);
 }
 
 /** Every stored key of every account, sealed, for the rewrap alone. */

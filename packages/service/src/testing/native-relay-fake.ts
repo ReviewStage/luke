@@ -64,11 +64,8 @@ export interface NativeRelayFakeOptions {
   readonly onLaunch?: (conversationId: string) => Effect.Effect<unknown, unknown, DatabaseServices>;
 }
 
-/** The deployment's environment, holding the eve secret given and the cohort, and nothing else. */
-function environmentValues(
-  secret: string | undefined,
-  cohort: readonly string[],
-): HostedEnvironmentValues {
+/** The deployment's environment, holding the eve secret given, and nothing else. */
+function environmentValues(secret: string | undefined): HostedEnvironmentValues {
   return {
     openAiKey: undefined,
     anthropicKey: undefined,
@@ -81,16 +78,12 @@ function environmentValues(
     eveDeploymentSecret: secret === undefined ? undefined : Redacted.make(secret),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
-    nativeAgentAccounts: cohort,
   };
 }
 
 /** The deployment's environment as a layer, as above. */
-export function relayEnvironment(
-  secret: string | undefined,
-  cohort: readonly string[] = [],
-): Layer.Layer<HostedEnvironment> {
-  return Layer.succeed(HostedEnvironment, environmentValues(secret, cohort));
+export function relayEnvironment(secret: string | undefined): Layer.Layer<HostedEnvironment> {
+  return Layer.succeed(HostedEnvironment, environmentValues(secret));
 }
 
 /** The harness behind the route, writing down every call and answering each as taken. */
@@ -186,7 +179,7 @@ export const nativeRelayFake = (options: NativeRelayFakeOptions = {}) =>
       const withEnvironment = Context.add(
         services,
         HostedEnvironment,
-        environmentValues(webSecret, []),
+        environmentValues(webSecret),
       );
       const context =
         options.harness === false

@@ -26,7 +26,7 @@ import { CodingAgentsPage } from "./coding-agents-page.js";
 
 /**
  * Settings › Coding agents › Claude Code over a bridge answering as the host
- * would: drawn for an account in the native-agents cohort alone; Add token
+ * would: drawn for every account; Add token
  * grows a masked field, Save sends the pasted token once with its kind and
  * clears it, and the row draws the service's hint and status of what was
  * kept; nothing of the token stands on the page afterwards or is logged;
@@ -113,9 +113,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The Coding agents page for an account in the cohort or not. */
-async function mount(options: { cohort?: boolean } = {}): Promise<HTMLElement> {
-  handState({}, { access: { admin: false, nativeAgents: options.cohort ?? true } });
+/** The Coding agents page for an ordinary account, no admin and no plan connected before. */
+async function mount(): Promise<HTMLElement> {
+  handState({}, { access: { admin: false } });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -159,12 +159,10 @@ async function paste(group: Element, value: string): Promise<HTMLInputElement> {
 const question = () =>
   document.querySelector('[role="alertdialog"]') ?? assert.fail("no question stands");
 
-test("the Claude Code group stands for an account in the cohort alone", async () => {
-  const group = claudeGroup(await mount()) ?? assert.fail("a cohort account sees it");
+test("the Claude Code group stands for every account", async () => {
+  const group = claudeGroup(await mount()) ?? assert.fail("an ordinary account sees it");
   assert.match(group.textContent ?? "", /Claude plan/u);
   assert.match(group.textContent ?? "", /Run claude setup-token in a terminal, then paste/u);
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  assert.equal(claudeGroup(await mount({ cohort: false })), undefined, "outside it, nothing");
 });
 
 test("Save sends the masked field's token once with its kind, then clears it, and nothing of it stands on the page or in a log", async () => {

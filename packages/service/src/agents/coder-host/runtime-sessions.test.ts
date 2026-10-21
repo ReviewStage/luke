@@ -187,8 +187,8 @@ const GITHUB = githubReaching(INSTALLATIONS).layer;
 
 const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 
-/** The deployment's environment: its eve secret, the cohort named, and the key ring. */
-function environment(cohort: readonly string[]): Layer.Layer<HostedEnvironment> {
+/** The deployment's environment: its eve secret and the key ring. */
+function environment(): Layer.Layer<HostedEnvironment> {
   const values: HostedEnvironmentValues = {
     openAiKey: undefined,
     anthropicKey: undefined,
@@ -201,7 +201,6 @@ function environment(cohort: readonly string[]): Layer.Layer<HostedEnvironment> 
     eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(RING),
-    nativeAgentAccounts: cohort,
   };
   return Layer.succeed(HostedEnvironment, values);
 }
@@ -401,7 +400,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Effect.provide(
               Layer.mergeAll(
                 native,
-                environment([]),
+                environment(),
                 fakeHttpClientLayer(async (url) => {
                   posted.push(url);
                   return Response.json({ sessionId: "wrun_1" }, { status: 202 });
@@ -895,13 +894,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a Start decides the runtime and the payer once",
   (it) => {
     it.effect(
-      "a cohort account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account outside the cohort, one with no setup-token, or a function with no harness starts on eve as today",
+      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account with no setup-token, or a function with no harness starts on eve as today, with no payer",
       () =>
         Effect.gen(function* () {
           const cases = [
             {
-              name: "cohort, Claude, setup-token",
-              cohort: true,
+              name: "Claude, setup-token",
               token: true,
               model: "anthropic/claude-opus-5.5",
               native: true,
@@ -909,23 +907,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a GPT model",
-              cohort: true,
               token: true,
               model: "openai/gpt-5.5",
               native: true,
               on: "eve",
             },
             {
-              name: "outside the cohort",
-              cohort: false,
-              token: true,
-              model: "anthropic/claude-opus-5.5",
-              native: true,
-              on: "eve",
-            },
-            {
-              name: "no setup-token",
-              cohort: true,
+              name: "no plan connected",
               token: false,
               model: "anthropic/claude-opus-5.5",
               native: true,
@@ -933,7 +921,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "no harness here, nor a relay to one",
-              cohort: true,
               token: true,
               model: "anthropic/claude-opus-5.5",
               native: false,
@@ -946,7 +933,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
-              environment(each.cohort ? [owner] : []),
+              environment(),
               ...(each.native ? [native] : []),
             );
             const started = yield* startCodingAgent(
@@ -985,12 +972,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             call: true,
           }).pipe(
             Effect.provide(
-              Layer.mergeAll(
-                githubReaching(INSTALLATIONS).layer,
-                CATALOG,
-                environment([owner]),
-                native,
-              ),
+              Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native),
             ),
           );
 
@@ -1002,13 +984,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a cohort account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a fast GPT model, a sign-in OpenAI signed out, none, an account outside the cohort, or a function with no harness starts on eve as today, and a Claude agent is untouched",
+      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a fast GPT model, a sign-in OpenAI signed out, none, or a function with no harness starts on eve as today, with no payer, and a Claude agent is untouched",
       () =>
         Effect.gen(function* () {
           const cases = [
             {
-              name: "cohort, GPT, signed in",
-              cohort: true,
+              name: "GPT, signed in",
               chatGpt: "signed_in",
               model: "openai/gpt-5.5",
               native: true,
@@ -1016,7 +997,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a fast GPT model",
-              cohort: true,
               chatGpt: "signed_in",
               model: "openai/gpt-5.5-fast",
               native: true,
@@ -1024,7 +1004,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "signed out",
-              cohort: true,
               chatGpt: "signed_out",
               model: "openai/gpt-5.5",
               native: true,
@@ -1032,31 +1011,20 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a sign-in the ring no longer opens",
-              cohort: true,
               chatGpt: "rotated_out",
               model: "openai/gpt-5.5",
               native: true,
               on: "eve",
             },
             {
-              name: "no sign-in",
-              cohort: true,
+              name: "no plan connected",
               chatGpt: "none",
               model: "openai/gpt-5.5",
               native: true,
               on: "eve",
             },
             {
-              name: "outside the cohort",
-              cohort: false,
-              chatGpt: "signed_in",
-              model: "openai/gpt-5.5",
-              native: true,
-              on: "eve",
-            },
-            {
               name: "no harness here, nor a relay to one",
-              cohort: true,
               chatGpt: "signed_in",
               model: "openai/gpt-5.5",
               native: false,
@@ -1064,7 +1032,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a Claude model, no setup-token",
-              cohort: true,
               chatGpt: "signed_in",
               model: "anthropic/claude-opus-5.5",
               native: true,
@@ -1077,7 +1044,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
-              environment(each.cohort ? [owner] : []),
+              environment(),
               ...(each.native ? [native] : []),
             );
             const started = yield* startCodingAgent(
@@ -1119,12 +1086,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const refused = yield* Effect.result(
             startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
               Effect.provide(
-                Layer.mergeAll(
-                  githubReaching(INSTALLATIONS).layer,
-                  CATALOG,
-                  environment([owner]),
-                  native,
-                ),
+                Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native),
               ),
             ),
           );
@@ -1137,12 +1099,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the plan is offered, a payer picked at Start is honoured and else the plan's default decides: the plan runs on Claude Code, and the API key, or Luke's key where none was saved, on eve; outside the cohort a pick changes nothing",
+      "where the plan is offered, a payer picked at Start is honoured and else the plan's default decides: the plan runs on Claude Code, and the API key, or Luke's key where none was saved, on eve; with no plan connected a pick changes nothing",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
             readonly name: string;
-            readonly cohort: boolean;
+            readonly plan: boolean;
             readonly forAgents: boolean;
             readonly apiKey: boolean;
             readonly picked: CodingAgentPayer | undefined;
@@ -1150,7 +1112,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           }[] = [
             {
               name: "the override to the API key",
-              cohort: true,
+              plan: true,
               forAgents: true,
               apiKey: true,
               picked: CODING_AGENT_PAYER.API_KEY,
@@ -1158,7 +1120,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "the override with no API key saved",
-              cohort: true,
+              plan: true,
               forAgents: true,
               apiKey: false,
               picked: CODING_AGENT_PAYER.LUKE,
@@ -1166,7 +1128,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "the default off, an API key saved",
-              cohort: true,
+              plan: true,
               forAgents: false,
               apiKey: true,
               picked: undefined,
@@ -1174,7 +1136,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "the default off, no API key",
-              cohort: true,
+              plan: true,
               forAgents: false,
               apiKey: false,
               picked: undefined,
@@ -1182,23 +1144,31 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "the default off, the plan picked",
-              cohort: true,
+              plan: true,
               forAgents: false,
               apiKey: true,
               picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
               recorded: ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
-              name: "outside the cohort, the plan picked",
-              cohort: false,
+              name: "no plan connected, the plan picked",
+              plan: false,
               forAgents: true,
               apiKey: false,
               picked: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
               recorded: ["eve", null],
             },
+            {
+              name: "no plan connected, an API key saved, nothing picked",
+              plan: false,
+              forAgents: true,
+              apiKey: true,
+              picked: undefined,
+              recorded: ["eve", null],
+            },
           ];
           for (const each of cases) {
-            const { owner, workspaceId } = yield* openStarter(true);
+            const { owner, workspaceId } = yield* openStarter(each.plan);
             if (!each.forAgents) {
               const turned = yield* setProviderKeyForAgents(
                 owner,
@@ -1213,7 +1183,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
-              environment(each.cohort ? [owner] : []),
+              environment(),
               native,
             );
             const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
@@ -1314,7 +1284,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
-              environment([owner]),
+              environment(),
               native,
             );
             const started = yield* startCodingAgent(routedSessions(eve.sessions, owner), owner, {
@@ -1346,7 +1316,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const layers = Layer.mergeAll(
             githubReaching(INSTALLATIONS).layer,
             CATALOG,
-            environment([owner]),
+            environment(),
             native,
           );
           const ask = startIn(workspaceId, "anthropic/claude-opus-5.5");

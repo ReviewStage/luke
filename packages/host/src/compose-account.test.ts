@@ -212,24 +212,24 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
       openSocket: scriptedOpenSocket([]).openSocket,
     });
     // Nothing is read until the gate opening asks, so nothing is an admin before it.
-    assert.deepEqual(yield* account.accessState, { admin: false, nativeAgents: false });
+    assert.deepEqual(yield* account.accessState, { admin: false });
 
     yield* account.refreshAccess;
     yield* until(() => lastAdmin() === true);
-    assert.deepEqual(lastAccess(), { admin: true, nativeAgents: false });
-    assert.deepEqual(yield* account.accessState, { admin: true, nativeAgents: false });
+    assert.deepEqual(lastAccess(), { admin: true });
+    assert.deepEqual(yield* account.accessState, { admin: true });
 
     const handler = account.methods[GATEWAY_METHOD.ACCOUNT_SIGN_OUT];
     assert.ok(handler);
     yield* Effect.orDie(handler({}, CONTEXT));
     yield* until(() => lastAdmin() === false);
-    assert.deepEqual(lastAccess(), { admin: false, nativeAgents: false });
-    assert.deepEqual(yield* account.accessState, { admin: false, nativeAgents: false });
+    assert.deepEqual(lastAccess(), { admin: false });
+    assert.deepEqual(yield* account.accessState, { admin: false });
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, async (input, init) => {
       const request = new Request(input, init);
       if (request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.ACCOUNT_ACCESS}`)
-        return jsonResponse({ admin: true, nativeAgents: false });
+        return jsonResponse({ admin: true });
       if (request.url.startsWith(`${ACCOUNT_BASE_URL}/`)) return jsonResponse({});
       throw new Error(`this test reaches no network: ${request.url}`);
     }),

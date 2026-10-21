@@ -45,7 +45,6 @@ function environment(secrets: {
     eveDeploymentSecret: secrets.eve === undefined ? undefined : Redacted.make(secrets.eve),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
-    nativeAgentAccounts: [],
   };
   return Layer.succeed(HostedEnvironment, values);
 }

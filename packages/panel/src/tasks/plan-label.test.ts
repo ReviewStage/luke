@@ -70,7 +70,7 @@ beforeEach(() => {
     },
   });
   // Handed after the acts, whose bridge it joins rather than replaces.
-  handState({}, { access: { admin: false, nativeAgents: true } });
+  handState({}, { access: { admin: false } });
 });
 
 afterEach(() => {

@@ -48,7 +48,7 @@ import {
   windowOf,
 } from "../tasks/coding-agent-model.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { useCapability, useNativeAgentsAccess } from "../use-app-state.js";
+import { useCapability } from "../use-app-state.js";
 import { ApiKeysSection } from "./api-keys-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
 import { ChatGptPlanSection } from "./chatgpt-plan-section.js";
@@ -62,9 +62,9 @@ import { SwitchRow } from "./switch-row.js";
  * The page is three groups under their own headings: this file's Default
  * model, the model a Generate chapters runs on (`chapters-model-section.tsx`),
  * then the account's own API keys (`api-keys-section.tsx`); on the desktop,
- * for an account in the native-agents cohort, a fourth, Codex, connects the
- * account's ChatGPT plan (`chatgpt-plan-section.tsx`); for that cohort on
- * any client, Claude Code connects its Claude plan with a pasted
+ * a fourth, Codex, connects the account's ChatGPT plan
+ * (`chatgpt-plan-section.tsx`); on any client, Claude Code connects its
+ * Claude plan with a pasted
  * `claude setup-token` (`claude-plan-section.tsx`). The first two
  * share the one read of the keys, so a
  * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
@@ -418,10 +418,8 @@ function CodingAgentsSection({
  * read of its own that a save below would leave behind.
  */
 export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
-  // The ChatGPT plan is offered where the loopback can be listened on, and to the cohort alone.
-  const loopbackOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
-  const inCohort = useNativeAgentsAccess();
-  const chatGptOffered = loopbackOffered && inCohort;
+  // The ChatGPT plan is offered where the loopback can be listened on, which the desktop alone can.
+  const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
@@ -433,7 +431,7 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
       <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
-      {inCohort ? <ClaudePlanSection signedIn={signedIn} /> : null}
+      <ClaudePlanSection signedIn={signedIn} />
       {chatGptOffered ? <ChatGptPlanSection signedIn={signedIn} /> : null}
     </>
   );

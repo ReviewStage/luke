@@ -65,7 +65,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
-  nativeAgentAccounts: [],
 };
 
 /** OpenAI's token endpoint: each renewal rotates the refresh token and answers the next access token, good for an hour. */

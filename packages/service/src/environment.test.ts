@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { ConfigProvider, Effect, Layer, Logger, Redacted } from "effect";
 import { test } from "vitest";
 import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
-import { CODER_ENVIRONMENT } from "./agents/coder-host/bounds.js";
 import {
   HostedEnvironment,
   type HostedEnvironmentValues,
@@ -106,15 +105,4 @@ test("an eve secret that is the cron's own value reads as unset, the cron's stay
   assert.match(logged[0] ?? "", /EVE_DEPLOYMENT_SECRET/u);
   assert.match(logged[0] ?? "", /CRON_SECRET/u);
   assert.equal(logged[0]?.includes("cron-secret-1"), false);
-});
-
-test("the native agent cohort is read as a list of its accounts, each once, and as none where it is unset or blank", async () => {
-  const unset = await environmentOver({ [CODER_ENVIRONMENT.NATIVE_AGENT_ACCOUNTS]: undefined });
-  const blank = await environmentOver({ [CODER_ENVIRONMENT.NATIVE_AGENT_ACCOUNTS]: " ,\n " });
-  const listed = await environmentOver({
-    [CODER_ENVIRONMENT.NATIVE_AGENT_ACCOUNTS]: " user-1, user-2\nuser-3 ,user-1,",
-  });
-  assert.deepEqual(unset.nativeAgentAccounts, []);
-  assert.deepEqual(blank.nativeAgentAccounts, []);
-  assert.deepEqual(listed.nativeAgentAccounts, ["user-1", "user-2", "user-3"]);
 });
