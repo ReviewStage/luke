@@ -724,19 +724,19 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
 });
 
-/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all and at work. */
-function namingRow(lines: readonly string[], total: number, working = 0) {
+/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all. */
+function namingRow(lines: readonly string[], total: number) {
   return {
     ...row(TASK.id, 1),
     agents: {
       total,
-      working,
+      working: 0,
       agents: lines.map((id) => ({
         id,
         title: null,
         model: RUNNING_AGENT.model,
         effort: RUNNING_AGENT.effort,
-        status: working > 0 ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
+        status: CODING_AGENT_STATUS.COMPLETED,
       })),
       pullRequestTotal: 0,
       pullRequests: [],
@@ -753,7 +753,6 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     lines: readonly string[],
     total: number,
     recent: readonly string[] | undefined,
-    working = 0,
   ) => {
     window.localStorage.setItem(
       "luke.mainTabs",
@@ -764,7 +763,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
       }),
     );
     const tab = mount(
-      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total, working)] } },
+      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } },
       unread,
     );
     await settle();
@@ -778,9 +777,9 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     "the agent last viewed, which the row names",
   );
   assert.deepEqual(
-    await shownOn([AGENT_ID, OLDER], 2, undefined),
+    await shownOn([AGENT_ID], 1, undefined),
     { agent: AGENT_ID },
-    "the newest started, where the row names every agent and none was viewed",
+    "the task's one agent, where none was viewed",
   );
   assert.deepEqual(
     await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
@@ -793,9 +792,9 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     "one viewed last that the row does not name may stand among those it leaves out",
   );
   assert.equal(
-    await shownOn([AGENT_ID, OLDER], 2, undefined, 1),
+    await shownOn([AGENT_ID, OLDER], 2, undefined),
     undefined,
-    "a row naming some at work and some not cannot say which started last",
+    "of two agents none viewed, the row cannot say which started last, as two started together stand by id",
   );
 });
 

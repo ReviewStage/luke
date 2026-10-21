@@ -1589,6 +1589,55 @@ it.effect(
 );
 
 it.effect(
+  "a part of an open that has not answered holds back neither the document, the parts that have, nor a write",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.codes[INVITES] = [];
+      // The pages are never answered, as a read that hangs until its deadline.
+      service.readPages = () => Effect.never;
+      const { call, last } = yield* subject(service);
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }), {
+        opened: true,
+      });
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+      assert.equal(last()?.codeStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.shownCode, []);
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+        { renamed: true },
+        "the lock is not held for the pages",
+      );
+    }),
+);
+
+it.effect(
+  "a part of an open that answers after its document lands on its own, though another is still out",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.codes[INVITES] = [];
+      const codeHeld = yield* Deferred.make<void>();
+      const readCode = service.readCode;
+      service.readCode = (taskId) => Effect.andThen(Deferred.await(codeHeld), readCode(taskId));
+      service.readPages = () => Effect.never;
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+      assert.equal(last()?.codeStatus, TASKS_READ.READING, "the code is still out");
+
+      yield* Deferred.succeed(codeHeld, undefined);
+      for (let turn = 0; turn < 8; turn += 1) yield* Effect.yieldNow;
+      assert.equal(last()?.codeStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.shownCode, []);
+    }),
+);
+
+it.effect(
   "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
   () =>
     Effect.gen(function* () {
