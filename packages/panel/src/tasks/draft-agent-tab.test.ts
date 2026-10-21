@@ -736,3 +736,27 @@ test("outside the cohort, or on a GPT model, the draft is as it was: no payer dr
   const gpt = await payerTab({ cohort: true, keys: plannedKeys(true), model: "openai/gpt-5.5" });
   assert.equal(gpt.field(), undefined);
 });
+
+test("a cohort account with ChatGPT connected sees ChatGPT plan beside a GPT model's chip, and a Start names it", async () => {
+  const tab = await payerTab({
+    cohort: true,
+    model: "openai/gpt-5.5",
+    keys: {
+      keys: [],
+      subscriptions: [
+        {
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          hint: "ChatGPT",
+          addedAt: 0,
+          status: PROVIDER_KEY_STATUS.UNVERIFIED,
+          statusAt: 0,
+          forAgents: true,
+        },
+      ],
+    },
+  });
+  assert.equal(tab.field()?.getAttribute("aria-label"), "Who pays: ChatGPT plan");
+  await tab.send();
+  assert.deepEqual(tab.payers, [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]);
+});
