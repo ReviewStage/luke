@@ -301,6 +301,14 @@ export const codingAgentAgentAnswerSchema = EffectSchema.Union([
 
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;
 
+/** An agent deleted for good, as the window hears it: that it was, or why it was not. */
+export const codingAgentDeleteAnswerViewSchema = EffectSchema.Union([
+  EffectSchema.Struct({ deleted: EffectSchema.Literal(true) }),
+  failed,
+]);
+
+export type CodingAgentDeleteAnswerView = typeof codingAgentDeleteAnswerViewSchema.Type;
+
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const codingAgentMessagesParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -392,7 +400,7 @@ export const codingAgentPinParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentPinParams = typeof codingAgentPinParamsSchema.Type;
 
-/** One agent, as the window names it to stop. */
+/** One agent, as the window names it to stop or to delete. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
 });

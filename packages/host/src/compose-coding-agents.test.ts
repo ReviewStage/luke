@@ -336,6 +336,11 @@ function fakeService() {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
       }),
+    delete: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`delete:${agentId}`);
+        return { deleted: true as const };
+      }),
     archive: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
@@ -858,6 +863,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
       { agent: AGENT },
     );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+      deleted: true,
+    });
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: AGENT_ID }), {
       agent: PAGE,
     });
@@ -1054,6 +1062,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `pin:${AGENT_ID}:true`,
+      `delete:${AGENT_ID}`,
       `page:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,

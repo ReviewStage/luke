@@ -98,7 +98,8 @@ export const AGENT_ACT_KIND = {
    * transcript past a cursor (held open by the service while the agent
    * runs), one sent a message naming how it reaches a turn under way, one
    * given another model and effort for its next step, one renamed, one stopped, one
-   * archived (a turn it still runs stopped first) or brought back. The
+   * archived (a turn it still runs stopped first) or brought back, one deleted
+   * for good (stopped first the same way). The
    * window holds what it draws; nothing here does.
    */
   CODING_AGENTS_MODELS: "codingAgents.models",
@@ -124,6 +125,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
+  CODING_AGENTS_DELETE: "codingAgents.delete",
   /**
    * Which agent's tab the panel shows, or none, and which task's Inbox tab,
    * or none: what main's notification of an agent's end or of an inbox item

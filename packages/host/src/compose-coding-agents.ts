@@ -8,6 +8,7 @@ import {
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentDeleteAnswerView,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAttachmentView,
@@ -159,6 +160,7 @@ export type CodingAgentClient = Pick<
   | "archive"
   | "pin"
   | "stop"
+  | "delete"
   | "agent"
   | "calls"
   | "pullRequest"
@@ -639,6 +641,16 @@ function composed(
         );
         const answer = yield* asked(client.stop(agentId));
         return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_DELETE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentStopParamsSchema,
+          params,
+          "deleting an agent names one agent",
+        );
+        const answer = yield* asked(client.delete(agentId));
+        return carried<CodingAgentDeleteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PAGE]: (params) =>
       Effect.gen(function* () {

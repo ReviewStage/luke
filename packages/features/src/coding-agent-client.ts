@@ -30,6 +30,7 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentDeleteAnswerView,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAttachmentView,
@@ -214,7 +215,7 @@ const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
-/** The refusals an archive can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
+/** The refusals an archive or a delete can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
 const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
@@ -929,6 +930,13 @@ export class HostedCodingAgentClient {
       askHosted(this.#hosted.agents.change, { params: { id: agentId }, body }),
       named,
     );
+  }
+
+  /** Deletes one agent for good, a turn it still runs stopped first; that it was, or why not: gone already, or one still starting with no turn to stop yet. */
+  delete(
+    agentId: string,
+  ): Effect.Effect<CodingAgentDeleteAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.agents.delete, { id: agentId }), ARCHIVE_REFUSALS);
   }
 
   /** Stops one agent, answering it as it then stands. */
