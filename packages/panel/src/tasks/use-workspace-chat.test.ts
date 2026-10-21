@@ -554,3 +554,21 @@ test("Mark as read reads each channel named to its newest message, leaving one w
   const reads = new Map(tab.control().chat?.reads?.map((each) => [each.channelId, each.readSeq]));
   assert.deepEqual([reads.get(CHANNEL), reads.get(other), reads.get(read)], [1, 2, 3]);
 });
+
+test("a push read before Mark as read landed sets the channel's cursor back no further than the read put it", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  const stale = {
+    ...answered([message(1), message(2)]),
+    reads: [{ channelId: CHANNEL, readSeq: 1 }],
+  };
+  service.push("acme", stale);
+  await settle();
+  act(() => tab.control().onRead([CHANNEL]));
+  await settle();
+  service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
+  await settle();
+  service.push("acme", stale);
+  await settle();
+  assert.deepEqual(tab.control().chat?.reads, [{ channelId: CHANNEL, readSeq: 2 }]);
+});
