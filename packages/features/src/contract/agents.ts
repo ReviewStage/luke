@@ -11,7 +11,8 @@
  * (`outputStructure: "detailed"`). A Start from an agent is keyed by that
  * agent rather than a task (`POST /api/agents/{id}/agents`), so an agent with
  * no task is continued and forked as one on a task is; its body is a Start's,
- * whose `from` names the path's agent. Outputs are the wire schemas flipped
+ * whose `from` names the path's agent. A delete (`DELETE /api/agents/{id}`)
+ * takes the agent for good, as a task's delete takes a task. Outputs are the wire schemas flipped
  * (`packages/service/src/orpc/base.ts`).
  */
 
@@ -24,6 +25,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentArchiveRequestSchema,
   codingAgentChangesAnswerSchema,
+  codingAgentDeleteAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPinRequestSchema,
@@ -166,6 +168,11 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(idParams, codingAgentChangeRequestSchema))
     .output(EffectSchema.flip(codingAgentAnswerSchema)),
+  /** One agent deleted for good, stopped first where it still works. */
+  delete: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.DELETE, path: AGENT_PATH }))
+    .input(idParams)
+    .output(EffectSchema.flip(codingAgentDeleteAnswerSchema)),
   /** One agent stopped. */
   stop: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))

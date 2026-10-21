@@ -59,6 +59,7 @@ import {
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
+import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
@@ -75,7 +76,8 @@ import {
   type TurnUsageRow,
   turnUsagesOf,
 } from "./message-reads.js";
-import { TaskArchived } from "./task-store.js";
+import { stampConversationsDeleted } from "./soft-delete.js";
+import { TaskAgentUnstopped, TaskArchived, type TaskDeleteGuard } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -1725,6 +1727,80 @@ export function discardCodingAgent(
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return false;
         yield* deleteConversationRow(deleted.conversationId);
+        return true;
+      }),
+    ),
+  );
+}
+
+/** What a delete that stopped the agent first tells it. */
+export interface CodingAgentDeleteGuard<R> {
+  /** Whether the agent, read under its conversation's lock, still stands as the caller's Stop left it; false refuses the delete. */
+  readonly standsStopped: (
+    agent: CodingAgent,
+  ) => Effect.Effect<boolean, CodingAgentStoreFailure, R>;
+  /** Run under that lock before anything is deleted, given the agent's conversation, as a task's delete runs its own. */
+  readonly beforeDelete: TaskDeleteGuard<R>["beforeDelete"];
+}
+
+/**
+ * The words said on every call into the agent, open or ended; the calls
+ * themselves stay, their agent set null by the delete, since the admin's
+ * activity and cost pages read them.
+ */
+const deleteAgentCallWords = SqlSchema.void({
+  Request: Schema.String,
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .delete(voiceTranscriptSegments)
+        .where(
+          inArray(
+            voiceTranscriptSegments.voiceSessionId,
+            db
+              .select({ id: voiceSessions.id })
+              .from(voiceSessions)
+              .where(eq(voiceSessions.agentId, agentId)),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Deletes the agent for good: its row, which takes its pins, its inbox, and
+ * its pull request polls with it and leaves what else named it naming no
+ * one; the words said on its calls; and its conversation stamped deleted, so
+ * the purge takes its transcript thirty days on, as a task's delete does
+ * for each of its agents. False where the account reaches no such agent.
+ *
+ * Everything runs under the agent's conversation lock, the one every write
+ * of its lines and turns takes, and the agent is read again under it, so a
+ * message handed over after the caller stopped it either landed first, and
+ * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
+ * waits on the lock and finds no agent.
+ */
+export function deleteCodingAgent<R = never>(
+  userId: string,
+  agentId: string,
+  guard: CodingAgentDeleteGuard<R>,
+): Effect.Effect<boolean, CodingAgentStoreFailure | TaskAgentUnstopped, DatabaseServices | R> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const found = yield* findAgent({ userId, agentId });
+        if (Option.isNone(found)) return false;
+        const locked = yield* lockAgentConversation({
+          conversationId: found.value.conversationId,
+        });
+        if (Option.isNone(locked)) return false;
+        const agent = yield* findAgent({ userId, agentId });
+        if (Option.isNone(agent)) return false;
+        if (!(yield* guard.standsStopped(agent.value))) return yield* new TaskAgentUnstopped();
+        yield* guard.beforeDelete([agent.value.conversationId]);
+        yield* deleteAgentCallWords(agentId);
+        const [deleted] = yield* deleteAgentRow({ userId, agentId });
+        if (deleted === undefined) return false;
+        yield* stampConversationsDeleted([deleted.conversationId]);
         return true;
       }),
     ),

@@ -20,7 +20,8 @@
  * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
  * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
  * MCP servers switched off, or a model and effort, and answers the agent as
- * it then stands.
+ * it then stands. A delete (`DELETE /api/agents/{id}`) takes the agent for
+ * good by the task delete's own steps, for any member who reaches it.
  *
  * The shells (`/api/agents/{id}/terminals`) are the agent's Terminal tab's:
  * listed, started, named, and ended in its sandbox, and the sandbox resumed
@@ -35,7 +36,9 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
+  type CodingAgent,
   type CodingAgentLine,
+  deleteCodingAgent,
   hasRepository,
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
@@ -97,6 +100,7 @@ import {
   codingAgentPage,
   codingAgentSummary,
   pageAccounts,
+  startedBlank,
   summaryAccounts,
 } from "./coder-host/status.js";
 import {
@@ -104,11 +108,13 @@ import {
   type EveReach,
   eveFor,
   standingsOf,
+  standsStopped,
   stoppedForGood,
   stoppedTurn,
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
@@ -213,6 +219,16 @@ const listedShells = /* @__PURE__ */ Effect.fnUntraced(function* (sessionId: str
   const sandbox = yield* AgentSandbox;
   return yield* sandboxOrUpstream(sandbox.terminals(sessionId));
 });
+
+/** Whether the agent, read again under its conversation's lock, still stands as a Stop left it, as a task's archive reads each of its own. */
+function agentStandsStopped(agent: CodingAgent) {
+  return standsStopped({
+    id: agent.id,
+    conversationId: agent.conversationId,
+    createdAt: agent.createdAt,
+    blank: startedBlank(agent),
+  });
+}
 
 /** The agents resource: every procedure to a signed-in caller, a body read under its own cap. */
 export function agentsProcedures(seams: AgentsProcedureSeams) {
@@ -440,6 +456,31 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value);
       return yield* changedAgent(userId, changed);
+    }),
+    /**
+     * The agent deleted for good, by the steps a task's delete takes for
+     * each of its agents (`tasks-procedures.ts`): stopped for good first,
+     * then, under its conversation's lock, its eve session retired
+     * (`retire-sessions.ts`), the words said on its calls deleted, its row
+     * deleted, and its conversation stamped deleted for the purge. Any
+     * member who reaches the agent may delete it, as any member may delete
+     * a task. An eve that refuses the Stop, an agent with a turn still
+     * coming that no Stop can name yet, or one a message woke after the
+     * Stop, stands and is refused as not ready.
+     */
+    delete: signedIn.delete.effect(function* ({ input, context }) {
+      const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
+      const eveAt = yield* retiringReach(seams, context.request, userId);
+      yield* stoppedForGood(seams, writer, context.request, userId, agent);
+      const deleted = yield* hostedStoreOrUnavailable(
+        deleteCodingAgent(userId, agent.id, {
+          standsStopped: agentStandsStopped,
+          beforeDelete: retiredBeforeDelete(eveAt),
+        }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
+      );
+      if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+      if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { deleted: true as const };
     }),
     /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {

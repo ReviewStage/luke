@@ -36,6 +36,7 @@ import {
   createCodingAgent,
   discardCodingAgent,
   lineSendersOf,
+  pinCodingAgent,
   readCodingAgent,
   readCodingAgentByKey,
   readCodingAgentPublished,
@@ -57,9 +58,11 @@ import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { agentPin } from "@luke/database/schemas";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { inboxItem } from "@luke/database/schemas/inbox";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
@@ -4580,6 +4583,128 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           "the owner's Start is all eve heard",
         );
         assert.ok(Option.isSome(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "a teammate's delete of a running agent stops it, retires its session, and takes it with its pins, its inbox, and the words said on its calls, keeping the calls and stamping its conversation deleted",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, target, sessionId, ask } = yield* startedAgent(eve, {
+          running: true,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        // An agent with no task, so it holds a pin of its own.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: task.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        assert.ok(Option.isSome(yield* pinCodingAgent(owner, agent.id, true)));
+        const posted = yield* postInboxItem(
+          { userId: owner, taskId: null, agentId: agent.id },
+          { key: "which-queue", title: "Which queue?", response: { type: INBOX_RESPONSE.TEXT } },
+        );
+        assert.ok(Result.isSuccess(posted));
+        const call = yield* voiceSessionRecord().register({
+          userId: owner,
+          sessionId: `live-${randomUUID()}`,
+          taskId: task.id,
+          agentId: agent.id,
+          attachId: randomUUID(),
+          model: "gpt-live",
+        });
+        assert.ok(call !== undefined);
+        yield* Database.use((db) =>
+          db.insert(voiceTranscriptSegments).values({
+            voiceSessionId: call,
+            seq: 1,
+            role: VOICE_SEGMENT_ROLE.USER,
+            text: "Use the new table.",
+            startMs: 0,
+            endMs: 900,
+          }),
+        );
+
+        const deleted = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
+
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(eve.reset, [sessionId]);
+        assert.ok(Option.isNone(yield* readCodingAgent(owner, agent.id)));
+        const db = yield* Database;
+        const [conversation] = yield* db
+          .select({ deletedAt: conversations.deletedAt })
+          .from(conversations)
+          .where(eq(conversations.id, target.conversationId));
+        assert.ok(conversation !== undefined && conversation.deletedAt !== null);
+        assert.deepEqual(
+          [
+            yield* db
+              .select({ seq: voiceTranscriptSegments.seq })
+              .from(voiceTranscriptSegments)
+              .where(eq(voiceTranscriptSegments.voiceSessionId, call)),
+            yield* db
+              .select({ agentId: voiceSessions.agentId })
+              .from(voiceSessions)
+              .where(eq(voiceSessions.id, call)),
+            yield* db
+              .select({ userId: agentPin.userId })
+              .from(agentPin)
+              .where(eq(agentPin.codingAgentId, agent.id)),
+            yield* db
+              .select({ id: inboxItem.id })
+              .from(inboxItem)
+              .where(eq(inboxItem.id, posted.success.id)),
+          ],
+          [[], [{ agentId: null }], [], []],
+          "the call's record stays for the cost pages, and nothing else of the agent's",
+        );
+      }),
+  );
+
+  it.effect(
+    "an account outside the workspace reaches no agent to delete and asks eve nothing; the owner's delete of an idle agent on a task leaves the task, and a second delete finds nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+          running: false,
+        });
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        const outside = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
+        assert.deepEqual(outside, notFound);
+        assert.deepEqual([eve.cancelled, eve.reset], [[], []]);
+        assert.ok(Option.isSome(yield* readCodingAgent(owner, agent.id)));
+
+        const deleted = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
+        const again = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
+
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.deepEqual(again, notFound);
+        assert.deepEqual([eve.cancelled, eve.reset], [[], [sessionId]]);
+        assert.ok(Option.isSome(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "an agent still starting, with no turn a Stop can name, is refused as not ready and stands, its session unretired",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask } = yield* startedAgent(eve, undefined);
+
+        const refused = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
+
+        assert.deepEqual(
+          refused,
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.deepEqual(eve.reset, []);
+        assert.ok(Option.isSome(yield* readCodingAgent(owner, agent.id)));
       }),
   );
 

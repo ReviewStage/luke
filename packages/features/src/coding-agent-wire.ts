@@ -760,6 +760,11 @@ export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 /** A started, stopped, or changed agent (POST, PATCH). */
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
 
+/** An agent deleted for good (DELETE), as a task's delete answers. */
+export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+});
+
 /**
  * The run of an automation that started an agent, as its page opens on it:
  * the automation's prompt alone, without the lines Luke adds of the firing,
