@@ -197,10 +197,11 @@ function withRead(
     return standing !== undefined && standing.touchedSeq > message.touchedSeq ? standing : message;
   });
   // Note that a cursor never moves back, so a push read before a read's answer sets nothing back.
+  // A push with no channel past its floor carries no `reads`, which says nothing of the cursors held.
   const reads =
-    chat?.reads === undefined || answer.reads === undefined
+    chat === undefined || (chat.reads === undefined && answer.reads === undefined)
       ? answer.reads
-      : furthestReads(chat, answer.reads);
+      : furthestReads(chat, answer.reads ?? []);
   return {
     ...answer,
     readSeq: Math.max(chat?.readSeq ?? 0, answer.readSeq),
