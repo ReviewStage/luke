@@ -539,7 +539,9 @@ export function coderInstructions(
         );
   const place = { ...task, ...work };
   const editing = editPlanTold(brief, taskLink !== null);
-  const opening = place.work.replace("\n", `${teamWords(chatOn)}\n`);
+  // The team's words end the opening line alone, so they are set in at its end rather than replaced in.
+  const firstLineEnd = place.work.indexOf("\n");
+  const opening = `${place.work.slice(0, firstLineEnd)}${teamWords(chatOn)}${place.work.slice(firstLineEnd)}`;
   return `${opening}For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.
 
 ${place.search}${place.skills}${place.links}${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
