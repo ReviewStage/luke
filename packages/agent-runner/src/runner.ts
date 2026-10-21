@@ -133,6 +133,11 @@ function queryOptions(
       failIfUnavailable: true,
       autoAllowBashIfSandboxed: true,
       allowUnsandboxedCommands: false,
+      // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
+      // kernel refuses bubblewrap a fresh /proc and every command failed; the
+      // host /proc is bound instead, where another process's environ, the
+      // CLI's and its token included, is still refused, as under Codex.
+      enableWeakerNestedSandbox: true,
       network: { allowedDomains: [...config.allowedDomains] },
       credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     },
