@@ -631,6 +631,8 @@ const liveRowsOf = (
       conversation: sql.unsafe(statements.conversation.sql, [...statements.conversation.params]),
       agent: sql.unsafe(statements.agent.sql, [...statements.agent.params]),
       workers: sql.unsafe(statements.workers.sql, [...statements.workers.params]),
+      window: sql.unsafe(statements.window.sql, [...statements.window.params]),
+      windowParts: sql.unsafe(statements.windowParts.sql, [...statements.windowParts.params]),
     });
     const decoded = yield* Schema.decodeUnknownEffect(agentTranscriptLiveRowsSchema)(rows);
     return JSON.stringify(
@@ -897,6 +899,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           ["conversation", []],
           ["agent", []],
           ["workers", []],
+          ["window", []],
+          ["windowParts", []],
         ]);
         assert.equal(
           yield* liveRowsOf({ userId: stranger, conversationId: parent }, parent),

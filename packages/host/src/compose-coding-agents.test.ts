@@ -1194,6 +1194,8 @@ const SEALED_TRANSCRIPT: AgentTranscriptLiveAnswer = {
     conversation: sealed("conversation"),
     agent: sealed("agent"),
     workers: sealed("workers"),
+    window: sealed("window"),
+    windowParts: sealed("windowParts"),
   },
 };
 
@@ -1206,6 +1208,52 @@ function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, 
   realtime.deliver("conversation", [{ id: "conversation-1", title: null, revision: seq }]);
   realtime.deliver("agent", [{ id: AGENT_ID, title: "Invites" }]);
   realtime.deliver("workers", []);
+  realtime.deliver("window", []);
+  realtime.deliver("windowParts", []);
+}
+
+/** One message of the window as its rows deliver it: a line of the agent's at `seq`, saying `text` in one part. */
+function windowRow(seq: number, text: string) {
+  return {
+    row: {
+      id: `m-${seq}`,
+      seq,
+      clientId: `client-${seq}`,
+      turnId: null,
+      role: "assistant",
+      partCount: 1,
+      metadata: null,
+      placedAt: NOW,
+      finishedAt: null,
+      sender: null,
+      senderName: null,
+      senderModel: null,
+      memberId: null,
+      memberName: null,
+      agentId: null,
+      agentTaskId: null,
+      journalId: null,
+      afterStep: null,
+      askTurnId: null,
+      askAfterStep: null,
+      turnStartedAt: null,
+      turnStatus: null,
+      turnModel: null,
+      turnEffort: null,
+      turnUsage: null,
+      turnFailure: null,
+      turnFastRefused: null,
+    },
+    part: {
+      messageId: `m-${seq}`,
+      index: 0,
+      part: { type: "text", text },
+      cutField: null,
+      bytes: null,
+      head: null,
+      tail: null,
+    },
+  };
 }
 
 /** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
@@ -1300,7 +1348,8 @@ it.effect(
 
       const moved = pageNow("3:0", { holds: false, text: "Testing the expiry." });
       script(moved);
-      transcriptRows(realtime, 3);
+      // A turn opening is what reads the page again; its messages come as rows (see the window's own test).
+      transcriptRows(realtime, 3, 2);
       yield* settled;
       assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(moved) });
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
@@ -1309,9 +1358,70 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const toldBefore = pages().length;
-      transcriptRows(realtime, 4);
+      transcriptRows(realtime, 4, 3);
       yield* settled;
       assert.equal(pages().length, toldBefore);
+    }),
+);
+
+it.effect(
+  "a followed transcript's newest messages are told as its window's rows draw them, each once and as caught up, beside what the last page said of the agent, with no page read again; a message whose parts are not all in waits for them",
+  () =>
+    Effect.gen(function* () {
+      const {
+        call,
+        asked,
+        pages,
+        sealTranscript,
+        pageNow: script,
+        pageNewest,
+        realtime,
+      } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest(newestPage("1:0", "Reading the invites."));
+      const caught = pageNow("1:0", { holds: true });
+      script(caught);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 1);
+      yield* settled;
+      const reads = () => asked.filter((ask) => ask.startsWith("messages-")).length;
+      const readBefore = reads();
+      const toldBefore = pages().length;
+
+      const first = windowRow(2, "Writing the expiry.");
+      const second = windowRow(3, "Testing the expiry.");
+      realtime.deliver("window", [first.row, second.row]);
+      // The second message's part has not landed yet, so only the first is drawn.
+      realtime.deliver("windowParts", [first.part]);
+      yield* settled;
+      realtime.deliver("windowParts", [first.part, second.part]);
+      yield* settled;
+      // Rows delivered again alike tell nothing more.
+      realtime.deliver("window", [first.row, second.row]);
+      yield* settled;
+
+      const said = (seq: number, text: string) => ({
+        id: `m-${seq}`,
+        role: "assistant",
+        parts: [{ type: "text", text }],
+      });
+      assert.deepEqual(pages().slice(toldBefore), [
+        {
+          transcript: FOLLOWED,
+          page: { ...windowPage(caught), messages: [said(2, "Writing the expiry.")] },
+        },
+        {
+          transcript: FOLLOWED,
+          page: { ...windowPage(caught), messages: [said(3, "Testing the expiry.")] },
+        },
+      ]);
+      assert.equal(reads(), readBefore);
+
+      // A turn moving reads the page past the messages the rows told.
+      transcriptRows(realtime, 3, 2);
+      yield* settled;
+      assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
     }),
 );
 
