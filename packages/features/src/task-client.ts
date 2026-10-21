@@ -44,7 +44,7 @@ import {
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
-import type { PageLine, PageVersion } from "./page-wire.js";
+import { type PageLine, type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
@@ -505,12 +505,12 @@ export class HostedTaskClient {
   }
 
   /**
-   * One task's pages, each at its newest version, sealed for following over
-   * Neon Realtime, or with `poll` their rows inline at the poll address, on
-   * the terms its record's is.
+   * One task's pages, or one coding agent's on no task, each at its newest
+   * version, sealed for following over Neon Realtime, or with `poll` their
+   * rows inline at the poll address, on the terms a task's record's is.
    */
   pagesLive(
-    taskId: string,
+    place: PagePlace,
     userId: string,
     poll = false,
     after?: string,
@@ -519,8 +519,10 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
+    const procedure =
+      "taskId" in place ? this.#hosted.live.taskPages : this.#hosted.live.agentPages;
     return hostedResult(
-      askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      askLive(procedure, { id: pagePlaceId(place), [LIVE_USER_QUERY]: userId }, poll, after),
       LIVE_REFUSALS,
     );
   }
@@ -827,32 +829,29 @@ export class HostedTaskClient {
     );
   }
 
-  /** One plan's pages, each by its newest version; nothing where the service did not answer them. */
+  /** One plan's pages, or one coding agent's on no task, each by its newest version; nothing where the service did not answer them. */
   readPages(
-    taskId: string,
+    place: PagePlace,
   ): Effect.Effect<readonly PageLine[] | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      orNothing(askHosted(this.#hosted.taskFiles.pages, { id: taskId })),
-      (answer) => answer?.pages,
-    );
+    const asked =
+      "taskId" in place
+        ? askHosted(this.#hosted.taskFiles.pages, { id: place.taskId })
+        : askHosted(this.#hosted.agentPages.list, { id: place.agentId });
+    return Effect.map(orNothing(asked), (answer) => answer?.pages);
   }
 
-  /** One version of one page of one plan, with its HTML; nothing where the service did not answer it, or holds no such version. */
+  /** One version of one page of one plan, or of one coding agent on no task, with its HTML; nothing where the service did not answer it, or holds no such version. */
   readPageVersion(
-    taskId: string,
+    place: PagePlace,
     pageId: string,
     version: number,
   ): Effect.Effect<PageVersion | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      orNothing(
-        askHosted(this.#hosted.taskFiles.page, {
-          id: taskId,
-          page: pageId,
-          version: String(version),
-        }),
-      ),
-      (answer) => answer?.page,
-    );
+    const named = { page: pageId, version: String(version) };
+    const asked =
+      "taskId" in place
+        ? askHosted(this.#hosted.taskFiles.page, { id: place.taskId, ...named })
+        : askHosted(this.#hosted.agentPages.version, { id: place.agentId, ...named });
+    return Effect.map(orNothing(asked), (answer) => answer?.page);
   }
 
   /** Puts one revision of a plan back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */

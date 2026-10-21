@@ -22,6 +22,7 @@ import {
 import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
+  pagePlaceSchema,
   pageVersionNumberSchema,
   planPageVersionAnswerSchema,
   taskPagesAnswerSchema,
@@ -858,12 +859,19 @@ export const tasksPictureKeepAnswerSchema = EffectSchema.Union([
 
 export type TasksPictureKeepAnswer = typeof tasksPictureKeepAnswerSchema.Type;
 
-/** One version of one page of a plan, as the frame drawing it names it. */
-export const tasksPageParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  pageId: EffectSchema.NonEmptyString,
-  version: pageVersionNumberSchema,
-});
+/** One version of one page, of a plan or of a coding agent on no task, as the frame drawing it names it. */
+export const tasksPageParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    taskId: EffectSchema.NonEmptyString,
+    pageId: EffectSchema.NonEmptyString,
+    version: pageVersionNumberSchema,
+  }),
+  EffectSchema.Struct({
+    agentId: EffectSchema.NonEmptyString,
+    pageId: EffectSchema.NonEmptyString,
+    version: pageVersionNumberSchema,
+  }),
+]);
 
 export type TasksPageParams = typeof tasksPageParamsSchema.Type;
 
@@ -875,10 +883,8 @@ export const tasksPageAnswerSchema = EffectSchema.Union([
 
 export type TasksPageAnswer = typeof tasksPageAnswerSchema.Type;
 
-/** One plan's pages, as the window's Inbox names the plan whose item it shows. */
-export const tasksPagesParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
+/** One plan's pages, as the window's Inbox names the plan whose item it shows, or one coding agent's on no task, as its page names it. */
+export const tasksPagesParamsSchema = pagePlaceSchema;
 
 export type TasksPagesParams = typeof tasksPagesParamsSchema.Type;
 
@@ -890,19 +896,19 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
 
-/** One plan's pages, followed by a window while its Inbox draws an item of that plan. */
-export const taskPagesFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+/** One plan's pages, followed by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
+export const taskPagesFollowSchema = pagePlaceSchema;
 
 export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
 
 /**
- * A followed plan's pages as they now stand, each by its newest version,
+ * A followed plan's or agent's pages as they now stand, each by its newest version,
  * told each time they move while followed, or why there are none.
  */
-export const taskPagesFollowedSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  view: tasksPagesAnswerSchema,
-});
+export const taskPagesFollowedSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
+  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
+]);
 
 export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
 

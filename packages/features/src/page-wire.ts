@@ -120,3 +120,27 @@ export type PageOwner =
 export function taskPageOwner(taskId: string): PageOwner {
   return { kind: PAGE_OWNER.TASK, taskId };
 }
+
+/**
+ * What a reader names a page's owner by as it crosses to the window: a
+ * task, or a coding agent on no task, by its id alone, the field naming
+ * which, as a frame's address and a page's link name it.
+ */
+export const pagePlaceSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString }),
+]);
+
+export type PagePlace = typeof pagePlaceSchema.Type;
+
+/** The id a page's owner is named by, a task's or an agent's, which never collide, as a key of what is held of it. */
+export function pagePlaceId(place: PagePlace): string {
+  return "taskId" in place ? place.taskId : place.agentId;
+}
+
+/** The place as what its pages stand on. */
+export function pageOwnerOf(place: PagePlace): PageOwner {
+  return "taskId" in place
+    ? { kind: PAGE_OWNER.TASK, taskId: place.taskId }
+    : { kind: PAGE_OWNER.AGENT, agentId: place.agentId };
+}

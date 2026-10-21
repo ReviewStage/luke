@@ -1538,7 +1538,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     tasksPage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_PAGE, {
-          taskId: params.taskId,
+          ...("taskId" in params ? { taskId: params.taskId } : { agentId: params.agentId }),
           pageId: params.pageId,
           version: params.version,
         }),
@@ -1587,7 +1587,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksPages: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PAGES, { taskId: params.taskId }),
+        client.call(
+          GATEWAY_METHOD.TASKS_PAGES,
+          "taskId" in params ? { taskId: params.taskId } : { agentId: params.agentId },
+        ),
         (answer): TasksPagesAnswer =>
           (answer.ok
             ? Result.getOrUndefined(

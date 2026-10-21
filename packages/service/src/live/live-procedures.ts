@@ -124,7 +124,7 @@ import {
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
-import { taskPagesLiveStatements } from "../tasks/task-pages-live.js";
+import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
 
@@ -301,6 +301,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskPagesLiveStatements(context.userId, taskId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* rowIdOf(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = agentPagesLiveStatements(context.userId, agentId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),
