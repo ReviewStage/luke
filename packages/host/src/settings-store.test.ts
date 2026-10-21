@@ -223,7 +223,6 @@ const SAMPLE_VALUE = {
   zoom: 150,
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
-  voiceCaptions: true,
   duckOtherMedia: false,
   preferBuiltInMicrophone: false,
   // On is the default, so Off is the choice that has to survive a reopen.

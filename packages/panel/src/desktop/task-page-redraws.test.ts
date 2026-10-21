@@ -5,7 +5,7 @@
  *
  * The page is drawn through `DesktopTasks` on a task control that stands
  * across draws, as the window's does while its tasks do not move, and drawn
- * again with other captions, which the page alone reads. What is drawn
+ * again with another notice line, which the page alone reads. What is drawn
  * again is read through a wrapper around the plan's key line, which draws
  * the real one. Synthetic task.
  */
@@ -79,15 +79,15 @@ afterEach(() => {
   draws.clear();
 });
 
-/** Draws the page over `tasks` with `captions`, as the shell hands them. */
-function drawPage(tasks: TasksControl, captions: string): void {
+/** Draws the page over `tasks` with the notice line saying `notice`, as the shell hands it. */
+function drawPage(tasks: TasksControl, notice: string): void {
   act(() =>
     root?.render(
       createElement(DesktopTasks, {
         summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         tasks,
-        captions: createElement("p", null, captions),
+        notice: createElement("p", null, notice),
       }),
     ),
   );

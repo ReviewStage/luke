@@ -1159,16 +1159,103 @@
   background: var(--luke-color-border);
 }
 
-.checkpoint-live {
+/* A call's ends (../tasks/call-card.tsx): a rule across the log carrying a
+   pill in its middle, on no band of its own, so it reads as one of the
+   transcript's dividers, only louder. The pill says what happened in the
+   body ink and when in the muted one. */
+.call-marker {
   display: flex;
   align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.call-marker-rule {
+  height: 1px;
+  min-width: var(--luke-space-12);
+  flex: 1;
+  background: var(--luke-color-border);
+}
+
+.call-marker-pill {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
   gap: var(--luke-space-6);
+  margin: 0;
+  padding: var(--luke-space-2) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  white-space: nowrap;
+}
+
+/* The words and when, one run of text, so the separators keep their own spaces. */
+.call-marker-text {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.call-marker-words {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
+}
+
+/* The duration rides the words' span (`data-call-length`) but in the muted ink, as the time does. */
+.call-marker-detail {
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-regular);
+}
+
+.call-marker-icon {
+  display: inline-flex;
+  width: 14px; /* off-scale: the voice mark at the pill's words */
+  height: 14px;
+  flex: none;
+  color: var(--luke-color-text-muted);
+}
+
+.call-marker-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A standing call's waveform wears the live green, as its Live mark does. */
+.call-marker-icon[data-live] {
   color: var(--luke-color-complete);
 }
 
-.checkpoint-live > svg {
-  width: 14px; /* off-scale: the voice mark at the divider's words */
-  height: 14px;
+/* "Live": a dot and the word in the live green. */
+.call-marker-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  color: var(--luke-color-complete);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.call-marker-live::before {
+  width: var(--luke-space-6);
+  height: var(--luke-space-6);
+  border-radius: var(--luke-radius-full);
+  background: currentcolor;
+  content: "";
+}
+
+/* A standing call's start stays pinned to the log's top while the developer
+   scrolls among its lines: it is the log's own child, and the call runs on
+   to the log's foot, so it sticks for as long as any of the call is in view
+   and goes back to its place above the call's first line. It stands on the
+   window's ground so the lines scrolling under it do not show through. */
+.call-marker[data-call-marker="start"][data-live] {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: var(--luke-color-ground);
 }
 
 /* An agent's glyph while a call into it is in progress: the divider's live
@@ -1179,9 +1266,20 @@
 
 /* One line, as a teammate's heading already keeps (`.call-caller`), so a
    time that would wrap in a narrow panel cannot outgrow the band. */
-.checkpoint-log [data-checkpoint] {
+.checkpoint-log :is([data-checkpoint], [data-call-marker="start"]) {
   height: var(--checkpoint-height);
   white-space: nowrap;
+}
+
+/* In the Code tab's feed a call's start sticks as a divider does, on the
+   well's ground, whether or not the call still stands. */
+.checkpoint-log .call-marker[data-call-marker="start"] {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  box-sizing: border-box;
+  padding-block: 0;
+  background: var(--luke-color-well);
 }
 
 /* The card clips at its rounded edge, against which its header's actions
@@ -3721,7 +3819,7 @@
 .diff-note {
   /* Note that a percentage padding is read against the row's width, so the
      note keeps the code's inset and comes in to the pane's narrower one
-     where the row is under 440px (\`annotation-card.tsx\`), with no query
+     where the row is under 440px (`annotation-card.tsx`), with no query
      on a container the note itself would have to be inside. */
   padding: var(--luke-space-8)
     clamp(var(--luke-space-8), (100% - 440px) * 999, var(--luke-space-12));
@@ -4341,7 +4439,7 @@
 /* Luke's note under the lines it is on (file-note.tsx): the annotation card
    (`.annotation-card`), measured as one so a narrow place steps its parts
    back, in the element Pierre keeps for it under a File tab's line or a
-   Code card's (\`.whole-file-note\`, \`.diff-note\`), which insets it. */
+   Code card's (`.whole-file-note`, `.diff-note`), which insets it. */
 .file-note {
   container: annotation / inline-size;
 }

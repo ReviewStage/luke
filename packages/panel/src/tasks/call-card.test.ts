@@ -94,11 +94,11 @@ test("the Code tab begins and ends each call: a divider naming a teammate's call
     }),
   );
 
-  const dividers = [...codeTab.querySelectorAll("[data-checkpoint]")];
+  const dividers = [...codeTab.querySelectorAll('[data-checkpoint], [data-call-marker="start"]')];
   assert.equal(dividers.length, 2, "each call begins at a divider");
   assert.match(
     dividers[0]?.textContent ?? "",
-    /Charles Pan’s call · /u,
+    /Charles Pan’s call started · /u,
     "a teammate's call is named over its code",
   );
   assert.match(
@@ -130,7 +130,11 @@ test("code a turn showed after a call ended stands after that call's closing lin
       onOpenFile: () => undefined,
     }),
   );
-  const order = [...codeTab.querySelectorAll("[data-checkpoint], [data-call-ended], .code-card")];
+  const order = [
+    ...codeTab.querySelectorAll(
+      '[data-checkpoint], [data-call-marker="start"], [data-call-ended], .code-card',
+    ),
+  ];
   const at = (selector: string) => {
     const element = codeTab.querySelector(selector);
     return element === null ? -1 : order.indexOf(element);
@@ -140,7 +144,7 @@ test("code a turn showed after a call ended stands after that call's closing lin
   const later = at('[data-call-id="show-after"]');
   assert.ok(during < closing && closing < later, "the call closes before the later code");
   assert.equal(
-    order[later - 1]?.matches("[data-checkpoint]"),
+    order[later - 1]?.matches('[data-checkpoint], [data-call-marker="start"]'),
     true,
     "the later code has a divider of its own",
   );
@@ -167,7 +171,7 @@ test("code an agent showed on a turn of its own stands under that turn's divider
   );
   const order = [...codeTab.querySelectorAll("[data-checkpoint], .code-card")];
   const words = order.map((element) =>
-    element.matches("[data-checkpoint]")
+    element.matches('[data-checkpoint], [data-call-marker="start"]')
       ? (element.textContent ?? "")
       : element.getAttribute("data-call-id"),
   );

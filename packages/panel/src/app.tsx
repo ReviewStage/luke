@@ -88,16 +88,11 @@ import {
   useExperiment,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
-import { useCaptionPresentation } from "./use-caption-presentation.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
-import {
-  FIXTURE_SPEAKING_CAPTIONS,
-  fixtureVoice,
-  useCallTranscript,
-  useVoiceView,
-} from "./use-voice-view.js";
+import { useVoiceNotice } from "./use-voice-notice.js";
+import { fixtureVoice, useCallTranscript, useVoiceView } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
 
@@ -383,14 +378,9 @@ function AppWindow(): React.JSX.Element {
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
-  // A capture run always draws the fixture's words: the voice window that
-  // otherwise decides the captions does not stand in one.
-  const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
-  const developerCaptions = fixtureSpeaking ? undefined : voiceView.developerCaptions;
-
-  // The hint rides Luke's caption, and only over a silence the helper
+  // The hint asks while Luke speaks, and only over a silence the helper
   // actually reported. "Got it" quiets it for this stretch of silence and any
-  // that follows too soon; the captions above it stay either way.
+  // that follows too soon.
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
@@ -616,13 +606,12 @@ function AppWindow(): React.JSX.Element {
   // stage has, which on the desktop is the window's.
   const sidebar = useSidebarCollapse(run?.fixtureMode === true, stage.compact);
 
-  const caption = useCaptionPresentation({
-    lukeCaptions,
-    developerCaptions,
+  const notice = useVoiceNotice({
     voiceError,
     voiceNotice,
     speakers,
     fixtureSpeaking,
+    volumeHint: { wanted: volumeHintWanted, text: volumeHintText(outputAudio) },
   });
 
   // Rings and keyboard-only hints follow focus the keyboard actually moved.
@@ -652,9 +641,9 @@ function AppWindow(): React.JSX.Element {
   }, [outputAudio]);
 
   /**
-   * The hint's own button. It quiets the hint, never the captions: the words
-   * stay for as long as the silence does, because they are what "got it"
-   * leaves the user reading Luke by.
+   * The hint's own button. It quiets the hint for this stretch of silence;
+   * Luke's words go on streaming into the transcript, which is what "got
+   * it" leaves the user reading him by.
    */
   const dismissVolumeHint = useCallback(() => {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
@@ -795,7 +784,7 @@ function AppWindow(): React.JSX.Element {
                         // lays it out.
                         data-surface="desktop"
                         // The sidebar's width lays out the shell and Settings' page list, and
-                        // places the captions over the work column beside it.
+                        // places the voice's notice line over the work column beside it.
                         style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
                       >
                         {/* The window's content. */}
@@ -832,14 +821,7 @@ function AppWindow(): React.JSX.Element {
                                   onList: history.lists.settings,
                                 }}
                                 call={call}
-                                captions={{
-                                  caption,
-                                  volumeHint: {
-                                    wanted: volumeHintWanted,
-                                    text: volumeHintText(outputAudio),
-                                    onDismiss: dismissVolumeHint,
-                                  },
-                                }}
+                                notice={{ notice, onDismissHint: dismissVolumeHint }}
                                 doors={settingsDoors}
                               />
                             </ThreadRevealProvider>

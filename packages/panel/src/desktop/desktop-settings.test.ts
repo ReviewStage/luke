@@ -120,7 +120,7 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
 const HOMES = [
   { words: "Sign out", page: "Profile" },
   { words: "Delete account", page: "Profile" },
-  { words: "Captions", page: "Voice" },
+  { words: "Quiet Music and Spotify", page: "Voice" },
   { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
@@ -382,7 +382,7 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   assert.equal(about.includes("Changelog"), true);
   assert.equal(about.includes("Check for updates"), false);
   for (const words of [
-    "Captions",
+    "Quiet Music and Spotify",
     "Notify me when a coding agent finishes or needs me",
     "Let agents run commands on this Mac",
     "Updates",

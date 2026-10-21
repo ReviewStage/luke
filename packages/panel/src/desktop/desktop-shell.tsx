@@ -24,7 +24,6 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card.js";
-import { CaptionStrip, type CaptionStripProps } from "../caption-strip.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
@@ -47,6 +46,7 @@ import {
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { useCallingAgent } from "../use-voice-view.js";
+import { VoiceNoticeStrip, type VoiceNoticeStripProps } from "../voice-notice-strip.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -490,10 +490,9 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
- * history, whichever is drawn (`new-task-dialog.tsx`). The live captions ride the call bar while the task's
- * column is drawn, and float at the window's foot wherever else a call can
- * still be heard; they hold back spoken words while the task's Transcript
- * is on screen streaming the same ones.
+ * history, whichever is drawn (`new-task-dialog.tsx`). The voice's notice line rides the foot of the call's
+ * agent's tab while it is drawn, and floats at the window's foot wherever
+ * else a call can still be heard.
  */
 export function DesktopShell({
   gates,
@@ -505,7 +504,7 @@ export function DesktopShell({
   room,
   settingsStep,
   call,
-  captions,
+  notice,
   settings,
 }: {
   gates: DesktopGates;
@@ -520,7 +519,7 @@ export function DesktopShell({
   settingsStep: SettingsStep;
   /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
   call: CallCardInput | undefined;
-  captions: CaptionStripProps;
+  notice: VoiceNoticeStripProps;
   settings: SettingsPanelProps;
 }): React.JSX.Element {
   const { account } = settings;
@@ -613,11 +612,7 @@ export function DesktopShell({
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   const calling = useCallingAgent();
   const callShown = taskDrawn && callTabShown(tasks, calling);
-  const speechHidden = callShown;
-  const captionStrip = useMemo(
-    () => <CaptionStrip {...captions} speechHidden={speechHidden} />,
-    [captions, speechHidden],
-  );
+  const noticeStrip = useMemo(() => <VoiceNoticeStrip {...notice} />, [notice]);
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (
@@ -664,7 +659,7 @@ export function DesktopShell({
             onExit={exitSettings}
           />
         </Suspense>
-        <CaptionStrip {...captions} />
+        {noticeStrip}
       </div>
     );
   }
@@ -698,7 +693,7 @@ export function DesktopShell({
             </Suspense>
           </ChipCards>
         </MentionedAgents>
-        <CaptionStrip {...captions} />
+        {noticeStrip}
         {newTaskDialog}
       </div>
     );
@@ -712,9 +707,9 @@ export function DesktopShell({
   const boardOpen = tasks.boardView.open;
   const panelToggle =
     planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
-  // Note that the captions ride the call bar at the foot of the call's agent's
-  // tab while that is on screen, and float at the window's foot otherwise.
-  const captionsInColumn = callShown;
+  // Note that the notice line rides the foot of the call's agent's
+  // tab while that is on screen, and floats at the window's foot otherwise.
+  const noticeInColumn = callShown;
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it
@@ -805,7 +800,7 @@ export function DesktopShell({
               <DesktopTasks
                 tasks={tasks}
                 looks={looks}
-                captions={captionsInColumn ? captionStrip : undefined}
+                notice={noticeInColumn ? noticeStrip : undefined}
                 summary={summary}
                 room={room}
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
@@ -814,7 +809,7 @@ export function DesktopShell({
           </ChipCards>
         </MentionedAgents>
       </main>
-      {captionsInColumn ? null : captionStrip}
+      {noticeInColumn ? null : noticeStrip}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <CallCardDock
         call={sidebar.collapsed ? call : undefined}

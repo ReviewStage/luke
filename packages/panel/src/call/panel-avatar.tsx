@@ -1,5 +1,5 @@
 /**
- * panel-avatar.tsx -- Luke's avatar as the panel draws it: his voice from the panel's root, and his video in a small tile at the foot of the call's own agent's tab and on the call card.
+ * panel-avatar.tsx -- Luke's avatar as the panel draws it: his voice from the panel's root, and his video centred above the composer of the call's own agent's tab and on the call card.
  *
  * The panel runs the avatar's session (`call-avatar.ts`) for as long as main
  * hands it a grant, whichever tab it shows and while it is hidden, because
@@ -15,12 +15,13 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { CHOICE_BAR_LOOK, CHOICE_BAR_SIZE, ChoiceBar, cssCustomProperties } from "@luke/ui";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
-import type { AvatarStatus } from "@luke/voice/avatar";
+import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
 import { avatarViewShareAtom } from "./avatar-view.js";
@@ -33,13 +34,16 @@ import {
 } from "./call-avatar.js";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.js";
 import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
-import { CALL_TILE_WIDTH, useCallTileWidth } from "./use-call-tile-width.js";
-
-/** What the tile's edge is called, for a reader and the keyboard. */
-const RESIZE_LABEL = "Resize video";
-
-/** What the tile leaves the tab beside it, in CSS pixels: an inset at each side, so it never meets the tab's edges. */
-const TILE_RESERVE = 32;
+import {
+  CALL_VIDEO_HEIGHT,
+  CALL_VIDEO_SIZE,
+  CALL_VIDEO_SIZE_HEIGHT,
+  type CallVideoSize,
+  callVideoSizeOf,
+  clampCallVideoHeight,
+  snapCallVideoHeight,
+  useCallVideoHeight,
+} from "./use-call-video-size.js";
 
 /** The avatar's tracks as published so far, none before a session stands. */
 function useAvatarTracks(): CallAvatarTracks {
@@ -92,34 +96,197 @@ export function useAgentCallVideo(agentId: string): AgentCallVideoState {
   };
 }
 
+/** Which top corner of the video a handle stands on. */
+const VIDEO_CORNER = {
+  LEFT: "left",
+  RIGHT: "right",
+} as const;
+
+type VideoCorner = (typeof VIDEO_CORNER)[keyof typeof VIDEO_CORNER];
+
+/** What the video's resize controls are called, for a reader and the keyboard. */
+const CALL_VIDEO_RESIZE_LABEL = {
+  [VIDEO_CORNER.LEFT]: "Resize video from its top-left corner",
+  [VIDEO_CORNER.RIGHT]: "Resize video from its top-right corner",
+  SIZES: "Video size",
+} as const;
+
+/** What each size is called on its control: a letter, as a video app's size picker says it. */
+const SIZE_LABEL = {
+  [CALL_VIDEO_SIZE.SMALL]: "S",
+  [CALL_VIDEO_SIZE.MEDIUM]: "M",
+  [CALL_VIDEO_SIZE.LARGE]: "L",
+} as const satisfies Record<CallVideoSize, string>;
+
+const SIZE_ITEMS = Object.values(CALL_VIDEO_SIZE).map((size) => ({
+  value: size,
+  label: SIZE_LABEL[size],
+}));
+
+/** How far one arrow press on a corner grows or shrinks the video, in CSS pixels. */
+const KEY_STEP = 16;
+
+/** The stock avatars stream a square picture, which is what the video stands at until its own is known. */
+const SQUARE = 1;
+
+/** A drag under way on a corner: the pointer making it, where it began, and the height the video stood at. */
+interface CornerDrag {
+  pointerId: number;
+  x: number;
+  y: number;
+  from: number;
+}
+
 /**
- * The tile at the foot of one agent's tab while the avatar stands, small and
- * floating over the transcript's foot (desktop.css), and nothing once video
- * is off. Its left edge drags it larger or smaller between
- * `CALL_TILE_WIDTH`'s bounds, the way it is anchored at its right, and the
- * width it is left at is kept for the next call. Video on and off are the
- * composer's (`agent-call.tsx`), so the tile offers neither.
+ * How much a drag from a corner grows the video, in height: the way it went
+ * up, or the way it went out sideways, whichever is the longer pull. The
+ * video stands centred, so a corner moves out by half of what its width
+ * grows, which is that over the aspect in height.
+ */
+function cornerGrowth(
+  drag: CornerDrag,
+  corner: VideoCorner,
+  aspect: number,
+  at: { x: number; y: number },
+): number {
+  const up = drag.y - at.y;
+  const out = corner === VIDEO_CORNER.LEFT ? drag.x - at.x : at.x - drag.x;
+  const sideways = (2 * out) / aspect;
+  return Math.abs(sideways) > Math.abs(up) ? sideways : up;
+}
+
+/**
+ * One of the video's top corners, dragged to grow or shrink it from that
+ * side, or stepped from the keyboard: ↑ or → grows it, ↓ or ← shrinks it,
+ * Home and End take it to its bounds.
+ */
+function VideoCornerHandle({
+  corner,
+  height,
+  aspect,
+  onResize,
+  onDragging,
+}: {
+  corner: VideoCorner;
+  height: number;
+  aspect: number;
+  onResize: (height: number) => void;
+  onDragging: (dragging: boolean) => void;
+}): React.JSX.Element {
+  const drag = useRef<CornerDrag | undefined>(undefined);
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, from: height };
+    onDragging(true);
+  };
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const held = drag.current;
+    if (held === undefined || held.pointerId !== event.pointerId) return;
+    const growth = cornerGrowth(held, corner, aspect, { x: event.clientX, y: event.clientY });
+    onResize(snapCallVideoHeight(held.from + growth));
+  };
+  const onPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = undefined;
+    onDragging(false);
+  };
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const asked =
+      event.key === "ArrowUp" || event.key === "ArrowRight"
+        ? height + KEY_STEP
+        : event.key === "ArrowDown" || event.key === "ArrowLeft"
+          ? height - KEY_STEP
+          : event.key === "Home"
+            ? CALL_VIDEO_HEIGHT.MIN
+            : event.key === "End"
+              ? CALL_VIDEO_HEIGHT.MAX
+              : undefined;
+    if (asked === undefined) return;
+    event.preventDefault();
+    onResize(clampCallVideoHeight(asked));
+  };
+  return (
+    <div
+      className="agent-call-video-corner"
+      data-corner={corner}
+      role="slider"
+      aria-label={CALL_VIDEO_RESIZE_LABEL[corner]}
+      aria-orientation="vertical"
+      aria-valuemin={CALL_VIDEO_HEIGHT.MIN}
+      aria-valuemax={CALL_VIDEO_HEIGHT.MAX}
+      aria-valuenow={height}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onKeyDown={onKeyDown}
+    />
+  );
+}
+
+/**
+ * Luke's video while a call into one agent stands, in its own room between
+ * the agent's transcript and its composer (desktop.css), so the transcript
+ * ends above it and nothing is ever drawn over the words. It stands centred
+ * in that room, a rectangle at the picture's own aspect that the picture
+ * fills, as tall as the developer left it (`use-call-video-size.ts`), S on
+ * a first call. Hovering it, or a drag or a key on its controls, brings out
+ * how it resizes: a handle on each top corner, since it grows upward, and
+ * S, M and L. Nothing at all once video is off, so the room goes with it.
+ * Video on and off are the composer's (`agent-call.tsx`), so the video
+ * offers neither.
  */
 export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Element | null {
   const { status, video, onSetVideo } = useAgentCallVideo(agentId);
-  const { width, onResize } = useCallTileWidth();
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
-    width,
-    bounds: CALL_TILE_WIDTH,
-    reserve: () => TILE_RESERVE,
-    label: RESIZE_LABEL,
-    onResize,
-  });
+  const { height, onResize } = useCallVideoHeight();
+  const [aspect, setAspect] = useState(SQUARE);
+  const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
-    <CallVideoTile
-      video={video}
-      status={status}
-      onSetVideo={onSetVideo}
-      toggles={false}
-      width={width}
-      edge={<div className="call-video-resize" {...edge} />}
-    />
+    <div
+      className="agent-call-video"
+      data-reveal={String(hovered || dragging)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      style={cssCustomProperties({
+        "--call-video-height": `${height}px`,
+        "--call-video-aspect": String(aspect),
+      })}
+    >
+      <div className="agent-call-video-frame">
+        <CallVideoTile
+          video={video}
+          status={status}
+          onSetVideo={onSetVideo}
+          toggles={false}
+          onAspect={setAspect}
+        />
+        {Object.values(VIDEO_CORNER).map((corner) => (
+          <VideoCornerHandle
+            key={corner}
+            corner={corner}
+            height={height}
+            aspect={aspect}
+            onResize={onResize}
+            onDragging={setDragging}
+          />
+        ))}
+        <div className="agent-call-video-sizes">
+          <ChoiceBar
+            label={CALL_VIDEO_RESIZE_LABEL.SIZES}
+            items={SIZE_ITEMS}
+            value={callVideoSizeOf(height)}
+            onChange={(size) => onResize(CALL_VIDEO_SIZE_HEIGHT[size])}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            size={CHOICE_BAR_SIZE.COMPACT}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 

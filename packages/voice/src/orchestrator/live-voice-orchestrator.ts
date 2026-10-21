@@ -23,14 +23,11 @@ import { NoticeStrip } from "./notice-strip.js";
 
 /**
  * What the orchestrator reads rather than owns: whether a voice stands at
- * all, whether the captions are wanted, whether the output is silent, and
- * whether the microphone is granted. Amended whole from the document each
+ * all, and whether the microphone is granted. Amended whole from the document each
  * time it moves.
  */
 export interface LiveVoiceSurroundings {
   voiceAvailable: boolean | undefined;
-  captionsEnabled: boolean;
-  outputSilent: boolean;
   microphoneGranted: boolean;
 }
 
@@ -44,8 +41,7 @@ interface LiveCallLine {
 }
 
 /**
- * Everything said on the standing call so far, settled or not and whatever
- * the captions preference says: the store's id for the call's session, where
+ * Everything said on the standing call so far, settled or not: the store's id for the call's session, where
  * an account holds it, and its lines in the order they opened. It is what the
  * agent tab's transcript draws until the call ends and the record is read.
  * It grows for the whole call, so it is never reported whole: each report
@@ -69,10 +65,6 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   voiceNotice: string | undefined;
   /** Whether a press is still waiting on the session it opened. */
   talkOpening: boolean;
-  /** Luke's rows while he speaks, when the captions preference or a silent output asks for them. */
-  lukeCaptions: readonly string[] | undefined;
-  /** The developer's own rows while they are still being said, under the captions preference alone. */
-  developerCaptions: readonly string[] | undefined;
   /** The agent the standing call speaks into, and its task; none while no call stands. */
   call: VoiceCallAbout | undefined;
   /** The store's id for the session of the last call Luke ended himself, so the transcript can say so; none before he has. */
@@ -116,9 +108,9 @@ const SPEAKER_OF_KIND = {
 /**
  * How long caption rows are folded before they are reported. A transcription
  * delta lands every few words while anyone speaks, and each report is a new
- * version of the document every window is sent, so the captions are read
+ * version of the document every window is sent, so the heard lines are read
  * about ten times a second rather than at the delta's rate; any other edge
- * reports at once and carries the captions as they stand.
+ * reports at once and carries the lines as they stand.
  */
 const CAPTION_REPORT_MS = 100;
 
@@ -175,8 +167,6 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.voiceError === right.voiceError &&
     left.voiceNotice === right.voiceNotice &&
     left.talkOpening === right.talkOpening &&
-    left.lukeCaptions === right.lukeCaptions &&
-    left.developerCaptions === right.developerCaptions &&
     sameCallAbout(left.call, right.call) &&
     left.lukeEndedCall === right.lukeEndedCall &&
     left.speakerMuted === right.speakerMuted &&
@@ -219,15 +209,11 @@ export class LiveVoiceOrchestrator {
   #call: LiveVoiceCall | undefined;
   #surroundings: LiveVoiceSurroundings = {
     voiceAvailable: undefined,
-    captionsEnabled: false,
-    outputSilent: false,
     microphoneGranted: false,
   };
   #status: LiveStatus = LIVE_STATUS.IDLE;
   #speakers: LiveVoiceSpeakers = SILENT;
   #rows: readonly LiveCaptionRow[] = [];
-  #lukeCaptions: readonly string[] | undefined;
-  #developerCaptions: readonly string[] | undefined;
   #callTranscript: LiveCallTranscript | undefined;
   #talkOpening = false;
   /** Whether the developer silenced Luke's voice on this device for the call standing, which its end lets go of. */
@@ -280,7 +266,6 @@ export class LiveVoiceOrchestrator {
     if (surroundings.voiceAvailable === false && stoodAvailable !== false && this.#call) {
       this.#endCall();
     }
-    this.#recomposeCaptions();
     this.#touch();
   }
 
@@ -416,9 +401,8 @@ export class LiveVoiceOrchestrator {
   /**
    * The panel's speaker toggle: Luke's voice silenced on this device, or
    * heard again, for the call standing. It is playback alone, so the session
-   * is told nothing and Luke goes on speaking: his words caption whatever
-   * the captions preference, as over a silent output, and still transcribe,
-   * and his speaking status, read off his track rather than off
+   * is told nothing and Luke goes on speaking: his words still stream into
+   * the agent's transcript as they are heard, and his speaking status, read off his track rather than off
    * what plays, still says when he is done. The call's end lets it go, so
    * the next call is heard; a press over no call does nothing.
    */
@@ -426,7 +410,6 @@ export class LiveVoiceOrchestrator {
     return Effect.sync(() => {
       if (this.#call === undefined) return;
       this.#speakerMuted = muted;
-      this.#recomposeCaptions();
       this.#touch();
     });
   }
@@ -464,7 +447,7 @@ export class LiveVoiceOrchestrator {
             this.#rows = [];
             this.#endCall();
             this.#letGo();
-            this.#recomposeCaptions();
+            this.#recomposeTranscript();
             this.#touch();
           }
           return;
@@ -583,7 +566,7 @@ export class LiveVoiceOrchestrator {
       this.#rows = [];
       this.#talkOpening = false;
       this.#letGo();
-      this.#recomposeCaptions();
+      this.#recomposeTranscript();
       this.#touch();
       return fiber ? Effect.asVoid(Fiber.interrupt(fiber)) : Effect.void;
     });
@@ -723,7 +706,7 @@ export class LiveVoiceOrchestrator {
       this.#endCall();
       this.#letGo();
     }
-    this.#recomposeCaptions();
+    this.#recomposeTranscript();
     this.#touch();
   }
 
@@ -731,41 +714,12 @@ export class LiveVoiceOrchestrator {
     if (this.#call !== call) return;
     this.#rows = rows;
     this.#heardDuringEnding(call);
-    this.#recomposeCaptions();
+    this.#recomposeTranscript();
     this.#touchCaptions();
   }
 
-  /**
-   * The captions as the panel draws them: Luke's words under the housing
-   * while he speaks and there is a reason to read them, the developer's own
-   * words while they are still being said and the captions preference asks
-   * for them. A silent output, or a speaker muted, is a reason to
-   * read Luke, who could not otherwise be heard, and no reason to read the
-   * developer, who said the words themselves; so their captions follow the
-   * preference alone. A developer row is unsettled for the ledger's gap after
-   * its last fragment, which is what keeps a finished sentence on screen a
-   * moment after the transcript catches up with it.
-   */
-  #recomposeCaptions(): void {
-    const unsettled = this.#rows.filter((row) => !row.settled);
-    const lukeRows = unsettled
-      .filter((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.REPLY)
-      .map((row) => row.entry.words);
-    const wanted =
-      (this.#surroundings.captionsEnabled ||
-        this.#surroundings.outputSilent ||
-        this.#speakerMuted) &&
-      this.#status === LIVE_STATUS.SPEAKING;
-    const nextCaptions = wanted && lukeRows.length > 0 ? lukeRows : undefined;
-    if (!sameWords(this.#lukeCaptions, nextCaptions)) this.#lukeCaptions = nextCaptions;
-    const developerRows = unsettled
-      .filter((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK)
-      .map((row) => row.entry.words);
-    const nextDeveloperCaptions =
-      this.#surroundings.captionsEnabled && developerRows.length > 0 ? developerRows : undefined;
-    if (!sameWords(this.#developerCaptions, nextDeveloperCaptions)) {
-      this.#developerCaptions = nextDeveloperCaptions;
-    }
+  /** The call's transcript as its rows now stand, kept as it was where no line moved. */
+  #recomposeTranscript(): void {
     const nextTranscript = callTranscriptOf(this.#rows);
     if (!sameTranscript(this.#callTranscript, nextTranscript)) {
       this.#callTranscript = nextTranscript;
@@ -780,8 +734,6 @@ export class LiveVoiceOrchestrator {
       voiceError: this.#strip.error,
       voiceNotice: this.#strip.notice,
       talkOpening: this.#talkOpening,
-      lukeCaptions: this.#lukeCaptions,
-      developerCaptions: this.#developerCaptions,
       call: this.#call === undefined ? undefined : this.#callAbout,
       lukeEndedCall: this.#lukeEndedCall,
       speakerMuted: this.#speakerMuted,
@@ -842,15 +794,6 @@ export class LiveVoiceOrchestrator {
     if (rising) this.#countedCall = this.#call;
     this.#bridge.reportView(view, rising, change);
   }
-}
-
-function sameWords(
-  left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
-): boolean {
-  if (left === right) return true;
-  if (!left || !right || left.length !== right.length) return false;
-  return left.every((word, index) => word === right[index]);
 }
 
 /** The call's rows as its transcript so far; none before its first row. */

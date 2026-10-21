@@ -43,8 +43,7 @@ export interface OutputVolumeWatch {
  * Watches whether the Mac's output would let Luke be heard: the default
  * output device's mute switch and volume, read by a helper that reads nothing
  * else and can write nothing at all. What it learns drives only what the
- * renderer draws — captions forced on, and a hint asking for volume, while
- * Luke speaks unheard.
+ * renderer draws — a hint asking for volume while Luke speaks unheard.
  */
 export function outputVolumeWatcher(options: OutputVolumeWatcherOptions): OutputVolumeWatch {
   const { spawnHelper } = options;

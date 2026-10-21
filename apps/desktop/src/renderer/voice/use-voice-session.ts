@@ -24,7 +24,6 @@ import {
   type LiveVoiceSurroundings,
 } from "@luke/voice/orchestrator";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
-import { outputSilent } from "@luke/voice/volume-hint";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
@@ -202,8 +201,7 @@ export function useVoiceSession(
 
   /**
    * Everything this window reads rather than owns — whether a voice stands,
-   * whether captions are wanted, the output the captions answer, and the
-   * microphone's grant — on the one channel main holds it on, handed over
+   * and the microphone's grant — on the one channel main holds it on, handed over
    * whole whenever it moves.
    */
   const settings = useAppSlice(APP_SETTINGS_VIEW);
@@ -211,8 +209,6 @@ export function useVoiceSession(
   useEffect(() => {
     const surroundings: LiveVoiceSurroundings = {
       voiceAvailable: settings?.voiceAvailable,
-      captionsEnabled: settings?.voiceCaptions === true,
-      outputSilent: outputSilent(audio?.outputAudio),
       microphoneGranted: audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
     };
     orchestrator.surround(surroundings);

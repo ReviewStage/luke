@@ -984,7 +984,7 @@ screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
 label, description, picture address, and link address a page carries for
 itself, is replaced with blocks of the same length, so a task's plan, a
-caption of what you or Luke said, your name and email address, and anything
+line of what you or Luke said, your name and email address, and anything
 you type all appear as blocks. A coding agent's message box is an editor, and
 the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out

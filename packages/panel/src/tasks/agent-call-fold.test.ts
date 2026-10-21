@@ -23,7 +23,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
-import { CallCheckpoint } from "./call-card.js";
+import { CallStartMarker } from "./call-card.js";
 
 /**
  * agent-call-fold.test.ts -- on a call into an agent, its tab reads as a
@@ -34,8 +34,9 @@ import { CallCheckpoint } from "./call-card.js";
  * joined the turn under way, folds only the work after the join under
  * the answer, and a turn the service names by `readFrom` alone, as it does
  * for a reply said long after the turn settled, folds the same way. A turn
- * outside a call is drawn as it always was, and the call's divider is a
- * plain rule on no ground of its own, live or ended. Synthetic throughout.
+ * outside a call is drawn as it always was, and a call is marked at each
+ * end by a labelled rule on no band of its own, its start pinned to the
+ * log's top while the call stands. Synthetic throughout.
  */
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
@@ -292,10 +293,10 @@ async function drawnTab(messages: readonly CodingAgentMessage[]): Promise<HTMLEl
 function drawnOrder(container: HTMLElement): readonly string[] {
   return [
     ...container.querySelectorAll(
-      "[data-checkpoint], [data-call-ended], [data-message-id], [data-turn-fold] > summary, [data-call-id], [data-worked]",
+      '[data-call-marker="start"], [data-call-ended], [data-message-id], [data-turn-fold] > summary, [data-call-id], [data-worked]',
     ),
   ].map((element) => {
-    if (element.matches("[data-checkpoint]")) return "call begins";
+    if (element.matches('[data-call-marker="start"]')) return "call begins";
     if (element.matches("[data-call-ended]")) return "call ended";
     if (element.matches("[data-message-id]"))
       return `message: ${element.getAttribute("data-message-id")}`;
@@ -534,37 +535,51 @@ test("a turn outside a call is drawn as it always was: its work folded and its w
   assert.match(container.textContent ?? "", /Done: invites now last fourteen days\./u);
 });
 
-test("a call's divider is a plain rule on no ground of its own, live and ended alike", () => {
+/** The panel's tasks sheet, laid into the test's document. */
+function layTasksSheet(): void {
   const sheet = document.createElement("style");
   sheet.textContent = readFileSync(`${__dirname}/../styles/tasks.css`, "utf8");
   document.head.append(sheet);
+}
+
+test('a call opens at a labelled rule, "Call started" and when, and closes at one, "Call ended", how long it ran, and when, each a pill on a rule with no band of its own', async () => {
+  layTasksSheet();
+  const container = await drawnTab([TASK, ASKED, ACK, SPOKEN_TURN, REPLY]);
+  const start = container.querySelector<HTMLElement>('[data-call-marker="start"]');
+  const end = container.querySelector<HTMLElement>('[data-call-marker="end"]');
+  assert.ok(start, "the call opens at its marker");
+  assert.ok(end, "and closes at one");
+  assert.match(start.textContent ?? "", /^Call started · .+\d:\d\d [AP]M$/u);
+  assert.ok(start.querySelector(".call-marker-icon svg"), "beside the voice's waveform");
+  assert.doesNotMatch(start.textContent ?? "", /Live/u, "an ended call is not live");
+  assert.match(end.textContent ?? "", /^Call ended · 1m 0s · .+\d:\d\d [AP]M$/u);
+  assert.ok(end.querySelector(".call-marker-icon svg"), "beside a hang-up glyph");
+  for (const marker of [start, end]) {
+    const style = getComputedStyle(marker);
+    assert.match(style.backgroundColor, /^(|transparent|rgba\(0, 0, 0, 0\))$/u, "no band");
+    assert.notEqual(style.position, "sticky", "an ended call's markers scroll with its lines");
+    assert.equal(marker.querySelectorAll(".call-marker-rule").length, 2, "a rule either side");
+    assert.ok(marker.querySelector(".call-marker-pill"), "the words on a pill");
+  }
+  assert.ok(
+    start.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the start stands before the end",
+  );
+});
+
+test("a standing call's start marker says Live and stays pinned to the top of the log while its lines scroll", () => {
+  layTasksSheet();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
     root?.render(
-      createElement("div", null, [
-        createElement(CallCheckpoint, {
-          key: "live",
-          startedAt: CALL_START,
-          live: true,
-          now: CALL_START,
-        }),
-        createElement(CallCheckpoint, {
-          key: "ended",
-          startedAt: CALL_START,
-          live: false,
-          now: CALL_START,
-        }),
-      ]),
+      createElement(CallStartMarker, { startedAt: CALL_START, live: true, now: CALL_START }),
     ),
   );
-  const dividers = [...container.querySelectorAll<HTMLElement>("[data-checkpoint]")];
-  assert.equal(dividers.length, 2);
-  for (const divider of dividers) {
-    const style = getComputedStyle(divider);
-    assert.match(style.backgroundColor, /^(|transparent|rgba\(0, 0, 0, 0\))$/u, "no ground");
-    assert.notEqual(style.position, "sticky", "a plain rule scrolls with the lines");
-    assert.ok(divider.querySelector(".checkpoint-rule"), "the rule runs on from its words");
-  }
-  assert.match(dividers[0]?.textContent ?? "", /Live$/u, "the live call says so");
+  const marker = container.querySelector<HTMLElement>('[data-call-marker="start"]');
+  assert.ok(marker);
+  assert.match(marker.textContent ?? "", /^Call started · .+Live$/u);
+  const style = getComputedStyle(marker);
+  assert.equal(style.position, "sticky", "pinned while the call's lines scroll under it");
+  assert.equal(style.top, "0px");
 });

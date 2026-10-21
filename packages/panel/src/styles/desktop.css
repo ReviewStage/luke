@@ -123,13 +123,11 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
-  /* Where the work column begins, which floating captions centre on, and the
-     width they are drawn at over it: no wider than the call bar draws them. */
+  /* Where the work column begins, which the floating notice line centres on,
+     and the most it is drawn at over it. */
   --work-left: var(--sidebar-width);
-  --caption-width-max: 560px;
-  /* The narrowest the captions stand beside a call's video tile before they take a line of their own over it. */
-  --caption-width-min: 240px;
-  --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
+  --notice-width-max: 560px;
+  --notice-width: min(var(--notice-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   /* The stage stands over what is seen of the window: from where a phone
      panned it to, down to where the on-screen keyboard begins, so what
@@ -2180,7 +2178,7 @@ ul.actor-stack {
    first makes it scroll. This is the block inside it. */
 .desktop-document .plan-document-body {
   padding: var(--luke-page-inset);
-  /* Room for the last line to scroll clear of the captions over the call bar. */
+  /* Room for the last line to scroll clear of what floats over the column's foot. */
   padding-bottom: 140px; /* off-scale */
 }
 
@@ -2273,118 +2271,150 @@ ul.actor-stack {
   }
 }
 
-/* The call bar ------------------------------------------------------------- */
+/* The call's room --------------------------------------------------------- */
 
-/* A call into an agent floats over the foot of its tab's transcript, above
-   the composer that holds the call's controls: one row taking none of the
-   tab's height, so the transcript never moves as the call or its video
-   comes and goes. The captions stand in the room at the row's left, centred
-   there, and Luke's video tile at its right, so the two never meet. The row
-   takes no pointer but what it draws, so the transcript under it scrolls. */
+/* While a call into an agent stands, its tab's foot holds the call: Luke's
+   video in a room of its own between the transcript and the composer, which
+   the transcript ends above, so no word is ever drawn under the video. The
+   room goes as video goes off or the call ends. The voice's notice line
+   floats just over the room's top edge, over the transcript's foot, so it
+   never stands on the video; it takes no pointer but its own button, so the
+   transcript under it scrolls. */
 .agent-call-foot {
   position: relative;
-  height: 0;
 }
 
-.agent-call-float {
-  container: plan-call-bar / inline-size;
+.agent-call-notice {
   position: absolute;
   z-index: 6;
   right: 0;
-  bottom: 0;
+  bottom: 100%;
   left: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: flex-end;
-  gap: var(--luke-space-12);
-  padding: 0 var(--luke-space-16) var(--luke-space-8);
+  height: 0;
   pointer-events: none;
 }
 
-/* The captions in the row rather than over the window: a box in its flow,
-   rising into place as they do wherever they float, and filling the room the
-   tile leaves, up to their own measure and centred there. Where that room is
-   narrower than a readable line, a narrow tab's, they wrap onto a line of
-   their own over the tile, spanning the tab. */
-.agent-call-float > .voice-caption {
+.agent-call-notice > .voice-notice {
+  bottom: var(--luke-space-8);
+  width: max-content;
+  max-width: min(var(--notice-width-max), calc(100% - 2 * var(--luke-space-32)));
+}
+
+/* The video's room: the video centred in it, as tall as the developer left
+   it (`use-call-video-size.ts`) and as wide as its own picture's aspect makes
+   that, never wider than the tab nor taller than two fifths of the stage, so
+   a short window keeps the transcript readable. */
+.agent-call-video {
+  display: flex;
+  justify-content: center;
+  padding: var(--luke-space-8) var(--luke-space-16);
+}
+
+.agent-call-video-frame {
   position: relative;
-  bottom: auto;
-  left: auto;
-  flex-grow: 1;
-  flex-shrink: 1;
-  flex-basis: var(--caption-width-min);
-  min-width: 0;
-  max-width: var(--caption-width-max);
-  margin-inline: auto;
-  transform: translateY(var(--luke-space-6));
+  width: min(
+    100%,
+    calc(var(--call-video-height) * var(--call-video-aspect)),
+    calc(var(--luke-stage-height) * 0.4 * var(--call-video-aspect))
+  );
+  aspect-ratio: var(--call-video-aspect);
 }
 
-.agent-call-float > .voice-caption[data-shown="true"] {
-  transform: none;
-}
-
-/* The tile is small at the row's right, as wide as the developer left it
-   (`use-call-tile-width.ts`) and never wider than the tab leaves, square as
-   the stock avatars' picture is, and raised off the transcript under it. */
-.agent-call-float > .call-video-tile {
-  width: min(var(--call-tile-width), 100%);
+/* The tile fills the frame, which stands at the picture's own aspect, so
+   the picture fills the tile whole and needs no blurred fill beside it. */
+.agent-call-video-frame > .call-video-tile {
+  width: 100%;
+  height: 100%;
   max-height: none;
   margin: 0;
-  box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
-  pointer-events: auto;
+  aspect-ratio: auto;
 }
 
-.agent-call-float > .call-video-tile .call-video-face {
+.agent-call-video .call-video-frame {
+  object-fit: cover;
+}
+
+.agent-call-video .call-video-fill {
+  display: none;
+}
+
+.agent-call-video .call-video-face {
   width: 40%;
   max-width: 56px;
   height: auto;
   aspect-ratio: 1;
 }
 
-/* The tile's left edge, dragged or stepped from the keyboard to resize it,
-   since the tile is anchored at its right. Inside the tile, which clips at
-   its corner, and lit as the window's other resize edges are. */
-.call-video-resize {
+/* How the video resizes, brought out while the pointer is over it, a drag
+   is under way, or the keyboard is on one of them (`AgentCallVideo`): a
+   bracket on each top corner, since the video grows upward, and S, M and L
+   at its foot. */
+.agent-call-video-corner,
+.agent-call-video-sizes {
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.agent-call-video[data-reveal="true"] :is(.agent-call-video-corner, .agent-call-video-sizes),
+.agent-call-video:focus-within :is(.agent-call-video-corner, .agent-call-video-sizes) {
+  opacity: 1;
+}
+
+.agent-call-video-corner {
   position: absolute;
   z-index: 1;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 6px;
-  cursor: col-resize;
-  outline: none; /* no ring: the edge fills in the focus colour */
-  transition: background-color var(--duration-hover) ease;
+  top: calc(-1 * var(--luke-space-6));
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+  box-sizing: border-box;
+  border-top: 2px solid var(--luke-color-border-strong);
+  outline: none; /* no ring: the bracket lights in the focus colour */
+  touch-action: none;
 }
 
-.call-video-resize:hover,
-.call-video-resize:active,
-.call-video-resize:focus-visible {
-  background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
+.agent-call-video-corner[data-corner="left"] {
+  left: calc(-1 * var(--luke-space-6));
+  border-left: 2px solid var(--luke-color-border-strong);
+  border-top-left-radius: var(--luke-radius-6);
+  cursor: nwse-resize;
 }
 
-/* Too narrow a tab: the captions span the room the tile leaves, their
-   volume hint wrapping rather than cut. */
-@container plan-call-bar (max-width: 359px) {
-  .agent-call-float .volume-hint-text {
-    white-space: normal;
-  }
+.agent-call-video-corner[data-corner="right"] {
+  right: calc(-1 * var(--luke-space-6));
+  border-right: 2px solid var(--luke-color-border-strong);
+  border-top-right-radius: var(--luke-radius-6);
+  cursor: nesw-resize;
 }
 
-/* Anywhere no call bar is drawn (Settings, the home page, a panel
-   filling the window) they float at the window's foot over the work column. */
-.desktop-shell > .voice-caption {
+.agent-call-video-corner:is(:hover, :active, :focus-visible) {
+  border-color: var(--luke-color-accent);
+}
+
+.agent-call-video-sizes {
+  position: absolute;
+  z-index: 1;
+  bottom: var(--luke-space-6);
+  left: 50%;
+  width: max-content;
+  transform: translateX(-50%);
+}
+
+/* Anywhere no call's tab is drawn (Settings, the home page, a panel
+   filling the window) the notice line floats at the window's foot over the
+   work column. */
+.desktop-shell > .voice-notice {
   bottom: var(--luke-space-24);
   left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
-  width: var(--caption-width);
+  width: max-content;
+  max-width: var(--notice-width);
 }
 
-/* On a phone they float just above whatever docks at the column's foot, a
-   composer first of all (`column-dock.ts`), rather than over it, and span the
-   screen less a step at each side. However tall the dock grows, they keep
+/* On a phone it floats just above whatever docks at the column's foot, a
+   composer first of all (`column-dock.ts`), rather than over it, and spans the
+   screen less a step at each side. However tall the dock grows, it keeps
    three controls' height of what is seen above it to stand in. The stage already keeps off the
    notch and the home indicator. */
-.desktop-shell[data-room="narrow"] > .voice-caption {
+.desktop-shell[data-room="narrow"] > .voice-notice {
   bottom: calc(
     max(
       0px,
@@ -2394,6 +2424,7 @@ ul.actor-stack {
   );
   left: 50%;
   width: calc(100% - 2 * var(--luke-space-16));
+  max-width: none;
 }
 
 /* The call bar's own row, laid out as a voice composer's controls are: at

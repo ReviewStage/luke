@@ -240,20 +240,6 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
   }),
-  voiceCaptions: toggleSetting({
-    field: "voiceCaptions",
-    id: APP_SETTING_ID.VOICE_CAPTIONS,
-    label: "Captions",
-    detail:
-      "Shows your words as well as Luke's, and keeps neither. Luke's appear anyway while the Mac's sound is muted or at zero.",
-    default: false,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 50,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: voiceControlDrawn,
-  }),
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",
     id: APP_SETTING_ID.DUCK_OTHER_MEDIA,

@@ -33,7 +33,7 @@ import { useStandingVoiceView } from "../use-voice-view.js";
 import { CALL_CONTROL_LABEL } from "./tasks-parts.js";
 
 /**
- * agent-call.tsx -- an agent's tab taking calls: the call's controls in the composer's row, and while a call into the agent stands, Luke's video tile and the captions at the tab's foot.
+ * agent-call.tsx -- an agent's tab taking calls: the call's controls in the composer's row, and while a call into the agent stands, Luke's video centred above the composer and the voice's notice line over it.
  *
  * One call stands on a Mac at a time, into one agent, and the voice window
  * holds it, so the controls and the foot read the voice as every window
@@ -70,8 +70,8 @@ export function takesCalls(agent: Pick<CodingAgentSummary, "runtime">): boolean 
   return agent.runtime === undefined;
 }
 
-/** The live captions, which ride the foot of the tab of the agent the call speaks into; none where the window draws them elsewhere. */
-export const CallCaptions = createContext<ReactNode>(undefined);
+/** The voice's notice line, which rides the foot of the tab of the agent the call speaks into; none where the window draws it elsewhere. */
+export const CallNotice = createContext<ReactNode>(undefined);
 
 /** What the group of a call's controls is named for a reader, since no line names the call any more. */
 const CALL_CONTROLS_LABEL = "Call with Luke";
@@ -257,23 +257,22 @@ export function AgentCallControls({
 }
 
 /**
- * What an agent's tab's foot draws over the transcript while a call into
- * the agent stands: one row floating at the transcript's foot, the captions
- * in the room at its left and Luke's video tile at its right, so the two
- * never meet and neither takes a line of the tab's height: the transcript
- * never moves as a call begins, its video comes and goes, or the tile is
- * resized. Nothing while no call into the agent stands.
+ * What an agent's tab's foot draws while a call into the agent stands:
+ * Luke's video in a room of its own between the transcript and the
+ * composer, centred there, which the transcript ends above
+ * (`AgentCallVideo`), and the voice's notice line floating just over that
+ * room's top edge, so a failure is read where the call is steered from and
+ * never stands on the video. Nothing while no call into the agent stands,
+ * so the room goes as the call ends, and goes too while video is off.
  */
 export function AgentCallFoot({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const captions = useContext(CallCaptions);
+  const notice = useContext(CallNotice);
   const onCall = useAgentOnCall(agentId);
   if (!onCall) return null;
   return (
     <div className="agent-call-foot">
-      <div className="agent-call-float">
-        {captions}
-        <AgentCallVideo agentId={agentId} />
-      </div>
+      {notice === undefined ? null : <div className="agent-call-notice">{notice}</div>}
+      <AgentCallVideo agentId={agentId} />
     </div>
   );
 }

@@ -23,6 +23,7 @@ import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { handState } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -67,7 +68,7 @@ async function mountOn(
   calls: AgentCallDoors | undefined,
   voice: VoiceView = IDLE_VOICE_VIEW,
   agent: CodingAgentSummary = AGENT,
-  call: { avatar?: AvatarState; activity?: TaskActivity } = {},
+  call: { avatar?: AvatarState; activity?: TaskActivity; notice?: React.ReactNode } = {},
 ): Promise<HTMLElement> {
   handState(
     {},
@@ -106,7 +107,12 @@ async function mountOn(
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks,
+          notice: call.notice,
+        }),
       ),
     ),
   );
@@ -160,11 +166,46 @@ function videoTile(page: HTMLElement): HTMLElement | null {
   return page.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`);
 }
 
-/** The tile's resize edge, which it must have. */
-function tileEdge(page: HTMLElement): HTMLElement {
-  const edge = videoTile(page)?.querySelector<HTMLElement>('[role="separator"]');
-  assert.ok(edge, "the tile has a resize edge");
-  return edge;
+/** The video's room above the composer, where it stands. */
+function videoRoom(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>(".agent-call-video");
+}
+
+/** The height the video stands at, as its room is told it. */
+function videoHeight(page: HTMLElement): string | undefined {
+  return videoRoom(page)?.style.getPropertyValue("--call-video-height");
+}
+
+/** One of the video's top-corner handles, which it must have. */
+function corner(page: HTMLElement, side: "left" | "right"): HTMLElement {
+  const handle = videoRoom(page)?.querySelector<HTMLElement>(
+    `.agent-call-video-corner[data-corner="${side}"]`,
+  );
+  assert.ok(handle, `the video has a ${side} corner handle`);
+  return handle;
+}
+
+/** The S, M, and L options, by their letters. */
+function sizeOption(page: HTMLElement, letter: string): HTMLElement {
+  const group = videoRoom(page)?.querySelector<HTMLElement>('[aria-label="Video size"]');
+  assert.ok(group, "the video offers its sizes");
+  const option = [...group.querySelectorAll<HTMLElement>('[role="radio"]')].find(
+    (each) => each.textContent?.trim() === letter,
+  );
+  assert.ok(option, `the video offers ${letter}`);
+  return option;
+}
+
+/** The tile inside the video's room, which it must hold. */
+function tileOf(room: HTMLElement): HTMLElement {
+  const tile = room.querySelector<HTMLElement>(".call-video-tile");
+  assert.ok(tile);
+  return tile;
+}
+
+/** A pointer event of `type` at the point given, as the browser hands one to the handle. */
+function pointer(type: string, x: number, y: number): MouseEvent {
+  return new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
 }
 
 test("the Call button is a waveform, not a phone", async () => {
@@ -209,11 +250,12 @@ test("on a call no line says what Luke is doing: no Listening, no Thinking, and 
   assert.equal(tab.querySelector(".call-status"), null);
 });
 
-test("with video off the tile goes and the composer's video button turns it on again; with video on it stands at the transcript's foot", async () => {
+test("with video off the video's room goes and the composer's video button turns it on again; with video on it takes a room of its own between the transcript and the composer", async () => {
   const off = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
     avatar: AVATAR_OFF,
   });
   assert.equal(videoTile(off), null);
+  assert.equal(videoRoom(off), null, "video off takes the room away");
   assert.ok(composerButtons(off).includes(CALL_VIDEO_LABEL.VIDEO_ON));
   act(() => roots.pop()?.unmount());
 
@@ -222,8 +264,18 @@ test("with video off the tile goes and the composer's video button turns it on a
   });
   const tile = videoTile(on);
   assert.ok(tile, "the tile stands");
-  assert.ok(tile.closest(".agent-call-foot"), "at the tab's foot");
-  assert.equal(tile.closest(".agent-composer"), null, "over the composer, not in it");
+  const room = videoRoom(on);
+  assert.ok(room && room.contains(tile), "in a room of its own");
+  const foot = on.querySelector(".agent-tab-foot");
+  assert.ok(foot?.contains(room), "at the tab's foot, out of the transcript");
+  assert.equal(room.closest(".conversation"), null);
+  const composer = on.querySelector(".agent-composer");
+  assert.ok(composer);
+  assert.ok(
+    room.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "above the composer",
+  );
+  assert.equal(tile.closest(".agent-composer"), null, "not in the composer");
   assert.equal(
     tile.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_OFF}"]`),
     null,
@@ -231,34 +283,141 @@ test("with video off the tile goes and the composer's video button turns it on a
   );
 });
 
-test("the video tile's size is held between its bounds and kept for the next call", async () => {
-  // A width kept by hand, or by an older build, past the greatest.
-  window.localStorage.setItem("luke.callTileWidth", "9999");
+test("the video's room takes height in the tab's flow, so the transcript ends above it, and stands the video centred in it", async () => {
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    avatar: { status: AVATAR_STATUS.LIVE },
+  });
+  const laid = layContainersAt({});
+  try {
+    const foot = page.querySelector<HTMLElement>(".agent-call-foot");
+    assert.ok(foot);
+    const drawn = getComputedStyle(foot);
+    assert.notEqual(drawn.position, "absolute", "the foot is in the tab's flow");
+    assert.notEqual(drawn.height, "0px", "and takes the room the video needs");
+    const room = videoRoom(page);
+    assert.ok(room);
+    assert.notEqual(getComputedStyle(room).position, "absolute", "nor does the video float");
+    assert.equal(getComputedStyle(room).justifyContent, "center", "the video is centred");
+    const frame = room.querySelector<HTMLElement>(".agent-call-video-frame");
+    assert.ok(frame);
+    assert.equal(
+      getComputedStyle(frame).aspectRatio,
+      "var(--call-video-aspect)",
+      "a rectangle at the picture's own aspect",
+    );
+  } finally {
+    laid.remove();
+  }
+});
+
+test("the video starts at S, its size is held between its bounds and snaps to S, M, and L, and it is kept for the next call", async () => {
   const live = { avatar: { status: AVATAR_STATUS.LIVE } } as const;
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
-  const size = () => videoTile(page)?.style.getPropertyValue("--call-tile-width");
-  assert.equal(size(), "360px", "a kept width past the greatest is held to it");
+  assert.equal(videoHeight(page), "120px", "a first call opens on S");
+  assert.equal(sizeOption(page, "S").getAttribute("aria-checked"), "true");
 
+  act(() => sizeOption(page, "L").click());
+  assert.equal(videoHeight(page), "300px", "L is a press away");
   act(() =>
-    tileEdge(page).dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })),
+    corner(page, "left").dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })),
   );
-  assert.equal(size(), "360px");
+  assert.equal(videoHeight(page), "360px", "no larger than the greatest");
   act(() =>
-    tileEdge(page).dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })),
+    corner(page, "right").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+    ),
   );
-  assert.equal(size(), "120px", "no smaller than the least");
+  assert.equal(videoHeight(page), "96px", "no smaller than the least");
   act(() =>
-    tileEdge(page).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })),
+    corner(page, "right").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+    ),
   );
-  assert.equal(size(), "136px", "its left edge widens it, as the tile is anchored at its right");
+  assert.equal(videoHeight(page), "112px", "↑ grows it, as it grows upward");
+
+  // A drag from the top-left corner, up past M, lands near it and settles on it.
+  const handle = corner(page, "left");
+  act(() => handle.dispatchEvent(pointer("pointerdown", 100, 400)));
+  act(() => handle.dispatchEvent(pointer("pointermove", 100, 315)));
+  assert.equal(videoHeight(page), "200px", "a drag landing near M settles on M");
+  act(() => handle.dispatchEvent(pointer("pointermove", 100, -2000)));
+  assert.equal(videoHeight(page), "360px", "a drag past the greatest holds there");
+  act(() => handle.dispatchEvent(pointer("pointermove", 100, 330)));
+  act(() => handle.dispatchEvent(pointer("pointerup", 100, 330)));
+  assert.equal(videoHeight(page), "182px", "between the sizes it stands where it was left");
   act(() => roots.pop()?.unmount());
 
   const next = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
-  assert.equal(
-    videoTile(next)?.style.getPropertyValue("--call-tile-width"),
-    "136px",
-    "the next call opens on the size it was left at",
-  );
+  assert.equal(videoHeight(next), "182px", "the next call opens on the size it was left at");
+  act(() => roots.pop()?.unmount());
+
+  // A height kept by hand past the greatest.
+  window.localStorage.setItem("luke.callVideoHeight", "9999");
+  const kept = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
+  assert.equal(videoHeight(kept), "360px", "a kept height past the greatest is held to it");
+});
+
+test("hovering the video brings out its resize controls, each named and reached from the keyboard", async () => {
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    avatar: { status: AVATAR_STATUS.LIVE },
+  });
+  const room = videoRoom(page);
+  assert.ok(room);
+  const laid = layContainersAt({});
+  try {
+    const controls = () =>
+      [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner, .agent-call-video-sizes")]
+        .map((each) => getComputedStyle(each).opacity)
+        .join(" ");
+    assert.equal(room.dataset.reveal, "false");
+    assert.equal(controls(), "0 0 0", "at rest the video is the video alone");
+    act(() => {
+      tileOf(room).dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    assert.equal(room.dataset.reveal, "true");
+    assert.equal(controls(), "1 1 1", "under the pointer its corners and sizes show");
+    act(() => {
+      tileOf(room).dispatchEvent(
+        new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
+      );
+    });
+    assert.equal(room.dataset.reveal, "false", "and go as the pointer leaves");
+  } finally {
+    laid.remove();
+  }
+  for (const side of ["left", "right"] as const) {
+    const handle = corner(page, side);
+    assert.equal(handle.tabIndex, 0, `the ${side} corner is reached from the keyboard`);
+    assert.match(handle.getAttribute("aria-label") ?? "", /^Resize video/u);
+    assert.equal(handle.getAttribute("role"), "slider");
+  }
+  assert.ok(sizeOption(page, "M"));
+});
+
+test("on a call the voice's notice line floats just over the video's room, never on the video, and no captions stand anywhere in the tab", async () => {
+  const notice = createElement("div", { className: "voice-notice", "data-shown": "true" }, "Lost");
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
+    avatar: { status: AVATAR_STATUS.LIVE },
+    notice,
+  });
+  const line = page.querySelector<HTMLElement>(".voice-notice");
+  assert.ok(line, "the notice line rides the call's tab");
+  const room = videoRoom(page);
+  assert.ok(room);
+  assert.equal(room.contains(line), false, "not inside the video's room");
+  const laid = layContainersAt({});
+  try {
+    const holder = line.closest<HTMLElement>(".agent-call-notice");
+    assert.ok(holder);
+    const drawn = getComputedStyle(holder);
+    assert.equal(drawn.position, "absolute");
+    assert.equal(drawn.bottom, "100%", "it stands above the foot's top edge, over the transcript");
+  } finally {
+    laid.remove();
+  }
+  const tab = page.querySelector(".agent-tab");
+  assert.ok(tab);
+  assert.equal(tab.querySelector(".voice-caption, .voice-caption-speaker"), null, "no captions");
 });
 
 test("an agent on Claude Code or Codex draws no Call button and no call foot, even where the platform has a voice", async () => {

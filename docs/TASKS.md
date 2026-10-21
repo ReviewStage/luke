@@ -88,9 +88,7 @@ sidebar, one page at a time:
  │  - An invite expires after 7 days.                           │
  │ ──────────────────────────────────────────────────────────── │
  │  (●)  Listening                                              │
- │  "So when access is removed, the pending invite..."          │
  └──────────────────────────────────────────────────────────────┘
-          ^ the live captions, just above the call bar
 ```
 
 - **New task page**: the tab's home, whenever no task is open. The task
@@ -118,9 +116,11 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   its task), and the service checks again.
 - A task stays open while the developer turns to Settings or closes the
   window, so a call into one of its agents goes on. While the call's agent's
-  tab is on screen, the captions ride its call bar and hold back the spoken
-  words its transcript already streams; anywhere else they float at the
-  window's foot, and the call card stands while the window has the keyboard.
+  tab is on screen, the voice's notice line (a failure, a notice, or that
+  the Mac's output is off) floats just over the call's video; anywhere else
+  it floats at the window's foot, and the call card stands while the window
+  has the keyboard. There are no captions: what is said streams into the
+  agent's transcript as it is heard.
 - A task is left by Back (`‹`) or Escape on its document page, by opening
   another task, or by a sign-out. Leaving a task, or opening another, leaves
   its call standing: the call outlives the tab on screen. Deleting the
@@ -499,10 +499,14 @@ subagent's tab stays in the side panel.
   are first heard, and the voice window reports them too
   (`VoiceView.callTranscript`); those the transcript does not hold yet grow
   at its foot under the call's divider, so a line is drawn once, from the
-  record once the record holds it (`callPlaces`). While the call stands, its
-  tab's foot draws the avatar's video, the captions, and the call bar over
-  the composer: the voice's status, the speaker, the microphone, and End
-  call.
+  record once the record holds it (`callPlaces`). Each call opens at a
+  labelled rule, "Call started" and when, with a Live mark that keeps it
+  pinned to the transcript's top while the call stands, and closes at one,
+  "Call ended", how long it ran, and when (`call-card.tsx`). While the call
+  stands, its tab's composer holds the speaker, the microphone, Video, and
+  End call, and Luke's video stands centred in a room of its own between
+  the transcript and the composer, S, M, or L or dragged from a top corner,
+  its size kept (`panel-avatar.tsx`).
 - **Live.** While the tab shows and the agent is starting or running, the
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
   the service's held long-poll (`tasks/use-agent-transcript.ts`), ending on
@@ -515,8 +519,8 @@ subagent's tab stays in the side panel.
   task's name and nothing of the transcript, unless the window is focused on
   that agent's tab. The agent's tab reads in semibold until it is shown.
 - **Privacy.** Every word is the agent's, the developer's, or the plan's, so
-  the tab carries `ph-no-capture`; the call bar and the captions draw inside
-  it.
+  the tab carries `ph-no-capture`; the call's video and notice line draw
+  inside it.
 - **The web.** A browser has no voice, so its agent tabs draw their
   transcripts, calls among them, and their composer, with no Call button,
   and its "+" offers no New voice chat.
@@ -876,10 +880,9 @@ comparative evaluation.
   the call's turn, with the thinking dots and its pending command. The
   service sends the snapshot as a `plan.activity` frame on the call's own
   socket each time it changes, and the call's end is told as nothing doing.
-- **Everything else is the panel's own.** The waveform is the wings', the
-  captions ride the call bar, labelled with who is speaking, and a voice
-  error or notice takes their strip, with the button left able to try
-  again.
+- **Everything else is the panel's own.** The waveform is the wings', and
+  a voice error or notice takes the notice line, with the button left able
+  to try again.
 
 ### How agents show code
 
@@ -969,7 +972,7 @@ Copy copies the new document.
 ## Failures the developer sees
 
 - **Microphone or connection.** The existing voice error and notice lines
-  appear in the panel's caption strip, as for any call ("the microphone is not
+  appear on the panel's notice line, as for any call ("the microphone is not
   allowed yet", "Voice is temporarily unavailable"). The microphone button
   retries.
 - **Save.** An agent's `edit_plan` whose notes do not all land saves nothing
@@ -1000,7 +1003,7 @@ the exact shape.
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the task's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open task's call alone. |
-| Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
+| Levels, errors | The notice line (`useVoiceNotice`, `voice-notice-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The line floats just over the call's video. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
@@ -1016,7 +1019,7 @@ Two existing rules carry over unchanged:
   attributes, and no new way of drawing words. An agent's tab is also left
   out of the recording (`ph-no-capture`), as a second line behind the
   masking, since every word in it is the developer's or the agent's.
-- **Secrets.** No credential or account secret enters the document, a caption,
+- **Secrets.** No credential or account secret enters the document, the notice line,
   a counted event, or a trace. The GitHub user token is sealed on the
   `account` row and read only by `packages/service/src/github/github-app.ts`; the
   installation tokens it mints are set at the sandbox's firewall and never
@@ -1060,7 +1063,7 @@ changes when a check is run, not when one is planned.
   the integrated application has not been run on one. The
   Tasks tab in the panel, the document's presentation, the
   document scrolling inside the panel's ceiling,
-  the microphone row, and the captions during a call
+  the microphone row, and the call's video during a call
   have never been seen running. `./scripts/evidence.sh` captures the window
   on the Tasks tab over a synthetic task
   (`app-smoke-tasks.png`, from `--profile tasks`), on the

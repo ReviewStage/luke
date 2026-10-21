@@ -17,7 +17,7 @@ import { TaskCard } from "./desktop/task-card.js";
 import { GLYPH_STATE } from "./state-glyph.js";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref.js";
 import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card.js";
-import { CallEnded } from "./tasks/call-card.js";
+import { CallEndMarker } from "./tasks/call-card.js";
 import { ChangesCard } from "./tasks/changes-card.js";
 import { subagentActor } from "./tasks/coding-agent-model.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
@@ -284,7 +284,7 @@ test("a call's card is a turn's card: the model at the head over when it ran, ho
     }),
   );
   const call = drawn(
-    createElement(CallEnded, {
+    createElement(CallEndMarker, {
       line: "Call ended",
       startedAt: STARTED_AT,
       record: {

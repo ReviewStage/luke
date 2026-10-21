@@ -12,16 +12,17 @@
  * which the tile does not repeat. No word of the conversation is drawn
  * here. The avatar's lip-synced voice is played apart
  * from the tile (`AvatarVoice`), because the tile is drawn only while the
- * Call tab is, and the voice is what the developer hears whatever is shown.
- * The video is drawn whole, never cut: where the tile is wider than the
- * avatar's square picture, a blurred copy of the same track fills the
- * sides behind it (call.css).
+ * call's agent's tab or the call card is, and the voice is what the
+ * developer hears whatever is shown. The video is drawn whole, never cut:
+ * in an agent's tab the tile stands at the picture's own aspect, which it
+ * fills; on the call card, where the tile is wider than the avatar's square
+ * picture, a blurred copy of the same track fills the sides behind it
+ * (call.css).
  */
 
 import {
   BUTTON_SHAPE,
   Button,
-  cssCustomProperties,
   IconButton,
   ResetIcon,
   VideoIcon,
@@ -57,12 +58,41 @@ function useTrack(
   }, [media, track]);
 }
 
+/**
+ * Tells `onAspect` the picture's own width over its height each time the
+ * video learns or changes its size, which the element says with `resize`.
+ */
+function useAspect(
+  media: React.RefObject<HTMLVideoElement | null>,
+  onAspect: ((aspect: number) => void) | undefined,
+): void {
+  useEffect(() => {
+    const element = media.current;
+    if (!element || onAspect === undefined) return;
+    const read = () => {
+      if (element.videoWidth > 0 && element.videoHeight > 0) {
+        onAspect(element.videoWidth / element.videoHeight);
+      }
+    };
+    read();
+    element.addEventListener("resize", read);
+    return () => element.removeEventListener("resize", read);
+  }, [media, onAspect]);
+}
+
 /** The avatar's video, muted, since its sound is the audio element's to play. */
-function AvatarVideo({ track }: { track: MediaStreamTrack }): React.JSX.Element {
+function AvatarVideo({
+  track,
+  onAspect,
+}: {
+  track: MediaStreamTrack;
+  onAspect: ((aspect: number) => void) | undefined;
+}): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null);
   const fill = useRef<HTMLVideoElement>(null);
   useTrack(video, track);
   useTrack(fill, track);
+  useAspect(video, onAspect);
   return (
     <>
       <video ref={video} className="call-video-frame" autoPlay muted playsInline />
@@ -96,13 +126,19 @@ function TileGround({
   status,
   video,
   onRestart,
+  onAspect,
 }: {
   status: AvatarStatus;
   video: MediaStreamTrack | undefined;
   onRestart: () => void;
+  onAspect: ((aspect: number) => void) | undefined;
 }): React.JSX.Element {
   if (status === AVATAR_STATUS.LIVE) {
-    return video === undefined ? <AvatarStill /> : <AvatarVideo track={video} />;
+    return video === undefined ? (
+      <AvatarStill />
+    ) : (
+      <AvatarVideo track={video} onAspect={onAspect} />
+    );
   }
   if (status === AVATAR_STATUS.ENDED) {
     return (
@@ -190,16 +226,15 @@ export function VideoToggle({
  * controls carry Video on wherever the tile stands (the call card's head,
  * an agent's composer). Where `toggles`, as on the call card, its own Video
  * off stands in its corner; an agent's tab offers it from the composer
- * instead. Where a `width` is handed it is the tile's size, and `edge` is
- * what resizes it (`AgentCallVideo`).
+ * instead. Where `onAspect` is handed, it is told the picture's own
+ * aspect, which an agent's tab draws the tile at (`AgentCallVideo`).
  */
 export function CallVideoTile({
   video,
   status,
   onSetVideo,
   toggles = true,
-  width,
-  edge,
+  onAspect,
 }: {
   video: MediaStreamTrack | undefined;
   status: AvatarStatus | undefined;
@@ -207,28 +242,23 @@ export function CallVideoTile({
   onSetVideo: (on: boolean) => void;
   /** Whether the tile offers its own Video off; the call card's does, an agent's tab's does not. */
   toggles?: boolean;
-  /** The tile's width in CSS pixels, where its owner keeps one. */
-  width?: number | undefined;
-  /** What resizes the tile, drawn on its edge. */
-  edge?: React.ReactNode;
+  /** Told the picture's width over its height as the video learns it, where the owner draws the tile at the picture's own aspect. */
+  onAspect?: ((aspect: number) => void) | undefined;
 }): React.JSX.Element | null {
   if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
-    <section
-      className="call-video-tile"
-      aria-label={CALL_VIDEO_LABEL.TILE}
-      data-status={status}
-      style={
-        width === undefined ? undefined : cssCustomProperties({ "--call-tile-width": `${width}px` })
-      }
-    >
-      <TileGround status={status} video={video} onRestart={() => onSetVideo(true)} />
+    <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
+      <TileGround
+        status={status}
+        video={video}
+        onRestart={() => onSetVideo(true)}
+        onAspect={onAspect}
+      />
       {toggles ? (
         <div className="call-video-controls">
           <VideoToggle on onSetVideo={onSetVideo} />
         </div>
       ) : null}
-      {edge}
     </section>
   );
 }
