@@ -121,7 +121,7 @@ export const CHAT_TOOLS = {
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
       "An @word that is no link names no one. The call answers with the message's number, who was told now, who reads it " +
       "when they next read, and who has left, each by their mention link, and the label of any link that named no member. " +
-      "This is your team's Slack: post often, in short messages, whenever you start something, decide something, find " +
+      "This is your team's Slack: post often, in short casual messages the way a person types them, never a report, whenever you start something, decide something, find " +
       "something, get stuck, push, or finish, the way a teammate keeps the team posted; " +
       `you may post at most ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times a turn. ` +
       "blocks go under the words: link blocks naming a page, such as the GitHub settings page a task is done on; code " +
