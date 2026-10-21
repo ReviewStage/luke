@@ -65,7 +65,7 @@ import {
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { startedBlank } from "./coder-host/status.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
+import { steerCodingAgentWritten } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -314,11 +314,13 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
-        yield* steerCodingAgent(eve, writer, context.userId, agent, {
+        const { txid } = yield* steerCodingAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
         });
-        return { agent: yield* summaryOf(context.userId, agent) };
+        const summary = yield* summaryOf(context.userId, agent);
+        // The transaction that wrote the line, which the host waits to see live before it confirms the send.
+        return txid === undefined ? { agent: summary } : { agent: summary, txid };
       }),
 
     agentWorker: signedIn.agentWorker.effect(function* ({ input, context }) {

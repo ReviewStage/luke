@@ -37,6 +37,7 @@ import {
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
+  type CodingAgentMessageAnswerView,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentOverviewChecksAnswerView,
@@ -824,7 +825,7 @@ export class HostedCodingAgentClient {
   message(
     agentId: string,
     request: CodingAgentMessageRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<CodingAgentMessageAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
