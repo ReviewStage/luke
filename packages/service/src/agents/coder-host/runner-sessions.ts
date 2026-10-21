@@ -528,10 +528,6 @@ export const runnerSessions = <
       resume: string | undefined,
     ) =>
       Effect.gen(function* () {
-        // A released wait's wakeups go as the CLI starts again: it restores what it can on
-        // resume (`coding-agent-wakeups.ts`), so a copy Luke still held would fire twice, or fire
-        // after the agent cancelled it.
-        yield* replaceCodingAgentWakeups(agent.id, []);
         const credential = yield* harness.launch(agent);
         const bundle = yield* (yield* RunnerBundle).contents;
         const digest = createHash("sha256").update(bundle).digest("hex");
@@ -578,6 +574,16 @@ export const runnerSessions = <
                 api.updateTags(sandbox.name, launching),
               ),
             ),
+          ),
+        );
+        // A released wait's wakeups go once the CLI has started again and taken its first
+        // message: it restores on resume what it can (`coding-agent-wakeups.ts`), so a copy Luke
+        // still held would fire twice, or after the agent cancelled it. A launch that failed
+        // before this leaves them for the sweep to deliver, and a delete that failed is logged,
+        // never failing the launch that already runs.
+        yield* replaceCodingAgentWakeups(agent.id, []).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning(`a relaunched agent's wakeups were not handed back: ${failure._tag}`),
           ),
         );
       });

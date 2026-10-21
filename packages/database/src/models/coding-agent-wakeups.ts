@@ -11,17 +11,19 @@
  * A claim takes the wakeups due, the longest due first and at most a batch,
  * under row locks a concurrent claim skips rather than waits on, and moves
  * each one's next delivery on before the locks go: Vercel may call the
- * minute's sweep twice, and the second claim must find nothing left. A
- * delivery then takes its wakeup, deleting it, before it sends, so one a
- * Stop or a launch deleted since the claim is not sent; one whose send
- * fails is put back as claimed, to be claimed again at its next delivery,
- * until `attempts` reaches the bound the claim is handed, when the claim
- * deletes it instead. An archived agent takes no wakeup, so the claim
- * deletes its wakeups too.
+ * minute's sweep twice, and the second claim must find nothing left. The
+ * claim's move is the delivery's lease: a delivery asks just before it sends
+ * whether its wakeup still stands, so one a Stop or a launch deleted since
+ * the claim is not sent, and deletes it once the send landed. One whose send
+ * failed, or whose sweep ended mid-send, stands to be claimed again at its
+ * next delivery, its message sent under the same key so a send that did land
+ * is told once (`native-wakeup-sweep.ts`), until `attempts` reaches the bound
+ * the claim is handed, when the claim deletes it instead. An archived agent
+ * takes no wakeup, so the claim deletes its wakeups too.
  */
 
 import { asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
@@ -125,33 +127,22 @@ const writeNextDelivery = SqlSchema.void({
     ),
 });
 
-const TakenRowSchema = Schema.Struct({
-  id: Schema.String,
-  agentId: Schema.String,
-  prompt: Schema.String,
-  dueAt: Schema.Date,
-  attempts: Schema.Int,
-});
-
-const deleteReturning = SqlSchema.findAll({
+const standsOne = SqlSchema.findAll({
   Request: Schema.Struct({ id: Schema.String }),
-  Result: TakenRowSchema,
+  Result: Schema.Struct({ id: Schema.String }),
   execute: ({ id }) =>
     Database.use((db) =>
-      db.delete(codingAgentWakeup).where(eq(codingAgentWakeup.id, id)).returning({
-        id: codingAgentWakeup.id,
-        agentId: codingAgentWakeup.agentId,
-        prompt: codingAgentWakeup.prompt,
-        dueAt: codingAgentWakeup.dueAt,
-        attempts: codingAgentWakeup.attempts,
-      }),
+      db
+        .select({ id: codingAgentWakeup.id })
+        .from(codingAgentWakeup)
+        .where(eq(codingAgentWakeup.id, id)),
     ),
 });
 
-const insertTaken = SqlSchema.void({
-  Request: TakenRowSchema,
-  execute: (row) =>
-    Database.use((db) => db.insert(codingAgentWakeup).values(row).onConflictDoNothing()),
+const deleteOne = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String }),
+  execute: ({ id }) =>
+    Database.use((db) => db.delete(codingAgentWakeup).where(eq(codingAgentWakeup.id, id))),
 });
 
 /** The agent's wakeups replaced by those given, none deleting them all. */
@@ -192,17 +183,12 @@ export function claimDueCodingAgentWakeups(
   );
 }
 
-/** A wakeup a claim took, as a delivery takes it, gone from the table until it is put back. */
-export type TakenCodingAgentWakeup = typeof TakenRowSchema.Type;
-
-/** The wakeup taken for its delivery, deleted so nothing else sends it; none where a Stop, a launch, or another delivery took it since the claim. */
-export function takeCodingAgentWakeup(
-  id: string,
-): WakeupEffect<Option.Option<TakenCodingAgentWakeup>> {
-  return Effect.map(deleteReturning({ id }), (rows) => Option.fromNullishOr(rows[0]));
+/** Whether the wakeup still stands, as a delivery asks just before it sends: a Stop or a launch since its claim deleted it. */
+export function codingAgentWakeupStands(id: string): WakeupEffect<boolean> {
+  return Effect.map(standsOne({ id }), (rows) => rows.length > 0);
 }
 
-/** A taken wakeup whose delivery failed, put back as the claim left it, for its next delivery. */
-export function restoreCodingAgentWakeup(taken: TakenCodingAgentWakeup): WakeupEffect<void> {
-  return insertTaken(taken);
+/** The wakeup delivered, so no claim takes it again. */
+export function deleteCodingAgentWakeup(id: string): WakeupEffect<void> {
+  return deleteOne({ id });
 }

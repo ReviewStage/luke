@@ -12,10 +12,11 @@
  * CLI that waited. The message goes under a key of the wakeup's own, so a
  * delivery repeated after one that landed is told once.
  *
- * A delivery takes its wakeup before it sends, so one a Stop or a launch
- * deleted since the claim is never sent; one refused or failed is said in
- * the log by its kind, put back, and claimed again `RETRY` later, at most
- * `MAX_ATTEMPTS` times. Each call is bounded so the sweep's minute holds.
+ * A delivery sends only a wakeup that still stands, so one a Stop or a
+ * launch deleted since the claim is never sent, and deletes it once sent;
+ * one refused or failed, or cut off mid-send, is said in the log by its kind
+ * where it can be and claimed again `RETRY` later, at most `MAX_ATTEMPTS`
+ * times, under the same key, so a send that did land is told once. Each call is bounded so the sweep's minute holds.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
@@ -23,8 +24,8 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   type ClaimedCodingAgentWakeup,
   claimDueCodingAgentWakeups,
-  restoreCodingAgentWakeup,
-  takeCodingAgentWakeup,
+  codingAgentWakeupStands,
+  deleteCodingAgentWakeup,
 } from "@luke/database/models/coding-agent-wakeups";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -58,31 +59,29 @@ function wakeupKey(wakeup: ClaimedCodingAgentWakeup): string {
 
 /**
  * One wakeup handed to its agent as a message from Luke; whether it landed.
- * It is taken from the table before it is sent, so one a Stop or a launch
- * deleted since the claim is not sent, and it is put back as claimed where
- * the send failed.
+ * It is sent only while it still stands, so one a Stop or a launch deleted
+ * since the claim is not sent, and deleted once the send landed; one whose
+ * send failed stands for its next delivery.
  */
 const deliver = (eveFor: EveForAccount, wakeup: ClaimedCodingAgentWakeup) =>
   Effect.gen(function* () {
     const agent = yield* readCodingAgent(wakeup.userId, wakeup.agentId);
     // An agent gone since is no one's to tell, and its wakeups went with it.
     if (Option.isNone(agent)) return true;
-    const taken = yield* takeCodingAgentWakeup(wakeup.id);
-    if (Option.isNone(taken)) return true;
-    yield* Effect.gen(function* () {
-      const eve = yield* eveFor(wakeup.userId);
-      yield* steerCodingAgent(
-        eve,
-        storeWriter({ tools: CODER_TOOL_SET }),
-        wakeup.userId,
-        agent.value,
-        {
-          text: wakeup.prompt,
-          clientKey: wakeupKey(wakeup),
-          sender: { kind: MESSAGE_SENDER.LUKE },
-        },
-      );
-    }).pipe(Effect.tapError(() => Effect.ignore(restoreCodingAgentWakeup(taken.value))));
+    if (!(yield* codingAgentWakeupStands(wakeup.id))) return true;
+    const eve = yield* eveFor(wakeup.userId);
+    yield* steerCodingAgent(
+      eve,
+      storeWriter({ tools: CODER_TOOL_SET }),
+      wakeup.userId,
+      agent.value,
+      {
+        text: wakeup.prompt,
+        clientKey: wakeupKey(wakeup),
+        sender: { kind: MESSAGE_SENDER.LUKE },
+      },
+    );
+    yield* deleteCodingAgentWakeup(wakeup.id);
     return true;
   }).pipe(
     // The failure's kind alone: nothing of the prompt or the agent rides the line.

@@ -8,9 +8,9 @@ import { getTestDB, startTask } from "../../testing/index.js";
 import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
 import {
   claimDueCodingAgentWakeups,
+  codingAgentWakeupStands,
+  deleteCodingAgentWakeup,
   replaceCodingAgentWakeups,
-  restoreCodingAgentWakeup,
-  takeCodingAgentWakeup,
 } from "../coding-agent-wakeups.js";
 
 /**
@@ -86,7 +86,7 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
           "a second call in the minute takes none",
         );
 
-        for (const { id } of first) assert.ok(Option.isSome(yield* takeCodingAgentWakeup(id)));
+        for (const { id } of first) yield* deleteCodingAgentWakeup(id);
         assert.deepEqual(yield* claimedOf(NEXT, [agentId]), [], "a delivered wakeup is gone");
         assert.deepEqual(
           (yield* claimedOf(LATER, [agentId])).map(({ prompt }) => prompt),
@@ -96,7 +96,7 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
   );
 
   it.effect(
-    "a delivery takes its wakeup once, takes none a Stop deleted since its claim, and puts back one whose send failed",
+    "a claimed wakeup stands until it is delivered, so a sweep cut off mid-send claims it again, and a Stop since the claim leaves it standing no more",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -104,17 +104,13 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
         yield* replaceCodingAgentWakeups(agentId, [{ at: NOW, prompt: "Check CI on #42." }]);
         const [claimed] = yield* claimedOf(NOW, [agentId]);
         assert.ok(claimed !== undefined);
+        assert.equal(yield* codingAgentWakeupStands(claimed.id), true);
 
-        const taken = yield* takeCodingAgentWakeup(claimed.id);
-        assert.ok(Option.isSome(taken));
-        assert.ok(Option.isNone(yield* takeCodingAgentWakeup(claimed.id)), "taken once");
-        yield* restoreCodingAgentWakeup(taken.value);
-        assert.deepEqual(yield* claimedOf(NOW, [agentId]), [], "put back as claimed, due later");
         const [again] = yield* claimedOf(NEXT, [agentId]);
-        assert.equal(again?.prompt, "Check CI on #42.");
+        assert.equal(again?.id, claimed.id, "claimed again past its lease");
 
         yield* replaceCodingAgentWakeups(agentId, []);
-        assert.ok(Option.isNone(yield* takeCodingAgentWakeup(claimed.id)), "a Stop deleted it");
+        assert.equal(yield* codingAgentWakeupStands(claimed.id), false, "a Stop deleted it");
       }),
   );
 
