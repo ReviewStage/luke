@@ -196,6 +196,24 @@ test("a file change's update marks the lines Codex's diff changed, a file delete
   ]);
 });
 
+test("a subagent call that was interrupted keeps its row, its task on its line and why it stopped in its body", () => {
+  const { line, body } = opened({
+    type: "tool-collabAgentToolCall",
+    toolCallId: "item_spawn",
+    state: "output-error",
+    input: {
+      tool: "spawnAgent",
+      prompt: "Find the queue.",
+      model: "gpt-5.5",
+      receiverThreadIds: ["thread-sub"],
+    },
+    output: { status: "interrupted", agentsStates: { "thread-sub": { status: "interrupted" } } },
+    errorText: "interrupted",
+  });
+  assert.ok(line.includes("Find the queue."), line);
+  assert.ok(body.includes("interrupted"), body);
+});
+
 test("a command that failed says its exit code, and one still running draws its row from its input alone", () => {
   const failed = opened(
     storedPart(
