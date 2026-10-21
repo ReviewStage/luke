@@ -388,6 +388,14 @@ test("an agent with no name or title is named by its model's name, as its tab is
     ],
   };
   assert.equal(chatWho(chat, NAMES, HELPER).name, "GPT 6 Astra");
+  // A title holding a slash is no model's id, and is named as it was written.
+  const titled = {
+    ...chat,
+    members: chat.members.map((member) =>
+      member.id === HELPER ? { ...member, name: "UI/API" } : member,
+    ),
+  };
+  assert.equal(chatWho(titled, NAMES, HELPER).name, "UI/API");
 });
 
 test("the reader posts in a standing channel and in a direct message of their own, never in an archived channel or a direct message between two others, which is named by both", () => {

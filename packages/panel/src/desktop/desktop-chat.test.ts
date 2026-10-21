@@ -2191,3 +2191,121 @@ test("a task whose repository is let go and chosen again reads its skills afresh
   await post("and choosing it again");
   assert.equal(reads, 2);
 });
+
+/** Where an agent's face in the channel shown stands, by the name its first message is bylined with: working, failed, or at rest. */
+function faceState(page: HTMLElement, name: string): string | null | undefined {
+  const message = [...page.querySelectorAll(".chat-message")].find(
+    (each) => each.querySelector(".chat-byline-name")?.textContent === name,
+  );
+  return message?.querySelector(".chat-face .state-glyph")?.getAttribute("data-state");
+}
+
+test("an agent wears where it stands, as its tile does everywhere else: its face working or failed, and a failed one's row the failed mark at its end", () => {
+  const page = mount((chat) => ({
+    ...chat,
+    agents: chat.agents.map((line) =>
+      line.title === "Invite emails" ? { ...line, status: CODING_AGENT_STATUS.FAILED } : line,
+    ),
+  }));
+  const failed = railRow(page, "Invite emails").closest("li")?.querySelector(".failed-mark");
+  assert.equal(failed?.getAttribute("aria-label"), "Failed");
+  assert.equal(
+    railRow(page, "Add teammate invitations").closest("li")?.querySelector(".failed-mark"),
+    null,
+    "a working agent's row wears none",
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(faceState(page, "Invite emails"), "failed");
+  assert.equal(faceState(page, "Add teammate invitations"), "working");
+});
+
+test("an agent with no name or title is named by its model, as its tab is, never by the model's bare id", () => {
+  const page = mount((chat) => ({
+    answer: {
+      ...chat.answer,
+      members: chat.answer.members.map((member) =>
+        member.name === "Add teammate invitations"
+          ? { ...member, name: "anthropic/claude-opus-5.5" }
+          : member,
+      ),
+    },
+    agents: chat.agents.map((line) =>
+      line.title === "Add teammate invitations" ? { ...line, title: null } : line,
+    ),
+  }));
+  assert.ok(railRow(page, "Opus 5.5"), "its direct message is named by its model");
+  assert.ok(!rail(page).includes("anthropic/claude-opus-5.5"));
+});
+
+test("an agent the plans' summaries do not name is read as its chip's mark reads it, and drawn by its name, its harness, and where it stands", async () => {
+  const lines: readonly TaskAgentLine[] = fixtureChat({ fixtureMode: true }, AT)?.agents ?? [];
+  const invites = lines.find((line) => line.title === "Invite emails");
+  assert.ok(invites);
+  // Its task's agents, archived ones among them, answer the line the summaries leave out.
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_LIST]: (request) =>
+      Promise.resolve({
+        agents: lines.map((line) =>
+          line.id === invites.id
+            ? {
+                id: line.id,
+                planId: request.taskId,
+                model: line.model,
+                effort: line.effort,
+                title: line.title,
+                personaName: "Nova",
+                createdAt: AT,
+                status: CODING_AGENT_STATUS.FAILED,
+                turnId: null,
+              }
+            : {
+                id: line.id,
+                planId: request.taskId,
+                model: line.model,
+                effort: line.effort,
+                title: null,
+                automationName: "Nightly audit",
+                createdAt: AT,
+                status: CODING_AGENT_STATUS.RUNNING,
+                turnId: null,
+              },
+        ),
+      }),
+  });
+  const page = mount((chat) => ({ ...chat, agents: [] }));
+  // Until its task's agents are read it stands by the name the chat read carries, on the mark of no known harness.
+  const before = railRow(page, "Invite emails").closest("li");
+  assert.equal(before?.querySelector(".actor-mark img.harness-mark"), null);
+  await settle();
+  const after = railRow(page, "Nova").closest("li");
+  assert.ok(after?.querySelector(".actor-mark img.harness-mark"), "its row wears Codex's mark");
+  assert.equal(after?.querySelector(".failed-mark")?.getAttribute("aria-label"), "Failed");
+  // One with no title is named by the automation that started it, as its tab is, and drawn at
+  // rest, since a read is not followed and a face never stays working after its agent stopped.
+  const nightly = railRow(page, "Nightly audit").closest("li");
+  assert.equal(nightly?.querySelector(".state-glyph")?.getAttribute("data-state"), "rest");
+});
+
+test("a member whose account is gone is named and drawn as one former member, in the rail and in the channel alike", () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      members: chat.answer.members.map((member) =>
+        member.name === "Maria Chen"
+          ? { id: member.id, kind: MEMBER_KIND.HUMAN, left: true }
+          : member,
+      ),
+    },
+  }));
+  const row = railRow(page, "Former member").closest("li");
+  assert.equal(
+    row?.querySelector(".inbox-row-mark .actor-mark")?.getAttribute("data-kind"),
+    "someone",
+  );
+  act(() => railRow(page, "general").click());
+  const gone = [...page.querySelectorAll(".chat-message")].find(
+    (each) => each.querySelector(".chat-face .actor-mark[data-kind='someone']") !== null,
+  );
+  assert.equal(gone?.querySelector(".chat-byline-name")?.textContent, "Former member");
+});

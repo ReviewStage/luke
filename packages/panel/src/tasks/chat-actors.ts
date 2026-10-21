@@ -1,4 +1,5 @@
 import { CHANNEL_KIND, type ChatAnswer, MEMBER_KIND } from "@luke/features/chat-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import {
   ACTOR_KIND,
@@ -7,7 +8,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { type ChatNames, chatNames, chatWho } from "@luke/ui/chat-model";
+import { type ChatAgentLine, type ChatNames, chatNames, chatWho } from "@luke/ui/chat-model";
 import { useMemo } from "react";
 import { useMemberDirectory } from "../member-directory.js";
 import { agentActor } from "./coding-agent-model.js";
@@ -35,23 +36,29 @@ import { type UnlinedAgent, useUnlinedAgents } from "./mentioned-agent-card.js";
  * mark of no known harness.
  */
 
-/** An agent's line from the summary a read of it answered, as a plan's summary would list it. */
-function lineOf(agent: {
-  readonly id: string;
-  readonly title: string | null;
-  readonly personaName?: string;
-  readonly model: string;
-  readonly effort: string;
-  readonly status: TaskAgentLine["status"];
-}): TaskAgentLine {
-  const line: TaskAgentLine = {
+/**
+ * An agent's line from the summary a read of it answered, as a plan's
+ * summary would list it, and the automation whose run started it. Note that
+ * a read lands once and is not followed, so only a failure, which no turn
+ * comes after, is kept; any other status is drawn at rest rather than as it
+ * stood when read, so an agent never stays working on its face after it
+ * stopped.
+ */
+function lineOf(agent: CodingAgentSummary): ChatAgentLine {
+  const line: ChatAgentLine = {
     id: agent.id,
     title: agent.title,
     model: agent.model,
     effort: agent.effort,
-    status: agent.status,
+    status:
+      agent.status === CODING_AGENT_STATUS.FAILED
+        ? CODING_AGENT_STATUS.FAILED
+        : CODING_AGENT_STATUS.COMPLETED,
+    ...(agent.personaName === undefined ? undefined : { personaName: agent.personaName }),
   };
-  return agent.personaName === undefined ? line : { ...line, personaName: agent.personaName };
+  return agent.automationName === undefined
+    ? line
+    : { ...line, automationName: agent.automationName };
 }
 
 /** The agents the chat draws, as authors of its messages or one of a direct message's two, that no line of `names` names. */

@@ -21,6 +21,7 @@ import {
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 
@@ -95,9 +96,12 @@ const CHANNEL_ORDER = {
   [CHANNEL_KIND.DM]: 3,
 } as const satisfies Record<ChatChannel["kind"], number>;
 
+/** An agent's line as chat names it by: a plan's summary's, and the automation whose run started it where a read of the agent says. */
+export type ChatAgentLine = TaskAgentLine & { readonly automationName?: string };
+
 /** What the window knows beside the chat that names its members: each agent's line, each plan's name, and the reader's own name. */
 export interface ChatNames {
-  readonly agents: ReadonlyMap<string, TaskAgentLine>;
+  readonly agents: ReadonlyMap<string, ChatAgentLine>;
   readonly tasks: ReadonlyMap<string, string>;
   /** The task each agent a plan's summary names works on, by the agent's id. */
   readonly agentTasks: ReadonlyMap<string, string>;
@@ -107,7 +111,7 @@ export interface ChatNames {
 /** The names a window knows: each agent's line from the plans' summaries and the lines a chat read carries, each plan's name, and the reader's own. */
 export function chatNames(
   tasks: readonly TaskSummary[],
-  agents: readonly TaskAgentLine[],
+  agents: readonly ChatAgentLine[],
   selfName: string | undefined,
 ): ChatNames {
   const lines = [...tasks.flatMap((task) => task.agents?.agents ?? []), ...agents];
@@ -127,7 +131,7 @@ export function chatNames(
 export interface ChatWho {
   readonly member: ChatMember | undefined;
   readonly name: string;
-  readonly agent: TaskAgentLine | undefined;
+  readonly agent: ChatAgentLine | undefined;
   readonly taskName: string | undefined;
 }
 
@@ -225,16 +229,29 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
+/** A catalog id's own name past its provider: lower-case words, digits, and dots, joined by dashes. */
+const CATALOG_MODEL_NAME = /^[a-z0-9.]+(?:-[a-z0-9.]+)*$/u;
+
+/** Whether a name is a model's catalog id: a provider the catalog lists, its separator, and a model's own name. */
+function isCatalogId(name: string): boolean {
+  const [provider, model, ...rest] = name.split(CATALOG_ID_SEPARATOR);
+  return (
+    rest.length === 0 &&
+    model !== undefined &&
+    Object.values<string>(MODEL_PROVIDER).includes(provider ?? "") &&
+    CATALOG_MODEL_NAME.test(model)
+  );
+}
+
 /**
  * What an agent member is called where the window holds no line of it: the
  * name the chat read carries, which is its model's catalog id until it has a
- * title, so an id is named as a tab names its model (`modelLabel`). Note
- * that an id is one word holding the catalog's separator, which a title
- * written in words is not.
+ * title, so an id is named as a tab names its model (`modelLabel`), and any
+ * other name, a title holding a slash among them, as it was written.
  */
 function agentMemberName(name: string | undefined): string {
   if (name === undefined) return CHAT_MEMBER_LABEL.FORMER_AGENT;
-  return name.includes(CATALOG_ID_SEPARATOR) && !/\s/.test(name) ? modelLabel(name) : name;
+  return isCatalogId(name) ? modelLabel(name) : name;
 }
 
 /**
