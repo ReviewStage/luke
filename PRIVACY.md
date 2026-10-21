@@ -370,6 +370,25 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
+**Your ChatGPT plan.** Where Settings offers it, Continue with ChatGPT signs
+Luke in to your ChatGPT account through OpenAI's own page in your browser,
+which hands a one-time code back to Luke on your Mac over a connection that
+never leaves it (`127.0.0.1`). Your Mac trades that code with OpenAI for an
+access token, a renewable refresh token, and an ID token, checks the ID
+token's signature and that it was issued to Luke for this sign-in, and sends
+them, with the client id OpenAI issued Luke and your ChatGPT account's id
+(the ID token's subject), once, over HTTPS, to our service. It keeps nothing
+of them itself. The service stores them under your account encrypted exactly
+as your own API keys are, with the scopes OpenAI granted and when the access
+token expires, beside a host id it made for your account, which names Luke's
+hosted runtime to OpenAI and is kept after you disconnect. It renews the
+access token with OpenAI as it nears its expiry. You are shown that you are
+connected and when, never a token, and we never log one or send it to our
+analytics, crash reports, or screen recordings. Disconnecting in Settings
+asks OpenAI to end the sign-in and deletes it whether or not OpenAI confirms;
+where OpenAI did not confirm, Settings says so, and you can remove Luke in
+your ChatGPT settings to end it there. Deleting your account deletes it too.
+
 **Your own GitHub token.** If you save a GitHub personal access token (classic)
 in Settings › Profile, your Mac sends it once, over HTTPS, to our service,
 which asks GitHub whose it is with one request and keeps it only if GitHub
@@ -1007,6 +1026,45 @@ Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
 launches. Every permission a page asks for, such as the camera, microphone, or
 location, is refused, and downloads are cancelled.
 
+With "Let agents run commands on this Mac" on, the same per-Mac switch that
+lets an agent run commands there, an agent on a task can open, read, click, and
+type in that task's Browser tabs on your Mac, and so **can act as you on any
+site you are signed in to in a Browser tab**, `localhost` included, with no
+approval for each action. Only the Mac running Luke's window answers, and only
+for the tab's own task. What an agent reads from a tab is its address, its
+title, a downscaled screenshot, and a text snapshot of the page. They reach that
+agent and its workers, our service, and the model that runs the agent. The
+text, address, and title are kept in the agent's transcript with the rest of
+the conversation; a screenshot goes to the model and is left out of the stored
+conversation, as a picture an agent looks at is. They still reach no trace, no
+counted event, and no voice call, and the screen recording still leaves them
+out. Turn the switch off, in Settings, and an agent can no longer reach a
+Browser tab; the tab then reaches only its panel, as before.
+
+A Browser tab can also be a cloud browser, which an agent drives and you
+watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
+your Mac, so it reaches that sandbox's own `localhost` and holds none of your
+Mac's cookies or signed-in sites. What the agent does with it reaches the model:
+each page's address and title, a screenshot, and a text snapshot of the page. A
+screenshot goes to the model alone and is left out of the agent's stored
+transcript, as a picture Luke looks at is; the rest is kept in the transcript,
+under its terms. Our service keeps the task's list of cloud tabs, each one's
+address and title, with the agent whose browser holds it, until the task's
+conversation is removed. The page, its live-view frames, and a tab's
+screenshots and text are not kept by us: the frames pass through our service
+to the panel of each member who opens the task, and every such member can
+watch the tab and take it over by clicking and typing in it, and the agent's
+actions on it wait while you do. Nothing of it reaches a trace, a counted event,
+a fixture, or the voice window, and the screen recording masks the live view.
+The browser's profile, with the cookies and logins you type into it, lives on
+the sandbox's disk, so it stays in that sandbox while it runs and in the
+snapshot Vercel keeps when the sandbox stops, until thirty days after the
+snapshot's last use, as the checkout does under "How Luke reads your
+repository"; the pages open at a stop are not kept, and the browser reopens
+each tab at its last address on resume. No other agent reaches that profile;
+an agent's workers share its sandbox, so they share it. Deleting the task, or
+your account, deletes the sandbox and its snapshot as described there.
+
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording
 that begins before you sign in is attached to your account if you sign in
@@ -1103,17 +1161,14 @@ only when you press Send.
 ## Who we send it to
 
 - OpenAI, for voice and for Luke's judgment. A voice session is one continuous
-  conversation. While your microphone is on — while you hold the talk key, or
-  from a press of a task's microphone button, the call card's, or the
-  microphone shortcut, or from starting a new task, until you press one of
-  those again or press and let go of the talk key — everything it hears
-  streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
+  conversation. While your microphone is on — from a press of an agent's Call
+  button, the call card's microphone, or the microphone shortcut, or from
+  starting a new voice chat, until you press one of those again — everything
+  it hears streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
   listening and closes the microphone when OpenAI confirms, within five
-  seconds; Luke can still speak while it is closed. Every ask is spoken; there
-  is no way to type to Luke. A call opens only when you press the talk key or
-  a task's microphone, or start a new task, which opens a call about it with
-  the microphone on where macOS already lets Luke use the microphone and no
-  other call is open. Every session goes through our own voice service on your
+  seconds; Luke can still speak while it is closed. A call opens only when you
+  press an agent's Call button or start a new voice chat; starting a task
+  never opens one, and Luke takes no key from the machine to open one. Every session goes through our own voice service on your
   account: nothing on your Mac holds or is handed an OpenAI credential, and it
   never reaches OpenAI on a key of your own. The service creates the session
   on our key; relays the control and transcript events between your Mac and
@@ -1436,28 +1491,25 @@ and error, performance, and agent reports by Sentry.
 
 - Sign out of your Luke account to turn voice off.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
-  Luke and coding agents running commands on that Mac; it is set on each Mac
-  apart, and signing out stops it too.
+  Luke and coding agents running commands on that Mac and driving its Browser
+  tabs; it is set on each Mac apart, and signing out stops it too.
 - Switch an integration off for one coding agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.
-- What you say to Luke on a call goes to that task's conversation, fixed when
-  the call opens and never moved afterwards.
+- What you say on a call goes to the conversation of the agent you called,
+  fixed when the call opens and never moved afterwards.
 - Luke listens through your microphone only while a call's microphone is on,
   or while a dictation into a message box is recording, which the box shows as
-  a moving waveform with its time. The talk key opens it while held; a task's
-  microphone button, the call card's, or the microphone shortcut opens it
-  until you press one again or press and let go of the talk key, and so does
-  starting a new task, which opens a call about it. macOS's microphone
+  a moving waveform with its time. An agent's Call button, the call card's
+  microphone, or the microphone shortcut opens it until you press one again,
+  and so does starting a new voice chat, which opens a call into its agent.
+  macOS's microphone
   indicator is lit whenever the device is open: from the press, including
   while a new call connects, until OpenAI confirms it has stopped listening,
-  within five seconds of the microphone going off. The stop key closes it too,
-  and is the one key that also tells Luke to stop talking, while letting go of
-  the talk key lets him finish. If Luke's key helper cannot start, the talk
-  key reports presses alone, so one press opens the microphone and the next
-  closes it, and the Keyboard shortcuts page says so.
+  within five seconds of the microphone going off. Escape closes it too, and
+  also tells Luke to stop talking.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage

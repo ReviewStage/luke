@@ -32,13 +32,10 @@
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The caption strip's ground, opaque because the document scrolls on beneath it. */
   --surface-caption: var(--luke-color-overlay);
-  /* The code on screen, in the ground and inks of the theme the host colours
-     it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
+  /* The code on screen, in the ground and inks of GitHub's themes, and the
+     mark beside a line changed in that theme's blue. */
   --code-ground: light-dark(#fff, #0d1117);
   --code-text: light-dark(#1f2328, #e6edf3);
-  --code-line-number: light-dark(rgba(31, 35, 40, 0.5), rgba(230, 237, 243, 0.32));
-  --code-line-number-pointed: light-dark(rgba(31, 35, 40, 0.85), rgba(230, 237, 243, 0.8));
-  --code-pointed: light-dark(rgba(9, 105, 218, 0.08), rgba(56, 139, 253, 0.16));
   --code-pointed-edge: light-dark(#0969da, #388bfd);
   /* A diff's lines on the code's ground, wherever one is drawn: a line
      added tinted in the palette's green and one removed in its red, the

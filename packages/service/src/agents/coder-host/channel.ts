@@ -4,7 +4,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { TurnPolicy } from "eve/channels";
 import { localDev } from "eve/channels/auth";
-import type { EveChannelInput } from "eve/channels/eve";
+import type { EveChannelInput, EveMessageContext, EveMessageResult } from "eve/channels/eve";
 import {
   type BearerAccount,
   DEPLOYMENT_ACT,
@@ -13,10 +13,12 @@ import {
   type DeploymentTurnTable,
   deploymentActor,
   lukeAccount,
+  turnKindOf,
 } from "../brain-host/auth.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/door.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 /**
  * channel.ts -- how the coding-agent service's eve channel is configured.
@@ -102,8 +104,9 @@ const UPLOAD_POLICY = {
  * the voice function's, handed to eve for the account it resolved at its
  * own handshake, as the brain's channel takes it
  * (`brain-host/channel.ts`): it opens an agent's session, or follows one
- * up, as a spoken turn (`CODER_DEPLOYMENT_PRESENCE`). A caller of another
- * role adds its row here and nowhere else.
+ * up, as a spoken turn, or joins the agent's turn under way
+ * (`CODER_DEPLOYMENT_PRESENCE`). A caller of another role adds its row here
+ * and nowhere else.
  * Note that the table holds no row for a cancel or a reset, and needs none:
  * neither opens a turn, so the deployment's authenticator admits both on
  * every channel without asking the table (`brain-host/auth.ts`). What
@@ -127,20 +130,49 @@ export const CODER_DEPLOYMENT_TURNS = {
 } as const satisfies DeploymentTurnTable;
 
 /**
- * Whose identity the deployment presents here for all but a typed message,
- * which presents the account's whatever this says: its own, as the brain's
- * channel does. Note that a spoken ask is therefore a principal of the
- * deployment's type, so eve never steers it into a typed turn running under
- * the developer's bearer, nor a typed line into a spoken turn: each waits
- * for the other's turn to end and opens one of its own, whose call tools
- * answer by its kind and whose message says it (`tool-set.ts`'s
- * `runCallTool`, `turn-context.ts`). The cost is that a call on an agent mid-turn waits for that
- * turn's end before it is answered. It also admits the deployment's read of
- * a session's stream, which the voice function follows a spoken ask's turn
- * on; a cancel and a reset are minted as the deployment's principal, which
- * eve's cancel and reset routes read nothing of.
+ * Whose identity the deployment presents here: the account's, for a typed
+ * message and a spoken ask alike, with the deployment named as its carrier.
+ * eve steers a running turn only with a message whose principal is the
+ * turn's own (`brain-host/auth.ts`'s `DEPLOYMENT_PRESENCE`), and an agent's
+ * turn runs under the developer's bearer, so a call's spoken ask joins the
+ * agent's typed turn under way at its next step, as a typed line does, and
+ * a line typed to the agent joins a call's spoken turn: a call on an agent
+ * an hour into a pull request is answered within a step rather than when
+ * the hour ends. A turn keeps the words it opened with (`turn-context.ts`),
+ * since eve resolves them as the turn starts, and the call's own tools
+ * answer by the kind it opened as (`tool-set.ts`'s `runCallTool`), so a
+ * spoken line joining a typed turn carries
+ * its own short note instead (`SPOKEN_LINE_NOTE`), and the relay tells
+ * each line it receives apart from the turn's kind (`brain-host/relay.ts`).
+ * A cancel and a reset are minted as the account's too, which eve's cancel
+ * and reset routes read nothing of.
  */
-export const CODER_DEPLOYMENT_PRESENCE = DEPLOYMENT_PRESENCE.DEPLOYMENT;
+export const CODER_DEPLOYMENT_PRESENCE = DEPLOYMENT_PRESENCE.ACCOUNT;
+
+/** The deployment reads a session's stream here, which the voice function follows a spoken ask's turn on, whichever identity it presents. */
+export const CODER_DEPLOYMENT_STREAMS = true;
+
+/**
+ * What a spoken line carries ahead of it into the agent's history, as eve
+ * hands a message's `context`: that it was said on a call and its answer is
+ * heard. A spoken turn of its own opens with the call's whole words
+ * (`turn-context.ts`'s `turnKindWords`), but a line that joins a typed turn
+ * under way keeps that turn's tools and words, so this is what it has, and
+ * it says that the first words after the line are its whole answer, since
+ * the voice follows such a line to the first step that says something
+ * (`turn-events.ts`). Note
+ * that it rides on every spoken line, because whether eve steers a line into
+ * the turn under way or opens a turn on it is decided after the door, at
+ * eve's next step boundary.
+ */
+const SPOKEN_LINE_NOTE = `This line was said on a voice call, and Luke says your reply to it aloud. Answer it in a sentence or two of plain speech, with no Markdown, and never wait to answer it: never call \`${CODER_TOOL.SLEEP}\` or \`task_wait\` for it. Where it reaches you in the middle of other work, the first words you write after it are taken as your whole answer, so look up what the answer needs first, saying nothing meanwhile, and then answer in one go. Then carry on with any work you were doing.`;
+
+/** The session auth a message runs under, and a spoken line's note ahead of it (`SPOKEN_LINE_NOTE`). */
+function messageResult(context: EveMessageContext): EveMessageResult {
+  const auth = messageAuth(context);
+  if (turnKindOf(auth) !== BRAIN_HOST_TURN.SPOKEN) return { auth };
+  return { auth, context: [SPOKEN_LINE_NOTE] };
+}
 
 export function coderChannelInput(
   resolveUserId: BearerAccount,
@@ -155,7 +187,7 @@ export function coderChannelInput(
     ),
     turnPolicy: TURN_POLICY,
     uploadPolicy: UPLOAD_POLICY,
-    onMessage: (ctx) => ({ auth: messageAuth(ctx) }),
+    onMessage: messageResult,
     events: {
       "session.failed": (data) => sessionEnded(data.sessionId),
       "session.completed": (_data, _channel, ctx) => sessionEnded(ctx.session.id),

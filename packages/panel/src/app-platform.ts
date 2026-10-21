@@ -2,7 +2,7 @@
  * app-platform.ts -- what this window can do that only its platform can: installed by its root before anything reads it.
  *
  * The bridge (`app-bridge.ts`) reaches the host; this reaches what stands
- * beside it. Copying, saving a file, bringing the panel forward, the address
+ * beside it. Copying words or a picture, saving a file, bringing the panel forward, the address
  * an agent's page is drawn from, the folder the panel's static files are
  * served from, the menu bar, a shortcut being recorded, a counted surface
  * event, and a link opened outside the window are each
@@ -32,6 +32,13 @@ type AdminDashboardWay = { readonly href: string } | { readonly open: () => void
 export interface AppPlatform {
   /** Puts the words on the system clipboard; rejects where the clipboard refused them. */
   copyText(words: string): Promise<void>;
+  /**
+   * Puts a picture on the system clipboard, given as the PNG's bytes in
+   * base64 still being drawn; rejects where the clipboard refused it. Note
+   * that the write is asked for at once and the bytes awaited inside it,
+   * because a browser takes a picture only in the press's own task.
+   */
+  copyImage(png: Promise<string>): Promise<void>;
   /** Saves the text as a file of the name given, where the person chooses; answers whether it was saved rather than declined. */
   saveFile(file: { readonly name: string; readonly text: string }): Promise<boolean>;
   /** Brings the panel forward, where the shell can. */
@@ -46,8 +53,6 @@ export interface AppPlatform {
   assetBase(): string;
   /** Hears each command chosen from the shell's menu, until the returned function is called. */
   onMenuCommand(listener: (command: AppCommand) => void): () => void;
-  /** Says whether a shortcut is being recorded, during which the shell's own keys hold off. */
-  setShortcutCapturing(capturing: boolean): void;
   /** Counts one surface event. */
   recordSurfaceEvent<Name extends ProductSurfaceEventName>(
     name: Name,

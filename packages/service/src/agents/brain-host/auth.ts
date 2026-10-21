@@ -131,7 +131,9 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
  * presents the channel's own: the brain channel's deployment presents
  * itself, so a spoken ask opens or joins a spoken turn alone and nothing of
  * the voice's joins a typed one, and the coder channel's presents the
- * account.
+ * account, so a call's spoken ask joins an agent's running typed turn at
+ * its next step and a line typed to the agent joins a spoken one, each as
+ * the developer's own word (`coder-host/channel.ts`).
  */
 export const DEPLOYMENT_PRESENCE = {
   /** A principal of the deployment's own type, the account as its attribute. */
@@ -155,18 +157,20 @@ export type DeploymentTurnTable = Readonly<
   Record<DeploymentAct, Readonly<Record<BrainHostTurn, boolean>>>
 >;
 
-/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, and whose identity it presents for all but a typed message, which presents the account's. */
+/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, whose identity it presents for all but a typed message, which presents the account's, and whether it may read a session's stream. */
 export interface DeploymentActor {
   /** The deployment's own secret (`EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`), sealed; nothing while the environment names none, which admits no request. */
   readonly secret: Redacted.Redacted | undefined;
   readonly admits: DeploymentTurnTable;
   readonly presents: DeploymentPresence;
+  /** Whether the deployment may read a session's event stream, which the voice function follows a spoken ask's turn on; a flag of its own, since the coder channel's presents the account and is followed all the same. */
+  readonly streams: boolean;
 }
 
 /**
  * The routes a deployment actor may reach: a message opening a session or
  * following one up, a cancel of a turn in a session, a reset retiring a
- * session for good, and, for an actor that presents itself, a read of a
+ * session for good, and, for an actor admitted to (`streams`), a read of a
  * session's event stream; no other.
  */
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
@@ -188,10 +192,10 @@ const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
  * reset are posted on a session the door's ownership check holds to one the
  * named account reaches, on every channel alike. The stream read is the
  * voice function hearing a spoken ask's turn as eve writes it rather than
- * reading the record on a timer, so
- * it is admitted to the actor that presents itself (the brain channel's)
- * and no other, and the door's ownership check still holds it to a session
- * the named account reaches. A typed message, and everything an actor that
+ * reading the record on a timer, so it is admitted to an actor whose
+ * channel a call speaks into (`streams`) and no other, and the door's
+ * ownership check still holds it to a session the named account reaches.
+ * A typed message, and everything an actor that
  * presents the account is admitted for, is minted as the account's own
  * principal instead, the deployment named as its carrier, so the ownership
  * check reads the same account either way.
@@ -216,10 +220,7 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
       actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
     const reset = posted && RESET_ROUTE.test(pathname);
-    const stream =
-      actor.presents === DEPLOYMENT_PRESENCE.DEPLOYMENT &&
-      request.method === "GET" &&
-      STREAM_ROUTE.test(pathname);
+    const stream = actor.streams && request.method === "GET" && STREAM_ROUTE.test(pathname);
     if (!message && !cancel && !reset && !stream) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }

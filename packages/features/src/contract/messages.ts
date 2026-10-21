@@ -20,6 +20,8 @@ import { Schema as EffectSchema } from "effect";
 import {
   CHAT_BOUNDS,
   chatAnswerSchema,
+  chatJoinAnswerSchema,
+  chatJoinRequestSchema,
   chatWriteAnswerSchema,
   chatWriteRequestSchema,
 } from "../chat-wire.js";
@@ -97,10 +99,12 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
     .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
     .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
-  /** One task's conversation, past the cursor and held while a turn runs, or a page of its turns. */
+  /** One task's conversation, past the cursor and held while a turn runs, or in one look where `hold=none` asks, or a page of its turns. */
   task: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/messages" }))
-    .input(EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue }))
+    .input(
+      EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue, hold: queryValue }),
+    )
     .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
   /** One task's brain worker's transcript past the cursor, held while it runs. */
   taskWorker: hostedProcedure
@@ -112,7 +116,11 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT }))
     .input(EffectSchema.Struct({ workspaceId: queryValue, after: queryValue }))
     .output(EffectSchema.flip(chatAnswerSchema)),
-  /** One write to a workspace's chat: a post, an answer, a resolve, or a read. */
+  /**
+   * One write to a workspace's chat: a join, which makes the person's
+   * member and `#general` where they are not yet and answers their member,
+   * or a post, an answer, a resolve, or a read.
+   */
   chatWrite: hostedProcedure
     .meta(bodyCap(CHAT_WRITE_BODY_BYTES))
     .meta(
@@ -128,9 +136,9 @@ export const messagesContract = {
           params: EffectSchema.optionalKey(EffectSchema.Unknown),
           query: chatQuery,
           headers: EffectSchema.optionalKey(EffectSchema.Unknown),
-          body: chatWriteRequestSchema,
+          body: EffectSchema.Union([chatJoinRequestSchema, chatWriteRequestSchema]),
         }),
       ),
     )
-    .output(EffectSchema.flip(chatWriteAnswerSchema)),
+    .output(EffectSchema.flip(EffectSchema.Union([chatJoinAnswerSchema, chatWriteAnswerSchema]))),
 };

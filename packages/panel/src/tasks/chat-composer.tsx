@@ -2,15 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { readerZone } from "@luke/features/date-mention";
-import {
-  ComboboxList,
-  comboboxOptionId,
-  GAP,
-  IconButton,
-  Inline,
-  PlusIcon,
-  SUBMIT_STATE,
-} from "@luke/ui";
+import { ComboboxList, comboboxOptionId, GAP, Inline, SUBMIT_STATE } from "@luke/ui";
 import {
   type ChatMention,
   type ChatTarget,
@@ -35,10 +27,12 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
+import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { chatOption, useChatMentionPicker } from "./chat-mention-picker.js";
 import { ComposerField } from "./composer-field.js";
+import { useDatePicker } from "./date-picker.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { useMentionDoors } from "./task-mentions.js";
@@ -285,7 +279,9 @@ function EditorChatComposer({
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
-  const picker = useRef<HTMLInputElement>(null);
+  // A date chip in the box opens its picker over the card, as the agent box's does.
+  const card = useRef<HTMLDivElement>(null);
+  const datePicker = useDatePicker(card);
   const [dropping, setDropping] = useState(false);
   const {
     draft,
@@ -322,6 +318,7 @@ function EditorChatComposer({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
+      ref={card}
       className="chat-composer"
       data-compact={String(compact === true)}
       data-dropping={dropping ? "" : undefined}
@@ -343,6 +340,7 @@ function EditorChatComposer({
       }}
     >
       {mentions.menu}
+      {datePicker.popover}
       <PromptInput onSubmit={send}>
         <AttachedFileChips
           files={attachmentChips(attachments)}
@@ -380,7 +378,13 @@ function EditorChatComposer({
           mentions={{
             onTrigger: mentions.onMemberTrigger,
             onChannelTrigger: mentions.onChannelTrigger,
-            chip: (mention) => <MentionNodeChip mention={mention} doors={doors} />,
+            chip: (mention, node) => (
+              <MentionNodeChip
+                mention={mention}
+                doors={doors}
+                edit={{ node, pickDate: datePicker.open }}
+              />
+            ),
             pasted: () => undefined,
           }}
           // Note that a thread's box is opened by a press, so it takes the caret; a place's foot leaves it where it is.
@@ -396,29 +400,12 @@ function EditorChatComposer({
             sending={sending}
             empty={empty || reading}
             lead={
-              <>
-                <Tooltip label={ATTACH}>
-                  <IconButton
-                    icon={<PlusIcon />}
-                    label={ATTACH}
-                    disabled={sending}
-                    onClick={() => picker.current?.click()}
-                  />
-                </Tooltip>
-                <input
-                  ref={picker}
-                  type="file"
-                  accept={PICKS_IMAGES}
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    const picked = Array.from(event.currentTarget.files ?? []);
-                    // Cleared so the same file can be picked again after it was taken off.
-                    event.currentTarget.value = "";
-                    attach(picked);
-                  }}
-                />
-              </>
+              <AttachFilesButton
+                label={ATTACH}
+                accept={PICKS_IMAGES}
+                disabled={sending}
+                onFiles={attach}
+              />
             }
           >
             <DictateButton dictation={dictation} disabled={sending || module === undefined} />

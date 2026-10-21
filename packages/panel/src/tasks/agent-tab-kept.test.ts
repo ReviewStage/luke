@@ -20,6 +20,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
+import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
  * agent-tab-kept.test.ts -- a running agent's tab draws again only the
@@ -149,7 +150,8 @@ function page(
 }
 
 /** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
-function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[] {
+/** What a row's card says: its name, its corner, and whether its tile wears the working mark. */
+function cardOn(row: HTMLElement | null): readonly (string | boolean | null | undefined)[] {
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.blur());
@@ -159,6 +161,7 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
     card.querySelector(".luke-hover-card-corner")?.textContent,
+    card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
   ];
 }
 
@@ -184,18 +187,13 @@ function recording(cards: TranscriptCards, drawn: string[]): TranscriptCards {
 /** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
-  const pages: ((answer: CodingAgentMessagesAnswerView) => void)[] = [];
-  let first = true;
-  const readTranscript = (): Promise<CodingAgentMessagesAnswerView> => {
-    if (first) {
-      first = false;
-      return Promise.resolve(
-        page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"),
-      );
-    }
-    return new Promise((resolve) => {
-      pages.push(resolve);
-    });
+  let hear: ((page: CodingAgentMessagesAnswerView) => void) | undefined;
+  const transcripts: TranscriptFollower = (_transcript, heard) => {
+    hear = heard;
+    heard(page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"));
+    return () => {
+      hear = undefined;
+    };
   };
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
@@ -203,7 +201,7 @@ function runningTab() {
   const controlOf = (otherTitle: string) =>
     codingAgentsControl({
       agents: [AGENT, listed("agent-7", otherTitle)],
-      readTranscript,
+      transcripts,
     });
   const cardsOf = (control: ReturnType<typeof controlOf>, task?: BriefTask) =>
     taskCards({
@@ -243,8 +241,7 @@ function runningTab() {
     },
     async answer(next: CodingAgentMessagesAnswerView) {
       await act(async () => {
-        while (pages.length === 0) await Promise.resolve();
-        pages.shift()?.(next);
+        hear?.(next);
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
     },
@@ -306,15 +303,18 @@ test("a message a page did not touch hangs the card the window hands now, and it
   tab.openEarlierFold();
   const row = (callId: string) =>
     tab.container.querySelector<HTMLElement>(`button[data-call-id="${callId}"]`);
-  assert.equal(cardOn(row("call-message"))[0], "Invoice export");
+  // A message folds its words open, so its card hangs from its chip, the row's way to the agent.
+  const messageChip = () =>
+    tab.container.querySelector<HTMLElement>('[data-call-id="call-message"] [data-tool-agent-ref]');
+  assert.equal(cardOn(messageChip())[0], "Invoice export");
   const refused = () =>
     tab.container.querySelector<HTMLElement>('[data-call-id="call-refused"]')?.textContent ?? "";
   assert.match(refused(), /Invoice export/u);
-  const working = cardOn(row(DELEGATE_CALL))[1];
+  assert.equal(cardOn(row(DELEGATE_CALL))[2], true, "the worker's tile wears the working mark");
 
   // The window draws again with the other agent renamed, and no page has touched the earlier turn.
   act(() => drawOver("Invoice export, retried"));
-  assert.equal(cardOn(row("call-message"))[0], "Invoice export, retried");
+  assert.equal(cardOn(messageChip())[0], "Invoice export, retried");
   assert.match(refused(), /Invoice export, retried/u);
 
   // A page touches the newest turn alone, and says the worker has finished.
@@ -325,7 +325,11 @@ test("a message a page did not touch hangs the card the window hands now, and it
     tab.container.querySelector('[data-message-id="newest"]')?.textContent ?? "",
     /Reading the retry audit\./u,
   );
-  assert.notEqual(cardOn(row(DELEGATE_CALL))[1], working);
+  assert.equal(
+    cardOn(row(DELEGATE_CALL))[2],
+    false,
+    "the finished worker's tile wears its harness",
+  );
 });
 
 test("a task renamed while its agent's tab stands names the plan's sender anew, hanging the task's new card", async () => {
@@ -333,6 +337,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   const control = tab.controlOf("Invoice export");
   const task = (name: string): BriefTask => ({
     name,
+    status: undefined,
     card: createElement("span", { "data-task-card-probe": "" }, `${name}, its card`),
   });
   act(() => tab.draw(control, tab.cardsOf(control, task("First draft"))));

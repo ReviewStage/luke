@@ -255,6 +255,49 @@ function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
   return found;
 }
 
+/** The text node and offset the caret stands at, where it stands in one; none where it stands between blocks. */
+function caretText(editor: Editor): { text: Text; offset: number } | undefined {
+  const { node, offset } = editor.view.domAtPos(editor.state.selection.head);
+  if (node instanceof Text) return { text: node, offset };
+  const after = node.childNodes[offset];
+  if (after instanceof Text) return { text: after, offset: 0 };
+  const before = node.childNodes[offset - 1];
+  return before instanceof Text ? { text: before, offset: before.data.length } : undefined;
+}
+
+/**
+ * The words the caret stands in, counted as `wordsAt` finds them, so the
+ * drawn text finds them again, and where their line stands in the window;
+ * none off any words, or where nothing is laid out to measure.
+ */
+function caretWords(editor: Editor): PlacedWords | undefined {
+  const { view } = editor;
+  const at = caretText(editor);
+  const section = caretSection(editor);
+  const blocks = sectionBlocks(view.state.doc, section);
+  if (at === undefined || blocks === undefined) return undefined;
+  const code = inCode(at.text);
+  let occurrence = 0;
+  let found = false;
+  view.state.doc.forEach((_node: PmNode, offset: number, index: number) => {
+    const dom = view.nodeDOM(offset);
+    if (found || index < blocks.first || index >= blocks.next || dom === null) return;
+    const walker = document.createTreeWalker(dom, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null && !found; text = walker.nextNode()) {
+      if (text === at.text) found = true;
+      else if (text.textContent === at.text.data && inCode(text) === code) occurrence += 1;
+    }
+  });
+  if (!found) return undefined;
+  try {
+    const { top } = view.coordsAtPos(view.state.selection.head);
+    return { section, text: at.text.data, occurrence, offset: at.offset, code, top };
+  } catch {
+    // Note that a view with no layout, as a test's page is, measures nothing.
+    return undefined;
+  }
+}
+
 /** Where the caret goes as the editor opens on the words a click landed on, where it finds them; none where it does not. */
 function placedOnWords(
   editor: Editor,
@@ -413,6 +456,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         return undefined;
       }
     },
+    caretWords: () => caretWords(editor),
     insertPictures: (files) => {
       if (pictures !== undefined) laidInPictures(editor.view, files, pictures);
     },

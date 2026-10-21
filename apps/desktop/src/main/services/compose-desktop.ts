@@ -302,7 +302,6 @@ export function composeDesktop(
       // answering nothing.
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
-        reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
       });
 
       return {

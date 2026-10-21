@@ -18,6 +18,11 @@
  * is malformed is kept without them, so one server's slip never costs the
  * developer its whole list.
  *
+ * The same session serves a native agent's `connection_execute` and
+ * `connection_search` (`connection-door.ts`): `listMcpToolSchemas` reads each
+ * tool with the schemas the server declared, untouched, and `callMcpTool`
+ * finds one tool by name and calls it, answering the server's own result.
+ *
  * Every failure is one word. The one thing kept of what the server said is
  * the first line of a JSON-RPC error's message, bounded, and only where it
  * carries neither the bearer nor anything shaped like a credential: that
@@ -30,7 +35,14 @@ import {
   type IntegrationToolParameter,
   integrationToolAnnotationsSchema,
 } from "@luke/features/integration-wire";
-import { isRecord, isWireString, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  type WireValue,
+  WireValueSchema,
+} from "@luke/wire";
 import { Data, Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -48,6 +60,7 @@ const MCP_METHOD = {
   INITIALIZE: "initialize",
   INITIALIZED: "notifications/initialized",
   TOOLS_LIST: "tools/list",
+  TOOLS_CALL: "tools/call",
 } as const;
 
 /**
@@ -59,6 +72,9 @@ const MAX_PAGES = 50;
 
 /** How long the whole read may take. */
 const READ_TIMEOUT = Duration.seconds(10);
+
+/** How long a call of one tool may take, the read before it included: under the function's own bound, which is longer still. */
+const CALL_TIMEOUT = Duration.minutes(5);
 
 /** How long ending the session may take, after which it is let go: the list is already read. */
 const END_TIMEOUT = Duration.seconds(2);
@@ -152,6 +168,7 @@ const ToolsPage = Schema.Struct({
       description: Schema.optionalKey(Schema.String),
       annotations: Schema.optionalKey(WireValueSchema),
       inputSchema: Schema.optionalKey(WireValueSchema),
+      outputSchema: Schema.optionalKey(WireValueSchema),
     }),
   ),
   nextCursor: Schema.optionalKey(Schema.String),
@@ -161,14 +178,32 @@ type RpcAnswerType = typeof RpcAnswer.Type;
 
 const decodeAnswerText = Schema.decodeUnknownOption(Schema.fromJsonString(RpcAnswer));
 
-/** What a request names besides its method: the handshake's terms, or the page of tools asked for. */
+/** What a request names besides its method: the handshake's terms, the page of tools asked for, or the tool called and its input. */
 interface RpcParams {
   readonly protocolVersion?: string;
   readonly capabilities?: Readonly<Record<string, never>>;
   readonly clientInfo?: { readonly name: string; readonly version: string };
   readonly cursor?: string;
+  readonly name?: string;
+  readonly arguments?: WireRecord;
 }
+
+/** One tool as the server listed it, for a model to call: its name, its words, and the schemas it declared, as the server wrote them. */
+export interface McpToolSchema {
+  readonly name: string;
+  readonly description?: string;
+  readonly inputSchema?: WireValue;
+  readonly outputSchema?: WireValue;
+}
+
+/** What a call of one tool answered: the server's own result, or, for a name the server lists no tool under, every tool it does list. */
+export type McpToolCall =
+  | { readonly called: true; readonly tool: McpToolSchema; readonly result: WireValue }
+  | { readonly called: false; readonly tools: readonly McpToolSchema[] };
+
+type ListedTool = (typeof ToolsPage.Type)["tools"][number];
 const decodePage = Schema.decodeUnknownOption(ToolsPage);
+const decodeWireValue = Schema.decodeUnknownOption(WireValueSchema);
 
 /** The JSON-RPC answers a response carries: its body whole, or each event's `data:` lines joined. */
 function answersOf(contentType: string, body: string): readonly RpcAnswerType[] {
@@ -262,120 +297,194 @@ function rpcFailure(error: typeof RpcError.Type, token: string): McpToolsFailure
   });
 }
 
+/** One JSON-RPC message sent within a session; a request answers its result, a notification nothing. */
+type McpSend = (
+  method: string,
+  params: RpcParams,
+  notification?: boolean,
+) => Effect.Effect<unknown, McpToolsFailure>;
+
 /**
- * The tools the server at `url` lists for the bearer `token`, in its order.
- * A server that refuses the bearer is `refused`; one that answers a JSON-RPC
- * error of its own, under any status, is `rejected` with its code and what
- * was safe to keep of its message; one that answers what is no JSON-RPC
- * answer is `unreadable`; anything that never answered, or answered an
- * error status with no JSON-RPC error, is `unreachable`.
+ * A session with the server at `url` under the bearer `token`: opened with
+ * `initialize`, `body` run over it, and ended as a courtesy, the whole
+ * within `timeout`. A server that refuses the bearer is `refused`; one that
+ * answers a JSON-RPC error of its own, under any status, is `rejected` with
+ * its code and what was safe to keep of its message; one that answers what
+ * is no JSON-RPC answer is `unreadable`; anything that never answered, or
+ * answered an error status with no JSON-RPC error, is `unreachable`.
  */
-export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(function* (
+function inMcpSession<A>(
   url: string,
   token: string,
-): Effect.fn.Return<readonly McpTool[], McpToolsFailure, HttpClient.HttpClient> {
-  const client = yield* HttpClient.HttpClient;
-  // The session id the server handed back, and whether the session is open: both ride every later request.
-  let session: string | undefined;
-  let opened = false;
-  let nextId = 0;
+  timeout: Duration.Input,
+  body: (send: McpSend) => Effect.Effect<A, McpToolsFailure>,
+): Effect.Effect<A, McpToolsFailure, HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    // The session id the server handed back, and whether the session is open: both ride every later request.
+    let session: string | undefined;
+    let opened = false;
+    let nextId = 0;
 
-  /** One JSON-RPC message sent; a request answers its result, a notification nothing. */
-  const send = (method: string, params: RpcParams, notification = false) =>
-    Effect.gen(function* () {
-      const id = notification ? undefined : ++nextId;
-      const request = HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeaders({
-          authorization: `Bearer ${token}`,
-          accept: "application/json, text/event-stream",
-          ...(session !== undefined ? { [MCP_HEADER.SESSION]: session } : undefined),
-          ...(opened ? { [MCP_HEADER.PROTOCOL]: PROTOCOL_VERSION } : undefined),
-        }),
-        HttpClientRequest.bodyJsonUnsafe({
-          jsonrpc: "2.0",
-          method,
-          params,
-          ...(id !== undefined ? { id } : undefined),
-        }),
-      );
-      const response = yield* Effect.mapError(client.execute(request), () => unreachable);
-      if (response.status === 401 || response.status === 403) {
-        return yield* refused;
-      }
-      if (response.status >= 400) {
-        // Note that we read an error status's body, because a server says there why it refused.
-        const failed = yield* Effect.mapError(response.text, () => unreachable);
-        const error = answersOf(response.headers["content-type"] ?? "", failed).find(
-          (message) => message.error !== undefined,
-        )?.error;
-        return yield* error === undefined ? unreachable : rpcFailure(error, token);
-      }
-      session = Option.getOrElse(
-        Option.fromUndefinedOr(response.headers[MCP_HEADER.SESSION]),
-        () => session,
-      );
-      if (id === undefined) return undefined;
-      const body = yield* Effect.mapError(response.text, () => unreachable);
-      const answer = answersOf(response.headers["content-type"] ?? "", body).find(
-        (message) => message.id === id,
-      );
-      if (answer === undefined) return yield* unreadable;
-      if (answer.error !== undefined) return yield* rpcFailure(answer.error, token);
-      return answer.result;
+    const send: McpSend = (method, params, notification = false) =>
+      Effect.gen(function* () {
+        const id = notification ? undefined : ++nextId;
+        const request = HttpClientRequest.post(url).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${token}`,
+            accept: "application/json, text/event-stream",
+            ...(session !== undefined ? { [MCP_HEADER.SESSION]: session } : undefined),
+            ...(opened ? { [MCP_HEADER.PROTOCOL]: PROTOCOL_VERSION } : undefined),
+          }),
+          HttpClientRequest.bodyJsonUnsafe({
+            jsonrpc: "2.0",
+            method,
+            params,
+            ...(id !== undefined ? { id } : undefined),
+          }),
+        );
+        const response = yield* Effect.mapError(client.execute(request), () => unreachable);
+        if (response.status === 401 || response.status === 403) {
+          return yield* refused;
+        }
+        if (response.status >= 400) {
+          // Note that we read an error status's body, because a server says there why it refused.
+          const failed = yield* Effect.mapError(response.text, () => unreachable);
+          const error = answersOf(response.headers["content-type"] ?? "", failed).find(
+            (message) => message.error !== undefined,
+          )?.error;
+          return yield* error === undefined ? unreachable : rpcFailure(error, token);
+        }
+        session = Option.getOrElse(
+          Option.fromUndefinedOr(response.headers[MCP_HEADER.SESSION]),
+          () => session,
+        );
+        if (id === undefined) return undefined;
+        const text = yield* Effect.mapError(response.text, () => unreachable);
+        const answer = answersOf(response.headers["content-type"] ?? "", text).find(
+          (message) => message.id === id,
+        );
+        if (answer === undefined) return yield* unreadable;
+        if (answer.error !== undefined) return yield* rpcFailure(answer.error, token);
+        return answer.result;
+      });
+
+    const read = Effect.gen(function* () {
+      yield* send(MCP_METHOD.INITIALIZE, {
+        protocolVersion: PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: "luke", version: "1" },
+      });
+      opened = true;
+      yield* send(MCP_METHOD.INITIALIZED, {}, true);
+      return yield* body(send);
     });
 
-  const read = Effect.gen(function* () {
-    yield* send(MCP_METHOD.INITIALIZE, {
-      protocolVersion: PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: { name: "luke", version: "1" },
-    });
-    opened = true;
-    yield* send(MCP_METHOD.INITIALIZED, {}, true);
-    const tools: McpTool[] = [];
+    /** The session ended as a courtesy, within its own bound; whether the server heard it changes nothing. */
+    const end = Effect.suspend(() =>
+      session === undefined
+        ? Effect.void
+        : Effect.ignore(
+            client
+              .execute(
+                HttpClientRequest.delete(url).pipe(
+                  HttpClientRequest.setHeaders({
+                    authorization: `Bearer ${token}`,
+                    [MCP_HEADER.SESSION]: session,
+                  }),
+                ),
+              )
+              .pipe(Effect.timeout(END_TIMEOUT)),
+          ),
+    );
+
+    return yield* read.pipe(
+      Effect.ensuring(end),
+      Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.fail(unreachable) }),
+    );
+  });
+}
+
+/** Every tool the session's server lists, page by page, as it listed them. */
+function listedTools(send: McpSend): Effect.Effect<readonly ListedTool[], McpToolsFailure> {
+  return Effect.gen(function* () {
+    const tools: ListedTool[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const result = yield* send(MCP_METHOD.TOOLS_LIST, cursor !== undefined ? { cursor } : {});
       const read = Option.getOrUndefined(decodePage(result));
       if (read === undefined) return yield* unreadable;
-      for (const tool of read.tools) {
-        const title = keptTitle(tool.title, tool.annotations);
-        const annotations = keptAnnotations(tool.annotations);
-        const parameters = toolParameters(tool.inputSchema);
-        tools.push({
-          name: tool.name,
-          ...(title !== undefined ? { title } : undefined),
-          description: bounded(tool.description, DESCRIPTION_MAX_CHARS),
-          ...(annotations !== undefined ? { annotations } : undefined),
-          ...(parameters !== undefined ? { parameters } : undefined),
-        });
-      }
+      tools.push(...read.tools);
       cursor = read.nextCursor;
       if (cursor === undefined) return tools;
     }
     return yield* unreadable;
   });
+}
 
-  /** The session ended as a courtesy, within its own bound; whether the server heard it changes nothing. */
-  const end = Effect.suspend(() =>
-    session === undefined
-      ? Effect.void
-      : Effect.ignore(
-          client
-            .execute(
-              HttpClientRequest.delete(url).pipe(
-                HttpClientRequest.setHeaders({
-                  authorization: `Bearer ${token}`,
-                  [MCP_HEADER.SESSION]: session,
-                }),
-              ),
-            )
-            .pipe(Effect.timeout(END_TIMEOUT)),
-        ),
-  );
+/** A listed tool as a model is shown it: its name, its words, and its schemas untouched. */
+function toolSchema(tool: ListedTool): McpToolSchema {
+  return {
+    name: tool.name,
+    ...(tool.description !== undefined ? { description: tool.description } : undefined),
+    ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : undefined),
+    ...(tool.outputSchema !== undefined ? { outputSchema: tool.outputSchema } : undefined),
+  };
+}
 
-  return yield* read.pipe(
-    Effect.ensuring(end),
-    Effect.timeoutOrElse({ duration: READ_TIMEOUT, orElse: () => Effect.fail(unreachable) }),
+/**
+ * The tools the server at `url` lists for the bearer `token`, in its order,
+ * as a person picking servers reads them; why not as `inMcpSession` says.
+ */
+export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(function* (
+  url: string,
+  token: string,
+): Effect.fn.Return<readonly McpTool[], McpToolsFailure, HttpClient.HttpClient> {
+  const listed = yield* inMcpSession(url, token, READ_TIMEOUT, listedTools);
+  return listed.map((tool): McpTool => {
+    const title = keptTitle(tool.title, tool.annotations);
+    const annotations = keptAnnotations(tool.annotations);
+    const parameters = toolParameters(tool.inputSchema);
+    return {
+      name: tool.name,
+      ...(title !== undefined ? { title } : undefined),
+      description: bounded(tool.description, DESCRIPTION_MAX_CHARS),
+      ...(annotations !== undefined ? { annotations } : undefined),
+      ...(parameters !== undefined ? { parameters } : undefined),
+    };
+  });
+});
+
+/** The tools the server at `url` lists for the bearer `token`, in its order, each with the schemas it declared; why not as `inMcpSession` says. */
+export const listMcpToolSchemas = /* @__PURE__ */ Effect.fn("web/listMcpToolSchemas")(function* (
+  url: string,
+  token: string,
+): Effect.fn.Return<readonly McpToolSchema[], McpToolsFailure, HttpClient.HttpClient> {
+  const listed = yield* inMcpSession(url, token, READ_TIMEOUT, listedTools);
+  return listed.map(toolSchema);
+});
+
+/**
+ * One call of the tool the server at `url` lists under `name`, with
+ * `input`, under the bearer `token`, in one session: the server's own
+ * result, which may be its tool's error, or every tool it lists where it
+ * lists none under the name; why no call was made as `inMcpSession` says.
+ */
+export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function* (
+  url: string,
+  token: string,
+  name: string,
+  input: WireRecord,
+): Effect.fn.Return<McpToolCall, McpToolsFailure, HttpClient.HttpClient> {
+  return yield* inMcpSession(url, token, CALL_TIMEOUT, (send) =>
+    Effect.gen(function* () {
+      const tools = (yield* listedTools(send)).map(toolSchema);
+      const tool = tools.find((each) => each.name === name);
+      if (tool === undefined) return { called: false, tools } as const;
+      const result = yield* send(MCP_METHOD.TOOLS_CALL, { name, arguments: input });
+      const answered = Option.getOrUndefined(decodeWireValue(result));
+      if (answered === undefined) return yield* unreadable;
+      return { called: true, tool, result: answered } as const;
+    }),
   );
 });

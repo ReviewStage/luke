@@ -44,8 +44,10 @@ export interface LiveDependencies {
   account: Pick<AccountComposer, "agentTrace"> & {
     readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
   };
-  /** The task the panel has open, the one task a call may be created about; nothing while it has none. */
+  /** The task the panel has open, the one task whose agents a call may be created into; nothing while it has none. */
   activeTaskId: () => string | undefined;
+  /** The task an agent is on as the service reads it now; none for one archived or out of reach (`CodingAgentsComposer.agentTaskOf`). */
+  agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
   /** Where a draft of the open task goes as the service's notetaker writes it during a task's call. */
   showPlanDraft: (draft: PlanDraftFrame) => void;
   /** Where the service's word of what each part of Luke is doing on a task's call goes, and the call's end clearing it. */
@@ -65,7 +67,8 @@ export interface LiveDependencies {
  * service's: every spoken ask is answered by the hosted brain, every reply
  * is appended by the service's own exchange over the same socket, and the
  * record is the account's on the service. What this side still does is
- * create the session for the peer's offer about the open task, end it on the
+ * create the session for the peer's offer into an agent of the open task,
+ * end it on the
  * peer's hang-up or the drain, and carry the peer's idle, the stop key, and
  * the developer's video toggle to the service. The avatar's grant that toggle
  * draws is the holder's to hand on in process, through the assembly's
@@ -128,13 +131,24 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         if (!request) return yield* invalid("sdp must be the peer's offer");
         // An offer about a task the window no longer has open (another was
         // opened, or the window closed, while the offer was out) is refused, so
-        // no call about one task is created while another is on screen.
+        // no call into one task's agent is created while another is on screen.
         if (request.taskId !== dependencies.activeTaskId()) {
           return yield* Effect.fail(
             new RefusedRefusal({ message: "the task is not the one the panel has open" }),
           );
         }
-        const created = yield* service.createSession(request.sdp, request.taskId);
+        // Note that the agent is read here as well as on the service, so an
+        // offer naming an agent of another task, archived, or out of reach
+        // creates and bills no session at all.
+        if ((yield* dependencies.agentTaskOf(request.agentId)) !== request.taskId) {
+          return yield* Effect.fail(
+            new RefusedRefusal({ message: "the agent is not one of the open task's" }),
+          );
+        }
+        const created = yield* service.createSession(request.sdp, {
+          taskId: request.taskId,
+          agentId: request.agentId,
+        });
         if (!created)
           return yield* Effect.fail(
             new RefusedRefusal({ message: "no live session could be created" }),

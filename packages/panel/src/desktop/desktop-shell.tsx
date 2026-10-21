@@ -18,8 +18,8 @@ import {
   SidebarIcon,
   Skeleton,
 } from "@luke/ui";
+import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -38,7 +38,6 @@ import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-car
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
@@ -47,6 +46,7 @@ import {
 } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCallingAgent } from "../use-voice-view.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -60,7 +60,7 @@ import { OfflineMark, useOffline } from "./offline-mark.js";
 import { FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
-import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
+import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { taskCardOf } from "./task-card.js";
 import { useSummaryPin } from "./task-summary.js";
 import { useWindowTitle } from "./window-title.js";
@@ -88,34 +88,22 @@ const AutomationsPage = lazy(() =>
   })),
 );
 
-/** The Board, its own chunk, loaded the first time it is opened. */
-const TasksBoard = lazy(() =>
-  import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
-);
-
-/** The Tasks page that stands in the Board's place while the inbox-first sidebar is on, its own chunk too. */
+/** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
 const TasksPage = lazy(() =>
   import("./tasks-page.js").then((loaded) => ({ default: loaded.TasksPage })),
 );
 
-/** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
-function BoardLoading({
-  title,
-  onExit,
-}: {
-  /** The page's name: the Board's, or the Tasks page's standing in its place. */
-  title: string;
-  onExit: () => void;
-}): React.JSX.Element {
+/** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
+function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
-      label={title}
+      label="Tasks"
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">{title}</h1>
+            <h1 className="desktop-toolbar-title">Tasks</h1>
           </div>
         </header>
       }
@@ -125,7 +113,7 @@ function BoardLoading({
   );
 }
 
-/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Board's does. */
+/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Tasks page's does. */
 function FactoryLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, onExit);
   return (
@@ -422,17 +410,20 @@ function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element 
 }
 
 /**
- * Whether the open task's Transcript is on screen with its words, streaming
- * a call's as they are said. A Call tab standing behind another chosen
- * tab, or under a side panel filling the window, is not on screen, and one
- * still reading, or failed, shows no words.
+ * Whether the tab of the agent the call speaks into is on screen, where its
+ * transcript streams the call's words as they are said and its foot draws
+ * the call bar. A tab standing behind another chosen tab, or under a side
+ * panel filling the window, is not on screen.
  */
-function transcriptStreaming(tasks: TasksControl): boolean {
-  const { mainTabs, sidePanel, transcript } = tasks;
+function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+  const { mainTabs, sidePanel } = tasks;
+  const tab = mainTabs.tab;
   return (
+    calling !== undefined &&
     !sidePanel.fullScreen &&
-    mainTabs.tab === MAIN_TAB.CALL &&
-    transcript.region.kind === TRANSCRIPT_REGION.READY
+    tab !== undefined &&
+    isAgentTab(tab) &&
+    tab.agent === calling
   );
 }
 
@@ -446,8 +437,6 @@ function titleSubject(
   tab: PanelTab,
   tasks: TasksControl,
   shownTask: Task | undefined,
-  /** Whether the account has the inbox-first sidebar on, under which the Board's place is the Tasks page. */
-  inboxFirst: boolean,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
@@ -463,9 +452,7 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
-  if (tasks.boardView.open) {
-    return { signedIn, subject: inboxFirst ? "Tasks" : "Board", workspace: tasks.workspace };
-  }
+  if (tasks.boardView.open) return { signedIn, subject: "Tasks", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -578,12 +565,16 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  // With the inbox-first sidebar on, the Board's place is the Tasks page, which holds the Board as one of its views.
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
-  const inboxListing = useInboxListing(tasks, inboxFirst && tasks.signedIn);
+  // Note that the sidebar draws its list, so the list holds still while the sidebar is in sight.
+  const inboxListing = useInboxListing(
+    tasks,
+    inboxFirst && tasks.signedIn,
+    tasks.shown && sidebarInSight(sidebar),
+  );
   const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
-  useWindowTitle(titleSubject(tab, tasks, shownTask, inboxFirst));
+  useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
   const mentionedAgents = useMemo(
@@ -620,7 +611,9 @@ export function DesktopShell({
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
-  const speechHidden = taskDrawn && transcriptStreaming(tasks);
+  const calling = useCallingAgent();
+  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const speechHidden = callShown;
   const captionStrip = useMemo(
     () => <CaptionStrip {...captions} speechHidden={speechHidden} />,
     [captions, speechHidden],
@@ -719,9 +712,9 @@ export function DesktopShell({
   const boardOpen = tasks.boardView.open;
   const panelToggle =
     planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
-  // Note that a panel filling the window hides the task's column, call bar
-  // and all, so the captions float in its place then.
-  const captionsInColumn = taskDrawn && !tasks.sidePanel.fullScreen;
+  // Note that the captions ride the call bar at the foot of the call's agent's
+  // tab while that is on screen, and float at the window's foot otherwise.
+  const captionsInColumn = callShown;
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it
@@ -793,19 +786,11 @@ export function DesktopShell({
                   <FACTORY.Route tasks={tasks} />
                 </Suspense>
               </PageFind>
-            ) : boardOpen && inboxFirst ? (
+            ) : boardOpen ? (
               // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
-              <Suspense fallback={<BoardLoading title="Tasks" onExit={tasks.boardView.onClose} />}>
+              <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
                 <TasksPage tasks={tasks} room={room} />
               </Suspense>
-            ) : boardOpen ? (
-              <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
-                <Suspense
-                  fallback={<BoardLoading title="Board" onExit={tasks.boardView.onClose} />}
-                >
-                  <TasksBoard tasks={tasks} room={room} />
-                </Suspense>
-              </PageFind>
             ) : automationsOpen ? (
               <PageFind
                 page={FIND_PAGE.AUTOMATIONS}

@@ -278,6 +278,13 @@
     color: var(--luke-color-text);
   }
 
+  /* A row whose thing is done with stands back: its press's words and
+     marks fade together, while its fill, which says it is open or in hand,
+     and its acts stay as they are. */
+  .luke-list-row[data-muted="true"] .luke-list-row-main {
+    opacity: 0.45;
+  }
+
   .luke-list-row-description,
   .luke-list-row-meta {
     color: var(--luke-color-text-muted);

@@ -1,9 +1,12 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
-import { AgentPlaceholderIcon, CallIcon, DocumentIcon, PlusIcon } from "@luke/ui";
+import type { TaskStatus } from "@luke/features/task-wire";
+import { AgentPlaceholderIcon, CallIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import {
   AppWindowIcon,
+  AudioLinesIcon,
   BotIcon,
   GitPullRequestIcon,
   GlobeIcon,
@@ -16,7 +19,8 @@ import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state
 import { agentGlyphState, providerOf } from "./coding-agent-model.js";
 import { fileLook } from "./file-ref.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
-import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
+import { type FixedSidePanelTab, SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
+import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
  * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the task's summary, and its row in ⌘K.
@@ -26,7 +30,9 @@ import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js
  * name wherever it is offered. A coding agent and a subagent wear their
  * harness's mark wearing where they stand (`AgentGlyph`, `SubagentGlyph`)
  * in every one of those places, the "+" menus' rows included: a row is
- * offered beside a strip that may not hold its tab. Each place adds what
+ * offered beside a strip that may not hold its tab. A task wears its
+ * status's mark (`PlanGlyph`), and so does its Plan tab, which is named
+ * for the task wherever the place knows it. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
  * and section, ⌘K's task name.
  */
@@ -37,8 +43,8 @@ export const TAB_KIND = {
   PANEL: "panel",
   /** A task, as a row naming it does. */
   PLAN: "plan",
-  /** The task's calls with Luke, which anchor its column. */
-  CALL: "call",
+  /** The "+" row that starts a blank agent with a call into it. */
+  VOICE_CHAT: "voice-chat",
   INBOX: "inbox",
   /** The plan's own channel of the workspace's chat. */
   CHAT: "chat",
@@ -63,11 +69,22 @@ interface AgentStanding {
   readonly status?: CodingAgentStatus | undefined;
 }
 
+/** A task as its tab or its row names it: its name, and its status where the place knows it. */
+export interface PlanStanding {
+  readonly name: string;
+  readonly status: TaskStatus | undefined;
+}
+
 /** What a place knows of the thing a tab shows, by its kind. */
 export type TabSubject =
-  | { readonly kind: typeof TAB_KIND.PANEL; readonly tab: FixedSidePanelTab }
-  | { readonly kind: typeof TAB_KIND.PLAN; readonly name: string }
-  | { readonly kind: typeof TAB_KIND.CALL }
+  | {
+      readonly kind: typeof TAB_KIND.PANEL;
+      readonly tab: FixedSidePanelTab;
+      /** The task the panel stands beside, whose name and status its Plan tab wears; none where the place does not know it, and the tab says Plan. */
+      readonly plan?: PlanStanding | undefined;
+    }
+  | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
+  | { readonly kind: typeof TAB_KIND.VOICE_CHAT }
   | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
@@ -76,6 +93,8 @@ export type TabSubject =
       /** Its tab's label (`agentTabLabel`), or what a pin last called it; the word for an agent where none is known. */
       readonly name: string | undefined;
       readonly agent: AgentStanding | undefined;
+      /** Whether a call into the agent is in progress, which its glyph wears as the live mark. */
+      readonly calling?: boolean | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.SUBAGENT;
@@ -109,6 +128,29 @@ export type TabSubject =
 export interface KindLook {
   readonly icon: React.JSX.Element;
   readonly label: string;
+}
+
+/**
+ * A task's glyph wherever a task is named: its status's mark
+ * (`TaskStatusMark`), or the document where its status is not known, as a
+ * task the window does not list.
+ */
+export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
+  return status === undefined ? <DocumentIcon /> : <TaskStatusMark status={status} />;
+}
+
+/**
+ * The open task as its Plan tab wears it: its name, and its status as the
+ * task list holds it, which a status set from the sidebar moves first; none
+ * while no task is open.
+ */
+export function openPlanStanding(
+  tasks: Pick<TasksControl, "region" | "tasks" | "archived">,
+): PlanStanding | undefined {
+  if (tasks.region.kind !== DOCUMENT_REGION.READY) return undefined;
+  const { task } = tasks.region;
+  const listed = [...tasks.tasks, ...tasks.archived].find((each) => each.id === task.id) ?? task;
+  return { name: task.name, status: listed.status };
 }
 
 /**
@@ -148,6 +190,22 @@ export function AgentGlyph({ agent }: { agent: AgentStanding | undefined }) {
   return <StateGlyph glyph={<AgentMark provider={provider} />} state={state} />;
 }
 
+/** What a reader is told of an agent's glyph while a call into it is in progress. */
+const CALLING_WORDS = "On a call";
+
+/**
+ * An agent's glyph while a call into it is in progress: the voice's live
+ * mark in the live tint, in the glyph's own footprint, as a call's divider
+ * marks the call live (`call-card.tsx`), whatever the agent is doing.
+ */
+function CallingGlyph(): React.JSX.Element {
+  return (
+    <span className="state-glyph agent-calling-glyph" role="img" aria-label={CALLING_WORDS}>
+      <AudioLinesIcon aria-hidden="true" />
+    </span>
+  );
+}
+
 /** A subagent's glyph wearing where it stands, as `AgentGlyph` wears an agent's. */
 function SubagentGlyph({ model, state }: { model: string | undefined; state: GlyphState }) {
   return <StateGlyph glyph={<SubagentMark model={model} />} state={state} />;
@@ -165,13 +223,17 @@ export function agentEndMark(
 export function tabLook(subject: TabSubject): KindLook {
   switch (subject.kind) {
     case TAB_KIND.PANEL: {
-      const { label, icon: Icon } = SIDE_PANEL_TAB_KIND[subject.tab];
+      const { tab, plan } = subject;
+      if (tab === SIDE_PANEL_TAB.PLAN && plan !== undefined) {
+        return { icon: <PlanGlyph status={plan.status} />, label: plan.name };
+      }
+      const { label, icon: Icon } = SIDE_PANEL_TAB_KIND[tab];
       return { icon: <Icon />, label };
     }
     case TAB_KIND.PLAN:
-      return { icon: <DocumentIcon />, label: subject.name };
-    case TAB_KIND.CALL:
-      return { icon: <CallIcon />, label: TAB_WORDS.CALL };
+      return { icon: <PlanGlyph status={subject.status} />, label: subject.name };
+    case TAB_KIND.VOICE_CHAT:
+      return { icon: <CallIcon />, label: TAB_WORDS.NEW_VOICE_CHAT };
     case TAB_KIND.INBOX:
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
     case TAB_KIND.CHAT:
@@ -180,7 +242,7 @@ export function tabLook(subject: TabSubject): KindLook {
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
     case TAB_KIND.AGENT:
       return {
-        icon: <AgentGlyph agent={subject.agent} />,
+        icon: subject.calling === true ? <CallingGlyph /> : <AgentGlyph agent={subject.agent} />,
         label: subject.name ?? TAB_WORDS.CODING_AGENT,
       };
     case TAB_KIND.SUBAGENT:

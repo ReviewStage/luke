@@ -431,7 +431,7 @@ function PersonColumn({
   const left = former?.find((each) => each.userId === userId);
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
-  // The sidebar's own view, so their tasks are listed there as its Created by lists them.
+  // The sidebar's own view, so their tasks are listed there as its Created by lists them, whoever they are assigned to.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
   const archive = useArchivedView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
@@ -439,7 +439,7 @@ function PersonColumn({
   // Note that the list is turned back from the archived tasks, because the page lists their open ones.
   const showTasks = () => {
     archive.onShown(false);
-    taskView.onCreatedBy(userId);
+    taskView.onCreatedByAlone(userId);
   };
   const page = personPage(userId, listed);
   const you = userId === tasks.me;

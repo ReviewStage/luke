@@ -1,15 +1,20 @@
 import type { PlanEditor } from "@luke/features/task-wire";
-import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
-import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@luke/features/transcript-wire";
+import { TASKS_READ } from "@luke/features/tasks-view";
+import {
+  type TaskTranscript,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptCall,
+} from "@luke/features/transcript-wire";
+import { MESSAGE_CHANNEL } from "@luke/wire";
 import type { UIMessage } from "ai";
 import type { VoiceCallTranscript, VoiceView } from "./voice-view.js";
 
 /**
- * transcript-model.ts -- what the open task's Call tab draws, decided from the stored transcript and the call standing now.
+ * transcript-model.ts -- the calls into an agent as its tab draws them, decided from the record of its calls and the call standing now.
  *
- * Two sources make one list. The host reads what was said on the task's
- * calls from the record whenever the task opens and whenever a call about it
- * ends; the call standing now is not on record yet, so its words come from
+ * Two sources make one list. The window reads the agent's calls from the
+ * record whenever its tab opens and whenever a call into it ends; the call
+ * standing now is not on record yet, so its words come from
  * the voice window's report as they are said. The two are told apart by the
  * store's id for the call's session, which both carry: a call the record
  * already holds is drawn from the record once the record has caught up with
@@ -21,24 +26,30 @@ import type { VoiceCallTranscript, VoiceView } from "./voice-view.js";
  * a line on record is.
  */
 
-/** What the tab says before anything was said on any call about the task. */
-export const TRANSCRIPT_EMPTY_LINE = "Nothing said yet.";
-
 /** The quiet line a call that has ended closes with, and the one for a call Luke ended himself. */
 const CALL_ENDED_LINE = {
   ENDED: "Call ended",
   LUKE_ENDED: "Luke ended the call",
 } as const;
 
-/** Which state the tab draws. */
+/** Where the read of an agent's calls stands, with what it holds. */
 export const TRANSCRIPT_REGION = {
   READING: "reading",
-  /** The read failed and nothing is held: the failure and Try again. */
+  /** The read failed and nothing is held. */
   FAILED: "failed",
-  /** Nothing was said on any call about the task. */
+  /** No call into the agent was made. */
   EMPTY: "empty",
   READY: "ready",
 } as const;
+
+/**
+ * What was said on an agent's calls as last read: where the read stands, and
+ * the calls it read, kept through a later read that failed.
+ */
+export interface CallsRead {
+  readonly status: (typeof TASKS_READ)[keyof typeof TASKS_READ];
+  readonly transcript?: TaskTranscript | undefined;
+}
 
 /** What a call's record says of the call itself, as far as it says it: when and why it ended, what it metered, and its model. */
 export type CallRecord = Pick<TranscriptCall, "endedAt" | "ending" | "usage" | "model">;
@@ -82,7 +93,7 @@ export type TranscriptRegion =
  * past the call's end until the record's copy of it has caught up.
  */
 export interface HeardCall {
-  readonly taskId: string;
+  readonly agentId: string;
   readonly transcript: VoiceCallTranscript;
   /** When this window first heard the call, which its header shows. */
   readonly heardAt: number;
@@ -120,30 +131,29 @@ function wordCount(messages: readonly UIMessage[]): number {
 }
 
 /**
- * The calls heard on the open task, from the voice window's report and what
+ * The calls heard into the agent, from the voice window's report and what
  * was held before: the call reported is live and grows in place, every other
  * is held no longer live, so a call ended just before the next began keeps
- * its words until the record has them. Another task opening drops them all,
- * and a call about another task than the one open is not this tab's.
+ * its words until the record has them. A call into another agent is not
+ * this tab's.
  */
 export function heardCalls(input: {
   held: readonly HeardCall[];
   /** The call standing, and its transcript as the document holds it (`voice.callTranscript`). */
-  voice: Pick<VoiceView, "callTaskId"> & { callTranscript: VoiceCallTranscript | undefined };
-  taskId: string | undefined;
+  voice: Pick<VoiceView, "call"> & { callTranscript: VoiceCallTranscript | undefined };
+  agentId: string;
   now: number;
 }): readonly HeardCall[] {
-  const { voice, taskId, now } = input;
-  if (taskId === undefined) return [];
-  const held = input.held.filter((call) => call.taskId === taskId);
-  const reported = voice.callTaskId === taskId ? voice.callTranscript : undefined;
+  const { voice, agentId, now } = input;
+  const held = input.held.filter((call) => call.agentId === agentId);
+  const reported = voice.call?.agentId === agentId ? voice.callTranscript : undefined;
   const ended = (call: HeardCall): HeardCall => (call.live ? { ...call, live: false } : call);
   if (reported === undefined) return held.map(ended);
   // Note that a call reported again keeps its place and when it was first heard.
   const standing = held.find(
     (call) => call.live && call.transcript.voiceSessionId === reported.voiceSessionId,
   );
-  const live = { taskId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
+  const live = { agentId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
   const kept = held.map((call) => (call === standing ? live : ended(call)));
   return standing === undefined ? [...kept, live] : kept;
 }
@@ -188,7 +198,7 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
  * own state is drawn.
  */
 export function transcriptRegion(input: {
-  transcript: TasksView["transcript"];
+  transcript: CallsRead | undefined;
   heard: readonly HeardCall[];
   /** The store's id for the session of the last call Luke ended himself, which closes with a line saying so. */
   lukeEndedCall?: string | undefined;
@@ -250,4 +260,152 @@ const LIVE_CALL_SLACK_MS = 30_000;
 /** When a call started, as what it holds reads it: a live call a little before it was first heard. */
 export function callStart(call: Pick<TranscriptCallRow, "startedAt" | "live">): number {
   return call.live ? call.startedAt - LIVE_CALL_SLACK_MS : call.startedAt;
+}
+
+/** The store's id for the call a line of an agent's transcript was said on, read off the line's own metadata; none for a line said on no call. */
+export function callOfLine(message: { readonly metadata?: unknown }): string | undefined {
+  const { metadata } = message;
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const channel: unknown = Reflect.get(metadata, "channel");
+  const session: unknown = Reflect.get(metadata, "voice_session_id");
+  return channel === MESSAGE_CHANNEL.VOICE && typeof session === "string" ? session : undefined;
+}
+
+/** A line of an agent's transcript as the tab holds it: its id, its metadata, and its parts. */
+interface TranscriptLine {
+  readonly id: string;
+  readonly metadata?: unknown;
+  readonly parts?: readonly unknown[];
+}
+
+/** A row the transcript draws: a line, and the lines that reached it while it ran, which it draws inside it. */
+interface TranscriptRow extends TranscriptLine {
+  readonly arrived?: readonly TranscriptLine[];
+}
+
+/** The lines of a call heard here that no row holds yet, and whether the call's divider stands above already. */
+export interface HeardTail {
+  readonly call: TranscriptCallRow;
+  readonly opened: boolean;
+  readonly lines: readonly UIMessage[];
+}
+
+/**
+ * Where an agent's transcript draws its calls: the checkpoint each begins at,
+ * before the first row drawing one of its lines; the line each that ended
+ * closes with, after the last such row; and the lines of each call heard
+ * here that no row holds yet, which stand at its foot in the order the
+ * calls began, each under its divider where none of its lines is held.
+ */
+export interface CallPlaces {
+  /** The calls that begin before a transcript row, by the row, in the order they began: two calls whose lines reached one running turn begin at its one row. */
+  readonly opens: ReadonlyMap<string, readonly TranscriptCallRow[]>;
+  /** The ended calls that close after a transcript row, by the row, in the order they began. */
+  readonly closes: ReadonlyMap<string, readonly TranscriptCallRow[]>;
+  readonly heard: readonly HeardTail[];
+}
+
+/** A line's words as it reads, its text parts joined. */
+function lineText(line: TranscriptLine): string {
+  return (line.parts ?? [])
+    .flatMap((part) => {
+      if (typeof part !== "object" || part === null) return [];
+      const text: unknown = Reflect.get(part, "text");
+      return Reflect.get(part, "type") === TRANSCRIPT_PART_TYPE.TEXT && typeof text === "string"
+        ? [text]
+        : [];
+    })
+    .join(" ");
+}
+
+/** Words compared as said, whatever their case and spacing. */
+function wordsOf(text: string): string {
+  return text.toLowerCase().replace(/\s+/gu, " ").trim();
+}
+
+/** How many of a heard line's first words a row must hold for the line to count as held: a row grows in place, so its start is what lands first. */
+const HELD_WORDS = 4;
+
+/**
+ * The lines heard on a call that its rows do not hold yet. Lines and rows
+ * are matched in the order said, each row holding one line at most, so a
+ * phrase said twice is held twice only where two rows hold it. A caption
+ * line may be one row or several, a call that reconnected splitting it, and
+ * a row grows in place, so a run of rows holds a line where it holds the
+ * line's first words, or holds the start of it still growing; the rows the
+ * run took are used up.
+ */
+function unheldLines(rows: readonly string[], lines: readonly UIMessage[]): UIMessage[] {
+  let next = 0;
+  return lines.filter((line) => {
+    const said = wordsOf(messageText(line));
+    const opening = said.split(" ").slice(0, HELD_WORDS).join(" ");
+    if (opening === "") return false;
+    for (let at = next; at < rows.length; at += 1) {
+      const first = rows[at] ?? "";
+      const holds = (run: string) => run.includes(opening) || (run !== "" && said.startsWith(run));
+      let run = "";
+      for (let end = at; end < rows.length; end += 1) {
+        const row = rows[end] ?? "";
+        run = run === "" ? row : `${run} ${row}`;
+        if (holds(run)) {
+          // The line takes every row after that its words run on into.
+          let last = end;
+          while (last + 1 < rows.length && said.startsWith(`${run} ${rows[last + 1] ?? ""}`)) {
+            last += 1;
+            run = `${run} ${rows[last] ?? ""}`;
+          }
+          next = last + 1;
+          return false;
+        }
+        // A run longer than the opening past its first row needs that row no more.
+        if (run.length > opening.length + first.length) break;
+      }
+    }
+    return true;
+  });
+}
+
+/**
+ * The calls placed among an agent's transcript rows, matched by the store's
+ * id for each call, which every line said on it carries. A line that reached
+ * a turn while it ran is drawn inside that turn's row, so a call begins
+ * before, and ends after, the row that draws its line. Only a call heard
+ * here, standing or not yet on record, has lines the rows may not hold:
+ * those the rows hold are drawn there, and the rest from what was heard.
+ */
+export function callPlaces(
+  rows: readonly TranscriptRow[],
+  calls: readonly TranscriptCallRow[],
+): CallPlaces {
+  const rowsOf = new Map<string, string[]>();
+  const wordsHeld = new Map<string, string[]>();
+  for (const row of rows) {
+    for (const line of [row, ...(row.arrived ?? [])]) {
+      const call = callOfLine(line);
+      if (call === undefined) continue;
+      const drawn = rowsOf.get(call) ?? [];
+      if (drawn.at(-1) !== row.id) drawn.push(row.id);
+      rowsOf.set(call, drawn);
+      wordsHeld.set(call, [...(wordsHeld.get(call) ?? []), wordsOf(lineText(line))]);
+    }
+  }
+  const opens = new Map<string, TranscriptCallRow[]>();
+  const closes = new Map<string, TranscriptCallRow[]>();
+  const heard: HeardTail[] = [];
+  for (const call of calls) {
+    const drawn = rowsOf.get(call.key) ?? [];
+    const [first] = drawn;
+    const last = drawn.at(-1);
+    if (first !== undefined) opens.set(first, [...(opens.get(first) ?? []), call]);
+    if (call.live || call.record === undefined) {
+      const lines = unheldLines(wordsHeld.get(call.key) ?? [], call.messages);
+      if (lines.length > 0) {
+        heard.push({ call, opened: first !== undefined, lines });
+        continue;
+      }
+    }
+    if (!call.live && last !== undefined) closes.set(last, [...(closes.get(last) ?? []), call]);
+  }
+  return { opens, closes, heard };
 }

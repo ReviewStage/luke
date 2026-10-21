@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -234,4 +234,110 @@ it.effect(
       assert.deepEqual(rows.at(-1), { left: [{ id: "live" }], right: [] }, "no polling once back");
       yield* Fiber.interrupt(following);
     }),
+);
+
+/** A read as the service answers it polled: each part's rows inline under a digest of them, or the digest alone where nothing moved. */
+function polledRead(left: readonly unknown[] | undefined, digest: string): SealedRead<Part> {
+  const part = (name: Part, rows: readonly unknown[] | undefined) => ({
+    ...sealed(name, 0, 0),
+    digest: `${name}-${digest}`,
+    ...(rows === undefined ? undefined : { rows }),
+  });
+  return {
+    url: LIVE_POLL_URL,
+    queries: {
+      left: part("left", left),
+      right: part("right", left === undefined ? undefined : []),
+    },
+  };
+}
+
+it.effect(
+  "a read the service answers polled is polled quietly, each poll naming where the rows last stood, and Realtime is not asked again",
+  () =>
+    Effect.gen(function* () {
+      const asked: (string | undefined)[] = [];
+      const answers = [polledRead([{ id: "b" }], "2"), polledRead(undefined, "2")];
+      let resealed = false;
+      const rows: unknown[] = [];
+      const following = yield* Effect.forkChild(
+        Stream.runForEach(
+          liveRows<Part>(
+            {
+              openLive: () => fakeRealtime().client,
+              reseal: () =>
+                Effect.sync(() => {
+                  resealed = true;
+                  return read(1, 0);
+                }),
+              poll: (after) =>
+                Effect.sync(() => {
+                  asked.push(after);
+                  return answers.shift() ?? polledRead(undefined, "2");
+                }),
+              now: () => 0,
+            },
+            polledRead([{ id: "a" }], "1"),
+          ),
+          (whole) => Effect.sync(() => void rows.push(whole)),
+        ),
+      );
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.deepEqual(rows, [
+        { left: [{ id: "a" }], right: [] },
+        { left: [{ id: "b" }], right: [] },
+      ]);
+      assert.deepEqual(asked.slice(0, 3), ["left-1,right-1", "left-2,right-2", "left-2,right-2"]);
+      yield* TestClock.adjust(Duration.minutes(1));
+      assert.equal(resealed, false, "Realtime is off, so it is not subscribed to again");
+      yield* Fiber.interrupt(following);
+    }),
+);
+
+it.effect("a poll that fails is asked again a second later, then longer, up to five seconds", () =>
+  Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const asks: number[] = [];
+    const following = yield* Effect.forkChild(
+      liveRows<Part>(
+        {
+          openLive: () => fakeRealtime().client,
+          reseal: () => Effect.succeed({ failure: "unavailable" }),
+          poll: () =>
+            Effect.sync(() => {
+              asks.push(clock.currentTimeMillisUnsafe());
+              return { failure: "unavailable" };
+            }),
+          now: () => 0,
+        },
+        polledRead([], "1"),
+      ).pipe(Stream.runDrain),
+    );
+    for (let second = 0; second < 30; second += 1) {
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+    }
+    const start = asks[0] ?? 0;
+    const gaps = asks.slice(1).map((at, index) => at - (asks[index] ?? start));
+    assert.deepEqual(gaps.slice(0, 4), [1_000, 2_000, 4_000, 5_000]);
+    assert.ok(gaps.every((gap) => gap <= 5_000));
+    yield* Fiber.interrupt(following);
+  }),
+);
+
+it.effect("a read whose session the service refuses as signed out ends, and is asked no more", () =>
+  Effect.gen(function* () {
+    const exit = yield* liveRows<Part>(
+      {
+        openLive: () => fakeRealtime().client,
+        reseal: () => Effect.succeed(LIVE_SIGNED_OUT),
+        poll: () => Effect.succeed(LIVE_SIGNED_OUT),
+        now: () => 0,
+      },
+      { ...read(0, 0), url: LIVE_POLL_URL },
+    ).pipe(Stream.runDrain, Effect.exit);
+    assert.ok(Exit.isFailure(exit));
+  }),
 );

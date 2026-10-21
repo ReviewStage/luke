@@ -6,13 +6,8 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
-  CHOICE_BAR_INSET,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
   Chip,
   ChipName,
-  ChoiceBar,
-  COUNT_TONE,
   DocumentIcon,
   EmptyState,
   ErrorState,
@@ -34,7 +29,6 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TaskStatusMark as TaskStatusGlyph,
   useMenu,
 } from "@luke/ui";
 import {
@@ -47,17 +41,20 @@ import {
 } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
+  ArchiveIcon,
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
   CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
-  ClockIcon,
+  ClockArrowDownIcon,
+  ClockArrowUpIcon,
   FactoryIcon,
   HourglassIcon,
   ImagesIcon,
   InboxIcon,
   ListIcon,
+  ListTodoIcon,
   MailIcon,
   MailOpenIcon,
   PenLineIcon,
@@ -67,7 +64,7 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -100,6 +97,7 @@ import {
   type InboxColumnsShown,
   type InboxRowPresses,
   listHeadControl,
+  VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import {
   archivedHolder,
@@ -133,6 +131,7 @@ import {
   inboxPreview,
   inboxSettledWords,
   inboxShownTicks,
+  isDone,
   isUnread,
   listedItems,
   NEEDS_YOU,
@@ -147,6 +146,7 @@ import {
 } from "./inbox-row-media.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
+import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
@@ -178,31 +178,36 @@ import { cardTitle, plainWords } from "./tool-call-model.js";
  * since the developer last read it, or they marked it so: the blue dot in
  * a gutter before its tile, its title in the unread weight; opening it
  * reads it, and its row, its menu, U, and Mark all as read in the view's
- * menu mark it read or unread (`use-inbox-read-marks.ts`). A folded task
+ * menu mark it read or unread (`use-inbox-read-marks.ts`). An item settled
+ * and read is done with (`isDone`), and its row stands back, gray, with no
+ * word saying so: the chosen row To do keeps once it is answered or read,
+ * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers the view's
- * menu: Group by, by task, by person, by status (what needs the developer
+ * menu: first what the list holds, To do, the developer's own items they are
+ * not done with, asks waiting on them and anything of theirs unread, a
+ * settled thread its agent wrote on again among them, or All, every item,
+ * and on the window's Inbox Archived, the archived tasks' items, the head
+ * naming any but To do after the Inbox's name; then Group by, by task, by
+ * person, by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
  * folding as a task's group does), or None, one run; Sort, the latest
- * activity first or the open items waiting longest first; Whose, everyone's
+ * change first or the oldest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
  * choice checked; Media previews, off until first pressed and checked while
  * each row shows the pictures and pages its item carries, drawn small under
  * its preview (`inbox-row-media.tsx`); and under them Mark all as read,
- * which clears the dots alone. Under the head stand the tabs that choose what the list
- * holds, each counting its own of whose items Whose lists: Needs you, the reader's own open items,
- * its count in the attention mark's orange while anything needs them;
- * Unread, anyone's; All open; and Everything, settled items too. Every
- * choice is kept across launches. Grouped by person, each person's items
+ * which clears the dots alone. Every
+ * choice is kept across launches, Archived aside. Grouped by person, each person's items
  * stand under their face, the reader's own first as You. Grouped by
  * anything but task, a row names its task in a chip before its preview,
- * since no task's header stands over it. Where the tab leaves out every
+ * since no task's header stands over it. Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
- * tab that holds something, as a mail app's empty unread view does; the
+ * scope that holds something, as a mail app's empty unread view does; the
  * item the pane shows keeps its place there, though no row. A task's own
- * Inbox lists one task's items in one run, so its head offers its tabs
- * alone, kept apart
+ * Inbox lists one task's items in one run, so its view's menu offers To do
+ * and All alone, kept apart
  * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
@@ -231,9 +236,6 @@ const SECOND_LINE = "Second line";
 /** The items whose media the rows show while they show none, kept as one so the reads see no change. */
 const NO_ITEMS: readonly string[] = [];
 
-/** What the head's menu button is called. */
-const VIEW_OPTIONS = "View options";
-
 /** What the view's submenu of groupings is called. */
 const GROUP_BY = "Group by";
 
@@ -258,52 +260,53 @@ const SKELETON_CONTEXT = "7em";
 /** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
 const SKELETON_MARK = "16px";
 
-/** What the row of tabs under the Inbox's title is called. */
-const SHOW_TABS = "Show";
+/** What each scope is called, in the view's menu and, but for To do, after the Inbox's name at its head, and its glyph in the menu. */
+const SCOPE_WORDS = {
+  [INBOX_SHOW.TO_DO]: { label: "To do", icon: <ListTodoIcon /> },
+  [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
+  [INBOX_SHOW.ARCHIVED]: { label: "Archived", icon: <ArchiveIcon /> },
+} as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
-/** The tabs under the Inbox's title, in the order they stand, each by what it is called. */
-const SHOW_TAB_WORDS = [
-  { show: INBOX_SHOW.NEEDS_YOU, label: NEEDS_YOU.LABEL },
-  { show: INBOX_SHOW.UNREAD, label: "Unread" },
-  { show: INBOX_SHOW.OPEN, label: "All open" },
-  { show: INBOX_SHOW.ALL, label: "Everything" },
-  { show: INBOX_SHOW.ARCHIVED, label: "Archived" },
-] as const;
+/** The scopes a task's own Inbox offers, and the window's, which offers the archived tasks' items too, in the order its menu lists them. */
+export const INBOX_SCOPES = {
+  TASK: [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL],
+  WINDOW: [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL, INBOX_SHOW.ARCHIVED],
+} as const satisfies Record<string, readonly InboxShow[]>;
+
+/** The Inbox's name at its head: the scope after it, but for To do, where the Inbox opens, since no other control on the head says it. */
+function inboxTitle(show: InboxShow): string {
+  return show === INBOX_SHOW.TO_DO ? "Inbox" : `Inbox · ${SCOPE_WORDS[show].label}`;
+}
 
 /**
- * What the list says where its tab leaves out every item it holds.
- * Everything leaves out only what Whose does, or an archived task's items.
+ * What the list says where its scope leaves out every item it holds.
+ * All leaves out only what Whose does, or an archived task's items.
  */
 const SHOW_EMPTY = {
-  [INBOX_SHOW.NEEDS_YOU]: NEEDS_YOU.NONE,
-  [INBOX_SHOW.UNREAD]: "Nothing unread",
-  [INBOX_SHOW.OPEN]: "Nothing open",
+  [INBOX_SHOW.TO_DO]: "Nothing to do",
   [INBOX_SHOW.ALL]: "Nothing here",
   [INBOX_SHOW.ARCHIVED]: "Nothing archived",
 } as const satisfies Record<InboxShow, string>;
 
-/** What the empty state's press says, by the tab it shows instead. */
+/** What the empty state's press says, by the scope it shows instead. */
 const SHOW_INSTEAD = {
-  [INBOX_SHOW.OPEN]: "Show all open",
-  [INBOX_SHOW.ALL]: "Show everything",
+  [INBOX_SHOW.ALL]: "Show all",
   [INBOX_SHOW.ARCHIVED]: "Show archived",
 } as const;
 
 /**
- * The tab an empty tab offers instead: All open from Needs you or Unread
- * where anything is open, else Everything where it holds anything, else
- * Archived where only an archived task holds items; none from Archived,
- * whose items the other tabs never list, nor where nothing is there to show.
+ * The scope an empty scope offers instead: All from To do where it holds
+ * anything, else Archived where only an archived task holds items; none
+ * from Archived, whose items the other scopes never list, nor where
+ * nothing is there to show.
  */
 function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
   if (show === INBOX_SHOW.ARCHIVED) return undefined;
-  if (show !== INBOX_SHOW.OPEN && show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.OPEN] > 0)
-    return INBOX_SHOW.OPEN;
   if (show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) return INBOX_SHOW.ALL;
   return (counts[INBOX_SHOW.ARCHIVED] ?? 0) > 0 ? INBOX_SHOW.ARCHIVED : undefined;
 }
 
-/** What Everything says where Whose, naming someone, leaves out every item. */
+/** What All says where Whose, naming someone, leaves out every item. */
 const NOTHING_THEIRS = "Nothing in the Inbox is theirs";
 
 /** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
@@ -540,7 +543,7 @@ function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
         <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
       )}
       <span className="task-card-chip">
-        {task.status === undefined ? <DocumentIcon /> : <TaskStatusGlyph status={task.status} />}
+        <PlanGlyph status={task.status} />
         {task.name}
       </span>
     </div>
@@ -665,6 +668,7 @@ export function InboxItemRow({
   face = true,
   chip = false,
   line = true,
+  muted = false,
   media,
   ref,
   onChoose,
@@ -686,6 +690,8 @@ export function InboxItemRow({
   chip?: boolean;
   /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
   line?: boolean;
+  /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
+  muted?: boolean;
   /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
   media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
@@ -861,6 +867,7 @@ export function InboxItemRow({
           }
           current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={unread}
+          muted={muted}
           hint={{ Hint: RowHint, label: title }}
           onPress={() => onChoose(listed)}
           contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
@@ -875,7 +882,7 @@ export function InboxItemRow({
 }
 
 /**
- * A holder's glyph as a row's chip draws it: a task's document, an
+ * A holder's glyph as a row's chip draws it: a task's status's mark, an
  * automation's clock tile, and the Factory's glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
@@ -883,7 +890,7 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
-  if (holder.kind === INBOX_HOLDER.TASK) return <DocumentIcon />;
+  if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
   if (holder.automationId === null) return <FactoryIcon />;
   return (
     <ActorMark
@@ -897,7 +904,7 @@ function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
 }
 
 /**
- * A holder's group header: a task's document glyph and name; an
+ * A holder's group header: a task's status's mark and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
  * sidebar's row listing every agent, for the agents no automation names,
@@ -920,7 +927,13 @@ function HolderHeader({
   );
   const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
   if (holder.kind === INBOX_HOLDER.TASK) {
-    return <SidebarGroupHeader glyph={<DocumentIcon />} name={holder.task.name} {...shared} />;
+    return (
+      <SidebarGroupHeader
+        glyph={<PlanGlyph status={holder.task.status} />}
+        name={holder.task.name}
+        {...shared}
+      />
+    );
   }
   if (holder.automationId === null) {
     return (
@@ -1061,23 +1074,74 @@ function whoseEntries(
 }
 
 /**
- * The head's button that drops the view's menu: Group by and Sort, each a
- * submenu with its choice checked; Whose, Everyone, Mine, or a teammate by
- * face and name; Media previews; and Mark all as read at its foot.
+ * The head's button that drops the view's menu: first the scopes the Inbox
+ * offers, To do, All, and on the window's Archived, the one shown checked;
+ * then, on the window's Inbox, Group by and Sort, each a submenu with its
+ * choice checked; Whose, Everyone, Mine, or a teammate by face and name;
+ * Media previews; and Mark all as read at its foot.
  */
 function ViewOptions({
   shown,
+  show,
+  scopes,
   choices,
   readerId,
   readAll,
 }: {
   shown: boolean;
-  choices: InboxViewChoices;
+  show: InboxShowChoice;
+  scopes: readonly InboxShow[];
+  /** The window's Inbox's other choices; none on a task's own, whose menu offers its scopes alone. */
+  choices: InboxViewChoices | undefined;
   readerId: string | undefined;
   readAll: InboxReadAll | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const reader = useMemberDirectory();
+  const scope: MenuEntry[] = scopes.map((value) => ({
+    ...SCOPE_WORDS[value],
+    checked: show.show === value,
+    onSelect: () => show.onShow(value),
+  }));
+  return (
+    <>
+      <Tooltip label={VIEW_OPTIONS}>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={VIEW_OPTIONS}
+          menu={menu.drawn}
+          groups={[
+            scope,
+            ...(choices === undefined ? [] : windowEntries(choices, reader, readerId)),
+            readAll === undefined ? [] : markAllEntries(readAll),
+          ].filter((group) => group.length > 0)}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread. */
+function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
+  return [
+    {
+      label: MARK_ALL_READ,
+      icon: <CheckCheckIcon />,
+      disabled: !readAll.unread,
+      onSelect: readAll.onMarkAll,
+    },
+  ];
+}
+
+/** The window's Inbox's own groups of its view's menu, after its scopes: Group by and Sort, Whose, and Media previews. */
+function windowEntries(
+  choices: InboxViewChoices,
+  reader: ReturnType<typeof useMemberDirectory>,
+  readerId: string | undefined,
+): MenuEntry[][] {
   const groupBy = (label: string, icon: React.JSX.Element, value: InboxGrouping): MenuAction => ({
     label,
     icon,
@@ -1105,8 +1169,8 @@ function ViewOptions({
       label: SORT_BY,
       icon: <ArrowDownNarrowWideIcon />,
       items: [
-        sortBy("Latest activity", <ClockIcon />, INBOX_SORT.LATEST),
-        sortBy("Waiting longest", <HourglassIcon />, INBOX_SORT.WAITING),
+        sortBy("Latest first", <ClockArrowDownIcon />, INBOX_SORT.LATEST),
+        sortBy("Oldest first", <ClockArrowUpIcon />, INBOX_SORT.OLDEST),
       ],
     },
   ];
@@ -1131,32 +1195,7 @@ function ViewOptions({
       onSelect: () => choices.onMediaPreviews(!choices.mediaPreviews),
     },
   ];
-  const markAll: MenuEntry[] =
-    readAll === undefined
-      ? []
-      : [
-          {
-            label: MARK_ALL_READ,
-            icon: <CheckCheckIcon />,
-            disabled: !readAll.unread,
-            onSelect: readAll.onMarkAll,
-          },
-        ];
-  return (
-    <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={VIEW_OPTIONS}
-          menu={menu.drawn}
-          groups={[view, whose, looks, markAll].filter((group) => group.length > 0)}
-          onClose={menu.close}
-        />
-      )}
-    </>
-  );
+  return [view, whose, looks];
 }
 
 /**
@@ -1203,68 +1242,7 @@ function WhoseChip({
   );
 }
 
-/** The ids the list's tabs are drawn by: the one each tab's id starts with, and the list's rows, the panel every tab controls. */
-interface ShowTabIds {
-  readonly tabs: string;
-  readonly panel: string;
-}
-
-/** A tab's element id, under the list's own. */
-function showTabId(tabs: string, show: InboxShow): string {
-  return `${tabs}-${show}`;
-}
-
-/**
- * The row of tabs under the Inbox's title, each listing its own items and
- * counting them: Needs you, its count in the attention mark's orange while
- * anything needs the developer, Unread, All open, and Everything; and
- * Archived, the archived tasks' items, where the Inbox counts them, which
- * only the window's does. The list under them is the panel every tab shows.
- */
-function ShowTabs({
-  show,
-  counts,
-  ids,
-}: {
-  show: InboxShowChoice;
-  counts: InboxCounts;
-  ids: ShowTabIds;
-}): React.JSX.Element {
-  return (
-    <div className="inbox-show-tabs">
-      <ChoiceBar<InboxShow>
-        label={SHOW_TABS}
-        items={SHOW_TAB_WORDS.flatMap(({ show: value, label }) => {
-          const count = counts[value];
-          if (count === undefined) return [];
-          return [
-            {
-              value,
-              label,
-              count: [
-                {
-                  text: String(count),
-                  tone:
-                    value === INBOX_SHOW.NEEDS_YOU && count > 0
-                      ? COUNT_TONE.ATTENTION
-                      : COUNT_TONE.QUIET,
-                },
-              ],
-            },
-          ];
-        })}
-        value={show.show}
-        onChange={show.onShow}
-        look={CHOICE_BAR_LOOK.FILL}
-        panels={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
-        inset={CHOICE_BAR_INSET.COLUMN}
-        size={CHOICE_BAR_SIZE.COMPACT}
-      />
-    </div>
-  );
-}
-
-/** What the list stands where its tab leaves out every item it holds: that nothing is there, and the press that shows the tab that holds something, which keeps the list standing where the Inbox shows one column. */
+/** What the list stands where its scope leaves out every item it holds: that nothing is there, and the press that shows the scope that holds something, which keeps the list standing where the Inbox shows one column. */
 export function ShowEmpty({
   show,
   counts,
@@ -1273,7 +1251,7 @@ export function ShowEmpty({
 }: {
   show: InboxShowChoice;
   counts: InboxCounts;
-  /** Whose items the window's Inbox lists, which offers everyone's again where no tab holds any of theirs; none on a task's own. */
+  /** Whose items the window's Inbox lists, which offers everyone's again where no scope holds any of theirs; none on a task's own. */
   whose?: InboxWhoseChoice | undefined;
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
@@ -1361,48 +1339,48 @@ export function InboxListSkeleton({
 }
 
 /**
- * The list's head: the Inbox's name, the view's menu at the list's top
- * right on the window's Inbox, and under them the tabs that choose what it
- * lists; a task's own Inbox lists one task's items in one run, so it has no
- * menu. On the window's Inbox its heading and its button glide as the
+ * The list's head: the Inbox's name, the scope after it where that is not
+ * To do, and the view's menu at the list's top right, which chooses the
+ * scope and, on the window's Inbox, the rest of how it lists; a task's own
+ * Inbox lists one task's items in one run, so its menu offers its scopes
+ * alone. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
  * sidebar's toggle, and the button keeping to the list's edge.
  */
 function ListHead({
   head,
-  ids,
   readerId,
   placement,
 }: {
   head: InboxListHead;
-  ids: ShowTabIds;
   readerId: string | undefined;
   placement: InboxListPlacement;
 }): React.JSX.Element {
-  const { shown, show, view, counts } = head;
-  const options =
-    view === undefined ? null : (
-      <ViewOptions
-        shown={shown}
-        choices={view.choices}
-        readerId={readerId}
-        readAll={head.readAll}
-      />
-    );
+  const { shown, show, scopes, view } = head;
+  const title = inboxTitle(show.show);
+  const options = (
+    <ViewOptions
+      shown={shown}
+      show={show}
+      scopes={scopes}
+      choices={view?.choices}
+      readerId={readerId}
+      readAll={head.readAll}
+    />
+  );
   return (
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
       {placement === INBOX_LIST_PLACEMENT.SIDEBAR ? (
-        <SidebarSectionHead name="Inbox">{options}</SidebarSectionHead>
+        <SidebarSectionHead name={title}>{options}</SidebarSectionHead>
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Inbox</h1>
+            <h1 className="desktop-toolbar-title">{title}</h1>
           </div>
           <div className="desktop-toolbar-actions">{options}</div>
         </header>
       )}
-      <ShowTabs show={show} counts={counts} ids={ids} />
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
@@ -1411,7 +1389,7 @@ function ListHead({
 /** What the list says where a task's read did not answer. */
 const NOT_READ = "Some items could not be read.";
 
-/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the tab's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 export function InboxListNote({
   failed,
   reading,
@@ -1427,11 +1405,11 @@ export function InboxListNote({
   empty: boolean;
   /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
-  /** The tab shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
+  /** The scope shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
   filteredOut: InboxViewChoices | undefined;
-  /** How many items each tab lists, for the empty state to offer one that lists something. */
+  /** How many items each scope lists, for the empty state to offer one that lists something. */
   counts: InboxCounts;
-  /** Asks for the list, so the tab its empty state shows leaves it standing. */
+  /** Asks for the list, so the scope its empty state shows leaves it standing. */
   onList: () => void;
   onRetry: () => void;
 }): React.JSX.Element | null {
@@ -1459,14 +1437,14 @@ export const INBOX_LIST_PLACEMENT = {
 
 export type InboxListPlacement = (typeof INBOX_LIST_PLACEMENT)[keyof typeof INBOX_LIST_PLACEMENT];
 
-/** What the list's head offers: its tabs on every Inbox, and on the window's how it groups its items and which plans are folded. */
+/** What the list's head offers: its scopes on every Inbox, and on the window's how it groups its items and which plans are folded. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  /** The tab the list shows, and the press that shows another. */
+  /** The scope the list shows, and the choice that shows another. */
   readonly show: InboxShowChoice;
-  /** How many items each tab lists, filtered out or not. */
-  readonly counts: InboxCounts;
+  /** The scopes its view's menu offers, in their order (`INBOX_SCOPES`). */
+  readonly scopes: readonly InboxShow[];
   /** The window's Inbox's grouping and its plans' folds; none on a task's own, which lists one task's items in one run. */
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
@@ -1488,9 +1466,9 @@ interface RowFocus {
 
 /**
  * Keeps the keyboard in the list when the row holding it is no longer
- * drawn, as Needs you leaves out an item answered on another Mac while its
- * row is focused: the keyboard goes to the tab shown, the control that left
- * it out. Note that a removed row fires no blur, so the row last focused is
+ * drawn, as To do leaves out an item answered on another Mac while its
+ * row is focused: the keyboard goes to View options, the control that
+ * chooses what the list leaves out. Note that a removed row fires no blur, so the row last focused is
  * remembered and looked for after every render.
  */
 function useRowFocusKept(rows: InboxRowPresses): RowFocus {
@@ -1571,10 +1549,9 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
-  const panel = useId();
-  const tabs = useId();
   const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
+  // A row whose item is done with is drawn gray, the chosen row kept on To do and every such row on All alike.
   const row = (listed: InboxListed) => (
     <InboxItemRow
       key={listed.item.id}
@@ -1587,6 +1564,7 @@ export function InboxList({
       face={view.grouping !== INBOX_GROUPING.PERSON}
       chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
       line={head.view?.choices.secondLine !== false}
+      muted={isDone(listed.item)}
       media={media}
       ref={rows.hold(listed.item.id)}
       onChoose={onChoose}
@@ -1667,21 +1645,8 @@ export function InboxList({
       onBlur={rowFocus.onBlur}
       style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} placement={placement} />
-      {sidebar ? (
-        <div id={panel} role="tabpanel" aria-labelledby={showTabId(tabs, head.show.show)}>
-          {body}
-        </div>
-      ) : (
-        <ScrollArea
-          id={panel}
-          role="tabpanel"
-          aria-labelledby={showTabId(tabs, head.show.show)}
-          fade={SCROLL_FADE.START}
-        >
-          {body}
-        </ScrollArea>
-      )}
+      <ListHead head={head} readerId={readerId} placement={placement} />
+      {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
       {!sidebar && columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
     </nav>
   );

@@ -14,6 +14,7 @@ import {
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
 import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -41,7 +42,31 @@ import { countedNumber } from "./service-wire.js";
 export const LIVE_POLL_URL = "luke-poll:";
 
 /** How a reader asks for a live read's rows inline rather than sealed, while Realtime fails it. */
-export const LIVE_POLL = { QUERY: "poll", ON: "true" } as const;
+export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after" } as const;
+
+/**
+ * The query every live read names the account it was started for under, as
+ * Neon's guide says a page sends its user ("When the session changes"): the
+ * service answers a session of anyone else, or a read naming none, as
+ * signed out.
+ */
+export const LIVE_USER_QUERY = "userId";
+
+/** A live read the service refused as signed out: no session, or one of another account than the read names. */
+export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
+
+/**
+ * Where a polled read's rows stand as one value: each part's digest, in
+ * the parts' name order. A reader sends the one it last saw as `after`, and
+ * the service holds the poll until the rows move past it.
+ */
+export function liveDigestOf(
+  queries: Readonly<Record<string, { readonly digest?: string }>>,
+): string | undefined {
+  const parts = Object.keys(queries).toSorted();
+  const digests = parts.map((part) => queries[part]?.digest);
+  return digests.every((digest) => digest !== undefined) ? digests.join(",") : undefined;
+}
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 const sealedLiveQuerySchema = EffectSchema.Struct({
@@ -57,6 +82,12 @@ const sealedLiveQuerySchema = EffectSchema.Struct({
   rows: EffectSchema.optionalKey(
     EffectSchema.fromJsonString(EffectSchema.Array(EffectSchema.Unknown)),
   ),
+  /**
+   * Where the statement's rows stand, answered only at `LIVE_POLL_URL`: a
+   * poll held past `after` that ends with nothing moved carries the digest
+   * and no rows.
+   */
+  digest: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
@@ -252,6 +283,54 @@ export const taskBoardLiveRowsSchema = EffectSchema.Struct({
 export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
 
 /**
+ * An open task's pages and calls sealed for following: the address, and one
+ * statement a part, each a mark that moves as its rows do and carries none
+ * of their words: the pages agents showed (`pages`) and the calls about the
+ * task (`calls`). The desktop reads a part again once its mark moves,
+ * rather than when a call's activity or end suggests it might have; the
+ * board is followed on its own (`taskBoardLiveAnswerSchema`). The service
+ * answers `not-found` for a task the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    pages: sealedLiveQuerySchema,
+    calls: sealedLiveQuerySchema,
+  }),
+});
+
+export type TaskRecordLiveAnswer = typeof taskRecordLiveAnswerSchema.Type;
+
+/** One page shown on the task as its row delivers it: its newest version's number. */
+const taskPageLiveRowSchema = EffectSchema.Struct({
+  pageId: EffectSchema.String,
+  version: EffectSchema.Finite,
+});
+
+/** One call about the task as its row delivers it: when and how it ended, null while it stands; what it metered and its model; its last fragment; and how many rows the voice wrote for it. */
+const taskCallLiveRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  closedAt: EffectSchema.NullOr(EffectSchema.Finite),
+  closeReason: EffectSchema.NullOr(EffectSchema.String),
+  usage: EffectSchema.NullOr(
+    EffectSchema.Struct({ seconds: EffectSchema.Finite, confirmed: EffectSchema.Boolean }),
+  ),
+  model: EffectSchema.NullOr(EffectSchema.String),
+  lastSegment: EffectSchema.Finite,
+  spoken: EffectSchema.Finite,
+});
+
+/** The task's pages and calls as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+export const taskRecordLiveRowsSchema = EffectSchema.Struct({
+  pages: EffectSchema.Array(taskPageLiveRowSchema),
+  calls: EffectSchema.Array(taskCallLiveRowSchema),
+});
+
+export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
+
+/**
  * A coding agent's transcript, or one of its workers', sealed for
  * following: the address, and the statements a page past the reader's
  * cursor is read from, which move where the service's held read would wake
@@ -333,3 +412,86 @@ export const transcriptNowAnswerSchema = EffectSchema.Struct({
 });
 
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;
+
+/**
+ * The commands the account's agents queued for its Mac, of the kinds it
+ * runs, sealed for following: the address, and the commands no Mac has
+ * claimed yet as one statement. The Mac claims each it hears of
+ * (`mac-command-wire.ts`), on the service's clock, so a command left waiting
+ * too long is refused there.
+ */
+export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ commands: sealedLiveQuerySchema }),
+});
+
+export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
+
+const [macShellCommandSchema, macBrowserCommandSchema] = macCommandSchema.members;
+
+/**
+ * One unclaimed command as its row delivers it: the command of its kind, and
+ * when it was queued in epoch milliseconds. Note that the column the other
+ * kind leaves null is read past, as every key a struct does not name is.
+ */
+const macCommandLiveRowSchema = EffectSchema.Union([
+  EffectSchema.Struct({ ...macShellCommandSchema.fields, queuedAt: countedNumber }),
+  EffectSchema.Struct({ ...macBrowserCommandSchema.fields, queuedAt: countedNumber }),
+]);
+
+/** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const macCommandsLiveRowsSchema = EffectSchema.Struct({
+  commands: EffectSchema.Array(macCommandLiveRowSchema),
+});
+
+/** The unclaimed commands, the earliest queued first, so the Mac claims them in the order they were asked for. */
+export function macCommandsOfLiveRows(
+  rows: typeof macCommandsLiveRowsSchema.Type,
+): readonly MacCommand[] {
+  return rows.commands
+    .toSorted((a, b) =>
+      a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )
+    .map(
+      (row): MacCommand =>
+        row.kind === MAC_COMMAND_KIND.SHELL
+          ? { id: row.id, kind: row.kind, command: row.command, timeoutSeconds: row.timeoutSeconds }
+          : { id: row.id, kind: row.kind, params: row.params, timeoutSeconds: row.timeoutSeconds },
+    );
+}
+
+/**
+ * A plan's planning conversation sealed for following: the address, and
+ * its mark as one statement, one row that moves whenever a read past the
+ * cursor would answer something new. The desktop holds its read of the
+ * conversation and asks it once, unheld, each time the mark moves, rather
+ * than holding a read the service looks again for on a clock. The service
+ * answers `not-found` for a plan the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema, workers: sealedLiveQuerySchema }),
+});
+
+export type TaskConversationLiveAnswer = typeof taskConversationLiveAnswerSchema.Type;
+
+/**
+ * Where the conversation stands as its row delivers it, keyed by the plan:
+ * the highest message sequence and the journal revision, and the newest
+ * turn and its status (null before the first).
+ */
+const taskConversationMarkSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  seq: EffectSchema.Finite,
+  revision: EffectSchema.Finite,
+  turnId: EffectSchema.NullOr(EffectSchema.String),
+  turnStatus: EffectSchema.NullOr(EffectSchema.String),
+});
+
+/** The conversation's mark as Realtime delivers it, one row or none for a plan the account no longer reaches, and its running workers' turns, a row each by id, in no order. */
+export const taskConversationLiveRowsSchema = EffectSchema.Struct({
+  mark: EffectSchema.Array(taskConversationMarkSchema),
+  workers: EffectSchema.Array(EffectSchema.Struct({ id: EffectSchema.String })),
+});

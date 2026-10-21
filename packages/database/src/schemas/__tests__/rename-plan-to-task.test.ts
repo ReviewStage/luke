@@ -10,6 +10,7 @@ import {
   getTestDB,
   migrationStatements,
   RENAME_PLAN_TO_TASK,
+  replayable,
   undoneRename,
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
@@ -62,7 +63,7 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const { userId, taskId, agentId } = yield* openTask;
-        const renames = yield* migrationStatements(RENAME_PLAN_TO_TASK);
+        const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
 
         // The database as it stood before the migration, written to as an earlier build wrote it.
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));

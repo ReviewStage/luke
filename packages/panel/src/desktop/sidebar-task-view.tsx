@@ -28,6 +28,7 @@ import {
   ListFilterIcon,
   ListIcon,
   SlidersHorizontalIcon,
+  UserCheckIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -131,8 +132,8 @@ function filteredActor(
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 
-/** Created by's choices: Anyone, then Me, then each other member as read, the choice checked. */
-function createdByEntries(
+/** Created by's and Assigned to's choices: Anyone, then Me, then each other member as read, the choice checked. */
+function memberEntries(
   createdBy: string | undefined,
   onCreatedBy: (createdBy: string | undefined) => void,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -177,7 +178,7 @@ export interface ArchivedView {
   readonly onShown: (shown: boolean) => void;
 }
 
-/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, whose tasks it lists, where shared, and the archived tasks. */
+/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, whose tasks it lists and who they are assigned to, where shared, and the archived tasks. */
 function viewEntries(
   control: TaskListViewControl,
   shared: boolean,
@@ -232,7 +233,12 @@ function viewEntries(
             {
               label: "Created by",
               icon: <UsersIcon />,
-              items: createdByEntries(view.createdBy, control.onCreatedBy, reader),
+              items: memberEntries(view.createdBy, control.onCreatedBy, reader),
+            },
+            {
+              label: "Assigned to",
+              icon: <UserCheckIcon />,
+              items: memberEntries(view.assignedTo, control.onAssignedTo, reader),
             },
           ],
         ]
@@ -391,23 +397,30 @@ function ViewChip({
 /**
  * The chips under the Tasks head, while the view leaves tasks out: one
  * member's face and "Created by me" or "Created by" their name, whose ×
- * lists everyone's again, and Archived, whose × goes back to the tasks.
+ * lists everyone's again; one member's face and "Assigned to me" or
+ * "Assigned to" their name, whose × lists anyone's again; and Archived,
+ * whose × goes back to the tasks.
  */
 export function ViewChips({
   createdBy,
+  assignedTo,
   tasks,
   onClearCreatedBy,
+  onClearAssignedTo,
   archive,
 }: {
   createdBy: string | undefined;
+  assignedTo: string | undefined;
   /** The listed tasks, which name a creator the members no longer list. */
   tasks: readonly TaskSummary[];
   onClearCreatedBy: () => void;
+  onClearAssignedTo: () => void;
   archive: ArchivedView;
 }): React.JSX.Element | null {
   const reader = useMemberDirectory();
-  if (createdBy === undefined && !archive.shown) return null;
+  if (createdBy === undefined && assignedTo === undefined && !archive.shown) return null;
   const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, tasks);
+  const assignee = assignedTo === undefined ? undefined : filteredActor(assignedTo, reader, tasks);
   return (
     <div className="sidebar-view-chips">
       {actor === undefined ? null : (
@@ -416,6 +429,16 @@ export function ViewChips({
           words={createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`}
           lift="Show everyone's tasks"
           onLift={onClearCreatedBy}
+        />
+      )}
+      {assignee === undefined ? null : (
+        <ViewChip
+          glyph={<ActorMark actor={assignee} size={ACTOR_SIZE.MARK} />}
+          words={
+            assignedTo === reader.readerId ? "Assigned to me" : `Assigned to ${actorName(assignee)}`
+          }
+          lift="Show tasks assigned to anyone"
+          onLift={onClearAssignedTo}
         />
       )}
       {archive.shown ? (
@@ -438,9 +461,10 @@ function offer(offered: boolean, changes: boolean, run: () => void): (() => void
 /**
  * The view's choices as ⌘K offers them, each only while it would change
  * the list: Group tasks by repository, by creator in a shared workspace, or
- * in one list; Order tasks by last updated, created, or name; Show my tasks
- * and Show everyone's tasks in a shared workspace; and Show or Hide archived
- * tasks. They act as the View options menu's choices do.
+ * in one list; Order tasks by last updated, created, or name; Show my tasks,
+ * the tasks assigned to the reader whoever created them, and Show everyone's
+ * tasks, which lets go of both filters by person, in a shared workspace; and
+ * Show or Hide archived tasks. They act as the View options menu's choices do.
  */
 export function useTaskViewCommands({
   offered,
@@ -456,7 +480,7 @@ export function useTaskViewCommands({
   readerId: string | undefined;
   archive: ArchivedView;
 }): void {
-  const { order, createdBy } = control.view;
+  const { order, createdBy, assignedTo } = control.view;
   // A grouping by creator kept for a workspace nobody shares now is drawn by
   // repository, so that is the grouping the commands read as standing.
   const grouping =
@@ -474,13 +498,21 @@ export function useTaskViewCommands({
   useAppCommand(APP_COMMAND.ORDER_TASKS_BY_NAME, orderBy(TASK_ORDER.NAME));
   useAppCommand(
     APP_COMMAND.SHOW_MY_TASKS,
-    offer(offered && shared && readerId !== undefined, createdBy !== readerId, () =>
-      control.onCreatedBy(readerId),
+    offer(
+      offered && shared && readerId !== undefined,
+      assignedTo !== readerId || createdBy !== undefined,
+      () => {
+        if (readerId !== undefined) control.onAssignedToAlone(readerId);
+      },
     ),
   );
   useAppCommand(
     APP_COMMAND.SHOW_EVERYONES_TASKS,
-    offer(offered && shared, createdBy !== undefined, () => control.onCreatedBy(undefined)),
+    offer(
+      offered && shared,
+      createdBy !== undefined || assignedTo !== undefined,
+      control.onEveryone,
+    ),
   );
   useAppCommand(
     APP_COMMAND.SHOW_ARCHIVED_TASKS,

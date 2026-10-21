@@ -147,3 +147,14 @@ test("an editor opened on words stops measuring them once a merged answer replac
 
   assert.equal(handle.wordsTop(), undefined);
 });
+
+test("the caret's words are answered as the drawn text finds them again: their section, the words, how many alike came before, and the offset", () => {
+  const text = "## Goal\n\nShip it.\n\n## Risks\n\nShip it.\n\nShip it.\n";
+  const words = { section: 1, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 0 };
+  const { handle } = mount(text, { x: 0, y: 0, words });
+
+  const { top, ...found } = handle.caretWords() ?? assert.fail("the caret stands in words");
+
+  assert.deepEqual(found, { section: 1, text: "Ship it.", occurrence: 1, offset: 5, code: false });
+  assert.ok(Number.isFinite(top), "their line is measured");
+});

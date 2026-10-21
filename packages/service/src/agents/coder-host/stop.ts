@@ -37,6 +37,7 @@ import {
   codingAgentStatusOf,
   codingAgentSummary,
   lineAwaitsTurn,
+  startedBlank,
   summaryAccounts,
 } from "./status.js";
 
@@ -171,6 +172,7 @@ export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
+    blank: startedBlank(agent),
   });
 });
 
@@ -288,6 +290,7 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
+    blank: startedBlank(agent),
   };
   if (lineAwaitsTurn(turn, standing)) return false;
   const status = codingAgentStatusOf(turn, standing);
@@ -310,6 +313,7 @@ export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt: awaiting.get(agent.conversationId),
+    blank: agent.blank,
   });
   return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
 });

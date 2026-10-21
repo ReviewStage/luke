@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
+import { readPlanCommentFile } from "@luke/database/models/plan-comments";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -17,7 +18,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /**
- * tasks-app.ts -- a plan's picture served as its bytes, the one plan read the hosted oRPC router does not answer, since it answers bytes rather than JSON.
+ * tasks-app.ts -- a plan's attachment served as its bytes, a picture its text names or a file one of its comments carries: the one plan read the hosted oRPC router does not answer, since it answers bytes rather than JSON.
  *
  * The plans themselves, and each one's board, edit, history, transcript,
  * work, and Stop, are the router's (`tasks-procedures.ts`), and so are its
@@ -29,7 +30,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  */
 
 const TASKS_PATH = {
-  /** GET serves one picture of the plan as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
+  /** GET serves one attachment of the plan as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
   ATTACHMENT: "/api/plans/attachment",
 } as const;
 
@@ -39,7 +40,7 @@ const HTTP_METHOD = {
 
 const TASK_ID_QUERY = "id";
 
-/** The query naming one picture of the plan by its id. */
+/** The query naming one attachment of the plan by its id. */
 const ATTACHMENT_QUERY = "attachment";
 
 export interface TasksAppSeams {
@@ -81,10 +82,11 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * GET serves one picture of the plan as its bytes, under the media type the
- * service sniffed them to be as they were kept, to the members of the plan's
- * workspace alone: a picture of a plan the account does not reach, or of
- * another plan, is not found, as a plan is.
+ * GET serves one attachment of the plan as its bytes, to the members of the
+ * plan's workspace alone: a picture its text names, under the media type the
+ * service sniffed it to be as it was kept, or else a file one of its comments
+ * carries, under the type it travelled as. An attachment of a plan the
+ * account does not reach, or of another plan, is not found, as a plan is.
  */
 const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint")(function* (
   seams: TasksAppSeams,
@@ -97,7 +99,10 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint
   const taskId = yield* idOf(request, TASK_ID_QUERY);
   const attachmentId = yield* idOf(request, ATTACHMENT_QUERY);
   const userId = yield* resolvedUserId(seams, request);
-  const found = yield* hostedStoreOrUnavailable(readPlanAttachment(userId, taskId, attachmentId));
+  const picture = yield* hostedStoreOrUnavailable(readPlanAttachment(userId, taskId, attachmentId));
+  const found = Option.isSome(picture)
+    ? picture
+    : yield* hostedStoreOrUnavailable(readPlanCommentFile(userId, taskId, attachmentId));
   if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,

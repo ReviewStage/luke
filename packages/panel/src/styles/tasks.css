@@ -430,6 +430,17 @@
   pointer-events: none;
 }
 
+/* The room a date picker opened from words at rest hangs in
+   (`words-dates.tsx`): laid over the words whole, so the picker is placed
+   from the room's own box wherever it stands, and only the picker takes
+   the pointer. */
+.words-date-room {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 .date-picker-anchor > * {
   pointer-events: auto;
 }
@@ -997,12 +1008,12 @@
     white-space: nowrap;
   }
 
-  /* The Inbox's thread, inside the `ScrollArea` that scrolls it in the room
-     its pane leaves it. */
+  /* The Inbox's thread, the block a log's lines stand in (`.conversation-log`),
+     which scrolls in the room its pane leaves it; its parts stand the log's
+     step apart. */
   .inbox-board {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-space-12);
     padding-top: var(--luke-section-gap);
   }
 
@@ -1153,6 +1164,12 @@
   height: 14px;
 }
 
+/* An agent's glyph while a call into it is in progress: the divider's live
+   mark, in the same tint, in the glyph's own footprint (`tab-look.tsx`). */
+.agent-calling-glyph {
+  color: var(--luke-color-complete);
+}
+
 /* One line, as a teammate's heading already keeps (`.call-caller`), so a
    time that would wrap in a narrow panel cannot outgrow the band. */
 .checkpoint-log [data-checkpoint] {
@@ -1191,58 +1208,14 @@
   margin-left: auto;
 }
 
-/* A File tab: the file's heading over its lines, which fill the tab and
-   scroll, with a row above and below them that reads more of the file. */
+/* A File tab: its file, or the lines Luke showed of it under why the file
+   is not shown, filling the tab. */
 .file-tab {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   background: var(--code-ground);
-}
-
-/* How a run of lines filling its place is drawn (code-lines.tsx), as
-   the File tabs' settings say (file-view-settings.ts): lines unwrapped,
-   which scroll on both axes together, stand as wide as the longest or the
-   place, so the lit lines' ground runs under the whole of every one; and
-   the numbers' gutter may be gone. The frame around them is as wide as
-   the place, which a note between them measures itself by. */
-.code-lines-frame {
-  container: code-lines / inline-size;
-}
-
-/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
-   stand on the theme's ground, as a diff in that theme does; every run
-   coloured in the theme names its own ink. */
-.code-lines-ground {
-  --code-ground: light-dark(
-    var(--theme-ground-light, var(--luke-color-ground)),
-    var(--theme-ground-dark, var(--luke-color-ground))
-  );
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 0%;
-  flex-direction: column;
-  background: var(--code-ground);
-}
-
-.code-lines[data-wrap="false"] {
-  width: max-content;
-  min-width: 100%;
-}
-
-.code-lines[data-wrap="false"] .code-line-text {
-  overflow-wrap: normal;
-  white-space: pre;
-}
-
-.code-lines[data-line-numbers="false"] .code-line-number {
-  display: none;
-}
-
-.code-lines[data-line-numbers="false"] .code-line-text {
-  padding-left: var(--luke-space-12);
 }
 
 /* A File tab beside its repository's tree, under one bar across both: the
@@ -3033,6 +3006,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A pressed filter is drawn in the ink, so its count steps back from the
+   ground's colour its words are in, rather than the subtle ink it would
+   vanish into. */
+.luke-chip[aria-pressed="true"] .pull-request-filter-count {
+  color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
+}
+
 /* What a section holds opens a step under its band. */
 .pull-request-section-body {
   padding-top: var(--luke-space-4);
@@ -4189,8 +4169,9 @@
   align-items: center;
   gap: var(--luke-space-4);
   padding: var(--luke-space-2) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
+  border: 1px solid var(--luke-color-chip-edge);
   border-radius: var(--luke-radius-full);
+  background: var(--luke-color-chip);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -4219,10 +4200,12 @@
   line-height: 1;
 }
 
+/* The reader's own reaction, where it cannot be pressed, stands as a
+   pressed compact filter does, in the ink. */
 .pull-request-reaction[data-mine="true"] {
-  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
-  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
-  color: var(--luke-color-text);
+  border-color: var(--luke-color-ink);
+  background: var(--luke-color-ink);
+  color: var(--luke-color-ink-inverse);
 }
 
 /* The comment box at the foot of the Conversation
@@ -4262,43 +4245,46 @@
   font-size: var(--luke-type-caption-size);
 }
 
-.file-tab-edge {
-  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
-  color: var(--luke-color-text-subtle);
-  -webkit-user-select: none;
-  user-select: none;
+/* A whole file drawn by Pierre (whole-file.tsx), a File tab's or a page's
+   source: its scroll area fills the place, Pierre drawing into it as the
+   scroller it virtualizes over, with the ring standing over it while the
+   diff bundle loads. */
+.whole-file {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
-/* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
-   annotation card (`.annotation-card`), standing from the code's column past
-   the numbers, or at the pane's inset where the place is narrow. Lines
-   unwrapped scroll sideways under it while it keeps to the place's width in
-   view. */
+.whole-file > .luke-spinner-region {
+  position: absolute;
+  inset: 0;
+}
+
+/* A note under a line of a whole file, its card or its chip: Pierre stands
+   it at the code's column, sticky in view while unwrapped lines scroll
+   sideways, so it keeps only the room between it and the lines, and none
+   while it is a chip alone, which floats over the end of its line. */
+.whole-file-note {
+  padding: var(--luke-space-6) var(--luke-space-12) var(--luke-space-6) 0;
+  white-space: normal;
+}
+
+.whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+  padding-block: 0;
+}
+
+.whole-file-note .file-note {
+  margin: 0;
+}
+
+/* Luke's note under the lines it is on (file-note.tsx): the annotation card
+   (`.annotation-card`), measured as one so a narrow place steps its parts
+   back, in the element Pierre keeps for it under a File tab's line or a
+   Code card's (\`.whole-file-note\`, \`.diff-note\`), which insets it. */
 .file-note {
-  --file-note-start: 48px; /* off-scale: the numbers' gutter, `.code-line-number` */
-  --file-note-end: var(--luke-space-12);
-  margin: var(--luke-space-6) var(--file-note-end) var(--luke-space-6) var(--file-note-start);
   container: annotation / inline-size;
-}
-
-.code-lines[data-line-numbers="false"] > .file-note {
-  --file-note-start: var(--luke-space-12);
-}
-
-@container code-lines (max-width: 439px) {
-  .code-lines[data-line-numbers] > .file-note {
-    --file-note-start: var(--luke-space-8);
-    --file-note-end: var(--luke-space-8);
-  }
-}
-
-/* Note that the note is stuck within the lines, which are as wide as the
-   longest, so it stays in view across the whole of them, and is as wide
-   as the place they scroll in, less its margins. */
-.code-lines[data-wrap="false"] > .file-note {
-  position: sticky;
-  left: var(--file-note-start);
-  width: calc(100cqi - var(--file-note-start) - var(--file-note-end));
 }
 
 /* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
@@ -4320,83 +4306,15 @@
   overflow-wrap: anywhere;
 }
 
-/* Luke's note reads as the step's words, so the path above it steps back. */
-.code-card:has(> .code-card-note) [data-file-ref] {
-  color: var(--luke-color-text-muted);
+/* A snippet not yet near the view stands at about the height its lines
+   will take (code-snippet.tsx), so the feed does not jump as cards mount. */
+.code-snippet-pending {
+  height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
-.code-card-note {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  overflow-wrap: anywhere;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.code-card-header:has(+ .code-card-note) {
-  border-bottom: 0;
-}
-
-/* Lines wrap rather than scroll sideways, so no card takes a swipe from the
-   feed. Note that they opt back into selection, because the window selects
-   nothing by default (`base.css`): a File tab's, a card's, and an inbox
-   item's code is read to be copied, the gutter's numbers left out of it. */
-/* A run of lines in the type View settings sets, a File tab's and a page
-   source's alike (`code-lines.tsx`), or the window's code type where its
-   box names none. */
-.code-lines {
-  padding: var(--luke-space-6) 0;
-  color: var(--code-text);
-  font-family: var(--code-font, var(--luke-font-mono));
-  font-size: var(--code-font-size, var(--luke-type-caption-size));
-  line-height: var(--code-line-height, var(--luke-type-reading-leading));
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.code-line {
-  display: flex;
-}
-
-/* The lines pointed at, lit across the whole width with a bar in the gutter. */
-.code-line[data-pointed="true"] {
-  background: var(--code-pointed);
-  box-shadow: inset 2px 0 0 var(--code-pointed-edge);
-}
-
-.code-line-number {
-  flex: 0 0 auto;
-  width: 48px; /* off-scale: a gutter for four digits */
-  padding: 0 var(--luke-space-12) 0 0;
-  color: var(--code-line-number);
-  text-align: right;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.code-line[data-pointed="true"] .code-line-number {
-  color: var(--code-line-number-pointed);
-}
-
-.code-line-text {
-  padding-right: var(--content-inset);
-  font: inherit;
-  /* Ligatures are the code's alone, so a note between its lines keeps its
-     prose's own (file-note.tsx). */
-  font-feature-settings: var(--code-font-features, normal);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-/* Each run carries its colour in both appearances (`code-lines.tsx`); a run
-   in the theme's own foreground carries neither and takes the pane's. A
-   transcript's fenced block is coloured the same way. */
-.code-line-text > span,
+/* A transcript's fenced block: each run carries its colour in both
+   appearances (`transcript-markdown.tsx`); a run in the theme's own
+   foreground carries neither and takes the pane's. */
 .transcript-code-body span {
   color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
 }
@@ -4558,9 +4476,32 @@ ol.transcript-list {
   flex-shrink: 0;
 }
 
+/* Note that the chip's box is held to the pill's own widest, because its
+   width otherwise comes from the whole name while the pill inside is cut,
+   which left a gap after the pill and pushed the preview to the line's end;
+   and that with a preview after it, it keeps to half the line, so a long
+   name never takes the preview's room. */
 .tool-chip {
+  display: flex;
   min-width: 0;
+  max-width: var(--luke-inline-ref-pill-width);
+  flex: 0 1 auto;
   white-space: nowrap;
+}
+
+.tool-chip:has(+ .tool-subject) {
+  max-width: min(50%, var(--luke-inline-ref-pill-width));
+}
+
+/* A chip that opens its agent from a line that folds open: lifted with the
+   line's hover as an inert one is, and pressed on its own hover, so it reads
+   as the one target inside the line. */
+summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
+  background: var(--luke-color-fill-selected);
+}
+
+.tool-line button[data-tool-agent-ref]:is(:hover, :focus-visible) {
+  background: var(--luke-color-fill-pressed);
 }
 
 /* The subject takes what is left of the line and fades where the line cuts
@@ -5723,74 +5664,52 @@ ol.transcript-list {
 }
 
 /* The Inbox's answer box draws the same card and field
-   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
-   box's does, and its quiet line beside it is cut short before its
-   microphone and Send are, and goes once the card is too narrow for
-   both, when the microphone goes too. */
-.inbox-answer-tools {
-  flex: 1 1 0;
+   (`inbox-answer-box.tsx`), but its foot is one row and its field is in it:
+   the +, the note line, one line that grows as it is written, the
+   microphone, and Send, each press standing at the line's last row. While
+   a dictation holds the line, its strip stands under it in the presses'
+   place. */
+.inbox-answer-foot {
+  align-items: flex-end;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6) var(--luke-space-8) var(--luke-space-8);
 }
 
-.inbox-answer-quiet {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-  padding-inline: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+.inbox-answer-foot[data-dictating] {
+  flex-wrap: wrap;
 }
 
+.inbox-answer-tools,
 .inbox-answer-actions {
   display: flex;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: none;
   align-items: center;
   gap: var(--luke-space-4);
 }
 
-.inbox-answer-quiet [data-inbox-quiet] {
+.inbox-answer-foot > .agent-composer-field {
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  --agent-composer-field-block: calc(2 * var(--luke-space-6));
 }
 
-/* What a send found the answer lacking reads in the attention ink, as the
-   item's own mark does, until it is filled. */
-.inbox-answer-quiet [data-wanting] {
-  color: var(--luke-color-attention);
+.inbox-answer-foot[data-dictating] > .agent-composer-field {
+  flex-basis: 100%;
 }
 
-/* A box answered in words alone holds its round Send at the field's end
-   once the card is narrow, so the field keeps to one line and the thread
-   above it keeps its room. */
-.inbox-answer {
-  position: relative;
+.inbox-answer-foot .agent-composer-input {
+  padding: var(--luke-space-6) var(--luke-space-4);
 }
 
-@container composer (max-width: 299px) {
-  .inbox-answer-foot .inbox-answer-quiet,
-  .inbox-answer .dictate-button,
-  .inbox-answer:not([data-named-send]) .inbox-answer-tools {
+.inbox-answer-foot .agent-composer-placeholder {
+  padding: var(--luke-space-6) var(--luke-space-4) 0;
+}
+
+/* Only on the narrowest card does the microphone go, so the line keeps its
+   room beside the + and Send. */
+@container composer (max-width: 239px) {
+  .inbox-answer .dictate-button {
     display: none;
-  }
-
-  .inbox-answer:not([data-named-send]) .agent-composer-input {
-    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
-      var(--luke-space-12) var(--luke-space-12);
-  }
-
-  .inbox-answer:not([data-named-send]) .agent-composer-placeholder {
-    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
-      var(--luke-space-12);
-  }
-
-  .inbox-answer:not([data-named-send]) > .inbox-answer-foot {
-    position: absolute;
-    right: var(--luke-space-6);
-    bottom: var(--luke-space-6);
-    padding: 0;
   }
 }
 
@@ -6160,8 +6079,8 @@ ol.transcript-list {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
-/* A text file's lines fill the card under its header and scroll there
-   (code-lines.tsx), on the code's ground. */
+/* A text file fills the card under its header and scrolls there, drawn
+   as every code is (whole-file.tsx), on the code's ground. */
 .attachment-viewer-lines {
   display: flex;
   flex-direction: column;
@@ -7065,7 +6984,7 @@ button.subagent-line:hover {
   margin: 0;
 }
 
-/* The pictures a comment on an Inbox thread carried, after its words
+/* The pictures a comment on an Inbox thread carried, over its words
    (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
    in, its room around it the comment's own gap between what it holds. */
 .inbox-comment-body > .transcript-pictures {
@@ -7880,11 +7799,28 @@ button.picture-frame {
   margin-left: var(--comment-indent);
 }
 
+/* Files dragged over a comment's field: its edge brightens as it does under
+   focus, so the drop target is the field itself. */
+.comment-field[data-dropping] {
+  border-color: var(--luke-color-border-selected);
+}
+
+/* The files a comment's field holds, over its words, at its padding. */
+.comment-field > .attached-files {
+  padding: var(--luke-space-8) var(--comment-field-inline) 0;
+}
+
+/* The files a sent comment carries, over its words, level with them. */
+.comment-files {
+  margin: var(--luke-space-4) 0 var(--luke-space-6) var(--comment-indent);
+}
+
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
 /* The Comments tab: its head over a list that scrolls under it, fading at
    its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
    which holds the list's own padded element). */
 .comments-tab {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -7951,20 +7887,9 @@ button.picture-frame {
   color: var(--luke-color-text);
 }
 
-/* A call that sent another agent words (`TranscriptOpeningCall`'s `sent`):
-   the line that opens the agent, a toggle at its end, and the words whole
-   under it, set in to the line's words as a call's body is. */
-.tool-opening-row {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.tool-opening-row > :first-child {
-  min-width: 0;
-  flex: 1;
-}
-
+/* A call that sent another agent words (`SentCall`): the words whole in
+   the body its line folds open, set in to the line's words as a call's
+   body is. */
 .tool-sent-block {
   padding: var(--luke-space-8) var(--luke-space-12);
 }

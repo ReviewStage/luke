@@ -124,7 +124,7 @@ export interface FactoryInput {
   /** What waits, by plan: every member's open items, as the Inbox reads them (`factoryWaiting`). */
   readonly waiting: readonly AppInboxTask[];
   /** The task on this Mac's call, or none. */
-  readonly callTaskId: string | undefined;
+  readonly talkingTaskId: string | undefined;
   /** The listed workspace's agents with no task that stand, not archived (chain D's plan list). */
   readonly oneOff: readonly TasklessAgent[];
   /** The open items those agents posted, as the Inbox reads them (`factoryOneOffWaiting`). */
@@ -307,7 +307,7 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
   ];
   const blockAt = (block: FactoryBlock) => factoryMovedAt(block.task);
   return {
-    talking: tasks.filter((task) => task.id === input.callTaskId),
+    talking: tasks.filter((task) => task.id === input.talkingTaskId),
     stopped: kindsInOrder(
       stops,
       [

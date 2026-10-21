@@ -22,7 +22,7 @@ type HastChild = Parameters<AllowElement>[0]["children"][number];
 type HastText = Extract<HastNode, { type: "text" }>;
 
 /** A stretch of the words, from one offset up to another. */
-interface MarkdownSpan {
+export interface MarkdownSpan {
   from: number;
   to: number;
 }
@@ -516,10 +516,24 @@ function plainLink(
 
 /**
  * Draws a link the place showing the words knows better than as words, a
- * mention's chip (`tasks/mention-chip.tsx`) say, from its destination
- * and its label's words; nothing for one it leaves drawn as any link is.
+ * mention's chip (`tasks/mention-chip.tsx`) say, from its destination,
+ * its label's words, and where the link is written in the words, which a
+ * date's chip names to change it in place; nothing for one it leaves drawn
+ * as any link is. Note that whether it draws a link never turns on `at`,
+ * since the words are glued around its links before they are placed.
  */
-export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
+export type LinkDrawer = (
+  href: string,
+  label: string,
+  at?: MarkdownSpan | undefined,
+) => ReactNode | undefined;
+
+/** Where a node is written in the words, where the tree kept its place. */
+function writtenAt(node: HastParent | undefined): MarkdownSpan | undefined {
+  const from = node?.position?.start.offset;
+  const to = node?.position?.end.offset;
+  return from === undefined || to === undefined ? undefined : { from, to };
+}
 
 /**
  * Draws a picture the place showing the words knows how to, a plan's say,
@@ -764,7 +778,9 @@ export const MarkdownMessage = memo(function MarkdownMessage({
       ...COMPONENTS,
       a: ({ href, children, node }) => {
         const drawn =
-          href === undefined || link === undefined ? undefined : link(href, labelOf(node));
+          href === undefined || link === undefined
+            ? undefined
+            : link(href, labelOf(node), writtenAt(node));
         return drawn === undefined || href === undefined
           ? plainLink(href, children, node, openLink)
           : drawnMarked(drawn, node, href, children, openLink);

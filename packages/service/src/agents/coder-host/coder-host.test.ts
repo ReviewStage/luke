@@ -443,6 +443,66 @@ function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): Messa
   ];
 }
 
+/**
+ * The rest of a typed coding turn as eve emits it once a line steered in
+ * after its first step: the line received under the deliveries the turn now
+ * carries, a step that answers it and goes back to work, a step of that
+ * work, and the end.
+ */
+function steeredTail(
+  turnId: string,
+  received: string,
+  deliveryIds: readonly string[],
+): MessageStreamEvent[] {
+  const sequence = 0;
+  const step = (stepIndex: number) => ({ turnId, sequence, stepIndex });
+  const steered = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    stampedEveEvent(event, NOW, deliveryIds);
+  return [
+    steered({ type: "message.received", data: { turnId, sequence, message: received } }),
+    steered({ type: "step.started", data: { ...step(1), modelId: "m" } }),
+    steered({
+      type: "message.completed",
+      data: { ...step(1), finishReason: "tool-calls", message: "The invite table is built." },
+    }),
+    steered({
+      type: "actions.requested",
+      data: {
+        ...step(1),
+        actions: [
+          {
+            kind: "tool-call",
+            callId: "call-2",
+            toolName: CODER_TOOL.BASH,
+            input: { command: "pnpm test" },
+          },
+        ],
+      },
+    }),
+    steered({
+      type: "action.result",
+      data: {
+        ...step(1),
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-2",
+          toolName: CODER_TOOL.BASH,
+          output: { status: "completed", exitCode: 0, stdout: "ok\n", stderr: "" },
+        },
+      },
+    }),
+    steered({ type: "step.completed", data: { ...step(1), finishReason: "tool-calls" } }),
+    steered({ type: "step.started", data: { ...step(2), modelId: "m" } }),
+    steered({
+      type: "message.completed",
+      data: { ...step(2), finishReason: "stop", message: "Expiry is in." },
+    }),
+    steered({ type: "step.completed", data: { ...step(2), finishReason: "stop" } }),
+    steered({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
 /** A title model answering each call with the next of `answers`, nothing once they run out, keeping each prompt it was asked. */
 function scriptedTitleModel(answers: readonly string[]) {
   const asked: string[] = [];
@@ -2234,6 +2294,232 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           unparsedWire(drawing),
         );
         assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+      }),
+  );
+
+  it.effect(
+    "a call's spoken ask steered into the agent's typed turn under way binds to that turn at the step it joined, and the line the voice wrote is the turn's once, drawn where it arrived among the turn's work, rather than written again from eve's message; the turn stays typed and runs to its end",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, {}),
+          );
+        const opening = codingTurn("turn_0", "turn.completed");
+        yield* relayed(opening.slice(0, opening.findIndex((e) => e.type === "step.completed") + 1));
+
+        // The call's ask, dispatched into the agent's session as a follow-up, and the developer's
+        // words the voice wrote as they were said; the voice ties them to the ask only after eve
+        // has steered the ask in, as it does when the steer is quick.
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-call" }),
+        );
+        const lineId = `line-${delegationId}`;
+        const line = yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "Where are you with the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        assert.ok(Result.isSuccess(line));
+        // eve moves the session's current auth to the line that steered in.
+        session.auth = { current: spokenSeat(target).current, initiator: auth.initiator };
+        const tail = steeredTail("turn_0", "The developer asked where the invites are.", [
+          "delivery-call",
+        ]);
+        yield* relayed(tail.slice(0, 2));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+        yield* relayed(tail.slice(2));
+
+        const turnId = hostTurnId(sessionId, "turn_0");
+        const bound = yield* asks.named(target.userId, ask.id);
+        assert.deepEqual([bound?.turnId, bound?.joinedAfterStep], [turnId, 1]);
+        const turn = yield* turnRow(turnId);
+        assert.deepEqual([turn?.origin, turn?.status], [TURN_ORIGIN.TYPED, TURN_STATUS.SETTLED]);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const journal = page.messages.find((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+        assert.ok(journal !== undefined);
+        const [opened] = page.messages;
+        assert.ok(opened !== undefined);
+        assert.deepEqual(
+          page.messages.flatMap((message) =>
+            message.role === MESSAGE_ROLE.USER ? [[message.id, message.arrivedIn]] : [],
+          ),
+          [
+            [opened.id, undefined],
+            [line.success.id, { journalId: journal.id, afterStep: 1 }],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a line typed to the agent while a call's spoken turn runs joins that turn and is taken as the developer's awaiting row where it arrived, not written again, while the turn's own line stays the transcript's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, userId, target, auth, sessionId } = yield* openAgent(host);
+        const spokenAuth: SessionAuth = {
+          current: spokenSeat(target).current,
+          initiator: auth.initiator,
+        };
+        const admitted = Result.getOrThrow(yield* host.admit(spokenAuth, sessionId));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-1" }),
+        );
+        const lineId = `line-${delegationId}`;
+        const spokenLine = yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "How far along are the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        assert.ok(Result.isSuccess(spokenLine));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth: spokenAuth, turn: { id: "turn_0" } };
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, {}),
+          );
+        const spoken = spokenCodingTurn("turn_0", ["delivery-1"]);
+        yield* relayed(spoken.slice(0, spoken.findIndex((e) => e.type === "step.completed") + 1));
+        const typed = "Use the mailer we already have.";
+        const written = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: typed,
+            clientKey: "typed-mid-call",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        session.auth = auth;
+        yield* relayed(steeredTail("turn_0", typed, ["delivery-1", "delivery-typed"]));
+
+        const turnId = hostTurnId(sessionId, "turn_0");
+        const turn = yield* turnRow(turnId);
+        assert.deepEqual([turn?.origin, turn?.status], [TURN_ORIGIN.SPOKEN, TURN_STATUS.SETTLED]);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const journal = page.messages.find((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+        assert.ok(journal !== undefined);
+        assert.deepEqual(
+          page.messages.flatMap((message) =>
+            message.role === MESSAGE_ROLE.USER ? [[message.id, message.arrivedIn]] : [],
+          ),
+          [
+            [spokenLine.success.id, undefined],
+            [written.success.value.id, { journalId: journal.id, afterStep: 1 }],
+          ],
+        );
+      }),
+  );
+  it.effect(
+    "a line typed to the agent that eve coalesced beside a call's spoken ask into one message is taken as its awaiting row where it arrived, and the ask's line stays the transcript's, so neither is written again nor left awaiting",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, userId, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, {}),
+          );
+        const opening = codingTurn("turn_0", "turn.completed");
+        yield* relayed(opening.slice(0, opening.findIndex((e) => e.type === "step.completed") + 1));
+
+        const typed = "Use the mailer we already have.";
+        const written = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: typed,
+            clientKey: "typed-beside-call",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-call" }),
+        );
+        const lineId = `line-${delegationId}`;
+        const line = yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "Where are you with the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        assert.ok(Result.isSuccess(line));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+        yield* relayed(
+          steeredTail("turn_0", `${typed}\n\nThe developer asked where the invites are.`, [
+            "delivery-typed",
+            "delivery-call",
+          ]),
+        );
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const journal = page.messages.find((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+        assert.ok(journal !== undefined);
+        const [opened] = page.messages;
+        assert.ok(opened !== undefined);
+        const place = { journalId: journal.id, afterStep: 1 };
+        assert.deepEqual(
+          page.messages.flatMap((message) =>
+            message.role === MESSAGE_ROLE.USER ? [[message.id, message.arrivedIn]] : [],
+          ),
+          [
+            [opened.id, undefined],
+            [written.success.value.id, place],
+            [line.success.id, place],
+          ],
+        );
       }),
   );
 });

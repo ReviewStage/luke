@@ -11,7 +11,7 @@ type LineUnavailable = typeof LINE_UNAVAILABLE;
  * A line's meaning: a state to report, the helper saying it cannot answer, or
  * nothing — a line that does not parse is dropped rather than guessed at.
  */
-export type ParsedLine<State> = State | LineUnavailable | undefined;
+type ParsedLine<State> = State | LineUnavailable | undefined;
 
 export interface LineWatcherOptions<State> {
   binary: string;

@@ -30,7 +30,6 @@ import {
   BlocksIcon,
   BotIcon,
   BugIcon,
-  FileTextIcon,
   GitMergeIcon,
   HouseIcon,
   ListTodoIcon,
@@ -38,6 +37,7 @@ import {
 } from "lucide-react";
 import { type FocusEvent, type PointerEvent, useEffect, useState } from "react";
 import { LinesChanged } from "../tasks/agent-published.js";
+import { PlanGlyph } from "../tasks/tab-look.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
@@ -427,6 +427,12 @@ function cardFaceOf(
 ): CardFace | undefined {
   const naming = namingOf(target, view, world, taskNames);
   if (naming === undefined) return undefined;
+  // Open task wears the task's status's mark, as every place naming a task does.
+  const taskGlyph = (taskId: string) => (
+    <PlanGlyph
+      status={[...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId)?.status}
+    />
+  );
   const lit = (paths: readonly string[]): Reach => ({
     touched: new Set(paths),
     downstream: new Set(),
@@ -462,7 +468,7 @@ function cardFaceOf(
       lines: pullRequests.size === 0 ? undefined : lines,
       reach: rippled(),
       doors: [
-        { label: "Open task", icon: <FileTextIcon />, onOpen: () => tasks.onSelect(target.id) },
+        { label: "Open task", icon: taskGlyph(target.id), onOpen: () => tasks.onSelect(target.id) },
       ],
     };
   }
@@ -483,7 +489,7 @@ function cardFaceOf(
     if (taskId !== null) {
       doors.push({
         label: "Open task",
-        icon: <FileTextIcon />,
+        icon: taskGlyph(taskId),
         onOpen: () => tasks.onSelect(taskId),
       });
     }
@@ -512,7 +518,7 @@ function cardFaceOf(
     if (taskId !== undefined) {
       doors.push({
         label: "Open task",
-        icon: <FileTextIcon />,
+        icon: taskGlyph(taskId),
         onOpen: () => tasks.onSelect(taskId),
       });
     }

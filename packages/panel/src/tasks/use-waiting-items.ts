@@ -2,15 +2,7 @@ import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useMemo } from "react";
 import { useAct } from "../act.js";
-import {
-  INBOX_GROUPING,
-  INBOX_SHOW,
-  type InboxListed,
-  inboxList,
-  listedItems,
-  taskHolder,
-  tasklessGroups,
-} from "./inbox-model.js";
+import { type InboxListed, openItems, taskHolder, tasklessGroups } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
 import { useInboxItems } from "./use-inbox-items.js";
 import { useTasklessInboxItems } from "./use-taskless-inbox-items.js";
@@ -75,15 +67,8 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     }),
     ...tasklessGroups(tasks.inboxTaskless, taskless.items, tasks.workspace?.id),
   ];
-  // Note that no reader is named, so every open item is kept as one that waits, whoever started its agent.
-  const items = listedItems(
-    inboxList(entries, {
-      grouping: INBOX_GROUPING.NONE,
-      show: INBOX_SHOW.NEEDS_YOU,
-      chosen: undefined,
-      readerId: undefined,
-    }),
-  );
+  // Note that every open item is kept as one that waits, whoever started its agent.
+  const items = openItems(entries);
   // Note that a plan read before it last changed is still being read, because a retry's newer read may yet answer what the older one did not hold.
   const reading =
     read.pending || tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));

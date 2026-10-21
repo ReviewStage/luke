@@ -396,50 +396,6 @@
   --shortcut-ink: var(--luke-color-text-muted);
 }
 
-/* A changeable key's chord is a field, as a text field is drawn, so a key
-   that can be changed reads apart from the fixed list under it: pressed, it
-   records the next chord in place, at the row's label size. */
-.shortcut-field {
-  --shortcut-text: var(--luke-type-label-size);
-  --shortcut-ink: var(--luke-color-text);
-  display: inline-flex;
-  min-width: 104px;
-  height: var(--luke-control-height);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--luke-space-12);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.shortcut-field:hover:not(:disabled) {
-  border-color: var(--luke-color-border-selected);
-}
-
-/* Recording is the field ringed in the focus colour, the way a text field
-   being typed into is, and saying what to do: nobody has to guess the next
-   keystroke is being listened for. */
-.shortcut-field[aria-pressed="true"] {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: -1px;
-}
-
-/* What the field says where there is no chord to draw: none having
-   registered, or another app owning it. Muted, because neither is a key. */
-.shortcut-state {
-  color: var(--luke-color-text-subtle);
-  white-space: nowrap;
-}
-
-.shortcut-field[aria-pressed="true"] > .shortcut-state {
-  color: var(--luke-color-text);
-}
-
 /* What leads a row that stands for something of its own, a provider's or a
    service's mark, in one box whatever the artwork's proportions. */
 .settings-row-mark {

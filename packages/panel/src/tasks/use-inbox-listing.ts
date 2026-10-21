@@ -19,7 +19,6 @@ import {
   type InboxGroup,
   type InboxListed,
   inboxCounts,
-  inboxList,
   listedItems,
   type TasklessInboxAgent,
   taskHolder,
@@ -27,6 +26,7 @@ import {
 } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
 import { useCodingAgents } from "./use-coding-agents.js";
+import { useHeldInboxList } from "./use-held-inbox-list.js";
 import { useInboxItems } from "./use-inbox-items.js";
 import { useInboxReadMarks } from "./use-inbox-read-marks.js";
 import { useTaskInbox } from "./use-task-inbox.js";
@@ -52,8 +52,8 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * The tasks the list holds items of, in main's order: each holding one that
  * the listed workspace's list given holds, so one not yet read, or another
  * workspace's, is listed nowhere. Handed the standing tasks, an archived
- * one is listed nowhere either; handed the archived ones, it is what the
- * Archived tab lists.
+ * one is listed nowhere either; handed the archived ones, it is what
+ * Archived lists.
  */
 function listedHoldings(
   holdings: TasksControl["inboxTasks"],
@@ -62,7 +62,7 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** No task's items are read for the Archived tab while it is not shown. */
+/** No task's items are read for Archived while it is not shown. */
 const NO_HOLDINGS: readonly AppInboxTaskHolding[] = [];
 
 /** Each task holding items as the list groups it, with its items as last read; a task the list given does not hold is left out. */
@@ -90,11 +90,17 @@ const NO_TASKLESS: TasksControl["inboxTaskless"] = [];
 
 /**
  * The window's Inbox as it is read and listed, and its chosen item; see the
- * module's head. Where it is not `enabled` it reads nothing, lists nothing,
+ * module's head, its list held still while it is shown (`use-held-inbox-list.ts`).
+ * Where it is not `enabled` it reads nothing, lists nothing,
  * and chooses nothing, so a shell that always calls it costs nothing while
  * the inbox-first sidebar is off.
  */
-export function useInboxListing(tasks: TasksControl, enabled = true) {
+export function useInboxListing(
+  tasks: TasksControl,
+  enabled = true,
+  /** Whether the list is in sight, where it is drawn apart from the Inbox's page, as the inbox-first sidebar draws it; none reads it as the page's. */
+  listShown?: boolean,
+) {
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useInboxViewChoices();
@@ -119,7 +125,7 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     [enabled, inboxTasks, listedArchived],
   );
   const read = useInboxItems({ holdings, readInbox });
-  // Note that the archived tasks' items are read only while the Archived tab is shown, since nothing in them waits on anyone.
+  // Note that the archived tasks' items are read only while Archived is shown, since nothing in them waits on anyone.
   const showArchived = choices.show === INBOX_SHOW.ARCHIVED;
   const archivedRead = useInboxItems({
     holdings: showArchived ? archivedHoldings : NO_HOLDINGS,
@@ -219,7 +225,7 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     },
   });
   // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
-  // The archived tasks' items stand on the Archived tab alone, which counts what main says each holds whether or not it is read yet.
+  // The archived tasks' items stand under Archived alone, which counts what main says each holds whether or not it is read yet.
   const standing: readonly InboxGroup[] = [
     ...taskEntries,
     ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
@@ -230,7 +236,7 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     ...inboxCounts(standing, tasks.me, choices.whose),
     [INBOX_SHOW.ARCHIVED]: archivedCount,
   };
-  // Note that the Archived tab lists every archived item, whoever's, as main's count of them does, and
+  // Note that Archived lists every archived item, whoever's, as main's count of them does, and
   // groups by task where Status is chosen, since nothing in it needs anyone or waits on anyone.
   const filter = {
     grouping:
@@ -242,12 +248,17 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     whose: showArchived ? EVERYONES : choices.whose,
     readerId: tasks.me,
   };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(entries, { ...filter, chosen: undefined });
-  const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
+  // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
+  // both held still while the list is shown: the page's while it stands, else what the caller says.
+  const { list, steps } = useHeldInboxList(
+    entries,
+    filter,
+    asked?.itemId,
+    enabled && (listShown ?? (view.open && tasks.shown)),
+  );
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
-  // Note that a tab leaving out every item listed is said apart from an Inbox holding none, the
-  // archived tasks' items among what another tab would list.
+  // Note that a scope leaving out every item listed is said apart from an Inbox holding none, the
+  // archived tasks' items among what another scope would list.
   const holdsItems = (groups: readonly InboxGroup[]) =>
     groups.some(({ items }) => items.length > 0);
   const filteredOut =
@@ -303,7 +314,7 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     view.open && chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
       ? firstChoice(list)
       : undefined;
-  // An item a link or a notification asked for on an archived task is shown on the Archived tab, the one that lists it.
+  // An item a link or a notification asked for on an archived task is shown under Archived, the scope that lists it.
   const { onShow } = choices;
   const opensArchived = asked?.opened === true && chosenArchived && !showArchived;
   useEffect(() => {

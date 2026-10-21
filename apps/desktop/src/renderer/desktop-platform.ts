@@ -21,12 +21,12 @@ import { applySessionReplay } from "./session-replay";
  */
 export const DESKTOP_PLATFORM: AppPlatform = {
   copyText: (words) => askAct(ACT_KIND.WINDOW_COPY_TEXT, { words }),
+  copyImage: (png) => png.then((drawn) => askAct(ACT_KIND.WINDOW_COPY_IMAGE, { png: drawn })),
   saveFile: ({ name, text }) => askAct(ACT_KIND.WINDOW_SAVE_FILE, { name, text }),
   focusPanel: () => tellAct(ACT_KIND.WINDOW_FOCUS_PANEL),
   pageFrameUrl,
   assetBase: () => new URL(".", document.baseURI).href,
   onMenuCommand: (listener) => appBridge().onMenuCommand(listener),
-  setShortcutCapturing: (capturing) => appBridge().setShortcutCapturing(capturing),
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
   openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
   openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),

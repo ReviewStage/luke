@@ -28,7 +28,8 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * The environment the runner reads. The bearer authenticates it to Luke, its
  * events and its MCP server alike. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
- * with the bearer, to every command the agent runs.
+ * with the bearer, to every command the agent runs. An Anthropic API key
+ * stands in its place for a launch in test mode, on the same terms.
  */
 export const RUNNER_ENV = {
   BEARER: "LUKE_RUNNER_TOKEN",
@@ -39,6 +40,7 @@ export const RUNNER_ENV = {
    * command Codex runs inherits.
    */
   CODEX_TOKEN: "ACCESS_TOKEN",
+  API_KEY: "ANTHROPIC_API_KEY",
 } as const;
 
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
@@ -170,9 +172,20 @@ const ImageBlockSchema = Schema.Struct({
 export const ContentBlockSchema = Schema.Union([TextBlockSchema, ImageBlockSchema]);
 export type ContentBlock = typeof ContentBlockSchema.Type;
 
-/** A message for the session, in the Messages API's own block shapes. */
+/** A UUID as the SDK spells one, which is what a message's `uuid` must be. */
+const UuidSchema = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+);
+
+/**
+ * A message for the session, in the Messages API's own block shapes. `uuid`
+ * is Luke's id for the message, handed to the SDK as the prompt's own, so
+ * the ACCEPTED event and the `result` that answers it name it; the runner
+ * mints one where a line names none.
+ */
 const MessageLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MESSAGE),
+  uuid: Schema.optionalKey(UuidSchema),
   content: Schema.Array(ContentBlockSchema),
 });
 /** Stop the running turn. */
@@ -210,12 +223,16 @@ export type InputLine = typeof InputLineSchema.Type;
  * The runner's own events, numbered among the SDK's messages, each a `type`
  * the SDK never uses.
  *
- * WAITING follows a `result` the run outlives, because the Stop hook before
- * it reported background work or a scheduled wakeup still to come: the agent
- * is waiting, not done, and the sandbox must stay up. END is the last event a
- * launch posts, with why it ended.
+ * ACCEPTED is posted as a message line is handed to the SDK, naming the
+ * message's `uuid`, so Luke ties the message it sent to the turn that runs
+ * it: the CLI never echoes a prompt back. WAITING follows a `result` the run
+ * outlives, because the Stop hook before it reported background work or a
+ * scheduled wakeup still to come: the agent is waiting, not done, and the
+ * sandbox must stay up. END is the last event a launch posts, with why it
+ * ended.
  */
 export const RUNNER_EVENT = {
+  ACCEPTED: "luke_runner_accepted",
   WAITING: "luke_runner_waiting",
   END: "luke_runner_end",
 } as const;
@@ -232,6 +249,12 @@ export const RUNNER_END = {
   FAILED: "failed",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
+
+/** The ACCEPTED event: the message line, by its `uuid`, handed to the SDK, or taken by Codex's app-server. */
+export interface RunnerAccepted {
+  readonly type: typeof RUNNER_EVENT.ACCEPTED;
+  readonly uuid: string;
+}
 
 /** The WAITING event: what the Stop hook before the `result` reported still in flight, as the SDK spells it. */
 export interface RunnerWaiting {
@@ -256,7 +279,12 @@ export interface RunnerEndEvent {
 export type CodexNotification = ServerNotification;
 
 /** What the runner posts: the SDK's message or Codex's notification as it was emitted, or one of the runner's own. */
-export type RunnerMessage = SDKMessage | CodexNotification | RunnerWaiting | RunnerEndEvent;
+export type RunnerMessage =
+  | SDKMessage
+  | CodexNotification
+  | RunnerAccepted
+  | RunnerWaiting
+  | RunnerEndEvent;
 
 /** One event as posted: its number and its message. */
 export interface RunnerEvent {

@@ -935,7 +935,10 @@ export function noReceiptOfLine() {
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
  * turn of eve's. A line a turn already received under another row
- * (`noReceiptOfLine`) is not counted.
+ * (`noReceiptOfLine`) is not counted, and neither is a line said on a call
+ * into the agent: the voice answers many of those itself, and one it hands
+ * on opens its spoken turn through the asks (`asks.ts`), whose turn row is
+ * what reads the agent as running, so no spoken line waits on a turn here.
  */
 const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
@@ -956,6 +959,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
+            sql`${messages.metadata} ->> 'channel' is distinct from ${MESSAGE_CHANNEL.VOICE}`,
             noReceiptOfLine(),
           ),
         )

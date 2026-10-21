@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { createRealtime, rawSql } from "@neon/realtime/server";
@@ -23,7 +24,12 @@ import { databaseUrl } from "../db/index.js";
 export const REALTIME_ENVIRONMENT = {
   URL: "NEON_REALTIME_URL",
   SECRET: "NEON_REALTIME_SECRET",
+  /** Luke's own switch: Realtime is used only where this reads `on`, so a deployment keeps Neon's variables while it is off. */
+  SWITCH: "LUKE_REALTIME",
 } as const;
+
+/** The value of `LUKE_REALTIME` that turns Realtime on; anything else, or none, leaves it off. */
+const REALTIME_ON = "on";
 
 /** Why a statement could not be sealed: the secret refused it. */
 export class SealRefused extends Data.TaggedError("SealRefused")<{ readonly reason: string }> {}
@@ -53,6 +59,9 @@ export const LiveSealing = Context.Reference<Option.Option<LiveSealer>>(
  * Realtime could not seal it. No secret stands here, so the capability and
  * fingerprint say only where to poll.
  */
+/** How many characters of a polled statement's digest it carries: far more than two readings of its rows could share by chance. */
+const DIGEST_CHARS = 32;
+
 export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
   return {
     url: LIVE_POLL_URL,
@@ -66,6 +75,11 @@ export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
           queryFingerprint: LIVE_POLL_URL,
           expiresAt: now,
           rows,
+          // Each row's text in sorted order, so the same rows in another order, which Postgres may answer, digest alike.
+          digest: createHash("sha256")
+            .update(JSON.stringify(rows.map((row) => JSON.stringify(row)).toSorted()))
+            .digest("hex")
+            .slice(0, DIGEST_CHARS),
         })),
         Effect.mapError(() => new SealRefused({ reason: "the statement could not be read" })),
       ),
@@ -119,19 +133,23 @@ function liveSealer(options: {
 }
 
 /**
- * Realtime as the deployment's environment configures it: on where both of
- * its variables and the database name stand, off where any is missing or
- * blank, so a deployment turns it on by setting them and off by removing
- * them. A secret Realtime refuses leaves it off, said once in the log.
+ * Realtime as the deployment's environment configures it: on only where
+ * `LUKE_REALTIME` is `on` and both of Neon's variables and the database name
+ * stand, off otherwise, when every live read is answered polled. So a
+ * deployment keeps Neon's variables and turns Realtime on or off with the
+ * switch alone. A secret Realtime refuses leaves it off, said once in the log.
  */
 export const liveSealingFromEnvironment = Layer.effect(
   LiveSealing,
   Effect.gen(function* () {
     const read = yield* Config.all({
+      switch: Config.option(Config.String(REALTIME_ENVIRONMENT.SWITCH)),
       url: Config.option(Config.String(REALTIME_ENVIRONMENT.URL)),
       secret: Config.option(Config.Redacted(REALTIME_ENVIRONMENT.SECRET)),
       database: Config.option(databaseUrl),
     });
+    // Off by choice: every live read is answered polled, said nowhere, since nothing is wrong.
+    if (Option.getOrUndefined(read.switch)?.trim() !== REALTIME_ON) return Option.none();
     const url = Option.getOrUndefined(read.url)?.trim();
     const secret = Option.getOrUndefined(read.secret);
     const database = Option.flatMap(read.database, databaseNameOf);

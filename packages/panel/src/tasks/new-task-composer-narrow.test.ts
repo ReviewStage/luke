@@ -23,7 +23,7 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * of its page, its `@` and `/` lists open under the caret's line, since a
  * list risen over the card is cut off under the page's head, while the
  * dialog's card keeps them over it; and a card too narrow for every press
- * has its Plan toggle and File for later draw their marks alone, still named
+ * has File for later draw its mark alone, still named
  * and still pressed, its microphone stand in the row in place of a ⋯ that
  * would hold it alone, and its model chip's words give way, so the round
  * Start stands inside the card, at the row's end. jsdom lays nothing out, so the
@@ -37,9 +37,6 @@ const CARD = {
   PHONE: 312,
   DESKTOP: 720,
 } as const;
-
-/** The Plan toggle's name, which its tooltip says too. */
-const MODE_TOGGLE = "Plan with Luke first";
 
 const roots: Root[] = [];
 
@@ -128,40 +125,6 @@ test("in the dialog the / list still opens over the line too", async () => {
   assert.equal(sideOf(await listOpenedBy(container, "/", ".skill-menu")), "above");
 });
 
-/** The toggle that turns Plan mode on, as the card draws it. */
-function modeToggle(container: HTMLElement): HTMLButtonElement {
-  return (
-    container.querySelector<HTMLButtonElement>(`button[aria-label="${MODE_TOGGLE}"]`) ??
-    assert.fail("the Plan toggle stands")
-  );
-}
-
-test("on a phone-wide card the Plan toggle draws its pencil alone, keeps its name, and still turns Plan mode on and off", async () => {
-  vi.spyOn(HTMLFormElement.prototype, "clientWidth", "get").mockReturnValue(CARD.PHONE);
-  layContainersAt({ composer: CARD.PHONE }, { touch: true });
-  const container = await mount();
-  const toggle = modeToggle(container);
-  const word = toggle.querySelector(".luke-chip-name") ?? assert.fail("the toggle holds its word");
-
-  assert.equal(getComputedStyle(word).width, "1px", "its word is drawn nowhere");
-  assert.equal(shown(toggle.querySelector("svg") ?? assert.fail("it holds its pencil")), true);
-  assert.equal(toggle.getAttribute("aria-pressed"), "false");
-  act(() => toggle.click());
-  assert.equal(modeToggle(container).getAttribute("aria-pressed"), "true");
-});
-
-test("on a desktop-wide card the Plan toggle says Plan beside its pencil", async () => {
-  vi.spyOn(HTMLFormElement.prototype, "clientWidth", "get").mockReturnValue(CARD.DESKTOP);
-  layContainersAt({ composer: CARD.DESKTOP });
-  const container = await mount();
-  const word =
-    modeToggle(container).querySelector(".luke-chip-name") ??
-    assert.fail("the toggle holds its word");
-  assert.equal(shown(word), true);
-  assert.notEqual(getComputedStyle(word).width, "1px", "its word is drawn");
-  assert.equal(word.textContent, "Plan");
-});
-
 test("on a phone-wide card the placeholder wraps in the card's five lines rather than being cut short, and stays one line on a desktop", async () => {
   const placeholder = async (width: number) => {
     const sheet = layContainersAt({ composer: width });
@@ -229,7 +192,7 @@ async function mountChosen(width: number, touch: boolean) {
             models: MODELS,
             readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
             linearIssuesIn: () => () => Promise.resolve(ISSUES),
-            start: (_name, _repository, _workspace, _withCall, from) => {
+            start: (_name, _repository, _workspace, from) => {
               statuses.push(from?.status);
               return Promise.resolve(undefined);
             },
@@ -283,7 +246,6 @@ test("on a phone-wide card with every chip chosen, Start stands last in the row,
   const presses = rowPresses(container);
 
   assert.deepEqual(presses.map(nameOf), [
-    MODE_TOGGLE,
     "Opus 5.5 High",
     "Dictate",
     "File for later",
@@ -297,22 +259,17 @@ test("on a phone-wide card with every chip chosen, Start stands last in the row,
   assert.equal(presses.at(-1)?.disabled, false, "Start stands ready");
 });
 
-test("on a desktop-wide card with every chip chosen, the row reads as it always has: Plan and File for later in words, the microphone, and Start", async () => {
+test("on a desktop-wide card with every chip chosen, the row reads the model and File for later in words, the microphone, and Start", async () => {
   const { container } = await mountChosen(CARD.DESKTOP, false);
   const presses = rowPresses(container);
 
   assert.deepEqual(presses.map(nameOf), [
-    MODE_TOGGLE,
     "Opus 5.5 High",
     "Dictate",
     "File for later",
     "Start agent",
   ]);
-  assert.deepEqual(presses.filter(drawsWords).map(nameOf), [
-    MODE_TOGGLE,
-    "Opus 5.5 High",
-    "File for later",
-  ]);
+  assert.deepEqual(presses.filter(drawsWords).map(nameOf), ["Opus 5.5 High", "File for later"]);
 });
 
 test("on a phone-wide card File for later draws the backlog's mark alone, keeps its name, and still files the task in the backlog", async () => {

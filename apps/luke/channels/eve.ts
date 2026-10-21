@@ -21,5 +21,6 @@ export default eveChannel(
     secret: seams.deploymentSecret(),
     admits: DEPLOYMENT_TURNS,
     presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+    streams: true,
   }),
 );

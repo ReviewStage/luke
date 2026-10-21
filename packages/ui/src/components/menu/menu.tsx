@@ -94,6 +94,8 @@ export interface MenuAction {
   mark?: MenuItemMark | undefined;
   /** Whether choosing it opens a list beside it rather than acting, which a chevron at its end says. */
   opens?: boolean | undefined;
+  /** Whether choosing it leaves the menu standing, as one of several values a filter toggles is. */
+  stays?: boolean | undefined;
 }
 
 /**
@@ -816,8 +818,9 @@ export function Menu({
     if (moveMenuFocus(event)) setSubmenu(undefined);
   };
 
+  // Note that a value a filter toggles leaves the menu standing, so several are chosen in one visit.
   const choose = (action: MenuAction) => {
-    onClose(true);
+    if (action.stays !== true) onClose(true);
     action.onSelect();
   };
   // Note that an open submenu draws its entry from this render's groups, because its owner may redraw them while it stands.

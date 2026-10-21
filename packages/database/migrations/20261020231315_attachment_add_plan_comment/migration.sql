@@ -1,0 +1,17 @@
+-- Idempotent, so a preview database that ran this under an earlier draft folder name runs it again as a no-op.
+-- Expand: a plan comment becomes one more owner of "attachment", by a nullable column with no default, written to the catalog alone. No row names a comment yet, so the new foreign key and check pass over every row standing; the owner and bound checks are written again with the new column among the owners, which keeps every row standing a plan's picture or what it was. "plan_comment" is locked first, against the writes the new foreign key needs held, then "attachment"; no writer of "attachment" writes "plan_comment" while holding it, so none holds one while it waits on the other.
+-- The "plan_attachment" view an older deployment reads still names a plan's pictures by the two owners it knew; a comment's file stands with its task beside its comment, so such a deployment would read it there as a picture of the plan it was never sent. Every run from before that view's move has drained, so nothing reads it.
+LOCK TABLE "plan_comment" IN SHARE ROW EXCLUSIVE MODE;--> statement-breakpoint
+LOCK TABLE "attachment" IN ACCESS EXCLUSIVE MODE;--> statement-breakpoint
+ALTER TABLE "attachment" ADD COLUMN IF NOT EXISTS "plan_comment_id" uuid;--> statement-breakpoint
+DROP INDEX IF EXISTS "attachment_unsaved";--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "attachment_unsaved" ON "attachment" ("created_at") WHERE ("task_id" is not null and num_nonnulls("chat_message_id", "inbox_item_id", "conversation_id", "plan_comment_id") = 0) and "saved_at" is null;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "attachment_plan_comment" ON "attachment" ("plan_comment_id") WHERE "plan_comment_id" is not null;--> statement-breakpoint
+ALTER TABLE "attachment" DROP CONSTRAINT IF EXISTS "attachment_plan_comment_id_plan_comment_id_fkey";--> statement-breakpoint
+ALTER TABLE "attachment" ADD CONSTRAINT "attachment_plan_comment_id_plan_comment_id_fkey" FOREIGN KEY ("plan_comment_id") REFERENCES "plan_comment"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "attachment" DROP CONSTRAINT IF EXISTS "attachment_plan_comment_file";--> statement-breakpoint
+ALTER TABLE "attachment" ADD CONSTRAINT "attachment_plan_comment_file" CHECK ("plan_comment_id" is null or ("task_id" is not null and "organization_id" is not null and "name" is not null and "position" is not null and octet_length("bytes") <= 3000000));--> statement-breakpoint
+ALTER TABLE "attachment" DROP CONSTRAINT IF EXISTS "attachment_one_owner";--> statement-breakpoint
+ALTER TABLE "attachment" ADD CONSTRAINT "attachment_one_owner" CHECK ((num_nonnulls("chat_message_id", "inbox_item_id", "conversation_id", "plan_comment_id") = 1 or ("task_id" is not null and num_nonnulls("chat_message_id", "inbox_item_id", "conversation_id", "plan_comment_id") = 0)) and ("inbox_message_id" is null or "inbox_item_id" is not null));--> statement-breakpoint
+ALTER TABLE "attachment" DROP CONSTRAINT IF EXISTS "attachment_bytes_bound";--> statement-breakpoint
+ALTER TABLE "attachment" ADD CONSTRAINT "attachment_bytes_bound" CHECK (("chat_message_id" is null or octet_length("bytes") <= 1500000) and ("conversation_id" is null or octet_length("bytes") <= 4000000) and (not ("task_id" is not null and num_nonnulls("chat_message_id", "inbox_item_id", "conversation_id", "plan_comment_id") = 0) or octet_length("bytes") <= 1500000));

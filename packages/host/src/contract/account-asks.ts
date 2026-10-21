@@ -1,4 +1,5 @@
 import {
+  chatGptSignInAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
   githubTokenAnswerViewSchema,
@@ -41,6 +42,16 @@ export const accountAskActsContract = {
   )
     .input(exactInput(providerKeyRemoveParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actProcedure(
+    "Could not sign in with ChatGPT on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(chatGptSignInAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actProcedure(
+    "Could not cancel the ChatGPT sign-in on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actProcedure(
     "Could not read your GitHub token on this system.",
   )

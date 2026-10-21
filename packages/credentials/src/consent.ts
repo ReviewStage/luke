@@ -57,6 +57,13 @@ export interface LoopbackExchange {
   redirectUri: string;
   /** The verifier whose challenge the authorization page was shown. */
   codeVerifier: string;
+  /**
+   * The client the redirect named, where it named one: a provider that
+   * registers its client as the user consents (OpenAI's open-source sign-in)
+   * hands the issued client back beside the code, and the exchange is made
+   * under it.
+   */
+  clientId?: string | undefined;
 }
 
 export interface LoopbackConsentOptions<Grant> {

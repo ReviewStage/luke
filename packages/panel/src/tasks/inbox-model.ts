@@ -36,6 +36,7 @@ import {
   type InboxReply,
   type InboxReplyKind,
   type InboxResponse,
+  inboxAnswerHeard,
   inboxAnswersRefusal,
   inboxReplyRefusal,
   knownBlock,
@@ -44,10 +45,11 @@ import {
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
-import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
+import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
 import { plainWords } from "./tool-call-model.js";
 
@@ -83,8 +85,8 @@ import { plainWords } from "./tool-call-model.js";
  * What the developer has put on a card so far: the options picked on a
  * choice, the fields filled on a form, their note, and the files they
  * attached to it; on a thread, the steps ticked in its open `do` ask and the
- * answer pressed in it and attached to the reply (Mark done, Couldn't do it,
- * or Answer), a `decide`'s pick being its choices and an `answer`'s fields
+ * answer pressed in it and attached to the reply (Mark done or Couldn't
+ * do it), a `decide`'s pick being its choices and an `answer`'s fields
  * filled its values.
  */
 export interface InboxDraft {
@@ -321,20 +323,11 @@ export const INBOX_MISSING = {
   WORDS: "words",
 } as const;
 
-/** What the answer lacks, with the line the box's foot says it in; a field's by its label. */
+/** What the answer lacks; a field's by its label. */
 export type InboxMissing =
-  | { readonly kind: typeof INBOX_MISSING.OPTION; readonly line: string }
-  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string; readonly line: string }
-  | { readonly kind: typeof INBOX_MISSING.WORDS; readonly line: string };
-
-/** What the box's foot says an answer lacks, by what it lacks. */
-const MISSING_LINE = {
-  ONE: "Pick an option",
-  MANY: "Pick at least one",
-  APPROVAL: "Approve or decline",
-  TODO: "Tick it, or say you couldn't",
-  WORDS: "Write your answer",
-} as const;
+  | { readonly kind: typeof INBOX_MISSING.OPTION }
+  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string }
+  | { readonly kind: typeof INBOX_MISSING.WORDS };
 
 /**
  * What the card's answer still lacks, the first thing in the item's order,
@@ -353,30 +346,20 @@ export function inboxMissing(
   const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
-      if (draft.choices.length > 0 || ownWords) return undefined;
-      return {
-        kind: INBOX_MISSING.OPTION,
-        line: response.multiple === true ? MISSING_LINE.MANY : MISSING_LINE.ONE,
-      };
+      return draft.choices.length > 0 || ownWords ? undefined : { kind: INBOX_MISSING.OPTION };
     case INBOX_RESPONSE.FORM: {
       if (formSendable(response, draft)) return undefined;
       const sent = new Set(sentValues(response, draft).map((value) => value.label));
       const empty = response.fields.find(
         (field) => field.required === true && !sent.has(field.label),
       );
-      return empty === undefined
-        ? undefined
-        : { kind: INBOX_MISSING.FIELD, label: empty.label, line: `Fill in ${empty.label}` };
+      return empty === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: empty.label };
     }
     case INBOX_RESPONSE.TEXT:
-      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS, line: MISSING_LINE.WORDS };
+      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS };
     case INBOX_RESPONSE.APPROVAL:
     case INBOX_RESPONSE.TODO:
-      if (decidedOf(response, draft) !== undefined) return undefined;
-      return {
-        kind: INBOX_MISSING.OPTION,
-        line: response.type === INBOX_RESPONSE.APPROVAL ? MISSING_LINE.APPROVAL : MISSING_LINE.TODO,
-      };
+      return decidedOf(response, draft) === undefined ? { kind: INBOX_MISSING.OPTION } : undefined;
     default:
       return undefined;
   }
@@ -451,11 +434,6 @@ export function withChoice(
     ? draft.choices.filter((each) => each !== label)
     : [...draft.choices, label];
   return { ...draft, choices };
-}
-
-/** What the box's foot says of a choice of several: how many are picked, or that any may be. */
-export function pickedWords(count: number): string {
-  return count === 0 ? "Pick any that apply" : `${count} picked`;
 }
 
 /** What follows an item's question on its thread: a message on it, or where it was settled. */
@@ -613,6 +591,29 @@ function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
   return Array.from({ length: shownSteps(ask) }, (_, at) => at);
 }
 
+/** Whether the reader ticked every step a `do` ask shows by hand. */
+function everyStepTicked(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: Pick<InboxDraft, "steps">,
+): boolean {
+  const ticked = new Set(tickedSteps(draft));
+  return everyStep(ask).every((at) => ticked.has(at));
+}
+
+/**
+ * The decision a `do` ask's draft holds: the press given, Mark done or
+ * Couldn't do it, or else Mark done where every step is ticked by hand,
+ * which nothing stores, so letting a step go takes it back off. Note that
+ * a press given wins, so Couldn't do it stands with every step ticked.
+ */
+export function doDecision(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: Pick<InboxDraft, "steps" | "press">,
+): InboxReplyKind | undefined {
+  if (draft.press === INBOX_REPLY.DONE || draft.press === INBOX_REPLY.NOT_DONE) return draft.press;
+  return everyStepTicked(ask, draft) ? INBOX_REPLY.DONE : undefined;
+}
+
 /**
  * The steps a `do` ask's card shows ticked: every one while Mark done is
  * pressed, which ticks them all, or else those the reader ticked by hand,
@@ -644,9 +645,29 @@ export function withStep(
 }
 
 /**
+ * The draft after a `do` ask's Mark done or Couldn't do it is pressed: the
+ * decision it holds (`doDecision`) taken off where it is the one pressed,
+ * or else given. Note that taking off a Mark done every step's hand tick
+ * stands for lets those ticks go, or it would stand again at once.
+ */
+export function withDoPress(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: InboxDraft,
+  reply: typeof INBOX_REPLY.DONE | typeof INBOX_REPLY.NOT_DONE,
+): InboxDraft {
+  if (doDecision(ask, draft) !== reply) return { ...draft, press: reply };
+  const released = { ...draft, press: undefined };
+  return reply === INBOX_REPLY.DONE && everyStepTicked(ask, released)
+    ? { ...released, steps: [] }
+    : released;
+}
+
+/**
  * The answer the draft attaches to the reply for the open ask, or none: a
- * `decide`'s options picked, a `do`'s Mark done with every step ticked or
- * Couldn't do it with the steps ticked, an `answer`'s fields' values once
+ * `decide`'s options picked, a `do`'s Mark done with every step ticked,
+ * pressed or every step ticked by hand, Couldn't do it with the steps
+ * ticked, or, with no press, the steps ticked as an answer deciding
+ * nothing, an `answer`'s fields' values once
  * any is filled, as a form filled in part sends what was filled, or its
  * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
@@ -661,13 +682,17 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
         ? undefined
         : { ask: id, reply: INBOX_REPLY.CHOSE, choices: draft.choices };
     case INBOX_ASK.DO: {
-      if (draft.press !== INBOX_REPLY.DONE && draft.press !== INBOX_REPLY.NOT_DONE)
-        return undefined;
-      const steps =
-        draft.press === INBOX_REPLY.DONE
-          ? everyStep(ask).filter((at) => at < ask.steps.length)
-          : tickedSteps(draft).filter((at) => at < ask.steps.length);
-      return { ask: id, reply: draft.press, steps };
+      const decision = doDecision(ask, draft);
+      const named = (steps: readonly number[]) => steps.filter((at) => at < ask.steps.length);
+      if (decision === INBOX_REPLY.DONE) {
+        return { ask: id, reply: decision, steps: named(everyStep(ask)) };
+      }
+      const ticked = named(tickedSteps(draft));
+      if (decision === INBOX_REPLY.NOT_DONE) return { ask: id, reply: decision, steps: ticked };
+      // Steps ticked with no press go as they stand, an answer that decides nothing.
+      return ticked.length === 0
+        ? undefined
+        : { ask: id, reply: INBOX_REPLY.ANSWERED, steps: ticked };
     }
     case INBOX_ASK.ANSWER:
       // A form's fields attach as they are filled, with no press, any filled in part sending what was filled.
@@ -680,9 +705,10 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
             }
           : undefined;
       }
-      return draft.press === INBOX_REPLY.ANSWERED
-        ? { ask: id, reply: INBOX_REPLY.ANSWERED }
-        : undefined;
+      // An ask of words alone is answered by the reply's own words or files, which the box holds as its one field.
+      return draft.note.trim() === "" && draft.attachments.length === 0
+        ? undefined
+        : { ask: id, reply: INBOX_REPLY.ANSWERED };
   }
 }
 
@@ -843,7 +869,8 @@ const SENT_WORDS = {
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
  * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
- * "Submitted", or "Answered". The ask it answers is read where the thread
+ * a to-do's steps ticked with no press, "Ticked 2/3", "Submitted", or
+ * "Answered". The ask it answers is read where the thread
  * still carries it.
  */
 export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
@@ -858,6 +885,11 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
         return counting("Done", stepCount(answers, ask));
       case INBOX_REPLY.NOT_DONE:
         return counting("Couldn't do it", stepCount(answers, ask));
+      case INBOX_REPLY.ANSWERED: {
+        // A to-do's steps ticked with no press decided nothing, so they say what was ticked.
+        const count = answers.steps === undefined ? undefined : stepCount(answers, ask);
+        return count === undefined ? sentenceCased(SENT_WORDS[answers.reply]) : `Ticked ${count}`;
+      }
       default:
         return sentenceCased(SENT_WORDS[answers.reply]);
     }
@@ -1613,29 +1645,23 @@ export const INBOX_GROUPING = {
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
 /**
- * Which items an Inbox lists, as the tabs under its title choose: what needs
- * the reader (`needsReader`), anything unread, anyone's, every open item, or
- * everything, open and settled; and, on the window's Inbox alone, the items
- * of the archived tasks, which no other tab lists (`desktop-inbox.tsx`).
+ * Which items an Inbox lists, as its view's menu chooses: To do, the
+ * reader's own items not done with (`toDo`), or All, every item, open and
+ * settled; and, on the window's Inbox alone, Archived, the items of the
+ * archived tasks, which neither of the others lists (`desktop-inbox.tsx`).
  */
 export const INBOX_SHOW = {
-  NEEDS_YOU: "needs-you",
-  UNREAD: "unread",
-  OPEN: "open",
+  TO_DO: "to-do",
   ALL: "all",
   ARCHIVED: "archived",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
 
-/**
- * How the window's Inbox orders its items: the latest changed first, or
- * the open items first, the one waiting longest first, as a triage reads
- * them, the settled ones after them the latest changed first.
- */
+/** How the window's Inbox orders its items: the latest changed first, or the oldest changed first. */
 export const INBOX_SORT = {
   LATEST: "latest",
-  WAITING: "waiting",
+  OLDEST: "oldest",
 } as const;
 
 export type InboxSort = (typeof INBOX_SORT)[keyof typeof INBOX_SORT];
@@ -1675,11 +1701,9 @@ const STATUS_KEY = {
   [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
-/** How many items each tab lists, filtered out by the tab shown or not; Archived only on an Inbox that offers it. */
+/** How many items each scope lists, filtered out by the scope shown or not; Archived only on an Inbox that offers it. */
 export interface InboxCounts {
-  readonly [INBOX_SHOW.NEEDS_YOU]: number;
-  readonly [INBOX_SHOW.UNREAD]: number;
-  readonly [INBOX_SHOW.OPEN]: number;
+  readonly [INBOX_SHOW.TO_DO]: number;
   readonly [INBOX_SHOW.ALL]: number;
   readonly [INBOX_SHOW.ARCHIVED]?: number;
 }
@@ -1762,9 +1786,51 @@ export function needsReader(item: InboxItem, readerId: string | undefined): bool
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
 }
 
+/**
+ * Whether opening the item acknowledges it, as Got it did: a notice waiting
+ * on a nod (`awaitsNod`), the reader's own (`needsReader`) by an id already
+ * known, since an acknowledgement settles it for every member, and one whose
+ * acknowledgement messages nobody (`inboxAnswerHeard`), since a note that
+ * asks to be heard back would reach its agent as "Acknowledged." on a mere
+ * open. A box holding no words or files for it offers no Got it.
+ */
+export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
+  return (
+    readerId !== undefined &&
+    needsReader(item, readerId) &&
+    awaitsNod(item, inboxThreadOf(item) ?? []) &&
+    !inboxAnswerHeard(item, { reply: INBOX_REPLY.ACKNOWLEDGED })
+  );
+}
+
 /** Whether a listed item needs the reader (`needsReader`) where it stands: never on a task put away in the archive, which nothing answers until it is back. */
 export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
   return needsReader(listed.item, readerId) && !archivedHolder(listed.holder);
+}
+
+/**
+ * Whether a listed item is one the reader is not done with, as To do lists
+ * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
+ * still unread, such as a settled thread its agent wrote on again; never
+ * on a task put away in the archive, as `needsYou` reads it.
+ */
+function toDo(listed: InboxListed, readerId: string | undefined): boolean {
+  if (archivedHolder(listed.holder)) return false;
+  return (
+    needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
+  );
+}
+
+/**
+ * Every open item of a holder not put away in the archive, whoever's, the
+ * latest changed first, as Home, Factory, and a person's page list what
+ * waits (`use-waiting-items.ts`).
+ */
+export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
+  return groups
+    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .filter((listed) => needsYou(listed, undefined))
+    .toSorted((a, b) => newestFirst(a.item, b.item));
 }
 
 /** What a person's group is folded by: their account's id, or one key for the reader's own. */
@@ -1801,19 +1867,11 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
   return b.updatedAt - a.updatedAt;
 }
 
-/** The open items first, the one posted longest ago first, then the settled ones the latest changed first. */
-function waitingLongest(a: InboxItem, b: InboxItem): number {
-  const aOpen = a.status === INBOX_STATUS.OPEN;
-  const bOpen = b.status === INBOX_STATUS.OPEN;
-  if (aOpen !== bOpen) return aOpen ? -1 : 1;
-  return aOpen ? a.postedAt - b.postedAt : newestFirst(a, b);
-}
-
-/** The order a sort lists items in. */
+/** The order a sort lists items in, by when each changed: the latest first, or the oldest first. */
 const SORT_ORDER = {
-  [INBOX_SORT.LATEST]: newestFirst,
-  [INBOX_SORT.WAITING]: waitingLongest,
-} as const satisfies Record<InboxSort, (a: InboxItem, b: InboxItem) => number>;
+  [INBOX_SORT.LATEST]: (a: number, b: number) => b - a,
+  [INBOX_SORT.OLDEST]: (a: number, b: number) => a - b,
+} as const satisfies Record<InboxSort, (a: number, b: number) => number>;
 
 /** Where an item stands for the reader, as a list grouped by status heads it. */
 function statusOf(item: InboxItem, readerId: string | undefined): InboxStatusGroupKind {
@@ -1821,13 +1879,27 @@ function statusOf(item: InboxItem, readerId: string | undefined): InboxStatusGro
   return readersItem(item, readerId) ? INBOX_STATUS_GROUP.NEEDS_YOU : INBOX_STATUS_GROUP.WAITING;
 }
 
+/**
+ * Where a listed item stands in a list's order: when it changed and the
+ * status it is grouped under, as the list first drew them. A list held
+ * still while it is shown is drawn from these rather than from the item as
+ * it is now, so an answer, which changes both, moves no row (`inboxPlaces`).
+ */
+export interface InboxPlace {
+  readonly at: number;
+  readonly status: InboxStatusGroupKind;
+}
+
+/** No item's place held: every item stands where it is now. */
+export const NO_PLACES: ReadonlyMap<string, InboxPlace> = new Map();
+
 /** The items, in the order given, under where each stands: what needs the reader, what waits on others, and what is answered, a status with nothing in it left out. */
 function statusGroups(
   items: readonly InboxListed[],
-  readerId: string | undefined,
+  statusOfItem: (item: InboxItem) => InboxStatusGroupKind,
 ): readonly InboxStatusGroup[] {
   return Object.values(INBOX_STATUS_GROUP).flatMap((status) => {
-    const held = items.filter(({ item }) => statusOf(item, readerId) === status);
+    const held = items.filter(({ item }) => statusOfItem(item) === status);
     return held.length === 0 ? [] : [{ key: STATUS_KEY[status], status, items: held }];
   });
 }
@@ -1846,14 +1918,17 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
 
 /**
  * The list from every task's items: each item in the sort's order, the
- * latest changed first or the one waiting longest first, under its plan,
+ * latest changed first or the oldest changed first, under its plan,
  * under the person whose agent asks it, under where it stands, or in one
  * run, the tasks and the people in the order their first item stands and
- * the statuses in theirs. The tab shown lists only the items it takes
- * (`showsItem`) of the people Whose names, and the item chosen where one is given. Note that the rows a list draws are given none,
- * so a settled item leaves a list filtered to exclude it, while the steps
- * through the list are given the item the pane shows, which keeps its place
- * among them so K, J, and Next still reach the rows either side of it.
+ * the statuses in theirs. The scope shown lists only the items it takes
+ * (`showsItem`) of the people Whose names, and the item chosen where one is given. Note that the rows a list draws are given
+ * only the chosen item they drew already, kept while it stays chosen
+ * (`use-held-inbox-list.ts`), so a settled item leaves a list filtered to
+ * exclude it once another is chosen, while the steps through the list are
+ * given the item the pane shows, which keeps its place among them so K, J,
+ * and Next still reach the rows either side of it. An item whose place is
+ * held (`places`) stands there, rather than where it changed last.
  */
 export function inboxList(
   tasks: readonly InboxGroup[],
@@ -1867,10 +1942,14 @@ export function inboxList(
     readonly sort?: InboxSort | undefined;
     /** Whose items are listed; everyone's where none is given. */
     readonly whose?: InboxWhose | undefined;
+    /** Where the items held still stand (`inboxPlaces`), each other item where it is now; none holds every item where it is now. */
+    readonly places?: ReadonlyMap<string, InboxPlace> | undefined;
   },
 ): InboxListView {
-  const { readerId, sort = INBOX_SORT.LATEST, whose = EVERYONES } = view;
-  const order = SORT_ORDER[sort];
+  const { readerId, sort = INBOX_SORT.LATEST, whose = EVERYONES, places = NO_PLACES } = view;
+  const placed = (item: InboxItem): InboxPlace =>
+    places.get(item.id) ?? { at: item.updatedAt, status: statusOf(item, readerId) };
+  const order = (a: InboxItem, b: InboxItem) => SORT_ORDER[sort](placed(a).at, placed(b).at);
   const shows = (holder: InboxHolder) => (item: InboxItem) =>
     (showsItem(view.show, { holder, item }, readerId) && whoseItem(whose, item, readerId)) ||
     item.id === view.chosen;
@@ -1888,9 +1967,28 @@ export function inboxList(
     return { grouping: INBOX_GROUPING.NONE, items, readerId };
   }
   if (view.grouping === INBOX_GROUPING.STATUS) {
-    return { grouping: INBOX_GROUPING.STATUS, groups: statusGroups(items, readerId), readerId };
+    const groups = statusGroups(items, (item) => placed(item).status);
+    return { grouping: INBOX_GROUPING.STATUS, groups, readerId };
   }
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
+}
+
+/**
+ * Where each row of a list stands, to hold it still while the list is
+ * shown: the place held for it where it has one, else where it is now. An
+ * item the list no longer draws holds no place, so once it is listed again
+ * it stands where it is then.
+ */
+export function inboxPlaces(
+  view: InboxListView,
+  held: ReadonlyMap<string, InboxPlace>,
+): ReadonlyMap<string, InboxPlace> {
+  return new Map(
+    listedItems(view).map(({ item }) => [
+      item.id,
+      held.get(item.id) ?? { at: item.updatedAt, status: statusOf(item, view.readerId) },
+    ]),
+  );
 }
 
 /** Two groups in the order their first items stand; a group with none, which the list never draws, last. */
@@ -1908,24 +2006,24 @@ export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
 }
 
-/** Whether a tab lists the item: Needs you the reader's own open items, Unread anyone's unread, All open every open one, and Everything and Archived all of them. */
+/** Whether the reader is done with an item, as its row is drawn gray: settled, answered or closed, and read since. */
+export function isDone(item: InboxItem): boolean {
+  return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
+}
+
+/** Whether a scope lists the item: To do the reader's own not done with (`toDo`), and All and Archived all of them. */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
-  const { item } = listed;
   switch (show) {
-    case INBOX_SHOW.NEEDS_YOU:
-      return needsYou(listed, readerId);
-    case INBOX_SHOW.UNREAD:
-      return isUnread(item);
-    case INBOX_SHOW.OPEN:
-      return item.status === INBOX_STATUS.OPEN;
-    // Note that the Archived tab is handed the archived tasks' groups alone, every item of which it lists.
+    case INBOX_SHOW.TO_DO:
+      return toDo(listed, readerId);
+    // Note that Archived is handed the archived tasks' groups alone, every item of which it lists.
     case INBOX_SHOW.ALL:
     case INBOX_SHOW.ARCHIVED:
       return true;
   }
 }
 
-/** How many of every task's items each tab lists, of the people Whose names. */
+/** How many of every task's items each scope lists, of the people Whose names. */
 export function inboxCounts(
   tasks: readonly InboxGroup[],
   readerId: string | undefined,
@@ -1937,9 +2035,7 @@ export function inboxCounts(
   const count = (show: InboxShow) =>
     items.filter((listed) => showsItem(show, listed, readerId)).length;
   return {
-    [INBOX_SHOW.NEEDS_YOU]: count(INBOX_SHOW.NEEDS_YOU),
-    [INBOX_SHOW.UNREAD]: count(INBOX_SHOW.UNREAD),
-    [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
+    [INBOX_SHOW.TO_DO]: count(INBOX_SHOW.TO_DO),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
   };
 }
@@ -2002,23 +2098,42 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
-/** The first row after the chosen one whose item needs the reader, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
+/** Which way the reader last stepped through the list, K up and J down, which Next follows. */
+export const INBOX_DIRECTION = {
+  UP: "up",
+  DOWN: "down",
+} as const;
+
+export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTION];
+
+/**
+ * The nearest row past the chosen one, the way the reader is moving, whose
+ * item the reader is not done with (`toDo`), a folded group's left out;
+ * none where nothing else is. Down it reads the rows below and wraps round
+ * to the list's top; up, the rows above, nearest first, and wraps round
+ * from the list's foot.
+ */
 export function nextNeedingYou(
   view: InboxListView,
   chosen: string | undefined,
   folded: (key: string) => boolean,
+  direction: InboxDirection = INBOX_DIRECTION.DOWN,
 ): InboxListed | undefined {
   const listed = rowedItems(view, folded, chosen);
   const at = listed.findIndex(({ item }) => item.id === chosen);
-  return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
-    (listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen,
-  );
+  const below = listed.slice(at + 1);
+  const above = listed.slice(0, Math.max(at, 0));
+  const ahead =
+    direction === INBOX_DIRECTION.UP
+      ? [...above.reverse(), ...below.reverse()]
+      : [...below, ...above];
+  return ahead.find((listed) => toDo(listed, view.readerId) && listed.item.id !== chosen);
 }
 
-/** The item that stands chosen where none is: the first listed that needs the reader, else the first listed. */
+/** The item that stands chosen where none is: the first listed the reader is not done with (`toDo`), else the first listed. */
 export function firstChoice(view: InboxListView): InboxListed | undefined {
   const listed = listedItems(view);
-  return listed.find((each) => needsYou(each, view.readerId)) ?? listed[0];
+  return listed.find((each) => toDo(each, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */
@@ -2034,7 +2149,7 @@ export const CODE_READ = {
 
 export type CodeRead =
   | { readonly kind: typeof CODE_READ.READING }
-  | { readonly kind: typeof CODE_READ.READY; readonly code: TaskCode }
+  | { readonly kind: typeof CODE_READ.READY; readonly code: SnippetLines }
   | {
       readonly kind: typeof CODE_READ.NOTICE;
       readonly line: string;
@@ -2104,9 +2219,7 @@ export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): Code
     kind: CODE_READ.READY,
     code: {
       ref: { path: block.path, startLine: block.startLine, endLine: block.endLine },
-      repository: file.repository,
       firstLine: file.firstLine,
-      lineCount: file.lineCount,
       lines: file.lines,
     },
   };

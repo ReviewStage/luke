@@ -194,6 +194,20 @@ function refreshingClient(
   });
 }
 
+it.effect("a refresh records the service's id for an account stored without one", () =>
+  Effect.gen(function* () {
+    const { id: _id, ...withoutId } = STORED;
+    const subject = yield* manager({ stored: withoutId });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...withoutId });
+
+    yield* subject.instance.refresh();
+
+    assert.equal(subject.stored()?.id, STORED.id);
+    const snapshot = subject.instance.snapshot;
+    assert.equal(snapshot.status === ACCOUNT_STATUS.SIGNED_IN ? snapshot.id : undefined, STORED.id);
+  }),
+);
+
 it.effect(
   "a renewal the service refuses with invalid_grant is the one path that signs the account out",
   () =>

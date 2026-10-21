@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubIssuePick } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
@@ -21,7 +17,6 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
-  PencilIcon,
   TaskStatusMark,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -53,7 +48,6 @@ import {
   type NewTaskLink,
   NewTaskLinks,
 } from "./new-task-links.js";
-import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { SkillFiles } from "./skill-chip.js";
@@ -62,15 +56,14 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
- * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, or Luke plans with, and the chips that say where and how the task starts.
+ * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, and the chips that say where and how the task starts.
  *
  * The card is the agent box's own (`agent-composer.tsx`): the words field,
  * the "+" that attaches files, with an image pasted or files dropped taken
- * too, dictation, the model chip, and the round Start button, with the
- * Plan toggle at the foot's right, before the model chip, drawing its
- * pencil alone where the card is too narrow for its word, as on a phone,
- * where File for later draws the backlog's mark alone too and the model
- * chip's words are cut short, so Start stays at the row's end in the card.
+ * too, dictation, the model chip, and the round Start button, with File for
+ * later before it, drawing the backlog's mark alone where the card is too
+ * narrow for its words, as on a phone, where the model chip's words are cut
+ * short too, so Start stays at the row's end in the card.
  * New task's own chips stand in a head row over the card, the same in the
  * dialog and on Home: the title, "New task", then the repository the task
  * is about (`repository-chip.tsx`), and at the row's right end the Issue
@@ -79,28 +72,17 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
  *
- * The card is in one of two modes (`new-task-mode.ts`), kept for the next
- * New task, and Shift+Tab from the field turns it as the toggle does:
- *
- * - Agent mode, the default: the words are a coding agent's prompt. Start
- *   stands once there are words, files, or an issue, and a
- *   repository, without which it is held and the card says so under it. It
- *   starts the task with an empty plan and no call, named by the issue where
- *   one was picked and else Untitled until the agent names it, and the agent
- *   on the words, the files, and the model on the chip, in the one start
- *   (`use-tasks-tab.ts`), then opens the task on the agent's tab; an agent
- *   refused opens it on a draft agent's tab holding the words, why under
- *   the box, and Retry (`draft-agent-tab.tsx`). The model chip starts on the
- *   account's default, and a pick here runs this one agent alone: only
- *   Settings changes the default.
- * - Plan mode: the task starts from the plan template and opens its call
- *   with Luke, as New task always did. Start always stands, an empty box
- *   starting today's blank plan, and the model chip stands down, since the
- *   call runs on no model of the developer's. The words are handed to Luke
- *   as the task's brief, which he reads beside the plan, bounded as a brief
- *   is (`TASK_BOUNDS.MAX_BRIEF_CHARS`), and name nothing: the task is named
- *   by its issue where one was picked, and else stands Untitled until Luke
- *   names it, as a planned task always has.
+ * The words are a coding agent's prompt. Start stands once there are
+ * words, files, or an issue, and a repository, without which it is held and
+ * the card says so under it. It starts the task with an empty plan and no
+ * call, named by the issue where one was picked and else Untitled until the
+ * agent names it, and the agent on the words, the files, and the model on
+ * the chip, in the one start (`use-tasks-tab.ts`), then opens the task on
+ * the agent's tab; an agent refused opens it on a draft agent's tab holding
+ * the words, why under the box, and Retry (`draft-agent-tab.tsx`). The
+ * model chip starts on the account's default, and a pick here runs this one
+ * agent alone: only Settings changes the default. A call starts only from an
+ * agent's own tab, so starting a task never opens one.
  *
  * Choosing a GitHub or a Linear issue links it, as a chip over the words
  * (`new-task-links.tsx`) with its key, its title, its Closes / Part of
@@ -111,9 +93,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * chosen, makes its repository the task's, and a change of repository lets
  * go the GitHub issues of the one before. The owner's workspace changing,
  * as Home's does, lets every one go. The task is named by the first issue
- * picked, Luke researches them in Plan mode beside the brief, and in Agent
- * mode the agent is handed a mention of each, by its page, before the words
- * (`agentPromptOf`), so an issue picked and Return starts an agent on it.
+ * picked, and the agent is handed a mention of each, by its page, before the
+ * words (`agentPromptOf`), so an issue picked and Return starts an agent on
+ * it.
  *
  * An agent's start carries a key the card mints, and a press asking the
  * same again, as Retry after a start the service never answered does,
@@ -121,9 +103,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * answers them rather than a second pair; a press asking anything else
  * mints another, and so does the card mounted afresh.
  *
- * Return starts, Shift+Return is a new line, and ⌘Return on an Agent-mode
- * box with neither words nor files starts a bare task: an empty plan, no
- * call, and no agent. File for later, beside Start in either mode, files
+ * Return starts, Shift+Return is a new line, and ⌘Return on a box with
+ * neither words nor files starts a bare task: an empty plan, no call, and
+ * no agent, which needs no repository. File for later, beside Start, files
  * the task in the backlog instead:
  * no call and no agent, named by its issue where one was picked and else
  * by the words' first line, the words kept as its brief for whoever takes
@@ -140,8 +122,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * skill's `SKILL.md` on GitHub. Note that the box takes mentions with or
  * without a repository, because its editor reads that as it mounts, and a
  * repository is often chosen after. A mention is written into the words as
- * its link, so the agent's prompt or Luke's brief holds it as any message
- * does.
+ * its link, so the agent's prompt holds it as any message does.
  *
  * The words and files are New task's draft in the workspace it starts in,
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
@@ -152,41 +133,22 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * owner's.
  */
 
-/** ⌘Return: a bare task from an Agent-mode box with nothing in it. */
+/** ⌘Return: a bare task from a box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
-
-/** The most the words may spell in each mode: an agent's prompt's bound, or a brief's. */
-const MODE_MAX_CHARS = {
-  [NEW_TASK_MODE.AGENT]: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
-  [NEW_TASK_MODE.PLAN]: TASK_BOUNDS.MAX_BRIEF_CHARS,
-} as const satisfies Record<NewTaskMode, number>;
-
-/** The field's name in either mode; note that it is one name, because the editor mounts afresh on a new one. */
-const FIELD_LABEL = "Task prompt";
 
 /** The head row's title, before the repository's chip. */
 const NEW_TASK_HEADING = "New task";
 
-/** What the card says in each mode. */
-const MODE_WORDS = {
-  [NEW_TASK_MODE.AGENT]: {
-    placeholder: "Describe the change for a coding agent…",
-    label: FIELD_LABEL,
-    send: "Start agent",
-  },
-  [NEW_TASK_MODE.PLAN]: {
-    placeholder: "What should you and Luke plan? (optional)",
-    label: FIELD_LABEL,
-    send: "Start planning",
-  },
-} as const satisfies Record<NewTaskMode, ComposerWords>;
+/** What the card asks for, calls its field, and calls its round button. */
+const NEW_TASK_WORDS: ComposerWords = {
+  placeholder: "Describe the change for a coding agent…",
+  label: "Task prompt",
+  send: "Start agent",
+};
 
-/** The Plan toggle's words, and why Agent mode's Start is held without a repository. */
+/** Why Start is held without a repository, and File for later's words. */
 const COMPOSER_WORDS = {
-  PLAN: "Plan",
-  TOGGLE_LABEL: "Plan with Luke first",
-  TOGGLE_KEYS: "Shift+Tab",
-  NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
+  NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one.",
   FILE: "File for later",
   FILE_HINT: "Add it to the backlog without starting it",
 } as const;
@@ -251,11 +213,6 @@ function newTaskPlace(workspaceId: string | undefined): DraftPlace {
   return { kind: DRAFT_PLACE.NEW_TASK, workspaceId: workspaceId ?? null };
 }
 
-/** Whether a key press is Shift+Tab alone, which turns the mode from the field. */
-function turnsMode(event: KeyboardEvent): boolean {
-  return event.key === "Tab" && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
-}
-
 /** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
@@ -300,7 +257,6 @@ export function NewTaskComposer({
   /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on Home, whose card stands at the page's top, where a list risen over it is cut off under the page's head. */
   listSide: MentionMenuSide;
 }): React.JSX.Element {
-  const [mode, setMode] = useNewTaskMode();
   const draft = useDraft(newTaskPlace(workspaceId));
   const { text: words, attachments } = draft.draft;
   // Words typed before the workspaces were read become the workspace's
@@ -327,24 +283,36 @@ export function NewTaskComposer({
     linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined;
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
+  // The repositories the chip's last read listed, an App's and a member's token's alike.
+  const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository or an issue picked in one workspace is none of another's,
   // so the owner's switch, as Home's, lets them go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
+    setListed(undefined);
     if (scope !== undefined) {
       setChosen(undefined);
       setLinks([]);
     }
     setScope(repositories.scope);
   }
-  // Note that a press's repository the workspace's GitHub does not reach is
-  // not started on, because the service would refuse it.
-  const pick =
-    chosen != null && workspace !== undefined && !workspaceReaches(workspace, chosen)
+  const isListed = (name: string) =>
+    listed === undefined || listed.some((each) => each.toLowerCase() === name.toLowerCase());
+  // A pick or the recent default a read does not list is let go, so a later read listing it does
+  // not bring it back; a read made before the workspace resolved, or for the
+  // one before a switch still under way, judges none.
+  const judged = repositories.scope !== undefined && repositories.scope === scope;
+  const candidate = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
+  if (candidate !== null && !isListed(candidate) && judged) setChosen(null);
+  // Note that a repository is not started on before the read lands unless
+  // the workspace's GitHub reaches it, because the service would refuse it.
+  const repository =
+    candidate !== null &&
+    (!isListed(candidate) ||
+      (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, candidate)))
       ? null
-      : chosen;
-  const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
+      : candidate;
   // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
   const [linkedFor, setLinkedFor] = useState(repository);
   if (linkedFor !== repository) {
@@ -352,14 +320,13 @@ export function NewTaskComposer({
     setLinks((was) => was.filter((link) => !linkedElsewhere(link, repository)));
   }
   const links = picks.filter((link) => !linkedElsewhere(link, repository));
-  const planning = mode === NEW_TASK_MODE.PLAN;
   const said = words.trim();
   const filled = hasWordsOrFiles(said, attachments);
-  // Agent mode needs a repository to work in, and something to work on:
+  // An agent needs a repository to work in, and something to work on:
   // words, files, or a GitHub or Linear issue.
   const onIssue = links.length > 0;
-  const blocked = !planning && repository === null;
-  const canStart = planning || (!blocked && (filled || onIssue));
+  const blocked = repository === null;
+  const canStart = !blocked && (filled || onIssue);
   const linkedIssues = links.map(linkIssueOf);
   const named = linkedIssues[0];
   const issueName = named === undefined ? undefined : taskNameOfIssue(named);
@@ -395,17 +362,13 @@ export function NewTaskComposer({
     );
   };
 
-  const begin = (
-    name: string,
-    withCall: boolean,
-    handing: Pick<NewTaskStart, "handed" | "brief" | "status"> = {},
-  ) => {
+  const begin = (name: string, handing: Pick<NewTaskStart, "handed" | "brief" | "status"> = {}) => {
     if (starting) return;
     setStarting(true);
     onStarting?.(true);
     setNote(undefined);
     newTask
-      .start(name, repository, workspaceId, withCall, {
+      .start(name, repository, workspaceId, {
         ...(issues.length === 0 ? undefined : { issues }),
         ...handing,
       })
@@ -429,48 +392,38 @@ export function NewTaskComposer({
   const start = () => {
     if (!canStart) return;
     filing.current = false;
-    if (planning) begin(issueName ?? "", true, said === "" ? {} : { brief: said });
-    else {
-      const name = issueName ?? "";
-      const ask: AgentAsk = {
-        name,
-        repository,
-        workspaceId,
-        issues,
-        agent: { prompt: agentPromptOf(linkedIssues, said), attachments, choice },
-      };
-      const held = pressed.current;
-      const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
-      pressed.current = { ask, key };
-      begin(name, false, { handed: { idempotencyKey: key, ...ask.agent } });
-    }
+    const name = issueName ?? "";
+    const ask: AgentAsk = {
+      name,
+      repository,
+      workspaceId,
+      issues,
+      agent: { prompt: agentPromptOf(linkedIssues, said), attachments, choice },
+    };
+    const held = pressed.current;
+    const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
+    pressed.current = { ask, key };
+    begin(name, { handed: { idempotencyKey: key, ...ask.agent } });
   };
-  // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
+  // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
   const bare = () => {
     filing.current = false;
-    begin(issueName ?? "", false);
+    begin(issueName ?? "");
   };
   // File for later is a bare task in the backlog, its words kept as its brief.
   const filable = said !== "" || named !== undefined;
   const file = () => {
     if (!filable) return;
     filing.current = true;
-    begin(filedName(issueName, said), false, {
+    begin(filedName(issueName, said), {
       status: TASK_STATUS.BACKLOG,
       ...(said === "" ? undefined : { brief: said }),
     });
   };
 
   const onKey = (event: KeyboardEvent): boolean => {
-    if (turnsMode(event)) {
-      // Note that the dialog's card traps Tab, so the turn is the field's alone.
-      event.preventDefault();
-      event.stopPropagation();
-      setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN);
-      return true;
-    }
     if (!shortcutMatches(BARE_CHORD, event)) return false;
-    if (planning || filled) start();
+    if (filled) start();
     else bare();
     return true;
   };
@@ -493,7 +446,8 @@ export function NewTaskComposer({
       value={repository}
       chooser={repositories}
       onChoose={setChosen}
-      onUnreached={() => setChosen(null)}
+      onUnreached={judged ? () => setChosen(null) : undefined}
+      onListed={setListed}
     />
   );
   const full = links.length >= TASK_BOUNDS.MAX_ISSUES;
@@ -555,7 +509,7 @@ export function NewTaskComposer({
 
   const card = (
     // biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the field first, which are what take the keys.
-    <div className="new-task-composer" data-mode={mode} onKeyDown={onCardKey}>
+    <div className="new-task-composer" onKeyDown={onCardKey}>
       <div className="new-task-head">
         <div className="new-task-title">
           <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
@@ -568,11 +522,10 @@ export function NewTaskComposer({
       <AgentComposer
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
-        wording={MODE_WORDS[mode]}
-        maxLength={MODE_MAX_CHARS[mode]}
-        sendsEmpty={planning || onIssue}
+        wording={NEW_TASK_WORDS}
+        sendsEmpty={onIssue}
         sendable={!blocked}
-        model={planning || choice === undefined ? undefined : { choice, note: undefined, choose }}
+        model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         readModels={newTask.readModels}
         usage={undefined}
@@ -592,7 +545,7 @@ export function NewTaskComposer({
           )
         }
         beforeSend={(narrow) => (
-          // Note that File for later is a chip as the Plan toggle is, and a card too narrow for its words draws the backlog's mark alone, still named, so Start keeps its room.
+          // Note that File for later is a chip, and a card too narrow for its words draws the backlog's mark alone, still named, so Start keeps its room.
           <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
             <Chip
               look={CHIP_LOOK.FILTER}
@@ -605,24 +558,6 @@ export function NewTaskComposer({
               <ChipName>{COMPOSER_WORDS.FILE}</ChipName>
             </Chip>
           </Tooltip>
-        )}
-        actions={(narrow) => (
-          <span className="new-task-plan-toggle">
-            <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
-              <Chip
-                look={CHIP_LOOK.FILTER}
-                iconOnly={narrow}
-                aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
-                aria-pressed={planning}
-                aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
-                disabled={starting}
-                onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
-              >
-                <PencilIcon />
-                <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
-              </Chip>
-            </Tooltip>
-          </span>
         )}
       />
       {blocked ? (

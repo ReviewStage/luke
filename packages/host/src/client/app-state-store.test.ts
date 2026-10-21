@@ -189,7 +189,7 @@ const BOOT: HostBootstrap = {
   settings: SETTINGS,
   account: inert(),
   sessionReplay: { permitted: true, accountId: "person" },
-  access: { admin: true },
+  access: { admin: true, nativeAgents: true },
   voiceAvailable: true,
   agentTraceEnabled: true,
 };
@@ -200,7 +200,7 @@ it("a host bootstrap lands in the document as the host answered it", () => {
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
-  assert.deepEqual(held.access, { admin: true });
+  assert.deepEqual(held.access, { admin: true, nativeAgents: true });
 });
 
 it("a halt outlives every host read until the host's own event stands it down", () => {
@@ -346,10 +346,10 @@ it("the voice window is not handed back the view it reported, while a panel and 
   publish();
   assert.equal(versionOf(await panel.next()), 1);
   assert.equal(versionOf(await call.next()), 1);
-  pushes.push(voiceWindow.handle, PUSH.SHOW_TASK, { taskId: "task-1" });
+  pushes.push(voiceWindow.handle, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   assert.deepEqual((await voice.next()).value, {
-    push: PUSH.SHOW_TASK,
-    payload: { taskId: "task-1" },
+    push: PUSH.SHOW_AGENT,
+    payload: { taskId: "task-1", agentId: "agent-1" },
   });
 
   // Something it draws moves, and it is told, view and all.

@@ -2,16 +2,17 @@ import type { CodingAgentAttachment, CodingAgentStatus } from "@luke/features/co
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
-import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BUTTON_VARIANT,
   Button,
+  CallIcon,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  PlusIcon,
   SKELETON_SHAPE,
   Skeleton,
 } from "@luke/ui";
@@ -25,7 +26,6 @@ import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
-import { CallTabVideo } from "../call/panel-avatar.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -33,6 +33,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import type { ShellRoom } from "../shell-room.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { useSteadyDoor } from "../steady-door.js";
+import { CallCaptions } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
@@ -41,14 +42,19 @@ import type { AgentFork } from "../tasks/fork-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
+import {
+  INBOX_SCOPES,
+  InboxList,
+  InboxListSkeleton,
+  ItemMark,
+  ShowEmpty,
+} from "../tasks/inbox-list.js";
 import {
   firstChoice,
   INBOX_GROUPING,
   INBOX_SHOW,
   type InboxListed,
   inboxCounts,
-  inboxList,
   listedItems,
   NEEDS_YOU,
   taskHolder,
@@ -59,7 +65,6 @@ import { PlanBody, type SectionLinks } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
-import { TaskCall } from "../tasks/task-call.js";
 import { TaskIssueLinks } from "../tasks/task-issue-links.js";
 import {
   mentionablePullRequests,
@@ -69,10 +74,10 @@ import {
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
-import { CallBar } from "../tasks/tasks-parts.js";
-import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands.js";
+import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
+import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
@@ -81,7 +86,8 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js"
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { workRowsOf } from "../tasks/work-model.js";
-import { useCapability } from "../use-app-state.js";
+import { useCallingAgent } from "../use-voice-view.js";
+import { useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopHome } from "./desktop-home.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -179,6 +185,35 @@ function Toolbar({
 }
 
 /**
+ * The column with no tab to show: the plan stands in the side panel beside
+ * it, and the column offers the two ways to put an agent to work on the
+ * task, a new voice chat, where the window has a voice, and a new agent.
+ * An archived task offers neither.
+ */
+function NoAgentPane({
+  onNewVoiceChat,
+  onNewAgent,
+}: {
+  onNewVoiceChat: (() => void) | undefined;
+  onNewAgent: (() => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <section className="desktop-no-agent">
+      {onNewVoiceChat === undefined ? null : (
+        <Button variant={BUTTON_VARIANT.PRIMARY} icon={<CallIcon />} onClick={onNewVoiceChat}>
+          {TAB_WORDS.NEW_VOICE_CHAT}
+        </Button>
+      )}
+      {onNewAgent === undefined ? null : (
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />} onClick={onNewAgent}>
+          {TAB_WORDS.NEW_AGENT}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+/**
  * Copy plan's chord, the toolbar's while a task is drawn: the press itself
  * stands in the ⋯ menu, and what came of it is said in the window's toast.
  */
@@ -198,13 +233,13 @@ const NO_FOLDS = () => false;
 
 /**
  * The plan's own Inbox tab, in the side panel: its items newest first in the window's Inbox's
- * list, under the window's head with its tabs alone, which keep a
- * choice of their own (`folded-groups.ts`), and no groups since they are one
+ * list, under the window's head, whose view's menu offers To do and All
+ * alone, kept as a choice of their own (`folded-groups.ts`), and no groups since they are one
  * plan's, and the chosen item read beside them in the same pane, on the
  * plan's own held read. With nothing chosen, the first item listed that
- * waits stands chosen, else the newest; a plan whose read holds nothing
- * says so under the Inbox's glyph, and one whose items its tab leaves out
- * says so in its list and offers the tab beside it, the item chosen still shown
+ * the reader is not done with stands chosen, else the newest; a plan whose read holds nothing
+ * says so under the Inbox's glyph, and one whose items its scope leaves out
+ * says so in its list and offers All, the item chosen still shown
  * beside it. The pane's plan crumb chooses the plan's tab and its agent crumb
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
@@ -251,31 +286,34 @@ function TaskInboxTab({
     show: show.show,
     readerId: tasks.me,
   };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(groups, { ...filter, chosen: undefined });
-  const steps = inboxList(groups, { ...filter, chosen: asked });
+  // Note that the tab stands in the side panel, so it is on screen while the panel is.
+  const shown = tasks.shown && tasks.sidePanel.open;
+  // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its
+  // place, both held still while the tab is shown (`use-held-inbox-list.ts`).
+  const { list, steps } = useHeldInboxList(groups, filter, asked, shown);
   const listed = listedItems(list);
   const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
   // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
   if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
   const filteredOut = show.show !== INBOX_SHOW.ALL && listed.length === 0 && items.length > 0;
-  // Note that the way back counts every item, filtered out or not, since the list holds the tabs.
+  // Note that the way back counts every item, filtered out or not, since the list holds the view's menu.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
-  // Note that the tab stands in the side panel, so it is on screen while the panel is.
-  const shown = tasks.shown && tasks.sidePanel.open;
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  const opened = shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen : undefined;
   useReadOnOpen({
-    shown: shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen?.item : undefined,
+    shown: opened?.item,
     chosen: chosen?.item,
     active: shown,
     onMark: marks.onMark,
   });
-  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // A notice of the reader's own is acknowledged as it opens, as the window's Inbox acknowledges it.
+  useNodOnOpen({ shown: opened, readerId: tasks.me, control: inbox });
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown,
     folded: NO_FOLDS,
   });
@@ -292,6 +330,7 @@ function TaskInboxTab({
     ),
     open,
     NO_FOLDS,
+    direction,
   );
   return (
     <section
@@ -309,7 +348,7 @@ function TaskInboxTab({
         head={{
           shown,
           show,
-          counts,
+          scopes: INBOX_SCOPES.TASK,
           view: undefined,
         }}
         models={tasks.agents.models}
@@ -441,9 +480,8 @@ function PlanDocument({
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
-  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
-  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
-  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
+  // The agent of this task a call is in progress into, whose tab wears the live mark.
+  const calling = useCallingAgent();
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -464,17 +502,18 @@ function PlanDocument({
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  const openTerminal = useOpenTerminal(tasks.sidePanel, showSide);
+  // Open terminal and Run open an agent's terminals as on every surface that draws it (`agent-actions.tsx`).
+  const terminalDoors = useAgentTerminalDoors(
+    tasks.sidePanel,
+    region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
+    showSide,
+  );
   // A refusal is said beside the chip, under the task it was about and no
   // other. Note that it is held above the states with no document, because
   // a task opened from the list is drawn reading before its read lands, and
   // a hook that only the ready page reached would be one more hook than
   // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ taskId: string; note: string } | undefined>(undefined);
-  // The one slot the toolbar keeps for a ⋯: the task's on its tab, and on
-  // another the chosen tab's own, drawn there from the tab (`strip-tabs.tsx`).
-  // Held above the states with no document for the same reason.
-  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // The task as the list names it, its owner, agents, and pull requests
   // among it, which its card and its banner read. Held above the states
   // with no document for the same reason.
@@ -577,13 +616,12 @@ function PlanDocument({
   };
   // Note that what the transcripts and the plan are handed, and what they
   // read from around them, is held across this page's draws over the same
-  // task, because each holds while that does (`TaskCall`, `AgentPane`,
-  // `PlanBody`), and the page is drawn again as its column's focus, its side
+  // task, because each holds while that does (`AgentPane`, `PlanBody`), and
+  // the page is drawn again as its column's focus, its side
   // panel's width, and the minute's clock move; only the cards a
   // transcript's rows hang move with the minute. Each door stands across
   // draws and calls the newest closure (`useSteadyDoor`).
   const openTargetDoor = useSteadyDoor(openTarget);
-  const openSubagent = useSteadyDoor((callId: string) => openPanelTab({ subagent: callId }));
   const openDelegationDoor = useSteadyDoor(openDelegation);
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
@@ -661,10 +699,6 @@ function PlanDocument({
       ),
     [opened, archived, linearIssuesIn, githubIssuesIn],
   );
-  const video = useMemo(
-    () => (openedId === undefined ? undefined : <CallTabVideo taskId={openedId} />),
-    [openedId],
-  );
   // A chat notice in an agent's transcript reads its message from the chat
   // the window holds, and opens the window's Chat on its channel.
   const chatRead = tasks.chatView.chat;
@@ -697,7 +731,11 @@ function PlanDocument({
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
             shownCode: shownCode ?? [],
-            task: { name: listedCard.name, card: taskCardOf(tasks, listedCard, now) },
+            task: {
+              name: listedCard.name,
+              status: listedCard.status,
+              card: taskCardOf(tasks, listedCard, now),
+            },
           }),
     [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
   );
@@ -814,23 +852,9 @@ function PlanDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  // Start and the task's ⋯ are the task's, not an agent's, so only the
-  // Call's tab, which anchors the column, draws them; the task's chords
-  // stand on every tab.
-  const onTaskTab = tab === MAIN_TAB.CALL;
   const openTaskLink = (href: string) => {
     if (!openHere(href)) openLink(href);
   };
-  // Run opens the agent's run on this Mac in the side panel at once;
-  // the tab reads the agent's pushed branch and starts it (`mac-terminal-tab.tsx`).
-  const { repository } = task;
-  const openOnMac =
-    repository === null || !macTerminalOffered
-      ? undefined
-      : (agentId: string) => {
-          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
-          showSide();
-        };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
   // A summary row that opens a tab of the side panel hands the panel the
@@ -919,7 +943,6 @@ function PlanDocument({
                         heading={
                           <MainTabStrip
                             task={task}
-                            taskCard={taskCardOf(tasks, listed, now)}
                             main={mainTabs}
                             agents={agents}
                             unread={tasks.unreadTabs}
@@ -932,13 +955,10 @@ function PlanDocument({
                             keys={tasks.shown && !sideFocused}
                             shown={tasks.shown}
                             chat={chatOn && tasks.chatView.available}
-                            actionsSlot={actionsSlot}
-                            onOpenTerminal={
-                              terminalsOffered
-                                ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
-                                : undefined
-                            }
-                            onOpenOnMac={openOnMac}
+                            onOpenTerminal={terminalDoors.onOpenTerminal}
+                            onOpenOnMac={terminalDoors.onOpenOnMac}
+                            onNewVoiceChat={tasks.onNewVoiceChat}
+                            calling={calling}
                           />
                         }
                       >
@@ -953,7 +973,7 @@ function PlanDocument({
                           </p>
                         ) : null}
                         <CopyChord copy={tasks.copy} />
-                        {terminalsOffered ? (
+                        {terminalDoors.terminals ? (
                           <TerminalCommands
                             here={terminalHere}
                             agents={agents}
@@ -979,17 +999,14 @@ function PlanDocument({
                                 onChoose={chooseRepository}
                                 openRequest={menuRequest}
                               />
-                              {onTaskTab ? <StartAgentButton control={agents} /> : null}
+                              <StartAgentButton
+                                control={agents}
+                                onNewVoiceChat={tasks.onNewVoiceChat}
+                              />
                             </>
                           )}
-                          <span ref={setActionsSlot} className="toolbar-tab-actions">
-                            <TaskActions
-                              tasks={tasks}
-                              task={task}
-                              button={onTaskTab}
-                              onRename={rename.begin}
-                            />
-                          </span>
+                          {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. */}
+                          <TaskActions tasks={tasks} task={task} button onRename={rename.begin} />
                         </Fragment>
                         <SummaryButton layout={summaryLayout} cardId={summaryCard} />
                       </Toolbar>
@@ -1002,30 +1019,18 @@ function PlanDocument({
                         <FindScope
                           className="desktop-task-column"
                           active={tasks.shown && !sideFocused}
-                          subject={{ task: task.id, tab }}
+                          subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
                         >
                           {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-                          {tab === MAIN_TAB.CALL ? (
-                            <section
-                              className="desktop-agent"
-                              role="tabpanel"
-                              aria-label={TAB_WORDS.CALL}
-                              data-popover-room=""
-                            >
-                              <TaskCall
-                                region={tasks.transcript.region}
-                                onRetry={tasks.transcript.onRetry}
-                                conversation={tasks.work.conversation}
-                                onLoadEarlier={tasks.work.onLoadEarlier}
-                                onOpenSubagent={openSubagent}
-                                onOpenTarget={openTargetDoor}
-                                cards={cards.call}
-                                shown={tasks.shown && !sidePanel.fullScreen}
-                                models={agents.models}
-                                reveal={tasks.transcript.reveal ?? tasks.work.reveal}
-                                video={video}
-                              />
-                            </section>
+                          {tab === undefined ? (
+                            <NoAgentPane
+                              onNewVoiceChat={archived ? undefined : tasks.onNewVoiceChat}
+                              onNewAgent={
+                                archived
+                                  ? undefined
+                                  : () => openColumnTab({ draft: agents.onNewDraft() })
+                              }
+                            />
                           ) : null}
                           {tab === MAIN_TAB.CHAT && chatOn ? (
                             <section
@@ -1036,22 +1041,25 @@ function PlanDocument({
                               <TaskChatTab tasks={tasks} taskId={task.id} />
                             </section>
                           ) : null}
-                          {tab === MAIN_TAB.CALL || tab === MAIN_TAB.CHAT ? null : (
-                            <AgentPane
-                              label={mainTabLabel(tab, agents)}
-                              tabbed
-                              tab={tab}
-                              agents={agents}
-                              shown={tasks.shown && !sidePanel.fullScreen}
-                              views={views}
-                              onOpenDelegation={openDelegationDoor}
-                              onOpenPullRequest={openPullRequestDoor}
-                              onOpenTarget={openTargetDoor}
-                              cards={cards}
-                              chat={chat}
-                              onFork={forkDoor}
-                              onContinue={continueDoor}
-                            />
+                          {tab === undefined || tab === MAIN_TAB.CHAT ? null : (
+                            <CallCaptions.Provider value={captions}>
+                              <AgentPane
+                                call={tasks.calls}
+                                label={mainTabLabel(tab, agents)}
+                                tabbed
+                                tab={tab}
+                                agents={agents}
+                                shown={tasks.shown && !sidePanel.fullScreen}
+                                views={views}
+                                onOpenDelegation={openDelegationDoor}
+                                onOpenPullRequest={openPullRequestDoor}
+                                onOpenTarget={openTargetDoor}
+                                cards={cards}
+                                chat={chat}
+                                onFork={forkDoor}
+                                onContinue={continueDoor}
+                              />
+                            </CallCaptions.Provider>
                           )}
                         </FindScope>
                         <TaskSummary
@@ -1064,19 +1072,6 @@ function PlanDocument({
                           onOpenAgent={(agent) => openColumnTab({ agent })}
                         />
                       </div>
-                      {/* Note that a call of the plan's own still stands, so it can be
-            ended, when only a race left one on a plan just archived. */}
-                      {!voiceOffered || (archived && !tasks.stop.shown) ? null : (
-                        <div className="desktop-call-bar">
-                          {captions}
-                          <CallBar
-                            status={tasks.status}
-                            microphone={tasks.microphone}
-                            speaker={tasks.speaker}
-                            stop={tasks.stop}
-                          />
-                        </div>
-                      )}
                     </div>
                     {drawing.panel ? (
                       <SidePanel
@@ -1090,7 +1085,6 @@ function PlanDocument({
                         shownCode={tasks.shownCode}
                         codeFailed={tasks.workFailed ? { onRetry: tasks.onRetryWork } : undefined}
                         pages={tasks.pages}
-                        transcript={tasks.transcript}
                         work={tasks.work}
                         agents={agents}
                         openAgents={mainTabs.openAgents}
@@ -1104,6 +1098,7 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
+                        task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,
                           waiting: inbox.board.open.length,

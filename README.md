@@ -26,8 +26,8 @@ Claude Code, Codex, or any other agent.
 
 ## How it works
 
-1. **Talk.** Create a task on a GitHub repository and press the microphone, or
-   hold ⌥Space from any app. Luke answers by voice. While you talk he runs
+1. **Talk.** Create a task on a GitHub repository and start a voice chat, or
+   press Call on any of its agents. Luke answers by voice. While you talk he runs
    `grep`, `cat`, and `git log` on a checkout of the repository, and hands
    longer searches to background workers so the call keeps going.
 2. **Plan.** A second model writes what the call settles into the task's plan:
