@@ -741,3 +741,138 @@ it.effect("while someone watches, a click waits the cursor's beat after its move
     assert.ok(pressed());
   }),
 );
+
+/**
+ * Moves the clock on in small steps, so a fiber still crossing the fake PTY
+ * as the move begins has armed its timer before the time it waits for has
+ * passed.
+ */
+function advance(by: Duration.Duration) {
+  const step = Duration.millis(50);
+  const steps = Math.ceil(Duration.toMillis(by) / Duration.toMillis(step));
+  return Effect.repeat(TestClock.adjust(step), { times: steps - 1 });
+}
+
+/** A page's tree that is only its root, named as the page is. */
+function pageTree(name: string) {
+  return { nodes: [{ nodeId: "1", role: { value: "RootWebArea" }, name: { value: name } }] };
+}
+
+/** A frame event on the blank page's session, as Chromium sends it with the page's events on. */
+function frameEvent(method: string, frameId = "main"): CdpEvent {
+  return { method, params: { frameId }, sessionId: "session-page-blank" };
+}
+
+it.effect(
+  "a wait after a click waits out the navigation the click started, as the old page still reads loaded",
+  () =>
+    Effect.gen(function* () {
+      let shown = "Login";
+      const { peer } = yield* browser((command) => {
+        if (command.method === "Page.enable") return { result: {} };
+        if (command.method === "Accessibility.getFullAXTree") return { result: pageTree(shown) };
+        // The login page stays loaded until the next document commits.
+        return command.method === "Runtime.evaluate"
+          ? { result: { result: { value: "complete" } } }
+          : undefined;
+      });
+      const tab = "page-blank";
+
+      const running = yield* Effect.forkChild(
+        run(peer, [
+          { action: BROWSER_AGENT_ACTION.CLICK, tab, x: 40, y: 60 },
+          { action: BROWSER_AGENT_ACTION.WAIT },
+          { action: BROWSER_AGENT_ACTION.SNAPSHOT },
+        ]),
+      );
+      yield* advance(Duration.millis(100));
+      yield* peer.emit(frameEvent("Page.frameStartedLoading"));
+      yield* advance(Duration.seconds(1));
+      shown = "Secure area";
+      yield* peer.emit(frameEvent("Page.frameStoppedLoading"));
+      const ran = yield* Fiber.join(running);
+
+      assert.deepEqual(
+        ran.steps.map((step) => [step.action, step.status]),
+        [
+          ["click", "done"],
+          ["wait", "done"],
+          ["snapshot", "done"],
+        ],
+      );
+      const snapshotted = ran.steps[2];
+      assert.ok(snapshotted !== undefined && "text" in snapshotted);
+      assert.equal(snapshotted.text, '- page "Secure area"');
+    }),
+);
+
+it.effect(
+  "a wait after a click that navigates nowhere answers after the grace, and one after typing at once",
+  () =>
+    Effect.gen(function* () {
+      const { peer } = yield* browser((command) => {
+        if (command.method === "Page.enable") return { result: {} };
+        return command.method === "Runtime.evaluate"
+          ? { result: { result: { value: "complete" } } }
+          : undefined;
+      });
+      const tab = "page-blank";
+
+      const typed = yield* run(peer, [
+        { action: BROWSER_AGENT_ACTION.TYPE, tab, text: "dean" },
+        { action: BROWSER_AGENT_ACTION.WAIT },
+      ]);
+      const clicked = yield* Effect.forkChild(
+        run(peer, [
+          { action: BROWSER_AGENT_ACTION.CLICK, tab, x: 40, y: 60 },
+          { action: BROWSER_AGENT_ACTION.WAIT },
+        ]),
+      );
+      yield* advance(Duration.seconds(1));
+      const still = yield* Fiber.join(clicked);
+
+      assert.deepEqual(typed.steps.at(-1), { action: "wait", status: "done", tab });
+      assert.deepEqual(still.steps.at(-1), { action: "wait", status: "done", tab });
+    }),
+);
+
+it.effect(
+  "a screenshot of a tab that has drawn nothing yet is asked again for a moment before it fails",
+  () =>
+    Effect.gen(function* () {
+      let refusals = 3;
+      const { peer } = yield* browser((command) => {
+        if (command.method === "Runtime.evaluate") return { result: { result: { value: 1 } } };
+        if (command.method !== "Page.captureScreenshot") return undefined;
+        if (refusals <= 0) return { result: { data: "/9j/AAAA" } };
+        refusals -= 1;
+        return { error: { code: -32000, message: "Unable to capture screenshot" } };
+      });
+      const tab = "page-blank";
+
+      const painting = yield* Effect.forkChild(
+        run(peer, [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab }]),
+      );
+      yield* advance(Duration.seconds(1));
+      const painted = yield* Fiber.join(painting);
+      refusals = Number.POSITIVE_INFINITY;
+      const blank = yield* Effect.forkChild(
+        run(peer, [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab }]),
+      );
+      yield* advance(Duration.seconds(2));
+      const never = yield* Fiber.join(blank);
+
+      assert.deepEqual(painted.steps, [
+        {
+          action: "screenshot",
+          status: "done",
+          tab,
+          image: { mime: "image/jpeg", data: "/9j/AAAA", width: 1280, height: 800 },
+        },
+      ]);
+      assert.equal(
+        failureOf(never.steps[0]),
+        "the browser refused Page.captureScreenshot: Unable to capture screenshot",
+      );
+    }),
+);

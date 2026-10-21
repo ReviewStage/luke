@@ -693,6 +693,35 @@ it.layer(getTestDB())("the browser tool", (it) => {
       }),
   );
 
+  it.effect("a list before a later action on its tab keeps the title it saw", () =>
+    Effect.gen(function* () {
+      const { conversationId } = yield* openConversation;
+      const { peer } = yield* browser();
+      const url = "https://shop.test/inbox";
+
+      const result = ran(
+        yield* call(
+          conversationId,
+          {
+            actions: [
+              { action: BROWSER_AGENT_ACTION.OPEN, url },
+              { action: BROWSER_AGENT_ACTION.LIST },
+              { action: BROWSER_AGENT_ACTION.CLICK, x: 10, y: 10 },
+            ],
+          },
+          agentBrowserTestLayer(peer, SESSION),
+        ),
+      );
+
+      assert.deepEqual(result.steps[1], {
+        action: BROWSER_AGENT_ACTION.LIST,
+        status: BROWSER_STEP_STATUS.DONE,
+        tabs: [{ tab: "tab-1", url, title: url }],
+      });
+      assert.deepEqual(result.tabs, [{ tab: "tab-1", url, title: titleAt(url) }]);
+    }),
+  );
+
   it.effect(
     "a screenshot reaches the model as an image and is left out of the stored conversation",
     () =>

@@ -496,6 +496,7 @@ it.effect(
       });
       assert.equal(options.sandbox?.enabled, true);
       assert.equal(options.sandbox?.failIfUnavailable, true);
+      assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
       assert.deepEqual(options.sandbox?.network?.allowedDomains, CONFIG.allowedDomains);
       const denied = (options.sandbox?.credentials?.envVars ?? []).map(
         (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,

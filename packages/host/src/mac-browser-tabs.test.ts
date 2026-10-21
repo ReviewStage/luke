@@ -11,7 +11,8 @@ import {
   MAC_COMMAND_IMAGE_TYPE,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
-import { Effect, Schema } from "effect";
+import { Duration, Effect, Fiber, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import {
   type MacBrowserDesk,
   type MacBrowserTab,
@@ -361,6 +362,35 @@ it.effect(
       });
       assert.deepEqual(ran.image, { mediaType: MAC_COMMAND_IMAGE_TYPE.JPEG, data: small });
       assert.ok(Buffer.from(small, "base64").length <= BROWSER_SCREENSHOT.MAX_BYTES);
+    }),
+);
+
+it.effect(
+  "a screenshot of a tab that has drawn nothing yet waits a moment for its first frame, as the cloud's does",
+  () =>
+    Effect.gen(function* () {
+      let blank = 2;
+      const tab = fakeTab("tab-a", "http://localhost:3000/", () => {
+        blank -= 1;
+        return blank >= 0 ? undefined : jpegOf(40_000);
+      });
+      const running = yield* Effect.forkChild(
+        run(desk(new Map([[TASK, taskTabs([tab]).own]])), [
+          { action: BROWSER_AGENT_ACTION.SNAPSHOT, tab: "tab-a" },
+          { action: BROWSER_AGENT_ACTION.SCREENSHOT },
+        ]),
+      );
+      yield* TestClock.adjust(Duration.seconds(1));
+
+      const ran = outputOf(yield* Fiber.join(running));
+      assert.deepEqual(
+        ran.output.steps.map((step) => [step.action, step.status]),
+        [
+          ["snapshot", "done"],
+          ["screenshot", "done"],
+        ],
+      );
+      assert.deepEqual(ran.image, { mediaType: MAC_COMMAND_IMAGE_TYPE.JPEG, data: jpegOf(40_000) });
     }),
 );
 
