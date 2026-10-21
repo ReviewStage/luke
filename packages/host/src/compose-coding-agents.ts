@@ -111,6 +111,7 @@ import {
   scopeInboxes,
 } from "./scope-inbox-follow.js";
 import {
+  confirmTranscriptWrite,
   followTranscript,
   type TranscriptFollows,
   TranscriptKey,
@@ -626,7 +627,13 @@ function composed(
           return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
         }
         const answer = yield* asked(client.message(agentId, request));
-        return carried<CodingAgentAgentAnswer>(answer);
+        if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
+        // The send is confirmed once its row reached the transcript a window follows now, and at once where none does.
+        const key = new TranscriptKey({ agentId, callId: undefined });
+        if (yield* FiberMap.has(followed, key)) {
+          yield* confirmTranscriptWrite(transcripts, key, answer.txid);
+        }
+        return carried<CodingAgentAgentAnswer>({ agent: answer.agent });
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>
       Effect.gen(function* () {
