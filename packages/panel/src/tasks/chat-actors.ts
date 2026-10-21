@@ -1,22 +1,108 @@
-import { type ChatAnswer, MEMBER_KIND } from "@luke/features/chat-wire";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, personActor } from "@luke/ui/actor-model";
-import { type ChatNames, chatWho } from "@luke/ui/chat-model";
+import { CHANNEL_KIND, type ChatAnswer, MEMBER_KIND } from "@luke/features/chat-wire";
+import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  personActor,
+  SOMEONE_REASON,
+} from "@luke/ui/actor-model";
+import { type ChatNames, chatNames, chatWho } from "@luke/ui/chat-model";
+import { useMemo } from "react";
 import { useMemberDirectory } from "../member-directory.js";
-import { providerOf } from "./coding-agent-model.js";
+import { agentActor } from "./coding-agent-model.js";
+import { type UnlinedAgent, useUnlinedAgents } from "./mentioned-agent-card.js";
 
 /**
- * chat-actors.ts -- a chat member as the rest of the app draws who said something: a person with their photo, Luke, or an agent with its harness.
+ * chat-actors.ts -- a chat member as the rest of the app draws who said something: a person with their photo, Luke, or an agent with its harness and where it stands.
  *
  * A chat message names its author by member, and a member is a person, an
  * agent, or a task's Luke. Each is drawn as the `Actor` every other place
  * of the window draws them by (`actor-ref.tsx`): a person read against the
  * workspace's members for their name, photo, email, and role, "You" for
- * the reader, grayed where they left (`personActor`); an agent by its title,
- * its task where a plan's summary names it, and its harness at rest, as a
- * transcript's sender is (`lineSender`); and Luke as himself. A person the
- * members read does not reach yet stands by the name the chat read carries,
- * the reader by the account's own.
+ * the reader, grayed where they left (`personActor`); an agent by its name,
+ * its task where a plan's summary names it, and its harness wearing where
+ * it stands, as its tile is everywhere else (`agentActor`); and Luke as
+ * himself. A person the members read does not reach yet stands by the
+ * name the chat read carries, the reader by the account's own, and a member
+ * whose account is gone as a former member, by the one name `chatWho`
+ * gives them.
+ *
+ * An agent is named and drawn from its line: the plans' summaries name a
+ * few of each task's agents, and an agent the chat draws past those, an
+ * archived one's or one past the few, is read as its chip's mark reads it
+ * (`useUnlinedAgents`), so no agent stands as its model's bare id on the
+ * mark of no known harness.
  */
+
+/** An agent's line from the summary a read of it answered, as a plan's summary would list it. */
+function lineOf(agent: {
+  readonly id: string;
+  readonly title: string | null;
+  readonly personaName?: string;
+  readonly model: string;
+  readonly effort: string;
+  readonly status: TaskAgentLine["status"];
+}): TaskAgentLine {
+  const line: TaskAgentLine = {
+    id: agent.id,
+    title: agent.title,
+    model: agent.model,
+    effort: agent.effort,
+    status: agent.status,
+  };
+  return agent.personaName === undefined ? line : { ...line, personaName: agent.personaName };
+}
+
+/** The agents the chat draws, as authors of its messages or one of a direct message's two, that no line of `names` names. */
+function unlinedAgents(chat: ChatAnswer | undefined, names: ChatNames): readonly UnlinedAgent[] {
+  if (chat === undefined) return [];
+  const drawn = new Set([
+    ...chat.messages.map((message) => message.authorId),
+    ...chat.channels.flatMap((channel) =>
+      channel.kind === CHANNEL_KIND.DM ? (channel.members ?? []) : [],
+    ),
+  ]);
+  return chat.members.flatMap((member) =>
+    member.kind !== MEMBER_KIND.AGENT ||
+    member.agentId === undefined ||
+    !drawn.has(member.id) ||
+    names.agents.has(member.agentId)
+      ? []
+      : [{ agentId: member.agentId, taskId: member.planId }],
+  );
+}
+
+/** A member whose account is gone, as `chatWho` names them: by the name the chat still holds, else as a former member. */
+function formerMember(name: string | undefined): Actor {
+  const left = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER } as const;
+  return name === undefined ? left : { ...left, name };
+}
+
+/**
+ * The names a chat is drawn by (`chatNames`): each agent's line from the
+ * plans' summaries and the lines the read carries, and for an agent the chat
+ * draws that none of those names, the line read for it.
+ */
+export function useChatNames(
+  tasks: readonly TaskSummary[],
+  read: { readonly answer: ChatAnswer; readonly agents: readonly TaskAgentLine[] } | undefined,
+  selfName: string | undefined,
+): ChatNames {
+  const listed = useMemo(
+    () => chatNames(tasks, read?.agents ?? [], selfName),
+    [tasks, read, selfName],
+  );
+  const unlined = useMemo(() => unlinedAgents(read?.answer, listed), [read, listed]);
+  const found = useUnlinedAgents(unlined);
+  return useMemo(
+    () =>
+      found.length === 0
+        ? listed
+        : chatNames(tasks, [...(read?.agents ?? []), ...found.map(lineOf)], selfName),
+    [found, listed, tasks, read, selfName],
+  );
+}
 
 /** The actor a member is drawn as, by the member's id, read against the workspace's members around the caller. */
 export function useChatActor(
@@ -34,27 +120,36 @@ export function useChatActor(
         const taskId =
           member.planId ??
           (member.agentId === undefined ? undefined : names.agentTasks.get(member.agentId));
+        // An agent no line names is drawn at rest on the mark of no known harness.
+        const drawn =
+          who.agent === undefined
+            ? {
+                kind: ACTOR_KIND.AGENT,
+                name: who.name,
+                provider: undefined,
+                state: ACTOR_STATE.REST,
+              }
+            : agentActor(who.agent, who.name);
         return {
-          kind: ACTOR_KIND.AGENT,
-          name: who.name,
+          ...drawn,
           ...(member.agentId === undefined ? undefined : { agentId: member.agentId }),
           ...(taskId === undefined ? undefined : { taskId }),
-          provider: who.agent === undefined ? undefined : providerOf(who.agent.model),
-          state: ACTOR_STATE.REST,
         };
       }
       case MEMBER_KIND.HUMAN: {
-        if (member.userId === undefined) return personActor(undefined, members, readerId, former);
-        const named = members?.find((each) => each.userId === member.userId)?.name;
-        return personActor(
-          { userId: member.userId, name: named ?? who.name },
-          members,
-          readerId,
-          former,
-        );
+        if (member.userId !== undefined) {
+          const named = members?.find((each) => each.userId === member.userId)?.name;
+          return personActor(
+            { userId: member.userId, name: named ?? who.name },
+            members,
+            readerId,
+            former,
+          );
+        }
+        return formerMember(member.name);
       }
       default:
-        return personActor(undefined, members, readerId, former);
+        return formerMember(undefined);
     }
   };
 }

@@ -20,7 +20,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
-import { type CodeRef, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import {
+  type CodeRef,
+  TASK_TREE_ENTRY,
+  type TaskAgentLine,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -250,7 +255,14 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   );
   // The folded thread is summed up by its repliers' faces and how many replied, as a comment thread at rest is.
   assert.equal(toggle?.textContent, "2 replies");
-  assert.equal(toggle?.querySelectorAll(".actor-stack .actor-mark").length, 2);
+  // Each replier's face is named to a screen reader and hangs their card, as a pull request's reviewers' are.
+  const repliers = page.querySelectorAll(
+    '.chat-message[data-seq="43"] .chat-thread-toggle ul[aria-label="Replies from"] > li',
+  );
+  assert.deepEqual(
+    [...repliers].map((face) => face.getAttribute("aria-label")),
+    ["Add teammate invitations", "Invite emails"],
+  );
   act(() => toggle?.click());
   assert.deepEqual(stream(page).slice(0, 5), [
     "Invite emails",
@@ -951,6 +963,9 @@ test("a direct message between two others reads as theirs, named by both, with n
   });
   // Nothing in it waits on the developer, so For you holds what it held.
   assert.equal(rail(page)[0], "▸ For you (4)");
+  // Its row's mark draws both of its two, as its name names both.
+  const pair = railRow(page, "Add teammate invitations ↔ Invite emails").closest("li");
+  assert.equal(pair?.querySelectorAll(".inbox-row-mark .actor-stack .actor-mark").length, 2);
   act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
   assert.equal(
     page.querySelector(".chat-head h2")?.textContent,

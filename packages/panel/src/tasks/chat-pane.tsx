@@ -134,6 +134,12 @@ const CHANNEL_META = {
   [CHANNEL_KIND.TOPIC]: "Topic",
 } as const;
 
+/** How many repliers a folded thread draws before it counts the rest. */
+const REPLIERS_DRAWN = 3;
+
+/** What a folded thread's faces are, to a screen reader. */
+const REPLIERS_LABEL = "Replies from";
+
 /** What a thread's press says: how many replies a folded one holds, Reply where it holds none, Hide once open. */
 function threadToggleWords(open: boolean, count: number): string {
   if (open) return "Hide thread";
@@ -532,7 +538,6 @@ function ThreadRow({
       aria-expanded={open}
       onClick={() => setOpen((was) => !was)}
     >
-      {replies.length > 0 && !open ? <ActorStack actors={repliers} drawn={3} /> : null}
       {threadToggleWords(open, replies.length)}
     </TextButton>
   );
@@ -553,7 +558,18 @@ function ThreadRow({
         <Body message={message} context={context} />
         {quiet ? null : (
           <div className="chat-thread" data-open={String(open)}>
-            <p className="chat-thread-toggle">{toggle}</p>
+            <div className="chat-thread-toggle">
+              {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
+              {replies.length > 0 && !open ? (
+                <ActorStack
+                  actors={repliers}
+                  drawn={REPLIERS_DRAWN}
+                  faces={repliers.map(() => ({}))}
+                  label={REPLIERS_LABEL}
+                />
+              ) : null}
+              {toggle}
+            </div>
             {open && replies.length > 0 ? (
               <ul className="chat-replies">
                 {replies.map((reply) => (

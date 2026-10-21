@@ -259,7 +259,7 @@ export function agentActorState(status: CodingAgentStatus): ActorState {
 export function agentActor(
   agent: { readonly model: string; readonly status: CodingAgentStatus },
   name: string,
-): Actor {
+): Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }> {
   return {
     kind: ACTOR_KIND.AGENT,
     name,

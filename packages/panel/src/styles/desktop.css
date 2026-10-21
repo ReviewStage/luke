@@ -5517,8 +5517,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-top: var(--luke-space-4);
 }
 
-/* A folded thread's press leads with its repliers' faces, then how many
-   replied, as a plan comment's thread at rest is summed up. */
+/* A folded thread's press follows its repliers' faces, each hanging its
+   card, and says how many replied, as a plan comment's thread at rest is
+   summed up. */
 .chat-thread-toggle {
   margin: 0;
   font-size: var(--luke-type-label-size);

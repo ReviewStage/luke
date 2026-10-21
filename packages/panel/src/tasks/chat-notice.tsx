@@ -15,7 +15,7 @@ import {
 } from "@luke/ui/chat-model";
 import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ActorRef } from "../actor-ref.js";
 import { FadingWords } from "../fading-words.js";
 import { useChatActor } from "./chat-actors.js";
 import { RelativeTime } from "./relative-time.js";
@@ -111,16 +111,13 @@ export function ChatNoticeCard({
       data-message-id={messageId}
     >
       <header className="chat-notice-head">
-        {from ?? (
-          <>
-            {who?.member === undefined ? null : (
-              <ActorMark actor={actorOf(who.member.id)} size={ACTOR_SIZE.INLINE} />
-            )}
-            <span className="chat-notice-from">
-              {who?.member === undefined ? notice.from : who.name}
-            </span>
-          </>
-        )}
+        {/* A sender the chat names is drawn by their own chip, which hangs their card, as another agent is by its own. */}
+        {from ??
+          (who?.member === undefined ? (
+            <span className="chat-notice-from">{notice.from}</span>
+          ) : (
+            <ActorRef actor={actorOf(who.member.id)} />
+          ))}
         <FadingWords className="chat-notice-place">
           {where === undefined ? null : `${where} · `}m {notice.chat_seq}
           {held === undefined ? null : (
