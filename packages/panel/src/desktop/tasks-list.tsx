@@ -72,6 +72,7 @@ import { useAppCommand } from "../app-commands.js";
 import { FadingWords } from "../fading-words.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { RelativeTime } from "../tasks/relative-time.js";
@@ -109,7 +110,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * under way at first (`tasksListGroups`). Every row of the page is a row of
  * one grid, as Linear's list stands its rows: the task's priority, key, and
  * status before its name, and after it how many Inbox threads of it wait on
- * the reader, its repository, its creator's face, what its agents are doing
+ * the reader, its repository led by its owner's picture, as the sidebar
+ * draws one (`repository-picture.tsx`), its creator's face, what its agents are doing
  * and the pull request they opened, when it last moved, and its ⋯, each
  * where the view draws it, so each column lines up down the whole page
  * whatever any one row holds.
@@ -366,7 +368,16 @@ function groupHead(
     case TASKS_GROUP.REPOSITORY:
       return head.repository === null
         ? { icon: <FolderXIcon />, name: NO_REPOSITORY }
-        : { icon: <FolderGitIcon />, name: repositoryLabel(head.repository, repositories) };
+        : {
+            icon: (
+              <RepositoryPicture
+                repository={head.repository}
+                pictures={tasks.repositories.pictures}
+                fallback={<FolderGitIcon />}
+              />
+            ),
+            name: repositoryLabel(head.repository, repositories),
+          };
     case TASKS_GROUP.CREATOR:
       return head.creatorId === null
         ? { icon: <UserXIcon />, name: NO_CREATOR }
@@ -617,7 +628,20 @@ function TaskListRow({
       {cell(TASK_PROPERTY.WAITING, <WaitingBadge count={waiting} />)}
       {cell(
         TASK_PROPERTY.REPOSITORY,
-        <FadingWords className="tasks-list-repository" words={repositoryName} />,
+        <>
+          {task.repository === null ? (
+            <FolderXIcon className="tasks-list-repository-glyph" aria-hidden="true" />
+          ) : (
+            <RepositoryPicture
+              repository={task.repository}
+              pictures={tasks.repositories.pictures}
+              fallback={
+                <FolderGitIcon className="tasks-list-repository-glyph" aria-hidden="true" />
+              }
+            />
+          )}
+          <FadingWords className="tasks-list-repository" words={repositoryName} />
+        </>,
       )}
       {cell(TASK_PROPERTY.CREATOR, <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />)}
       {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} />)}

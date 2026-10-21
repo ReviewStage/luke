@@ -58,7 +58,6 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { useTaskMenu } from "./task-actions.js";
-import { taskCardOf } from "./task-card.js";
 import {
   PriorityChip,
   StatusChip,
@@ -83,9 +82,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * repository, what its agents are doing and the pull requests they opened
  * (`task-row-parts.tsx`), and a ⋯ dropping the task's own menu, the sidebar
  * row's, which a right-click drops too and whose Rename makes the card's
- * name its field. A press anywhere else opens the task, and resting on it
- * hangs the task's card beside it, as its sidebar row does
- * (`task-card.tsx`): its agents and pull requests in full, each opening. A card dragged onto another column
+ * name its field. A press anywhere else opens the task. A card hangs no
+ * hover card, since it already says what its row's card would. A card dragged onto another column
  * is sent that column's status, or its priority, as the task page's chips
  * send them, and stands where it was until the list read again says
  * otherwise; a change the service did not keep says so, whether dragged or
@@ -139,8 +137,7 @@ const COLUMN_TABS = "Columns";
 
 /**
  * One task's card: its key, what waits on the reader, when it last moved,
- * and its creator's face over its name, one press that opens it and hangs
- * the task's card beside it while the pointer rests there, and at its foot
+ * and its creator's face over its name, one press that opens it, and at its foot
  * the chips that change it where it stands, its priority and its status,
  * its repository, its agents' work and pull requests, and the ⋯ dropping
  * the task's own menu, which a right-click opens too. Renamed from that
@@ -178,7 +175,6 @@ function TaskBoardCard({
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
-  const item = useRef<HTMLLIElement | null>(null);
   const press = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   const drawn = (property: TaskProperty) => properties.includes(property);
@@ -207,7 +203,6 @@ function TaskBoardCard({
   );
   return (
     <li
-      ref={item}
       className="tasks-board-card"
       data-task-id={task.id}
       data-menu-open={actions.open ? "true" : undefined}
@@ -230,23 +225,21 @@ function TaskBoardCard({
           </span>
         </div>
       ) : (
-        <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardBeside cardRegion={item}>
-          <button
-            ref={press}
-            type="button"
-            className="tasks-board-card-press"
-            disabled={actions.deletion.busy}
-            onClick={() => {
-              actions.close(false);
-              onOpen();
-            }}
-            onKeyDown={actions.keyMenu}
-            {...actions.contextMenu(press)}
-          >
-            {head}
-            <span className="tasks-board-name">{task.name}</span>
-          </button>
-        </Tooltip>
+        <button
+          ref={press}
+          type="button"
+          className="tasks-board-card-press"
+          disabled={actions.deletion.busy}
+          onClick={() => {
+            actions.close(false);
+            onOpen();
+          }}
+          onKeyDown={actions.keyMenu}
+          {...actions.contextMenu(press)}
+        >
+          {head}
+          <span className="tasks-board-name">{task.name}</span>
+        </button>
       )}
       {rename.refused ? (
         <span className="tasks-board-card-note" role="alert">

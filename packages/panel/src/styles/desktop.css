@@ -8816,6 +8816,19 @@ button.tasks-list-press:focus-visible::after {
   font-variant-numeric: tabular-nums;
 }
 
+/* A row's repository is led by its owner's picture, or a folder's glyph
+   where it has none to draw, at a caption's size. */
+.tasks-list-cell[data-cell="repository"] > :is(.repository-picture, .tasks-list-repository-glyph) {
+  flex: none;
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+}
+
+.tasks-list-glyph > .repository-picture {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
 .tasks-list-repository {
   min-width: 0;
   overflow: hidden;
