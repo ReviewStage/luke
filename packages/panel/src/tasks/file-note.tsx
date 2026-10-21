@@ -2,7 +2,7 @@ import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { IconButton, useMenu, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -224,18 +224,4 @@ export function FileNoteAnnotation({
       {card}
     </MinimizedChip>
   );
-}
-
-/**
- * What a run of the lines Luke showed draws after each line, where the tab
- * draws them in the file's place: the cards of the notes whose ranges end
- * there, nothing where none does, as the file draws them (`noteLineOf`).
- */
-export function notesAfter(notes: FileNotes, lastLine: number): (line: number) => ReactNode {
-  return (line) =>
-    notes.notes
-      .filter((note) => noteLineOf(note, lastLine) === line)
-      .map((note) => (
-        <FileNoteAnnotation key={note.callId} note={note} notes={notes} minimized={undefined} />
-      ));
 }
