@@ -14,8 +14,9 @@ import { useChatToasts } from "./chat-toast.js";
 
 /**
  * chat-toast.test.ts -- a message waiting in chat says so in the window's
- * toast, which leaves by itself, goes once the Chat it is read in stands,
- * and whose View opens its workspace's Chat. Synthetic messages throughout.
+ * toast, which leaves by itself, goes once the Chat it is read in stands
+ * or once the message no longer waits, and whose View opens the message in
+ * its workspace's Chat. Synthetic messages throughout.
  */
 
 /** A waiting message as main hands it to the window. */
@@ -29,8 +30,17 @@ interface Waiting {
 
 let waiting: ((message: Waiting) => void) | undefined;
 let root: Root | undefined;
-let rerender: ((shown: ChatShown | null) => void) | undefined;
-let viewed: string[] = [];
+let rerender: ((shown: ChatShown | null, still?: Still) => void) | undefined;
+let viewed: string[][] = [];
+
+/** Main's word on what still waits: the messages, and the version of its document they were read from. */
+interface Still {
+  readonly waiting: readonly string[];
+  readonly version: number;
+}
+
+/** No word from main yet, as before its document is first read, which withdraws nothing. */
+const NOTHING_HEARD: Still = { waiting: [], version: -1 };
 
 beforeEach(() => {
   fakeAppBridge({
@@ -50,8 +60,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function Harness({ shown }: { shown: ChatShown | null }): React.JSX.Element {
-  useChatToasts((workspaceId) => viewed.push(workspaceId), shown);
+function Harness({ shown, still }: { shown: ChatShown | null; still: Still }): React.JSX.Element {
+  useChatToasts(
+    (workspaceId, messageId) => viewed.push([workspaceId, messageId]),
+    still.waiting,
+    still.version,
+    shown,
+  );
   return createElement(Fragment, null, createElement(ToastHost));
 }
 
@@ -60,8 +75,8 @@ function mount(shown: ChatShown | null): void {
   document.body.append(container);
   root = createRoot(container);
   const registry = AtomRegistry.make();
-  const draw = (next: ChatShown | null) =>
-    act(() => root?.render(onRegistry(registry, createElement(Harness, { shown: next }))));
+  const draw = (next: ChatShown | null, still: Still = NOTHING_HEARD) =>
+    act(() => root?.render(onRegistry(registry, createElement(Harness, { shown: next, still }))));
   rerender = draw;
   draw(shown);
 }
@@ -121,7 +136,7 @@ test("a task's Chat tab withdraws only what waits in its plan's channel", () => 
   assert.deepEqual(standing(), ["@agent-3 messaged you"]);
 });
 
-test("a message's toast leaves by itself once the news's hold runs out, and its View opens the Chat of the workspace it waits in", () => {
+test("a message's toast leaves by itself once the news's hold runs out, and its View opens the message in the Chat of the workspace it waits in", () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   mount({ workspaceId: "workspace-acme", taskId: null });
   act(() =>
@@ -138,7 +153,7 @@ test("a message's toast leaves by itself once the news's hold runs out, and its 
       (button) => button.textContent === "View",
     ) ?? assert.fail("the toast's View");
   act(() => view.click());
-  assert.deepEqual(viewed, ["workspace-beta"]);
+  assert.deepEqual(viewed, [["workspace-beta", "m-1"]]);
 
   act(() =>
     waiting?.({
@@ -153,4 +168,28 @@ test("a message's toast leaves by itself once the news's hold runs out, and its 
     vi.advanceTimersByTime(Duration.toMillis(TOAST_HOLD.NEWS) * 2);
   });
   assert.deepEqual(standing(), []);
+});
+
+test("a message's toast goes once main says it no longer waits, answered or read elsewhere, while one still waiting stands", () => {
+  mount(null);
+  act(() => {
+    waiting?.({
+      messageId: "m-ask",
+      workspaceId: "workspace-beta",
+      taskId: "plan-invites",
+      words: "@agent-2 asked you",
+      detail: "Teammate invitations",
+    });
+    waiting?.({
+      messageId: "m-dm",
+      workspaceId: "workspace-beta",
+      taskId: null,
+      words: "@agent-3 messaged you",
+      detail: "Chat",
+    });
+  });
+  rerender?.(null, { waiting: ["m-ask", "m-dm"], version: 1 });
+  assert.deepEqual(standing(), ["@agent-2 asked you", "@agent-3 messaged you"]);
+  rerender?.(null, { waiting: ["m-dm"], version: 2 });
+  assert.deepEqual(standing(), ["@agent-3 messaged you"]);
 });

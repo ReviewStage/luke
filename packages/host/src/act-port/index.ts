@@ -58,8 +58,6 @@ export type {
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
 export {
-  type HostTerminalPort,
-  type TerminalActsDependencies,
   type TerminalPortSeam,
   terminalProcedures,
 } from "./terminal-procedures.js";

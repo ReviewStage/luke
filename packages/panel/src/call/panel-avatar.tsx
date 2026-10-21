@@ -20,7 +20,7 @@ import { agentCallVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
@@ -268,5 +268,7 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
  */
 export function useCallCardVideo(): CallCardVideo | undefined {
   const { tell } = useAct();
-  return cardVideo(useCardVideoStatus(), useAvatarTracks().video, tell);
+  const status = useCardVideoStatus();
+  const track = useAvatarTracks().video;
+  return useMemo(() => cardVideo(status, track, tell), [status, track, tell]);
 }

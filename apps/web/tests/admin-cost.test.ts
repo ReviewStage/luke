@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { AdminCost } from "@luke/service/admin/admin-cost-wire";
-import { SECONDS_LIST_PRICE } from "@luke/service/admin/admin-cost-wire";
+import type { AdminCost } from "@luke/features/admin-cost-wire";
+import { SECONDS_LIST_PRICE } from "@luke/features/admin-cost-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";

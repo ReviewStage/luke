@@ -1,4 +1,4 @@
-import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
+import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { CHOICE_BAR_LOOK, Checkbox, ChoiceBar, ErrorState, GAP, Stack } from "@luke/ui";
 
 /** A window by the constant's own name for it, which is how the segmented control keys its options. */

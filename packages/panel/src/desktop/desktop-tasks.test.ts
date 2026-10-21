@@ -759,7 +759,7 @@ test("a plan's document opens on its title, with who created it and last edited 
   container.remove();
 });
 
-test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
   const agent: CodingAgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
@@ -814,7 +814,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
             sidePanel: {
               ...DOCUMENT_PANEL,
               onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
-              onChoose: (tab) => opened.push(tab),
+              onPreview: (tab) => opened.push(tab),
             },
             agents: codingAgentsControl({
               agents: [agent],

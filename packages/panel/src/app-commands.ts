@@ -122,7 +122,12 @@ export function useAppKeymap(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     const handleKey = (event: KeyboardEvent) => {
-      const command = commandForKey(KEYED, event);
+      // Note that the command offered is read first, because the Inbox's and Chat's K and J share their keys, and only one of the two ever stands.
+      const command =
+        commandForKey(
+          KEYED.filter((each) => (offers.get(each)?.length ?? 0) > 0),
+          event,
+        ) ?? commandForKey(KEYED, event);
       if (command === undefined) return;
       if (shortcutEditsText(APP_SHORTCUTS[command].chord) && typingInto(event.target)) return;
       // Note that a held chord's repeats stay the window's even once its

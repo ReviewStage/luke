@@ -32,6 +32,10 @@ export interface FakeSandbox {
   tags: Record<string, string>;
   snapshotId: string;
   deleted: boolean;
+  /** The timeout each session of the sandbox opens with, as its create or a later update set it. */
+  timeout: number;
+  /** The timeout each session a resume opened started with, in order. */
+  resumedWith: number[];
   /** Whether the snapshot the sandbox resumes from expired, so a resume is answered 410 as Vercel answers it. */
   snapshotExpired?: boolean;
   /** When the sandbox was created, as Vercel's list says it: later for each sandbox opened. */
@@ -99,6 +103,7 @@ export function runnerSandboxApi() {
     currentSessionId: sandbox.currentSessionId,
     tags: sandbox.tags,
     createdAt: sandbox.createdAt,
+    timeout: sandbox.timeout,
   });
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
@@ -118,6 +123,8 @@ export function runnerSandboxApi() {
         snapshotId: asked.source.snapshotId,
         deleted: false,
         createdAt: sandboxes.length + 1,
+        timeout: asked.timeout,
+        resumedWith: [],
       };
       sandboxes.push(sandbox);
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
@@ -136,7 +143,10 @@ export function runnerSandboxApi() {
       const sandbox = sandboxes.find((each) => each.name === decodeURIComponent(named[1] ?? ""));
       if (sandbox === undefined || sandbox.deleted) return new Response(null, { status: 404 });
       if (method === "PATCH") {
-        sandbox.tags = (await body()).tags;
+        // Only the fields given change, as Vercel's update takes them.
+        const asked = await body();
+        if (asked.tags !== undefined) sandbox.tags = asked.tags;
+        if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
         return Response.json({ sandbox: listed(sandbox) });
       }
       if (method === "DELETE" && failDelete.remaining > 0) {
@@ -154,6 +164,7 @@ export function runnerSandboxApi() {
       if (resuming && sandbox.status === "stopped") {
         sandbox.status = "running";
         sandbox.currentSessionId = id("sbs");
+        sandbox.resumedWith.push(sandbox.timeout);
       }
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
     }

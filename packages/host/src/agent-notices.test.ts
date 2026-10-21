@@ -104,6 +104,7 @@ function fixture() {
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
+  const chatWaiting: AppInboxSlice["chat"][] = [];
   const openedAutomations: string[] = [];
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
@@ -160,6 +161,7 @@ function fixture() {
         holding.push(next.tasks);
         taskless.push(next.taskless);
         failedRuns.push(next.failedRuns);
+        chatWaiting.push(next.chat);
       },
       openFailedRun: (place) => openedAutomations.push(place.automationId),
       openChat: (workspaceId) => chatOpened.push(workspaceId),
@@ -206,6 +208,7 @@ function fixture() {
     openedInboxes,
     runsToasted,
     failedRuns,
+    chatWaiting,
     openedAutomations,
     chatToasted,
     /** The workspace each chat notification's click opened Chat on. */
@@ -1186,6 +1189,32 @@ it.effect(
       yield* settled;
       assert.equal(f.posted.length, 0);
       assert.equal(f.badges.at(-1), 0);
+    }),
+);
+
+it.effect(
+  "what waits in chat reaches the window by message, so a toast goes once its message no longer waits, and nothing does while Chat is off",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.answerInbox({
+        items: [],
+        chat: [chatEntry(40), chatEntry(41)],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      f.answerInbox({ items: [], chat: [chatEntry(41)], cursor: "2", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.chatWaiting.slice(-2), [
+        [chatEntry(40).messageId, chatEntry(41).messageId],
+        [chatEntry(41).messageId],
+      ]);
+      f.turnChat(false);
+      f.answerInbox({ items: [], chat: [chatEntry(41)], cursor: "3", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.chatWaiting.at(-1), []);
     }),
 );
 

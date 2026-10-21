@@ -30,10 +30,15 @@ function element(tag: string, className: string, parent: Element): HTMLElement {
 test("a card's chip is held to the card's width, and an Inbox card's key stays whole on one line with its task's chip", () => {
   const standing = element("div", "task-card-standing", document.body);
   const chip = element("span", "task-card-chip", standing);
-  const key = element("span", "task-card-chip task-card-key", standing);
+  const key = element("span", "task-key", standing);
   assert.equal(getComputedStyle(chip).maxWidth, "100%");
   assert.equal(getComputedStyle(key).flexShrink, "0");
   assert.equal(getComputedStyle(standing).flexWrap, "wrap");
+  assert.equal(
+    getComputedStyle(standing).alignItems,
+    "center",
+    "the key sits centred on the chips",
+  );
   standing.dataset.line = "one";
   assert.equal(getComputedStyle(standing).flexWrap, "nowrap");
 });

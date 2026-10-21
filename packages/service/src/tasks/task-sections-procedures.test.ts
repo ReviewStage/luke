@@ -138,9 +138,14 @@ it.layer(getTestDB())("the task sections route", (it) => {
           },
         ],
         entries: [],
+        agentEntries: [],
       });
       assert.deepEqual(sectionsOf(yield* ask(request(owner))), made);
-      assert.deepEqual(sectionsOf(yield* ask(request(other))), { sections: [], entries: [] });
+      assert.deepEqual(sectionsOf(yield* ask(request(other))), {
+        sections: [],
+        entries: [],
+        agentEntries: [],
+      });
     }),
   );
 
@@ -181,7 +186,11 @@ it.layer(getTestDB())("the task sections route", (it) => {
           deleted,
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
-        assert.deepEqual(sectionsOf(yield* ask(request(owner))), { sections: [], entries: [] });
+        assert.deepEqual(sectionsOf(yield* ask(request(owner))), {
+          sections: [],
+          entries: [],
+          agentEntries: [],
+        });
       }),
   );
 });

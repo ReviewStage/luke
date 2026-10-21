@@ -90,6 +90,7 @@ import {
 } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
+import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
 import { useChatOn } from "./tasks/chat-gate.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
@@ -946,7 +947,8 @@ export function useWindowHistory(input: {
   const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
-  const chatListed = narrow ? tasks.chatView.listed : undefined;
+  // Chat showing one column, by its own width or a narrow room's, steps between its rail and its place as the Inbox does.
+  const chatListed = narrow || tasks.chatView.single === true ? tasks.chatView.listed : undefined;
   // The place Chat shows, alone in a narrow room or beside its rail in a wide one; none while a narrow room's rail stands.
   const chatShownPlace = chatListed === true ? undefined : tasks.chatView.place;
   const panelOpen = tasks.sidePanel.open;
@@ -1226,60 +1228,59 @@ export function useWindowHistory(input: {
   });
   // Note that only a narrow room holds a list as a step of its own, so a wide one only stands it.
   const up = (to: Place, stand: () => void) => (narrow ? upTo(to, stand) : stand());
-  return {
+  // Note that the history is handed back steady, its ways back among it, so the screens it is handed hold while nothing they read moves.
+  const lists = useSteadyDoorSet<ListBacks>({
+    settings: () =>
+      up({ kind: PLACE_KIND.SETTINGS, view: settingsView, listed: true }, input.onSettingsList),
+    versions: () =>
+      boundFor === undefined
+        ? tasks.history.onList()
+        : up(
+            { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: true },
+            tasks.history.onList,
+          ),
+    chat: () =>
+      up(
+        { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace, listed: true },
+        tasks.chatView.onList,
+      ),
+    runs: () =>
+      up(
+        {
+          kind: PLACE_KIND.AUTOMATIONS,
+          page: automationsPage,
+          workspaceId: listedWorkspace,
+          runs: false,
+        },
+        () => tasks.automationsView.onRuns(false),
+      ),
+    // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
+    inbox: (listed) => {
+      if (!listed) {
+        tasks.inboxView.onListed(false);
+        return;
+      }
+      const stand = () => tasks.inboxView.onListed(true);
+      if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
+      else stand();
+    },
+    panel: () => {
+      const shut = () => tasks.sidePanel.onSetOpen(false);
+      if (boundFor === undefined) {
+        shut();
+        return;
+      }
+      up({ kind: PLACE_KIND.TASK, taskId: boundFor, panel: { open: false, tab: undefined } }, shut);
+    },
+  });
+  return useSteadyDoors({
     ...history,
     onLeaveVersionHistory: () => {
       if (boundFor !== undefined && backTo({ kind: PLACE_KIND.TASK, taskId: boundFor })) return;
       tasks.history.onClose();
     },
-    lists: {
-      settings: () =>
-        up({ kind: PLACE_KIND.SETTINGS, view: settingsView, listed: true }, input.onSettingsList),
-      versions: () =>
-        boundFor === undefined
-          ? tasks.history.onList()
-          : up(
-              { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: true },
-              tasks.history.onList,
-            ),
-      chat: () =>
-        up(
-          { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace, listed: true },
-          tasks.chatView.onList,
-        ),
-      runs: () =>
-        up(
-          {
-            kind: PLACE_KIND.AUTOMATIONS,
-            page: automationsPage,
-            workspaceId: listedWorkspace,
-            runs: false,
-          },
-          () => tasks.automationsView.onRuns(false),
-        ),
-      // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
-      inbox: (listed) => {
-        if (!listed) {
-          tasks.inboxView.onListed(false);
-          return;
-        }
-        const stand = () => tasks.inboxView.onListed(true);
-        if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
-        else stand();
-      },
-      panel: () => {
-        const shut = () => tasks.sidePanel.onSetOpen(false);
-        if (boundFor === undefined) {
-          shut();
-          return;
-        }
-        up(
-          { kind: PLACE_KIND.TASK, taskId: boundFor, panel: { open: false, tab: undefined } },
-          shut,
-        );
-      },
-    },
-  };
+    lists,
+  });
 }
 
 /**

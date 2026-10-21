@@ -1,14 +1,17 @@
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { browserClient } from "@luke/features/contract/browser-client";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import type {
   AdminWorkspaceInstallation,
   AdminWorkspaceIntegration,
   AdminWorkspaceList,
   AdminWorkspaceRow,
-} from "@luke/service/admin/admin-workspaces";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH, type AdminWorkspacesQuery } from "@luke/service/admin/http";
+} from "@luke/features/admin-answer-wire";
+import {
+  ADMIN_USERS_SEARCH_MAX_LENGTH,
+  type AdminWorkspacesQuery,
+} from "@luke/features/admin-wire";
+import { browserClient } from "@luke/features/contract/browser-client";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
+import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
+import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   BADGE_TONE,
   Badge,
@@ -65,7 +68,7 @@ const WORKSPACES_EMPTY = "No workspace matches.";
 const readWorkspaceList =
   (query: AdminWorkspacesQuery): AdminReader<AdminWorkspaceList> =>
   async (signal) =>
-    // SAFETY: the admin workspaces procedure answers an AdminWorkspaceList (`@luke/service/admin/admin-workspaces`), which the contract cannot name.
+    // SAFETY: the admin workspaces procedure answers an AdminWorkspaceList (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.workspaces(query, { signal })) as AdminWorkspaceList;
 
 /** The table's columns by key; a fixed set, so a heading never carries a free string. */

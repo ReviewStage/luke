@@ -1,26 +1,20 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { utcDayKey } from "@luke/database/models/quota";
-import { Clock, Effect } from "effect";
-import { DAY_MS } from "../core.js";
-import {
-  type AdminAccountSource,
-  type AdminAccountSupport,
-  buildAdminAccountSupport,
-} from "./admin-account.js";
-import {
-  ADMIN_TREND_DAYS,
-  type AdminDailyUsage,
-  type AdminTrend,
-  lastNDayKeys,
-  sum,
-  trailingTrend,
-} from "./admin-metrics.js";
+import type {
+  AdminUserAccount,
+  AdminUserAllTime,
+  AdminUserDetail,
+} from "@luke/features/admin-answer-wire";
 import {
   type AdminMetricsWindow,
   type AdminUserQuery,
   adminMetricsWindow,
   adminUserId,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
+import { DAY_MS } from "../core.js";
+import { type AdminAccountSource, buildAdminAccountSupport } from "./admin-account.js";
+import { ADMIN_TREND_DAYS, lastNDayKeys, sum, trailingTrend } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -52,28 +46,6 @@ export function calendarDayKeys(now: number): string[] {
   return lastNDayKeys(now, CALENDAR_COMPLETE_WEEKS * DAYS_PER_WEEK + daysIntoWeek);
 }
 
-/** The account the page names, from the service's own user row. */
-export interface AdminUserAccount {
-  id: string;
-  name: string;
-  email: string;
-  /** The avatar URL the sign-in provider gave the account, when it gave one. */
-  image: string | null;
-  admin: boolean;
-  /** When the account was created, in epoch milliseconds. */
-  createdAt: number;
-  /** Linked sign-in providers, as their account rows name them (e.g. "github"). */
-  signInMethods: string[];
-}
-
-/** The account's whole hosted-tier history, folded to counts and two dates. */
-interface AdminUserAllTime {
-  activeDays: number;
-  firstActiveDay: string | null;
-  lastActiveDay: string | null;
-  calls: number;
-}
-
 /**
  * The raw shape the queries produce for one account, before the pure builder
  * zero-fills the series and reads the streak off it — split out, like the
@@ -87,35 +59,6 @@ export interface AdminUserSource {
     calendarByDay: ReadonlyMap<string, number>;
     allTime: AdminUserAllTime;
   };
-}
-
-export interface AdminUserDetail {
-  generatedAt: number;
-  windowDays: number;
-  account: AdminUserAccount;
-  activity: {
-    daily: AdminDailyUsage[];
-    /**
-     * The calendar's zero-filled trailing year, `calendarDayKeys`'s span,
-     * whatever window the rest of the page is read at.
-     */
-    calendarDaily: AdminDailyUsage[];
-    usageTrend: AdminTrend;
-    activeDaysWindow: number;
-    /** Active days in the trailing run beside the run before it. */
-    activeDaysTrend: AdminTrend;
-    /**
-     * Consecutive active days ending today or yesterday — today may simply not
-     * have started yet. Read off the window's own series, so a run older than
-     * the window reports the window's length and the page words it as "or
-     * longer" rather than posing a truncation as the exact count.
-     */
-    currentStreakDays: number;
-    callsWindow: number;
-    allTime: AdminUserAllTime;
-  };
-  /** What a maintainer supports the account from: `admin-account.ts`. */
-  support: AdminAccountSupport;
 }
 
 /** Shapes one account's queried source, and its support rows, into the page's answer. */

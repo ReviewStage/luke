@@ -182,8 +182,9 @@ function withChannels(
 
 /**
  * The chat held with a push taken in: the push whole, which messages it
- * holds included, each one the window holds newer kept, and what the window
- * wrote laid over it, since a push may have been read before a write landed.
+ * holds included, each one the window holds newer kept, each read cursor
+ * the window holds further kept, and what the window wrote laid over it,
+ * since a push may have been read before a write landed.
  */
 function withRead(
   chat: ChatAnswer | undefined,
@@ -195,8 +196,16 @@ function withRead(
     const standing = held.get(message.id);
     return standing !== undefined && standing.touchedSeq > message.touchedSeq ? standing : message;
   });
+  // Note that a cursor never moves back, so a push read before a read's answer sets nothing back.
+  // A push with no channel past its floor carries no `reads`, which says nothing of the cursors held.
+  const reads =
+    chat === undefined || (chat.reads === undefined && answer.reads === undefined)
+      ? answer.reads
+      : furthestReads(chat, answer.reads ?? []);
   return {
     ...answer,
+    readSeq: Math.max(chat?.readSeq ?? 0, answer.readSeq),
+    ...(reads === undefined ? undefined : { reads }),
     channels: withChannels(answer.channels, written.channels),
     messages: withMessages(pushed, written.messages),
   };
@@ -229,9 +238,9 @@ function holdsAsWritten(pushed: ChatAnswer, written: Written): boolean {
 
 /**
  * Each channel's cursor as far as either the chat held or a read's answer
- * puts it. Note that a cursor never moves back, so of two reads answered
- * out of order, as Mark all as read sends them, the older answer sets
- * nothing back.
+ * or a push puts it. Note that a cursor never moves back, so of two reads
+ * answered out of order, as Mark all as read sends them, the older answer
+ * sets nothing back, nor does a push read before either landed.
  */
 function furthestReads(
   chat: ChatAnswer,

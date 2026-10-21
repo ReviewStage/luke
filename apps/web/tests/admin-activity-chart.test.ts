@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { AdminActivityDay } from "@luke/service/admin/admin-overview";
-import { ACTIVITY_FEATURE } from "@luke/service/admin/admin-overview-vocabulary";
+import type { AdminActivityDay } from "@luke/features/admin-answer-wire";
+import { ACTIVITY_FEATURE } from "@luke/features/admin-overview-vocabulary";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

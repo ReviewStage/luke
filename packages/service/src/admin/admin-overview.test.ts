@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
-import { buildAdminOverview, emptyOverviewSource } from "./admin-overview.js";
 import {
   ACTIVITY_FEATURE,
   DAILY_COUNT,
   type DailyCount,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "./admin-overview-vocabulary.js";
-import { ADMIN_METRICS_WINDOW } from "./http.js";
+} from "@luke/features/admin-overview-vocabulary";
+import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { test } from "vitest";
+import { buildAdminOverview, emptyOverviewSource } from "./admin-overview.js";
 
 /**
  * admin-overview.test.ts -- the overview's fold: the chart's days are the

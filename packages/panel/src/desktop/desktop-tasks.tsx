@@ -28,10 +28,10 @@ import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import type { ShellRoom } from "../shell-room.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
+import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -86,7 +86,7 @@ import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopHome } from "./desktop-home.js";
 import { useTaskInboxShow } from "./folded-groups.js";
-import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs.js";
+import { AgentPane, MainTabStrip, mainTabLabel, TAB_SKELETON_WIDTH } from "./main-tabs.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -102,7 +102,9 @@ import { useTabViews } from "./strip-tabs.js";
 import { TaskActions } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
+  SUMMARY_MODE,
   SummaryButton,
+  type SummaryMode,
   type SummaryPin,
   summaryHolds,
   TaskSummary,
@@ -159,8 +161,8 @@ import {
  * drawn, and a version viewed is not restored (`../tasks/archived-task.tsx`).
  */
 
-/** How wide the block standing in the plan's tab is while the plan is read: a typical tab's width. */
-const TAB_SKELETON_WIDTH = "120px";
+/** What the task's page says to a reader while the task is read. */
+const TASK_LOADING_LABEL = "Loading task";
 
 /**
  * The strip across the top of the work column, which is also the window's
@@ -178,6 +180,73 @@ function Toolbar({
       {heading}
       {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
     </header>
+  );
+}
+
+/** How wide each of the toolbar's actions stands while the task is read: the repository's chip, Start, and the task's ⋯. */
+const ACTION_SKELETON_WIDTHS = ["112px", "72px", "28px"] as const;
+
+/**
+ * The task's page while the task is read, in the shape it lands in: the
+ * toolbar with a tab where the column's first will stand and its actions at
+ * its right, the column standing as an agent's tab does before its
+ * transcript lands (`AgentTabSkeleton`), the summary's room where it will
+ * stand, and the side panel at its width where it is open. The column's tab
+ * draws the very same placeholder until it lands, so a task opens through
+ * one placeholder rather than a chain of them, and nothing moves as the
+ * page arrives but what fills it.
+ */
+function TaskPageSkeleton({
+  panel,
+  summary,
+  onColumn,
+}: {
+  /** The side panel as it will be drawn; none where it is shut. */
+  panel: { width: number; fullScreen: boolean } | undefined;
+  /** How the summary will stand, whose room is kept. */
+  summary: SummaryMode;
+  /** Hands over the column, which the summary's room is measured on, as the page's own does. */
+  onColumn: (column: HTMLDivElement | null) => void;
+}): React.JSX.Element {
+  const fullScreen = panel?.fullScreen === true;
+  return (
+    <div className="desktop-task" data-panel-open={String(panel !== undefined)}>
+      <div ref={onColumn} className="desktop-task-main" hidden={fullScreen}>
+        <Toolbar
+          heading={
+            <div className="desktop-toolbar-heading">
+              <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
+            </div>
+          }
+        >
+          {ACTION_SKELETON_WIDTHS.map((width) => (
+            <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
+          ))}
+        </Toolbar>
+        <div className="desktop-plan-body">
+          <div className="desktop-task-column">
+            <section className="desktop-agent">
+              <AgentTabSkeleton label={TASK_LOADING_LABEL} />
+            </section>
+          </div>
+          {summary === SUMMARY_MODE.NONE ? null : (
+            <aside className="task-summary" data-mode={summary} aria-hidden="true" />
+          )}
+        </div>
+      </div>
+      {panel === undefined ? null : (
+        <aside
+          className="side-panel"
+          data-full-screen={String(panel.fullScreen)}
+          style={panel.fullScreen ? undefined : { width: panel.width }}
+          aria-hidden="true"
+        >
+          <div className="side-panel-bar">
+            <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
+          </div>
+        </aside>
+      )}
+    </div>
   );
 }
 
@@ -438,11 +507,19 @@ function PlanDocument({
   }, [resolvedLinked, inboxTaskId, showSideTab]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  // The summary lists the task's agents once they are read, so where the
+  // task's row says it has some, the summary's room is kept from the open on
+  // and the list landing moves nothing in the column.
+  const listedRow = tasks.tasks.find((each) => each.id === tasks.activeTaskId);
+  const agentsComing =
+    tasks.agents.agents === undefined &&
+    !tasks.agents.listFailed &&
+    (listedRow?.agents?.total ?? 0) > 0;
   const summaryLayout = useSummaryLayout(
     summary,
     column,
     tasks.sidePanel.fullScreen,
-    summaryHolds(tasks, inbox.board, openComments),
+    agentsComing || summaryHolds(tasks, inbox.board, openComments),
   );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
@@ -505,8 +582,8 @@ function PlanDocument({
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     lines === undefined
-      ? tasks.sidePanel.onOpenFile({ path })
-      : tasks.sidePanel.onOpenFile(
+      ? tasks.sidePanel.onPreviewFile({ path })
+      : tasks.sidePanel.onPreviewFile(
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
         );
@@ -551,13 +628,13 @@ function PlanDocument({
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
-        return sidePanel.onChoose({ page: target.page });
+        return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
         return tasks.onShowTask(target.task);
       case TOOL_TARGET.SHOWN_CODE: {
         // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
         const showing = tasks.shownCode?.find((each) => each.callId === target.call);
-        return sidePanel.onOpenFile(target.ref, showing?.code.commit);
+        return sidePanel.onPreviewFile(target.ref, showing?.code.commit);
       }
     }
   };
@@ -570,7 +647,7 @@ function PlanDocument({
     status: CodingAgentStatus,
   ) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+    sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
@@ -745,6 +822,11 @@ function PlanDocument({
     openMentionedFileDoor,
     agentLookDoor,
   ]);
+  if (region.kind === DOCUMENT_REGION.READING) {
+    return (
+      <TaskPageSkeleton panel={drawing.panel} summary={summaryLayout.mode} onColumn={setColumn} />
+    );
+  }
   if (
     region.kind !== DOCUMENT_REGION.READY ||
     workspace === undefined ||
@@ -760,23 +842,13 @@ function PlanDocument({
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
     return (
       <>
-        <Toolbar
-          heading={
-            <div className="desktop-toolbar-heading">
-              {region.kind === DOCUMENT_REGION.READING ? (
-                <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
-              ) : null}
-            </div>
-          }
-        />
+        <Toolbar heading={<div className="desktop-toolbar-heading" />} />
         {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
         {region.kind === DOCUMENT_REGION.MISSING ? (
           <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
         ) : (
           <section className="desktop-empty">
-            {region.kind === DOCUMENT_REGION.READING ? (
-              <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
-            ) : region.kind === DOCUMENT_REGION.FAILED ? (
+            {region.kind === DOCUMENT_REGION.FAILED ? (
               <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
                 {line}
               </ErrorState>
@@ -793,6 +865,9 @@ function PlanDocument({
   }
   const { task } = region;
   const listed = listedOpen ?? task;
+  // The column has a tab on its way: the agents are still read, or, read, a draft opens in an unarchived task's empty column.
+  const columnComing =
+    agents.agents === undefined ? !agents.listFailed : agents.onUnarchive === undefined;
   const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
   const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
@@ -866,7 +941,8 @@ function PlanDocument({
       code={{
         repository: task.repository,
         readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
-        onOpenFile: sidePanel.onOpenFile,
+        // A code card is a link, which opens its file as the panel's preview, as the window's Inbox opens one.
+        onOpenFile: sidePanel.onPreviewFile,
       }}
     />
   );
@@ -977,7 +1053,15 @@ function PlanDocument({
                           subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
                         >
                           {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-                          {tab === undefined ? null : (
+                          {tab === undefined ? (
+                            // While the agents are read, or a draft opens on a task with none, the
+                            // column stands as the tab it will show does before it lands.
+                            columnComing ? (
+                              <section className="desktop-agent">
+                                <AgentTabSkeleton />
+                              </section>
+                            ) : null
+                          ) : (
                             <CallNotice.Provider value={notice}>
                               <AgentPane
                                 call={tasks.calls}

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
@@ -33,7 +34,12 @@ import {
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
+import {
+  type AppInboxTask,
+  type AppInboxTaskHolding,
+  type AppStateSnapshot,
+  RUN_PROFILE,
+} from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -49,15 +55,16 @@ import {
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
-  type VoiceCallTranscript,
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
 import { AsyncIteratorClass } from "@orpc/client";
-import { Duration, Effect, Option, Schema } from "effect";
+import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
@@ -77,8 +84,15 @@ import {
   type PanelSpan,
 } from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -135,9 +149,6 @@ interface Standing {
   tasks: TasksView;
   profile: string;
   fixtureMode: boolean;
-  voice: VoiceView;
-  /** The document's `voice.callTranscript`, held whole beside the view. */
-  callTranscript: VoiceCallTranscript | undefined;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxTask[];
   inboxTasks: readonly AppInboxTaskHolding[];
@@ -182,8 +193,6 @@ function mount(
     tasks: IDLE_TASKS_VIEW,
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
-    voice: IDLE_VOICE_VIEW,
-    callTranscript: undefined,
     unseenAgents: [],
     inboxWaiting: [],
     inboxTasks: [],
@@ -260,12 +269,6 @@ function mount(
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
       failedRuns: [],
-      voice: {
-        view: held.voice,
-        callTranscript: held.callTranscript,
-        listening: false,
-        requestMicrophoneAccess: () => undefined,
-      },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
@@ -719,6 +722,81 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   const draft = { draft: launched.control().agents.draft?.id ?? assert.fail("no draft opened") };
   assert.deepEqual(again().tabs, [draft]);
   assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
+});
+
+/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all and at work. */
+function namingRow(lines: readonly string[], total: number, working = 0) {
+  return {
+    ...row(TASK.id, 1),
+    agents: {
+      total,
+      working,
+      agents: lines.map((id) => ({
+        id,
+        title: null,
+        model: RUNNING_AGENT.model,
+        effort: RUNNING_AGENT.effort,
+        status: working > 0 ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
+      })),
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+}
+
+test("a task whose row settles its tab shows that agent's before its agents are read, and one whose row cannot say shows none until they are", async () => {
+  const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
+  const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
+  // The list of agents never answers, so whatever the column shows, the row chose.
+  const unread = { [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise<never>(() => undefined) };
+  const shownOn = async (
+    lines: readonly string[],
+    total: number,
+    recent: readonly string[] | undefined,
+    working = 0,
+  ) => {
+    window.localStorage.setItem(
+      "luke.mainTabs",
+      JSON.stringify({
+        closedAgents: [],
+        tasks:
+          recent === undefined ? {} : { [TASK.id]: { recent: recent.map((agent) => ({ agent })) } },
+      }),
+    );
+    const tab = mount(
+      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total, working)] } },
+      unread,
+    );
+    await settle();
+    assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
+    return tab.control().mainTabs.tab;
+  };
+
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER, UNNAMED], 5, [OLDER]),
+    { agent: OLDER },
+    "the agent last viewed, which the row names",
+  );
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER], 2, undefined),
+    { agent: AGENT_ID },
+    "the newest started, where the row names every agent and none was viewed",
+  );
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
+    { agent: OLDER },
+    "past one viewed since that the row shows is gone",
+  );
+  assert.equal(
+    await shownOn([AGENT_ID, OLDER], 4, [OLDER, UNNAMED]),
+    undefined,
+    "one viewed last that the row does not name may stand among those it leaves out",
+  );
+  assert.equal(
+    await shownOn([AGENT_ID, OLDER], 2, undefined, 1),
+    undefined,
+    "a row naming some at work and some not cannot say which started last",
+  );
 });
 
 test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
@@ -2675,6 +2753,55 @@ test("a chat notification's click, listing the workspace its message waits in an
   assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
 });
 
+test("a chat toast's View opens Chat, and the channel its message stands in once a read holds it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  const messageId = "d0d0d0d0-0000-4000-8000-000000000003";
+  const stream = chatStream();
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().chatView.onShow({ kind: CHAT_PLACE.CHANNEL, channelId: "other" }));
+  act(() => tab.control().chatView.onShowMessage(messageId));
+  assert.equal(tab.control().chatView.open, true);
+  assert.deepEqual(
+    tab.control().chatView.place,
+    FOR_YOU,
+    "For you, which lists the message, stands until the read lands, rather than the channel shown before",
+  );
+  stream.push({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
+    channels: [{ id: channelId, kind: CHANNEL_KIND.TOPIC, name: "infra", archived: false }],
+    messages: [
+      {
+        id: messageId,
+        seq: 4,
+        touchedSeq: 4,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [me],
+        postedAt: 1,
+      },
+    ],
+    cursor: "",
+  });
+  await vi.waitFor(async () => {
+    await settle();
+    assert.deepEqual(tab.control().chatView.place, { kind: CHAT_PLACE.CHANNEL, channelId });
+  });
+  assert.equal(tab.control().chatView.listed, false);
+});
+
 test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
@@ -3097,7 +3224,16 @@ test("a platform with no voice takes no calls", async () => {
 });
 
 test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES);
+  // The voice arrives as main delivers it, a call into another agent landing after the first press.
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(stateWith({}, {})),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
   const otherCall: VoiceView = {
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
@@ -3118,7 +3254,12 @@ test("an agent's Call press opens a call into it at once, and over another agent
   act(() => tab.control().calls?.onPress(AGENT_ID));
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
 
-  tab.stand({ voice: otherCall });
+  act(() => {
+    for (const listener of listeners) {
+      listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view: otherCall } }));
+    }
+  });
+  await settle();
   act(() => tab.control().calls?.onPress(AGENT_ID));
   assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
   assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
@@ -3208,3 +3349,237 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
     .map(({ payload }) => Option.getOrUndefined(readStanding(payload))?.status);
   assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });
+
+/** A registry whose atoms count on this clock, as the window's count on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry {
+  return AtomRegistryModule.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
+/** Lets `span` pass on the test's clock, then lets what fell due land. */
+const passing = (span: Duration.Input) => Effect.andThen(TestClock.adjust(span), landed);
+
+const FINISHED_ID = "4f6e2a1b-7c3d-4e5f-8a9b-0c1d2e3f4a5b";
+const UNSEEN_ID = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d";
+
+/** Two agents beside the running one: one whose turn ended and was seen, and one whose turn ended unseen. */
+const IDLE_AGENTS: readonly CodingAgentSummary[] = [
+  RUNNING_AGENT,
+  { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: CODING_AGENT_STATUS.COMPLETED },
+  { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: CODING_AGENT_STATUS.COMPLETED },
+];
+
+/** An item waiting in the open task's Inbox, posted by the agent given. */
+function waitingFrom(agentId: string): AppInboxTask {
+  return {
+    taskId: TASK.id,
+    items: [{ id: `item-${agentId}`, agentId, title: "A question", postedAt: 1 }],
+  };
+}
+
+it.effect(
+  "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown, a fixed tab, and a pinned one stay",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: { ...OPEN, shownCode: SHOWN } },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const panel = () => tab.control().sidePanel;
+      const file = { file: CODE.ref.path };
+      const pulls = { changes: AGENT_ID };
+      act(() => panel().onOpenFile(CODE.ref));
+      act(() => panel().onChoose(pulls));
+      act(() => panel().onPin(pulls, "Pull request"));
+      act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+      yield* landed;
+      const strip = panel().strip;
+      assert.deepEqual(strip, [
+        SIDE_PANEL_TAB.PLAN,
+        SIDE_PANEL_TAB.CODE,
+        file,
+        pulls,
+        SIDE_PANEL_TAB.BOARD,
+      ]);
+
+      yield* passing(Duration.hours(23));
+      assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
+
+      yield* passing(Duration.hours(1));
+      assert.deepEqual(
+        panel().strip,
+        [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE, pulls, SIDE_PANEL_TAB.BOARD],
+        "the file's tab closed; the fixed tabs, the pinned Pull request, and the tab shown stay",
+      );
+      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+
+      act(() => tab.control().onReopenClosedTab?.());
+      assert.deepEqual(panel().strip, strip, "⇧⌘T stands it back where it stood");
+      assert.deepEqual(panel().tab, file);
+    }),
+);
+
+it.effect(
+  "an agent's tab not viewed for a day closes unless the agent works, waits on the developer, or ended unseen, and opens again as an Inbox item of its wakes it, where one closed by hand stays closed",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      const running = { agent: AGENT_ID };
+      const finished = { agent: FINISHED_ID };
+      const unseen = { agent: UNSEEN_ID };
+      act(() => column().onChoose(finished));
+      act(() => column().onChoose(running));
+      yield* landed;
+      assert.deepEqual(column().tabs, [running, finished, unseen]);
+
+      yield* passing(Duration.days(1));
+      assert.deepEqual(column().tabs, [running, unseen], "the finished agent's tab closed");
+      assert.deepEqual(column().tab, running);
+      assert.ok(tab.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
+
+      act(() => column().onClose(unseen));
+      tab.stand({ inboxWaiting: [waitingFrom(FINISHED_ID), waitingFrom(UNSEEN_ID)] });
+      yield* landed;
+      assert.deepEqual(
+        column().tabs,
+        [running, finished],
+        "the agent closed for being idle is back with its item, the one closed by hand is not",
+      );
+      assert.deepEqual(
+        column().tab,
+        running,
+        "and comes back without taking the shown tab's place",
+      );
+    }),
+);
+
+it.effect(
+  "when a tab was last viewed is kept across a launch, so a Pull request tab left a day before the window opens again closes as its task opens",
+  () =>
+    Effect.gen(function* () {
+      const clock = yield* Clock.Clock;
+      const listed = {
+        [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      };
+      const pulls = { changes: AGENT_ID };
+      const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
+      yield* landed;
+      act(() => first.control().sidePanel.onChoose(pulls));
+      act(() => first.control().sidePanel.onChoose(SIDE_PANEL_TAB.PLAN));
+      yield* landed;
+      assert.deepEqual(first.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN, pulls]);
+      closeWindow();
+
+      yield* TestClock.adjust(Duration.hours(25));
+      const again = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
+      yield* landed;
+      assert.deepEqual(again.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN]);
+      assert.ok(again.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
+    }),
+);
+
+it.effect(
+  "a tab kept before the window counted when tabs were viewed counts as viewed now, so nothing closes the moment it is first counted",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Duration.toMillis(Duration.days(30)));
+      window.localStorage.setItem(
+        "luke.mainTabs",
+        JSON.stringify({
+          closedAgents: [],
+          tasks: { [TASK.id]: { recent: [{ agent: FINISHED_ID }, { agent: AGENT_ID }] } },
+        }),
+      );
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      const running = { agent: AGENT_ID };
+      const finished = { agent: FINISHED_ID };
+      const unseen = { agent: UNSEEN_ID };
+      yield* passing(Duration.minutes(1));
+      assert.deepEqual(
+        column().tabs,
+        [running, finished, unseen],
+        "its first count leaves it open",
+      );
+
+      yield* passing(Duration.days(1));
+      assert.deepEqual(column().tabs, [running, unseen], "a day unviewed after it closes it");
+    }),
+);
+
+it.effect(
+  "an agent's tab left chosen under the side panel filling the window is no longer viewed, so a day of it closes the tab",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      act(() => column().onChoose({ agent: FINISHED_ID }));
+      act(() => tab.control().sidePanel.onToggleFullScreen());
+      yield* landed;
+      assert.equal(tab.control().sidePanel.fullScreen, true);
+
+      yield* passing(Duration.days(1));
+      assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
+    }),
+);
+
+it.effect(
+  "a tab shown as its task is left for one whose agents are still unread is stamped as it was left, not when it was last stamped",
+  () =>
+    Effect.gen(function* () {
+      const unread = Promise.withResolvers<never>();
+      const tab = mount(
+        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
+        {
+          [ACT_KIND.CODING_AGENTS_LIST]: (params) =>
+            Option.getOrUndefined(readListed(params))?.taskId === TASK.id
+              ? Promise.resolve({ agents: IDLE_AGENTS })
+              : unread.promise,
+          [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+        },
+        registryOn(yield* Clock.Clock),
+      );
+      yield* landed;
+      const column = () => tab.control().mainTabs;
+      act(() => column().onChoose({ agent: FINISHED_ID }));
+      yield* passing(Duration.minutes(50));
+      tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+      yield* landed;
+      // The panel filling the window over the column keeps the tab from being viewed again on return.
+      act(() => tab.control().sidePanel.onToggleFullScreen());
+
+      yield* passing(Duration.hours(23));
+      tab.stand({ tasks: OPEN });
+      yield* passing(Duration.minutes(30));
+      assert.deepEqual(
+        column().tabs,
+        [{ agent: AGENT_ID }, { agent: FINISHED_ID }, { agent: UNSEEN_ID }],
+        "a day has not passed since it was left",
+      );
+
+      yield* passing(Duration.hours(1));
+      assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
+    }),
+);
+
+/** A list's payload, read back as the act's own schema admits it. */
+const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));

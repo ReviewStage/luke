@@ -1,19 +1,20 @@
 // @vitest-environment jsdom
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+
+import {
+  ADMIN_FAILURE_KIND,
+  ADMIN_PULL_REQUEST,
+  ADMIN_WORKSPACE_KIND,
+} from "@luke/features/admin-account-wire";
+import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
 import {
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
+import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import {
-  ADMIN_FAILURE_KIND,
-  ADMIN_PULL_REQUEST,
-  ADMIN_WORKSPACE_KIND,
-} from "@luke/service/admin/admin-account-wire";
-import type { AdminUserDetail } from "@luke/service/admin/admin-user";
 import { EXPERIMENT } from "@luke/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -18,8 +18,12 @@
  * create it and refuses the rest with a 409, which wait for it. The one that
  * created it uploads the recorded preparation and starts it as a detached
  * command, so no function waits out a build that takes minutes; the
- * command's id is kept in the template's tags. Whoever reads the template
- * after that command exited 0 marks it built in a tag, then snapshots it;
+ * command's id is kept in the template's tags. The build also writes its
+ * own exit status to a marker file as it ends, because Vercel can leave the
+ * command without an exit code once the build has dropped the default
+ * user's sudo; a reader that finds no exit code reads the marker instead.
+ * Whoever reads the template after the build exited 0 marks it built in a
+ * tag, then snapshots it;
  * a template marked built, stopped, and holding a snapshot is ready, and
  * that snapshot is the one a launch opens from. The mark is what tells a
  * whole image apart, because a persistent sandbox also snapshots itself as
@@ -88,6 +92,15 @@ const TEMPLATE_TAG = {
 
 /** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
 const BUILD_DIRECTORY = "/tmp/luke-template";
+
+/**
+ * Where the build writes its own exit status as it ends, renamed into place
+ * whole, so a reader finds the status or nothing.
+ */
+const BUILD_EXIT_FILE = `${BUILD_DIRECTORY}/exit`;
+
+/** How much of the marker a reader reads: an exit status is at most three digits. */
+const BUILD_EXIT_BYTES = 16;
 
 /** Where eve's session resolves a relative path, as its template's preparation saw it. */
 const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
@@ -162,6 +175,8 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   }));
   // Each file is put where the preparation wrote it, then each command runs in order, as `prepareImage` ran them.
   const entry = [
+    // The marker is written however the build ends, as the trap sees its status.
+    `trap 'status=$?; echo "$status" > ${BUILD_EXIT_FILE}.tmp && mv ${BUILD_EXIT_FILE}.tmp ${BUILD_EXIT_FILE}' EXIT`,
     "set -e",
     BASE_SETUP,
     ...writes.map(
@@ -246,6 +261,25 @@ const rebuild = (api: VercelSandboxApi, build: ImageBuild, stale: ListedSandbox)
     return yield* startBuild(api, build);
   });
 
+/**
+ * How the build ended: the command's exit code where Vercel recorded one,
+ * else the status the build's marker holds, a marker that is not a status
+ * counting as failed; null while neither says it ended.
+ */
+const buildExit = (
+  api: VercelSandboxApi,
+  session: string,
+  commandId: string,
+): Effect.Effect<number | null, SandboxUnavailable> =>
+  Effect.gen(function* () {
+    const tracked = yield* api.commandExit(session, commandId);
+    if (tracked !== null) return tracked;
+    const marker = yield* api.readFile(session, BUILD_EXIT_FILE, BUILD_EXIT_BYTES);
+    if (marker === undefined) return null;
+    const status = Buffer.from(marker).toString("utf8").trim();
+    return /^\d{1,3}$/u.test(status) ? Number(status) : -1;
+  });
+
 /** Whether the instant the tag holds is longer ago than the bound. */
 function olderThan(now: number, at: number | undefined, bound: Duration.Duration): boolean {
   return at !== undefined && Number.isFinite(at) && now - at >= Duration.toMillis(bound);
@@ -290,7 +324,7 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
         ? PREPARING
         : yield* rebuild(api, build, found);
     }
-    const exit = yield* api.commandExit(session, commandId);
+    const exit = yield* buildExit(api, session, commandId);
     if (exit === null) return PREPARING;
     if (exit !== 0) {
       yield* Effect.logWarning(

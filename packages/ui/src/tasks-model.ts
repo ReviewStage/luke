@@ -564,7 +564,7 @@ export function unsettledMarks(marks: PendingMarks, view: TasksView): PendingMar
  * object of its own, so whoever set it lets go of it alone, and never of a
  * later press's status for the same task.
  */
-export interface PendingStatus {
+interface PendingStatus {
   readonly status: TaskStatus;
 }
 

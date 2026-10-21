@@ -2,11 +2,7 @@
  * cost-chart.tsx -- the Cost screen's daily list-price equivalent, one bar a day stacked by source.
  */
 
-import {
-  type AdminCostDay,
-  COST_SOURCE,
-  type CostSource,
-} from "@luke/service/admin/admin-cost-wire";
+import { type AdminCostDay, COST_SOURCE, type CostSource } from "@luke/features/admin-cost-wire";
 import {
   formatCompact,
   formatDayTick,

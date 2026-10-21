@@ -78,7 +78,6 @@ import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import {
@@ -99,6 +98,7 @@ import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
+import { AgentTabSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
@@ -1589,7 +1589,7 @@ function sameMessageDraw(a: AgentMessageProps, b: AgentMessageProps): boolean {
 const SteadyAgentMessage = memo(AgentMessage, sameMessageDraw);
 
 /** The door that brings a message whose row is not drawn into view, handing its row to `then` once drawn; false where no row draws it. */
-export type MessageBringer = (messageId: string, then: (row: HTMLElement) => void) => boolean;
+type MessageBringer = (messageId: string, then: (row: HTMLElement) => void) => boolean;
 
 /** A row placed in a transcript: its message, the lines that reached it, and the voice's lines drawn ahead of it. */
 type PlacedRow = SpokenMessage;
@@ -1994,12 +1994,12 @@ function AgentTranscriptView({
       </ErrorState>
     );
   }
+  // The log's first page, and what stands around it, wait in the tab's own placeholder, which it opened on (`AgentTab`).
+  if (holding || (reading && ended === undefined)) return <TranscriptSkeleton />;
   // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
   return (
     <ConversationEmptyState wide>
-      {holding || (reading && ended === undefined) ? (
-        <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
-      ) : (
+      {
         <>
           {ended === undefined ? (
             <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
@@ -2013,7 +2013,7 @@ function AgentTranscriptView({
           )}
           {endTrail}
         </>
-      )}
+      }
     </ConversationEmptyState>
   );
 }
@@ -2308,20 +2308,8 @@ function AgentTabView({
   );
 }
 
-export function AgentTab({
-  agent,
-  control,
-  shown,
-  onOpenSubagent,
-  onOpenPullRequest,
-  onOpenTarget,
-  cards,
-  chat,
-  onHeld,
-  run,
-  call,
-}: {
-  agent: CodingAgentSummary;
+/** What an agent's tab is handed beside the agent. */
+interface AgentTabDoors {
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: CodingAgentOrigin | undefined;
   /** What the tab takes calls through; none where the platform has no voice. */
@@ -2341,10 +2329,35 @@ export function AgentTab({
   chat?: ChatNoticeDoors | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
-}): React.JSX.Element {
+}
+
+/**
+ * The agent an agent's tab is: read already, or named by its id alone while
+ * the task's list of agents, which reads it, is on its way.
+ */
+type AgentTabProps = AgentTabDoors &
+  (
+    | { agent: CodingAgentSummary; agentId?: undefined }
+    | { agent: CodingAgentSummary | undefined; agentId: string }
+  );
+
+/**
+ * An agent's tab, by the agent's id alone: its transcript is followed and
+ * the calls into it read from the moment the tab stands, while the agent
+ * itself may still be on its way with the task's list of agents. What needs
+ * the agent, its composer, its model, its pull request, and how its log is
+ * headed, waits for it, the tab standing in its own shape meanwhile
+ * (`AgentTabSkeleton`): the log's placeholder lines, which stand on until
+ * the first page lands, over the composer's card, which the composer then
+ * takes the place of. So a task opened on an agent reads its transcript
+ * beside the list rather than after it, and nothing moves as either lands.
+ */
+export function AgentTab(props: AgentTabProps): React.JSX.Element {
+  const { agent, control, shown, onHeld, agentId: _agentId, ...rest } = props;
+  const agentId = props.agentId === undefined ? props.agent.id : props.agentId;
   const { tell } = useAct();
   const transcript = useAgentTranscript({
-    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId: agent.id },
+    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId },
     shown,
     follower: control.transcripts,
     onStatus: control.onStatus,
@@ -2352,7 +2365,7 @@ export function AgentTab({
   });
   const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
   const { calls, settled: callsSettled } = useAgentCalls({
-    agentId: agent.id,
+    agentId,
     read: control.readCalls,
     messages,
     readerId: control.me,
@@ -2363,8 +2376,8 @@ export function AgentTab({
   useEffect(() => {
     if (pageStatus === undefined || messages.length === 0) return;
     const status = pageStatus;
-    onHeld(agent.id, { messages, status, runStartedAt, title: undefined, subagentTitles });
-  }, [onHeld, agent.id, messages, pageStatus, runStartedAt, subagentTitles]);
+    onHeld(agentId, { messages, status, runStartedAt, title: undefined, subagentTitles });
+  }, [onHeld, agentId, messages, pageStatus, runStartedAt, subagentTitles]);
   // A plan edit that answered has changed the plan the window holds, so the host re-reads it;
   // the edits already on screen when the tab opened are the plan's as it was read.
   const settledEdits = settledPlanEdits(transcript.messages);
@@ -2394,6 +2407,44 @@ export function AgentTab({
     seenSidebarCalls.current = new Set(sidebarCalls);
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
   }, [sidebarCalls, tell]);
+  // The tab stands in its own shape until the agent is here; its log stands the same lines until its first page is (`TranscriptSkeleton`).
+  if (agent === undefined) return <AgentTabSkeleton />;
+  return (
+    <AgentTabBody
+      {...rest}
+      agent={agent}
+      control={control}
+      shown={shown}
+      transcript={transcript}
+      calls={calls}
+      callsSettled={callsSettled}
+    />
+  );
+}
+
+/** The tab once the agent is read: its composer, model, servers, and pull request, over the transcript its id followed (`AgentTab`). */
+function AgentTabBody({
+  agent,
+  control,
+  shown,
+  transcript,
+  calls,
+  callsSettled,
+  onOpenSubagent,
+  onOpenPullRequest,
+  onOpenTarget,
+  cards,
+  chat,
+  run,
+  call,
+}: Omit<AgentTabDoors, "onHeld"> & {
+  agent: CodingAgentSummary;
+  transcript: AgentTranscriptControl;
+  calls: readonly TranscriptCallRow[];
+  /** Whether the calls into the agent were read, or their read gave up, which the log's first draw waits on. */
+  callsSettled: boolean;
+}): React.JSX.Element {
+  const { messages } = transcript;
   const composer = useAgentComposer({
     agentId: agent.id,
     taskId: agent.planId,

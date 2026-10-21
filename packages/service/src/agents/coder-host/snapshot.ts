@@ -48,6 +48,7 @@ import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   credentialPolicy,
   OPEN_INTERNET_POLICY,
@@ -269,6 +270,8 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     const up = UP_STATUSES.has(sandbox.status ?? "");
     // Note that the stop is registered ahead of the wake, so a wake cut short by the bound is stopped too.
     if (!up) yield* Effect.addFinalizer(() => stopWoken(api, ask));
+    // Lowered ahead of a wake, so a woken session a terminal or a turn keeps up lives the timeout, not an old sandbox's day.
+    if (!up) yield* capSandboxTimeout(api, sandbox);
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
     const credential = yield* ask.credential;
     // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.

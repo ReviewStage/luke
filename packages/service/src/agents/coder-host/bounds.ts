@@ -76,6 +76,16 @@ export const CODER = {
    * the step's own model call ahead of the pause; a longer wait is two.
    */
   SLEEP_MAX: Duration.minutes(8),
+  /**
+   * The shortest pause (`sleep.ts`) the sandbox is stopped for, where no
+   * process the agent started still runs (`../agent-runtime/sandbox-idle.ts`),
+   * and resumed from its snapshot at the next step. Vercel bills provisioned
+   * memory by the minute a session runs, idle or not, and a stop writes a
+   * snapshot and the next step waits on a resume, so a pause shorter than
+   * two billed minutes saves too little to be worth the resume
+   * (https://vercel.com/kb/guide/vercel-sandbox-duration-and-persistence).
+   */
+  SLEEP_STOPS_AT: Duration.minutes(2),
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
   /**
