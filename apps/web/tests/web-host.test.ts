@@ -238,6 +238,7 @@ it.effect(
             askAct(ACT_KIND.BROWSER_OPEN, {
               browserId: "browser-1",
               address: "https://example.com/",
+              taskId: "task-1",
             }).catch((error: Error) => error.message),
           ]),
         );

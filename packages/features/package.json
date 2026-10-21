@@ -122,6 +122,8 @@
     "./browser-live-wire": "./src/browser-live-wire.js",
     "./agent-browser-tab-wire": "./src/agent-browser-tab-wire.js",
     "./browser-agent-actions": "./src/browser-agent-actions.js",
+    "./browser-agent-cdp": "./src/browser-agent-cdp.js",
+    "./browser-cdp": "./src/browser-cdp.js",
     "./page-policy": "./src/page-policy.js",
     "./page-find": "./src/page-find.js",
     "./terminal-entry": "./src/terminal-entry.js",

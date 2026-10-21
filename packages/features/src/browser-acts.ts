@@ -83,6 +83,9 @@ export function browserAddressOf(typed: string): string | undefined {
 
 const browserId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
 
+/** The task a Browser tab is opened on, by its id. */
+const taskId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
+
 const browserAddress = Schema.String.check(Schema.makeFilter(isBrowserAddress));
 
 const shown = Schema.String.check(Schema.isMaxLength(BROWSER_SHOWN_MAX_CHARS));
@@ -93,8 +96,33 @@ const pixels = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 
 /** A call that names one Browser tab's view. */
 export const browserViewParamsSchema = Schema.Struct({ browserId });
 
-/** An open, or a navigation: the view, and the address it loads. */
+/** A call that names one Browser tab's view, as main tells the panel of one an agent closed. */
+export const isBrowserView = Schema.is(browserViewParamsSchema);
+
+/** A navigation: the view, and the address it loads. */
 export const browserAddressParamsSchema = Schema.Struct({ browserId, address: browserAddress });
+
+/**
+ * An open: the view, the address it loads, and the task the tab is on,
+ * which main keeps beside the view so an agent on that task can reach it.
+ */
+export const browserOpenParamsSchema = Schema.Struct({
+  browserId,
+  address: browserAddress,
+  taskId,
+});
+
+/**
+ * A Browser tab an agent opened on a task, which main tells the panel of
+ * so it draws the tab on that task, as the "+" would, without taking the
+ * keyboard: its view's id, the task, and the address it opened at.
+ */
+const browserOpenedSchema = browserOpenParamsSchema;
+
+export type BrowserOpened = typeof browserOpenedSchema.Type;
+
+/** Whether a value is a Browser tab an agent opened, as the panel is told on `onBrowserOpened`. */
+export const isBrowserOpened = Schema.is(browserOpenedSchema);
 
 /** A step of the bar's: back, forward, reload, or stop. */
 export const browserStepParamsSchema = Schema.Struct({
@@ -128,6 +156,8 @@ export const browserPageSchema = Schema.Struct({
   forward: Schema.Boolean,
   /** Why the page last failed to load, in the browser's words; none once one loads. */
   failure: Schema.optional(shown),
+  /** Whether an agent drives the page now, which the tab's bar says, with a Stop beside it; none while none does. */
+  agent: Schema.optional(Schema.Boolean),
 });
 
 export type BrowserPage = typeof browserPageSchema.Type;

@@ -45,6 +45,7 @@
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { browserTabDriver } from "@luke/database/models/agent-browser-tabs";
 import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
+import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@luke/features/browser-cdp";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -77,14 +78,7 @@ import {
 } from "effect";
 import { BROWSER_TAKEOVER_HOLD_MS } from "../agents/agent-browser-tabs-procedures.js";
 import { controlsAgent } from "../agents/agent-reach.js";
-import {
-  type AgentBrowserService,
-  BROWSER_UNREACHABLE,
-  type CdpCommand,
-  type CdpEvent,
-  type CdpFailure,
-  type CdpSession,
-} from "../agents/browser/agent-browser.js";
+import { type AgentBrowserService, BROWSER_UNREACHABLE } from "../agents/browser/agent-browser.js";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 import type { RelaySocket } from "../terminal/relay.js";
 

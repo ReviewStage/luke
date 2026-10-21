@@ -9,6 +9,7 @@ import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
+import { macBrowserTabsOver } from "@luke/host/mac-browser-tabs";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import {
@@ -81,23 +82,37 @@ export function registerDesktopIpc(services: DesktopServices): void {
     },
   };
 
+  const browserExperimentOn = () =>
+    experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER);
+
   // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
   const browserViews = createBrowserViews({
     tellPage: (sender, page) => windowPushes.push(sender, PUSH.BROWSER_STATE, page),
     tellKey: (sender, key) => windowPushes.push(sender, PUSH.BROWSER_KEY, key),
     tellFocus: (sender, focus) => windowPushes.push(sender, PUSH.BROWSER_FOCUS, focus),
+    tellOpened: (sender, opened) => windowPushes.push(sender, PUSH.BROWSER_OPENED, opened),
+    tellClosed: (sender, closed) => windowPushes.push(sender, PUSH.BROWSER_CLOSED, closed),
     whenGone: whenPageGone,
   });
+
+  // An agent on a task reaches the window's Browser tabs on that task while the window is open on screen.
+  native.serveBrowserTabs(
+    macBrowserTabsOver({
+      experimentOn: browserExperimentOn,
+      panel: () => {
+        const window = panels.primaryPanel();
+        return window?.isVisible() ? window.webContents : undefined;
+      },
+      shownTask: () => state.snapshot().tasks.activeTaskId,
+      tabsOn: (panel, taskId) => browserViews.agentTabs(panel, taskId),
+    }),
+  );
 
   // The acts main answers itself on the act port: its windows', ports', and
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...avatarProcedures({ avatar }),
-    ...browserProcedures({
-      views: browserViews,
-      experimentOn: () =>
-        experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
-    }),
+    ...browserProcedures({ views: browserViews, experimentOn: browserExperimentOn }),
     ...macTerminalProcedures({
       host: operator.host,
       worktreesRoot: worktreesRoot(os.homedir()),

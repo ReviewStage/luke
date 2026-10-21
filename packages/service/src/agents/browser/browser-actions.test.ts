@@ -8,6 +8,8 @@ import {
   type BrowserAgentAction,
   type BrowserAgentStep,
 } from "@luke/features/browser-agent-actions";
+import { runBrowserActions } from "@luke/features/browser-agent-cdp";
+import type { CdpEvent, PageTarget } from "@luke/features/browser-cdp";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -18,9 +20,7 @@ import {
   fakeCdpPeer,
   fakeSandboxApi,
 } from "../../testing/agent-browser-fake.js";
-import type { CdpEvent, PageTarget } from "./agent-browser.js";
 import { agentBrowserOver } from "./agent-browser.js";
-import { runBrowserActions } from "./browser-actions.js";
 
 /**
  * An agent's browser actions over a fake Chromium behind the real CDP

@@ -173,6 +173,8 @@ export function createInProcessBridge(
       onBrowserState: neverDelivered,
       onBrowserKey: neverDelivered,
       onBrowserFocus: neverDelivered,
+      onBrowserOpened: neverDelivered,
+      onBrowserClosed: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,
