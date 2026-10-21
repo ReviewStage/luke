@@ -1002,7 +1002,8 @@ their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
-the still of its page drawn while something covers it; code drawn in a
+the still of its page drawn while something covers it, and a cloud Browser
+tab with the live view of its page; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; and the cards
 that open over a row or a chip on hover, a page's preview among them. The
