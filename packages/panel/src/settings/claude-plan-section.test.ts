@@ -17,6 +17,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { dayAndTimeText } from "../tasks/task-time.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
@@ -195,7 +196,10 @@ test("Save sends the masked field's token once with its kind, then clears it, an
 
   const group = claudeGroup(page) ?? assert.fail("no Claude Code group");
   assert.equal(group.querySelector("input"), null, "the field is gone once the token is kept");
-  assert.match(group.textContent ?? "", /Connected · sk-ant-oat01…fake · Added /u);
+  assert.match(
+    group.textContent ?? "",
+    /Connected · Not yet checked · sk-ant-oat01…fake · Added /u,
+  );
   assert.ok(!document.body.innerHTML.includes(TOKEN), "the token stands nowhere on the page");
   for (const spy of logged) {
     assert.ok(
@@ -260,6 +264,33 @@ test("a token Anthropic rejected says so and offers to replace it", async () => 
   const group = claudeGroup(page) ?? assert.fail("no Claude Code group");
   assert.match(group.textContent ?? "", /Anthropic rejected this token\./u);
   assert.ok(button(group, "Replace token"));
+});
+
+test("the row says how the plan's last turn found it: connected once a turn ran, its limit reached with the reset, and still connected while it waits", async () => {
+  held = { keys: [], subscriptions: [{ ...CONNECTED, status: PROVIDER_KEY_STATUS.VERIFIED }] };
+  const verified = claudeGroup(await mount()) ?? assert.fail("no Claude Code group");
+  assert.match(verified.textContent ?? "", /Connected · sk-ant-oat01…fake/u);
+  assert.doesNotMatch(verified.textContent ?? "", /Not yet checked/u);
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  const resetsAt = Date.UTC(2026, 9, 21, 22, 40);
+  held = {
+    keys: [],
+    subscriptions: [
+      { ...CONNECTED, status: PROVIDER_KEY_STATUS.LIMIT_REACHED, limitResetsAt: resetsAt },
+    ],
+  };
+  const limited = claudeGroup(await mount()) ?? assert.fail("no Claude Code group");
+  const state = limited.querySelector(".settings-state");
+  assert.equal(state?.textContent, `Usage limit reached · Resets ${dayAndTimeText(resetsAt)}`);
+  assert.equal(state?.getAttribute("data-state"), "attention");
+  assert.ok(button(limited, "Disconnect"), "a reached limit leaves the plan connected");
+  assert.ok(
+    [...limited.querySelectorAll("button")].every((each) => each.textContent !== "Replace token"),
+    "nothing asks for a new token while the plan only waits",
+  );
 });
 
 const planSwitch = (within: Element) =>

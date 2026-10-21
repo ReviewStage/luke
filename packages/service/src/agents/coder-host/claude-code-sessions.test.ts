@@ -17,13 +17,17 @@ import {
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
+import { saveProviderKey, setPlanStatus } from "@luke/database/models/provider-key-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
+import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN } from "../../core.js";
@@ -45,6 +49,7 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import {
   type ClaudeCodeSessionsOptions,
@@ -287,6 +292,71 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(command?.env[RUNNER_ENV.API_KEY], undefined);
       assert.equal(JSON.stringify([command?.args, command?.stdin]).includes(PLAN_TOKEN), false);
     }),
+  );
+
+  it.effect(
+    "a setup-token Anthropic refused refuses the launch as one to reconnect, a limit refuses it with its reset until that passes, and neither starts a runner while refused",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const { userId, agent } = yield* openAgent;
+        const ring = parseKeyRing(Redacted.make(RING));
+        assert.ok(Result.isSuccess(ring));
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring.success, owner, Redacted.make(PLAN_TOKEN)),
+          "sk-ant-oat…oken",
+          null,
+          new Date(0),
+        );
+        const markPlan = (
+          status: typeof PROVIDER_KEY_STATUS.LIMIT_REACHED | typeof PROVIDER_KEY_STATUS.INVALID,
+          resetsAt?: Date,
+        ) =>
+          Effect.gen(function* () {
+            const now = yield* DateTime.nowAsDate;
+            yield* setPlanStatus(userId, owner.provider, owner.kind, status, resetsAt, now, now);
+          });
+        const openOn = (api: ReturnType<typeof runnerSandboxApi>) =>
+          Effect.gen(function* () {
+            const sessions = yield* sessionsFor(userId, { next: 0 }, null).pipe(
+              Effect.provide(services(api)),
+            );
+            return yield* sessions.open(message(agent, "Go."));
+          });
+
+        const resetsAt = new Date((yield* DateTime.nowAsDate).getTime() + 30 * 60_000);
+        yield* markPlan(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt);
+        const limited = runnerSandboxApi();
+        assert.deepEqual(yield* openOn(limited), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+          planResetsAt: resetsAt.getTime(),
+        });
+        assert.deepEqual(limited.commands, []);
+
+        yield* TestClock.adjust("31 minutes");
+        const reset = runnerSandboxApi();
+        assert.equal((yield* openOn(reset)).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(reset.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
+
+        yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
+        const refused = runnerSandboxApi();
+        assert.deepEqual(yield* openOn(refused), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.SIGNED_OUT,
+        });
+        assert.deepEqual(refused.commands, []);
+      }),
   );
 
   it.effect(

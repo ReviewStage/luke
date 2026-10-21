@@ -81,6 +81,7 @@ import {
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
+import { planLimitReachedDataSchema } from "./contract/errors.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
@@ -181,6 +182,7 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 type Failed = {
   readonly failure: CodingAgentCallFailure;
   readonly unreached?: RepositoryUnreached;
+  readonly resetsAt?: number;
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -293,6 +295,10 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
   if (failure === undefined) return UNANSWERED;
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
+    const limit = Result.getOrUndefined(readServiceAnswer(planLimitReachedDataSchema)(payload));
+    return limit?.resetsAt === undefined ? { failure } : { failure, resetsAt: limit.resetsAt };
+  }
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
@@ -361,7 +367,12 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   const failure = named[failed.refusal];
   if (failure === undefined) return UNANSWERED;
   const unreached = failed.data?.unreached;
-  return unreached === undefined ? { failure } : { failure, unreached };
+  const resetsAt = failed.data?.resetsAt;
+  return {
+    failure,
+    ...(unreached === undefined ? undefined : { unreached }),
+    ...(resetsAt === undefined ? undefined : { resetsAt }),
+  };
 }
 
 /**

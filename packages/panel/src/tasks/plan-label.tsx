@@ -5,11 +5,17 @@ import { TEXT_LINK_LOOK, TEXT_TONE, TEXT_VARIANT, Text, TextLink } from "@luke/u
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { useNativeAgentsAccess } from "../use-app-state.js";
-import { CHATGPT_USAGE_URL, chatGptPlanLabel, PLAN_LABEL_WORDS } from "./plan-label-model.js";
+import {
+  CHATGPT_USAGE_URL,
+  chatGptPlanLabel,
+  claudePlanLabel,
+  PLAN_LABEL_WORDS,
+  type PlanLabel,
+} from "./plan-label-model.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
- * plan-label.tsx -- "Using ChatGPT plan · Manage usage" under a Codex agent's composer, or why the plan cannot serve it.
+ * plan-label.tsx -- "Using ChatGPT plan · Manage usage" under a Codex agent's composer, "Using your Claude plan" under a Claude Code agent's, or why the plan cannot serve it.
  *
  * Drawn for an agent on Codex, which its starter's ChatGPT plan alone pays
  * for. The words are `plan-label-model.ts`'s; the plan's status is read for
@@ -52,6 +58,36 @@ function useStarterKeys(
   return reads ? keys : undefined;
 }
 
+/** A label's words, in the attention colour, and said aloud as a status, where they ask for attention. */
+function LabelWords({ label }: { label: PlanLabel }): React.JSX.Element {
+  return (
+    <span
+      className="agent-plan-label"
+      data-state={label.attention ? "attention" : undefined}
+      role={label.attention ? "status" : undefined}
+    >
+      {label.words}
+    </span>
+  );
+}
+
+/** The label under a Claude Code agent's composer. */
+export function ClaudePlanLabel({
+  starter,
+  status,
+}: {
+  /** Whether the reader started the agent, whose plan pays and whose status is theirs to read. */
+  starter: boolean;
+  status: CodingAgentStatus;
+}): React.JSX.Element {
+  const label = claudePlanLabel(useStarterKeys(starter, status));
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      <LabelWords label={label} />
+    </Text>
+  );
+}
+
 /** The label under a Codex agent's composer. */
 export function ChatGptPlanLabel({
   starter,
@@ -65,13 +101,7 @@ export function ChatGptPlanLabel({
   const label = chatGptPlanLabel(useStarterKeys(starter, status));
   return (
     <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      <span
-        className="agent-plan-label"
-        data-state={label.attention ? "attention" : undefined}
-        role={label.attention ? "status" : undefined}
-      >
-        {label.words}
-      </span>
+      <LabelWords label={label} />
       {" · "}
       <TextLink
         href={CHATGPT_USAGE_URL}

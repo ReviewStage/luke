@@ -28,7 +28,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { HarnessMark } from "../harness-marks.js";
-import { dayText } from "../tasks/task-time.js";
+import { dayAndTimeText, dayText } from "../tasks/task-time.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
@@ -54,6 +54,8 @@ const WORDS = {
   TITLE: "Claude Code",
   LABEL: "Claude plan",
   CONNECTED: "Connected",
+  UNVERIFIED: "Connected · Not yet checked",
+  LIMIT_REACHED: "Usage limit reached",
   INVALID: "Anthropic rejected this token. Paste a new one.",
   QUOTA_EXCEEDED: "Out of usage on your Claude plan.",
   UNREADABLE: "This token can no longer be read. Paste a new one.",
@@ -83,12 +85,27 @@ function setupTokenOf(answer: ProviderKeysAnswer): SubscriptionKeySummary | unde
   return answer.subscriptions?.find((one) => one.kind === PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
 }
 
-/** Whether a stored token still stands for the plan: kept, or answered by Anthropic. */
+/** Whether a stored token still stands for the plan: kept, answered by Anthropic, or only waiting on its limit to reset. */
 function standing(stored: SubscriptionKeySummary): boolean {
   return (
     stored.status === PROVIDER_KEY_STATUS.UNVERIFIED ||
-    stored.status === PROVIDER_KEY_STATUS.VERIFIED
+    stored.status === PROVIDER_KEY_STATUS.VERIFIED ||
+    stored.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
   );
+}
+
+/** What a standing token's status says: connected, not yet run on, or its limit reached until the reset Claude Code named. */
+function standingWords(stored: SubscriptionKeySummary): string {
+  switch (stored.status) {
+    case PROVIDER_KEY_STATUS.UNVERIFIED:
+      return WORDS.UNVERIFIED;
+    case PROVIDER_KEY_STATUS.LIMIT_REACHED:
+      return stored.limitResetsAt === undefined
+        ? WORDS.LIMIT_REACHED
+        : `${WORDS.LIMIT_REACHED} · Resets ${dayAndTimeText(stored.limitResetsAt)}`;
+    default:
+      return WORDS.CONNECTED;
+  }
 }
 
 /** What a token Anthropic no longer takes says on its row. */
@@ -115,14 +132,16 @@ function rowDescription(stored: SubscriptionKeySummary | undefined): React.React
     );
   }
   const ok = standing(stored);
+  // Note that a reached limit keeps the plan connected, so it is said in the attention colour without an alert.
+  const limited = stored.status === PROVIDER_KEY_STATUS.LIMIT_REACHED;
   return (
     <>
       <span
         className="settings-state"
-        data-state={ok ? "connected" : "attention"}
+        data-state={ok && !limited ? "connected" : "attention"}
         role={ok ? undefined : "alert"}
       >
-        {ok ? WORDS.CONNECTED : attentionWords(stored)}
+        {ok ? standingWords(stored) : attentionWords(stored)}
       </span>
       {" · "}
       <code className="api-key-hint">{stored.hint}</code>

@@ -1196,4 +1196,170 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         assert.deepEqual(yield* planRow(agent.userId), [PROVIDER_KEY_STATUS.UNVERIFIED, null]);
       }),
   );
+
+  /** The account's Claude setup-token, kept as pasting keeps it: sealed, and not yet answered. */
+  const pasted = (userId: string, at = new Date(0)) =>
+    saveProviderKey(
+      userId,
+      PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+      { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-setup-token" },
+      "sk-ant-oat01…fake",
+      null,
+      at,
+    );
+
+  /** The setup-token's row as it stands: its status, and when a reached limit resets. */
+  const setupTokenRow = (userId: string) =>
+    Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN), (rows) => {
+      const row: ProviderKeyRow | undefined = rows[0];
+      return [row?.status, row?.limitResetsAt?.toISOString() ?? null] as const;
+    });
+
+  /** Events numbered on from where the last batch left off. */
+  const numberedFrom = (from: number, messagesOfLaunch: readonly unknown[]) =>
+    // SAFETY: each message is one the pinned SDK or the runner emits, written in its JSON shape.
+    messagesOfLaunch.map((message, index) => ({ sequence: from + index, message }) as RunnerEvent);
+
+  /** One launch whose one turn Claude Code ended in error, with what it said first. */
+  const failedClaudeLaunch = (lineId: string, said: readonly WireValue[]): readonly unknown[] => {
+    const top = { parent_tool_use_id: null, session_id: SESSION };
+    return [
+      { type: RUNNER_EVENT.ACCEPTED, uuid: lineId },
+      { type: "system", subtype: "init", ...top },
+      ...said,
+      { type: "result", subtype: "success", is_error: true, ...top },
+      { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+    ];
+  };
+
+  it.effect(
+    "a Claude plan's row takes how each turn found it: verified by P00's turn, its limit reached with the reset Claude Code named, verified again once a turn runs, then refused, which a turn that ran never lifts",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, [
+          "Run the probe.",
+          "Go on.",
+          "Go on again.",
+          "Once more.",
+          "And again.",
+        ]);
+        yield* pasted(agent.userId);
+        const statuses: (readonly [string | undefined, string | null])[] = [
+          yield* setupTokenRow(agent.userId),
+        ];
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        let next = 0;
+        const launch = (messagesOfLaunch: readonly unknown[]) =>
+          Effect.gen(function* () {
+            const events = numberedFrom(next, messagesOfLaunch);
+            next += events.length;
+            yield* post(agent.bearer, events);
+            statuses.push(yield* setupTokenRow(agent.userId));
+          });
+        const ran = (lineId: string) => workflowTurn(lineId).map((event) => event.message);
+
+        yield* launch(ran(agent.lineIds[0] ?? ""));
+
+        const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
+        yield* launch(
+          failedClaudeLaunch(agent.lineIds[1] ?? "", [
+            {
+              type: "rate_limit_event",
+              rate_limit_info: {
+                status: "rejected",
+                rateLimitType: "five_hour",
+                resetsAt: resetsAt / 1000,
+              },
+              uuid: randomUUID(),
+              ...top,
+            },
+          ]),
+        );
+
+        yield* launch(ran(agent.lineIds[2] ?? ""));
+
+        yield* launch(
+          failedClaudeLaunch(agent.lineIds[3] ?? "", [
+            {
+              type: "assistant",
+              message: {
+                id: "msg_auth",
+                content: [{ type: "text", text: "Invalid API key · Please run /login" }],
+              },
+              error: "authentication_failed",
+              uuid: randomUUID(),
+              ...top,
+            },
+          ]),
+        );
+
+        // A turn that ran after the refusal leaves it standing: only a new setup-token mends it.
+        yield* launch(ran(agent.lineIds[4] ?? ""));
+
+        assert.deepEqual(statuses, [
+          [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+          [PROVIDER_KEY_STATUS.VERIFIED, null],
+          [PROVIDER_KEY_STATUS.LIMIT_REACHED, new Date(resetsAt).toISOString()],
+          [PROVIDER_KEY_STATUS.VERIFIED, null],
+          [PROVIDER_KEY_STATUS.INVALID, null],
+          [PROVIDER_KEY_STATUS.INVALID, null],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const warned = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the test."]);
+        yield* pasted(warned.userId);
+        yield* post(
+          warned.bearer,
+          numberedFrom(
+            0,
+            failedClaudeLaunch(warned.lineId, [
+              {
+                type: "rate_limit_event",
+                rate_limit_info: { status: "allowed_warning", resetsAt: 1_800_000_000 },
+                uuid: randomUUID(),
+                ...top,
+              },
+            ]),
+          ),
+        );
+
+        const onKey = yield* agentOn(
+          { ...HARNESS.CLAUDE_CODE, payer: CODING_AGENT_PAYER.API_KEY },
+          ["Fix the test."],
+        );
+        yield* pasted(onKey.userId);
+        yield* post(
+          onKey.bearer,
+          numberedFrom(
+            0,
+            failedClaudeLaunch(onKey.lineId, [
+              {
+                type: "assistant",
+                message: { content: [{ type: "text", text: "Invalid API key" }] },
+                error: "authentication_failed",
+                uuid: randomUUID(),
+                ...top,
+              },
+            ]),
+          ),
+        );
+
+        assert.deepEqual(
+          [yield* setupTokenRow(warned.userId), yield* setupTokenRow(onKey.userId)],
+          [
+            [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+            [PROVIDER_KEY_STATUS.UNVERIFIED, null],
+          ],
+        );
+      }),
+  );
 });

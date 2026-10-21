@@ -27,6 +27,7 @@ import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
   hostedRefusing,
+  planLimitReached,
   repositoryNotReachable,
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
@@ -39,6 +40,7 @@ const REACH_PATH = "/api/test/reach";
 const ITEMS_PATH = "/api/test/items";
 const DEFECT_PATH = "/api/test/defect";
 const CAPPED_PATH = "/api/test/capped";
+const LIMITED_PATH = "/api/test/limited";
 
 /** A small cap of the capped procedure's own, in bytes, well under the handler's ceiling. */
 const CAP = 64;
@@ -58,6 +60,8 @@ const UNREACHED = {
   connectedTo: "someone-else",
 } as const;
 
+const RESETS_AT = Date.UTC(2026, 9, 21, 15, 40);
+
 const testContract = {
   when: oc
     .errors(HOSTED_ERRORS)
@@ -67,6 +71,10 @@ const testContract = {
   reach: oc
     .errors(HOSTED_ERRORS)
     .meta(openapi({ method: HTTP_METHOD.GET, path: REACH_PATH }))
+    .output(Schema.flip(itemSchema)),
+  limited: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.GET, path: LIMITED_PATH }))
     .output(Schema.flip(itemSchema)),
   create: oc
     .errors(HOSTED_ERRORS)
@@ -91,6 +99,9 @@ const testRouter = test.router({
   reach: test.reach.effect(function* () {
     return yield* Effect.fail(repositoryNotReachable(UNREACHED));
   }),
+  limited: test.limited.effect(function* () {
+    return yield* Effect.fail(planLimitReached(RESETS_AT));
+  }),
   create: test.create.handler(({ input }) => ({ name: input.name })),
   defect: test.defect.effect(function* () {
     return yield* Effect.die(new Error("a defect"));
@@ -109,6 +120,11 @@ const oldGroup = Layer.mergeAll(
     HTTP_METHOD.GET,
     REACH_PATH,
     hostedRefusing(Effect.fail(repositoryNotReachable(UNREACHED))),
+  ),
+  HttpRouter.add(
+    HTTP_METHOD.GET,
+    LIMITED_PATH,
+    hostedRefusing(Effect.fail(planLimitReached(RESETS_AT))),
   ),
   HttpRouter.add(
     HTTP_METHOD.POST,
@@ -177,6 +193,19 @@ it.effect(
       assert.deepEqual(JSON.parse(orpc.text), {
         error: "repository-not-reachable",
         unreached: UNREACHED,
+      });
+    }),
+);
+
+it.effect(
+  "a plan's reached limit is refused with when it resets, beside the slug at the top level, as a route group refuses it",
+  () =>
+    Effect.gen(function* () {
+      const { orpc, old } = yield* bothAnswer({ path: LIMITED_PATH });
+      assert.deepEqual(orpc, old);
+      assert.deepEqual(JSON.parse(orpc.text), {
+        error: "agent-plan-limit-reached",
+        resetsAt: RESETS_AT,
       });
     }),
 );

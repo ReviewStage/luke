@@ -3,7 +3,12 @@ import type { ToolCallSettlement } from "@luke/features/brain";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
-import { NATIVE_MOMENT, type NativeHeld, type NativeMoment } from "./native-moments.js";
+import {
+  NATIVE_MOMENT,
+  type NativeHeld,
+  type NativeMoment,
+  PLAN_STATUS,
+} from "./native-moments.js";
 import {
   FAILURE_CHARS,
   PICTURE_STAND_IN,
@@ -28,7 +33,11 @@ import {
  * own MCP server is named as Luke's tool (`mcp__luke__read_inbox` is
  * `read_inbox`) and its answer read as the JSON that tool answers; every
  * other call keeps the CLI's own name and its answer the text the model
- * read. Each shape is read with a schema of the fields this reads alone, so
+ * read. A turn also says how it found the plan that pays: a `result` that
+ * is no error ran on it, an answer the CLI flags `authentication_failed`
+ * (a setup-token revoked, expired, or never one) refused it, and a
+ * rejected `rate_limit_event` is its limit reached, until the reset the
+ * CLI names. Each shape is read with a schema of the fields this reads alone, so
  * a field the SDK adds changes nothing here, and a message no schema fits
  * is no moment.
  */
@@ -69,6 +78,7 @@ const readInit = Schema.decodeUnknownOption(Schema.Struct({ session_id: Schema.S
 
 const readAssistant = Schema.decodeUnknownOption(
   Schema.Struct({
+    error: Schema.optionalKey(Schema.String),
     message: Schema.Struct({
       id: Schema.optionalKey(Schema.String),
       content: Schema.Array(WireValueSchema),
@@ -138,6 +148,17 @@ const SYSTEM_SUBTYPE = { INIT: "init", COMPACT_BOUNDARY: "compact_boundary" } as
 /** The limit status that refuses the plan's calls, as `SDKRateLimitInfo` spells it. */
 const RATE_LIMIT_REFUSED = "rejected";
 
+/**
+ * The errors an answer carries that say the provider refused the plan's
+ * credential, as `SDKAssistantMessageError` spells them: the token was
+ * refused, or its organization may not use Claude Code. Either is mended
+ * only by a new setup-token.
+ */
+const CREDENTIAL_REFUSED: ReadonlySet<string> = new Set([
+  "authentication_failed",
+  "oauth_org_not_allowed",
+]);
+
 /** The name a call is stored under: Luke's tool's own for a call to Luke's MCP server, the CLI's otherwise. */
 function storedClaudeCodeToolName(name: string): string {
   return name.startsWith(CLAUDE_CODE_LUKE_TOOL_PREFIX)
@@ -189,6 +210,10 @@ function assistantMoments(message: WireValue): readonly NativeMoment[] {
   const moments: NativeMoment[] = [
     id === undefined ? { kind: NATIVE_MOMENT.STEP } : { kind: NATIVE_MOMENT.STEP, key: id },
   ];
+  const { error } = read.value;
+  if (error !== undefined && CREDENTIAL_REFUSED.has(error)) {
+    moments.push({ kind: NATIVE_MOMENT.PLAN, status: PLAN_STATUS.INVALID });
+  }
   for (const block of content) {
     const text = readTextBlock(block);
     if (Option.isSome(text)) {
@@ -290,6 +315,8 @@ function resultMoments(message: WireValue): readonly NativeMoment[] {
         }
       : { kind: NATIVE_MOMENT.RESULT },
   );
+  // Note that a turn that ran is the plan's answer that it pays, which a limit reached earlier lifts on.
+  if (!failed) moments.push({ kind: NATIVE_MOMENT.PLAN, status: PLAN_STATUS.VERIFIED });
   moments.push({ kind: NATIVE_MOMENT.STEP_CLOSED });
   return moments;
 }
@@ -299,16 +326,21 @@ function rateLimitMoments(message: WireValue): readonly NativeMoment[] {
   const read = readRateLimit(message);
   if (Option.isNone(read)) return [];
   const { status, rateLimitType, resetsAt } = read.value.rate_limit_info;
+  // Note that the SDK counts the reset in seconds since the epoch.
+  const resetsAtMs = resetsAt === undefined ? undefined : resetsAt * 1000;
   const words = [`rate_limit_${status}`];
   if (rateLimitType !== undefined) words.push(rateLimitType);
-  // Note that the SDK counts the reset in seconds since the epoch.
-  if (resetsAt !== undefined) words.push(`resets ${new Date(resetsAt * 1000).toISOString()}`);
+  if (resetsAtMs !== undefined) words.push(`resets ${new Date(resetsAtMs).toISOString()}`);
+  const refused = status === RATE_LIMIT_REFUSED;
   return [
     {
       kind: NATIVE_MOMENT.RATE_LIMIT,
-      refused: status === RATE_LIMIT_REFUSED,
+      refused,
       detail: words.join(" "),
+      ...(refused && resetsAtMs !== undefined ? { resetsAt: resetsAtMs } : undefined),
     },
+    // The limit held first, so the plan's word reads its reset.
+    ...(refused ? [{ kind: NATIVE_MOMENT.PLAN, status: PLAN_STATUS.LIMIT_REACHED } as const] : []),
   ];
 }
 

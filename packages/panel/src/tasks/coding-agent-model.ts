@@ -9,6 +9,7 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_PAYER,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
@@ -20,6 +21,7 @@ import {
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentRuntime,
   type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -78,6 +80,7 @@ import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
+import { dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
   remoteCallOf,
@@ -566,17 +569,70 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
-/** A refused start or message as the view hears it: why, and why the repository is out of reach where it is and the service said. */
+/** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, and when a plan's reached limit resets where it is that and the provider said. */
 export interface RefusedCall {
   readonly failure: CodingAgentCallFailure;
   readonly unreached?: RepositoryUnreached | undefined;
+  readonly resetsAt?: number | undefined;
+}
+
+/**
+ * The plan that pays for an agent on a provider's own harness, which only
+ * its plan runs (`agent-runtime-choice.ts`); none for an agent on eve,
+ * which a key pays for.
+ */
+export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgentPayer | undefined {
+  if (runtime === CODING_AGENT_RUNTIME.CLAUDE_CODE) return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+  if (runtime === CODING_AGENT_RUNTIME.CODEX) return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+  return undefined;
+}
+
+/** What a message refused by the Claude plan that pays for its agent says. */
+export const CLAUDE_PLAN_REFUSAL = {
+  SIGNED_OUT: "Your Claude plan needs reconnecting in Settings.",
+  LIMIT_REACHED: "Your Claude plan has reached its usage limit. It waits until the limit resets.",
+} as const;
+
+/** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
+function limitResetsWords(payer: CodingAgentPayer | undefined, resetsAt: number): string {
+  const whose =
+    payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+      ? "Your Claude plan has"
+      : "The plan paying for this agent has";
+  return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
+}
+
+/**
+ * The words of a refusal by the plan that pays for the agent, by its plan
+ * where the words say which, and with when a reached limit resets where
+ * the provider said; none for any other refusal. The agent waits on its
+ * plan, never turning to another payer.
+ */
+function planRefusalWords(
+  refused: RefusedCall,
+  payer: CodingAgentPayer | undefined,
+): string | undefined {
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
+    if (refused.resetsAt !== undefined) return limitResetsWords(payer, refused.resetsAt);
+    return payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+      ? CLAUDE_PLAN_REFUSAL.LIMIT_REACHED
+      : undefined;
+  }
+  if (
+    refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT &&
+    payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+  ) {
+    return CLAUDE_PLAN_REFUSAL.SIGNED_OUT;
+  }
+  return undefined;
 }
 
 /** What a Start that did not start says beside the button, and what mends it. */
 export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
-  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
-    ? unreachedFailure(refused.unreached, taskId)
-    : callFailure(startFailureWords(refused.failure));
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
+    return unreachedFailure(refused.unreached, taskId);
+  }
+  return callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure));
 }
 
 /** A refused call's words, which trying again mends. */
@@ -698,13 +754,17 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
 }
 
 /** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
-export function messageFailureNote(refused: RefusedCall, taskId: string | null): Failure {
+export function messageFailureNote(
+  refused: RefusedCall,
+  taskId: string | null,
+  payer?: CodingAgentPayer | undefined,
+): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
-  return callFailure(messageFailureWords(refused.failure));
+  return callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure));
 }
 
 /** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */

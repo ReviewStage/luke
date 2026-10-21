@@ -150,6 +150,8 @@ export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
   readonly reason: string;
   /** How the account's plan failed, where it is why. */
   readonly planRefusal?: PlanRefusal | undefined;
+  /** When a reached limit resets, in epoch milliseconds, where the provider said. */
+  readonly planResetsAt?: number | undefined;
 }> {}
 
 /** What a launch's command is started with of the harness's own. */
@@ -593,6 +595,9 @@ export const runnerSessions = <
           status: failedStatus(failure),
           ...(failure instanceof LaunchRefused && failure.planRefusal !== undefined
             ? { planRefusal: failure.planRefusal }
+            : undefined),
+          ...(failure instanceof LaunchRefused && failure.planResetsAt !== undefined
+            ? { planResetsAt: failure.planResetsAt }
             : undefined),
         } as const,
       );

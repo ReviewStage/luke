@@ -58,11 +58,12 @@ export const HOSTED_REFUSAL_STATUS = {
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), and for an upstream that refused, its status (`upstreamRefused`). */
+/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), and for a plan's reached limit, when it resets (`planLimitReached`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
   readonly upstreamStatus?: number;
+  readonly resetsAt?: number;
 };
 
 /**
@@ -134,6 +135,13 @@ export const HOSTED_REFUSAL = {
   /** The workspace's Linear could not be read: none connected, its grant refused, or no such issue; nothing was written. */
   LINEAR_UNAVAILABLE: { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE },
 } as const satisfies Record<string, HostedRefusal>;
+
+/** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
+export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
+  return resetsAt === undefined
+    ? HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED
+    : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
+}
 
 /** The repository out of reach, with why, so the desktop can offer what mends it. */
 export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {

@@ -7,6 +7,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
+  type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -17,7 +18,7 @@ import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { ChatGptPlanLabel } from "./plan-label.js";
+import { ChatGptPlanLabel, ClaudePlanLabel } from "./plan-label.js";
 
 /**
  * The label under a Codex agent's box: "Using ChatGPT plan · Manage usage"
@@ -28,11 +29,22 @@ import { ChatGptPlanLabel } from "./plan-label.js";
  */
 
 let status: ProviderKeyStatus = PROVIDER_KEY_STATUS.INVALID;
+/** The plan the starter's keys hold. */
+let plan: Pick<SubscriptionKeySummary, "provider" | "kind" | "hint"> = {
+  provider: PROVIDER_KEY_PROVIDER.OPENAI,
+  kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+  hint: "ChatGPT",
+};
 let reads = 0;
 const roots: Root[] = [];
 
 beforeEach(() => {
   status = PROVIDER_KEY_STATUS.INVALID;
+  plan = {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+    hint: "ChatGPT",
+  };
   reads = 0;
   fakeAppPlatform(QUIET_PANEL);
   fakeActs({
@@ -47,9 +59,7 @@ beforeEach(() => {
           keys: [],
           subscriptions: [
             {
-              provider: PROVIDER_KEY_PROVIDER.OPENAI,
-              kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-              hint: "ChatGPT",
+              ...plan,
               addedAt: 0,
               status,
               statusAt: 0,
@@ -74,7 +84,10 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(starter: boolean): Promise<HTMLElement> {
+async function mount(
+  starter: boolean,
+  Label: typeof ChatGptPlanLabel = ChatGptPlanLabel,
+): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -82,7 +95,7 @@ async function mount(starter: boolean): Promise<HTMLElement> {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(ChatGptPlanLabel, { starter, status: CODING_AGENT_STATUS.COMPLETED }),
+        createElement(Label, { starter, status: CODING_AGENT_STATUS.COMPLETED }),
       ),
     ),
   );
@@ -108,4 +121,26 @@ test("a teammate sees the plain label, and the starter's keys are never read", a
   const label = await mount(false);
   assert.equal(label.textContent, "Using ChatGPT plan · Manage usage");
   assert.equal(reads, 0);
+});
+
+test('a Claude Code agent\'s starter sees "Using your Claude plan", or why it waits, and a teammate the plain label', async () => {
+  plan = {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+    hint: "sk-ant-oat01…fake",
+  };
+  const label = await mount(true, ClaudePlanLabel);
+  assert.equal(label.textContent, "Claude plan needs reconnecting in Settings");
+  assert.ok(label.querySelector('[role="status"]'), "a plan that can't serve is said as a status");
+
+  status = PROVIDER_KEY_STATUS.VERIFIED;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  assert.equal(label.textContent, "Using your Claude plan");
+  assert.equal(label.querySelector("a"), null);
+
+  const teammate = await mount(false, ClaudePlanLabel);
+  assert.equal(teammate.textContent, "Using your Claude plan");
 });
