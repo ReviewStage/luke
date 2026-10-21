@@ -1,4 +1,4 @@
-import { ADMIN_ERROR, ADMIN_HTTP_STATUS, type AdminError } from "./http.js";
+import { ADMIN_ERROR, ADMIN_HTTP_STATUS, type AdminError } from "@luke/features/admin-wire";
 
 /**
  * The admin refusals as the dashboard's procedures fail with them, and the

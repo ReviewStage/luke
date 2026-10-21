@@ -10,6 +10,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { TASK_SECTION_ICON_KIND, type TaskSectionIcon } from "@luke/features/task-section-wire";
 import { test } from "vitest";
 import {
   CHAT_RUN_SPAN,
@@ -22,12 +23,17 @@ import {
   chatWho,
   continuesRun,
   FOR_YOU_REASON,
+  firstUnreadSeq,
   forYou,
+  messageMarkdown,
   postsIn,
   reachedIn,
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
+
+/** A section's icon, an emoji, as the sidebar's section wears it. */
+const ROCKET: TaskSectionIcon = { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🚀" };
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const AGENT = "00000000-0000-4000-8000-0000000000a2";
@@ -258,6 +264,50 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
+test("a channel's New line stands before the first root someone else posted past the reader's cursor there, never before a reply, the reader's own, or an old message changed since", () => {
+  const chat = {
+    ...chatOf(2, [
+      message(1, AGENT, TASK_CHANNEL.id, { touchedSeq: 9 }),
+      message(4, AGENT, TASK_CHANNEL.id, { parentId: "m1" }),
+      message(5, ME, TASK_CHANNEL.id),
+      message(6, MARIA, TASK_CHANNEL.id),
+      message(7, AGENT, TASK_CHANNEL.id),
+      message(8, AGENT, GENERAL.id),
+    ]),
+    reads: [{ channelId: GENERAL.id, readSeq: 8 }],
+  };
+  assert.equal(firstUnreadSeq(chat, TASK_CHANNEL.id), 6);
+  assert.equal(firstUnreadSeq(chat, GENERAL.id), undefined);
+});
+
+test("a message copies as Markdown, a block a paragraph: its words as written, a link by its label and address, a code block by its lines on GitHub, and no picture", () => {
+  const copied = messageMarkdown(
+    message(1, AGENT, TASK_CHANNEL.id, {
+      blocks: [
+        { type: CHAT_BLOCK.MARKDOWN, text: "See **this**" },
+        { type: CHAT_BLOCK.IMAGE, attachmentId: "a1", alt: "the page" },
+        { type: CHAT_BLOCK.LINK, url: "https://example.com/a_(b)", label: "PR [draft]" },
+        {
+          type: CHAT_BLOCK.CODE,
+          repo: "acme/app",
+          path: "src/a b.ts",
+          startLine: 3,
+          endLine: 5,
+          sha: "0123456789abcdef0123456789abcdef01234567",
+        },
+      ],
+    }),
+  );
+  assert.equal(
+    copied,
+    [
+      "See **this**",
+      "[PR \\[draft\\]](https://example.com/a_%28b%29)",
+      "https://github.com/acme/app/blob/0123456789abcdef0123456789abcdef01234567/src/a%20b.ts#L3-L5",
+    ].join("\n\n"),
+  );
+});
+
 test("a root continues its author's run within five minutes of their last one, and a different author, a longer gap, or a thread between breaks it", () => {
   const root = (
     seq: number,
@@ -442,7 +492,7 @@ test("a topic's name is written as a channel's, and refused where it breaks the 
   assert.equal(topicNameProblem(chat, "alpha", TOPIC.id), undefined, "a topic keeps its own name");
 });
 
-test("the tasks' channels stand as the sidebar groups their tasks: pinned in the pins' order, each section in its order, the rest under Other tasks; and the archived channels apart", () => {
+test("the tasks' channels stand as the sidebar groups their tasks: pinned in the pins' order, each section in its order, the rest under Tasks, each section wearing its own icon; and the archived channels apart", () => {
   const task = (id: string, name: string, archived = false): ChatChannel => ({
     id: `channel-${id}`,
     kind: CHANNEL_KIND.TASK,
@@ -465,14 +515,14 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
   };
   const grouped = chatRail(chat, NAMES, {
     pinned: ["t3"],
-    sections: [{ id: "launch", title: "Launch", taskIds: ["t2", "t3", "t1"] }],
+    sections: [{ id: "launch", title: "Launch", icon: ROCKET, taskIds: ["t2", "t3", "t1"] }],
   });
   assert.deepEqual(
-    grouped.tasks.map((group) => [group.title, group.rows.map((row) => row.label)]),
+    grouped.tasks.map((group) => [group.title, group.icon, group.rows.map((row) => row.label)]),
     [
-      ["Pinned", ["schema"]],
-      ["Launch", ["invites", "billing"]],
-      ["Other tasks", ["zeta"]],
+      ["Pinned", undefined, ["schema"]],
+      ["Launch", ROCKET, ["invites", "billing"]],
+      ["Tasks", undefined, ["zeta"]],
     ],
   );
   assert.deepEqual(
@@ -482,6 +532,6 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
   const flat = chatRail(chat, NAMES);
   assert.deepEqual(
     flat.tasks.map((group) => [group.title, group.rows.length]),
-    [[undefined, 4]],
+    [["Tasks", 4]],
   );
 });

@@ -2,7 +2,6 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   HOVER_CARD_ROW_LOOK,
@@ -28,7 +27,7 @@ import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-mod
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -369,28 +368,10 @@ export function TaskCard({
 }
 
 /**
- * A task's key as a card names it, “STAG-182” in a small chip of its own,
- * monospace, before what else the card leads with: the task's card, and an
- * Inbox row's card naming the task its item stands under; nothing for a task
- * from a service before keys, or where the window holds no such workspace.
- */
-export function TaskKeyChip({
-  task,
-  workspaceName,
-}: {
-  task: Pick<TaskSummary, "number">;
-  workspaceName: string | undefined;
-}): React.JSX.Element | null {
-  if (task.number === undefined || workspaceName === undefined) return null;
-  return (
-    <span className="task-card-chip task-card-key">{taskKey(workspaceName, task.number)}</span>
-  );
-}
-
-/**
- * Where a task stands, as its card leads with it: its key, its status, and
- * its priority, each a small chip of its mark and its words; none it has
- * not got, as a task from a service before keys, statuses, or priorities.
+ * Where a task stands, as its card leads with it: its key in plain words, as
+ * every place draws it (`TaskKey`), then its status and its priority, each a
+ * small chip of its mark and its words; none it has not got, as a task from
+ * a service before keys, statuses, or priorities.
  */
 function TaskStanding({
   task,
@@ -403,7 +384,7 @@ function TaskStanding({
   if (!keyed && task.status === undefined && task.priority === undefined) return null;
   return (
     <div className="task-card-standing">
-      <TaskKeyChip task={task} workspaceName={workspaceName} />
+      <TaskKey workspaceName={workspaceName} number={task.number} />
       {task.status === undefined ? null : (
         <span className="task-card-chip">
           <TaskStatusGlyph status={task.status} />

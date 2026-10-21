@@ -24,6 +24,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
+import { NAV_COUNT_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -35,7 +36,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
-import { callControls } from "../call/call-card.js";
+import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -160,11 +161,6 @@ function shellProps(
     },
     room: SHELL_ROOM.WIDE,
     settingsStep: { listed: true, onList: ignore },
-    call: undefined,
-    notice: {
-      notice: { content: undefined, shown: false },
-      onDismissHint: ignore,
-    },
     settings: SETTINGS,
   };
 }
@@ -826,7 +822,13 @@ function placed(place: Place) {
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
   const { tell } = useAct();
   const { tab, tasks } = placed(place);
-  return createElement(DesktopShell, {
+  // The card is handed down as the window's root hands it, past every page between.
+  const call: CallCardInput = {
+    card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
+    speakerMuted: false,
+    controls: callControls(tell, false),
+  };
+  const shell = createElement(DesktopShell, {
     gates: {
       accountRequired: false,
       onBeginSignIn: ignore,
@@ -856,17 +858,9 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
     },
     room: SHELL_ROOM.WIDE,
     settingsStep: { listed: true, onList: ignore },
-    call: {
-      card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
-      speakerMuted: false,
-      controls: callControls(tell, false),
-    },
-    notice: {
-      notice: { content: undefined, shown: false },
-      onDismissHint: ignore,
-    },
     settings: SETTINGS,
   });
+  return createElement(CallCardContext.Provider, { value: call }, shell);
 }
 
 /** Every act the window sent over the bridge, by kind, in order. */
@@ -1117,7 +1111,30 @@ test("the sidebar's Chat row stands only while the account has Chat on and a cha
   await settle();
   assert.equal(chatRow(open)?.getAttribute("aria-current"), "page");
   assert.equal(homeRow(open).getAttribute("aria-current"), null);
-  assert.ok(open.querySelector(".desktop-main > .chat-view"), "Chat stands in the plan's place");
+  assert.ok(
+    open.querySelector(".desktop-main > .page-find > .chat-view"),
+    "Chat stands in the plan's place",
+  );
+});
+
+test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the Inbox's accent", async () => {
+  let opened = 0;
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
+  handState({});
+  mount(false, false, { chatView: view });
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.CHAT), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const page = mount(false, false, { chatView: view });
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.CHAT), true);
+  assert.equal(opened, 1);
+  const count = chatRow(page)?.querySelector<HTMLElement>(".luke-nav-item-count");
+  assert.equal(count?.dataset.tone, NAV_COUNT_TONE.ACCENT);
 });
 
 test("with Chat off for the account, its row stands nowhere, and Chat standing in the plan's place gives it back", async () => {

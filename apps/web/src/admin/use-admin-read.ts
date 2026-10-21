@@ -1,5 +1,5 @@
+import { ADMIN_HTTP_STATUS, type AdminQuery } from "@luke/features/admin-wire";
 import { BrowserRedirected, browserRefusal } from "@luke/features/contract/browser-client";
-import { ADMIN_HTTP_STATUS, type AdminQuery } from "@luke/service/admin/http";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SIGN_IN_CHOSEN } from "./prefs";
 

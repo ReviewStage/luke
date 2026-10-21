@@ -613,8 +613,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      if (archiving)
-        yield* Effect.provide(stoppedInBackground(archivedWith), seams.sessionSandboxes);
+      if (archiving) yield* stoppedInBackground(seams, archivedWith);
       const { task: plan, txid } = task.value;
       return txid === undefined ? { plan } : { plan, txid };
     }),

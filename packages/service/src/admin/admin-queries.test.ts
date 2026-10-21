@@ -4,10 +4,14 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { account, user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
+import {
+  ADMIN_METRICS_SCOPE,
+  ADMIN_METRICS_WINDOW,
+  type AdminMetricsScope,
+} from "@luke/features/admin-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminUsersSource } from "./admin-queries.js";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW, type AdminMetricsScope } from "./http.js";
 
 /**
  * admin-queries.test.ts -- the Users read carries the sign-in methods the

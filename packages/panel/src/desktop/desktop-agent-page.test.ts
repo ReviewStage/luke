@@ -1174,7 +1174,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   const base = tasksControl({ me: "user-dean" });
   const page = mount({
     ...base,
-    sidePanel: { ...base.sidePanel, onChoose: (tab) => chosen.push(tab) },
+    sidePanel: { ...base.sidePanel, onPreview: (tab) => chosen.push(tab) },
   });
   await settle();
 

@@ -503,3 +503,87 @@ test("a channel the last account wrote, answered after another account signed in
   await settle();
   assert.equal(tab.control().chat?.channels[0]?.name, "beta");
 });
+
+test("Mark as read reads each channel named to its newest message, leaving one with nothing past its cursor alone, and an answer landing late sets no channel back", async () => {
+  const other = "00000000-0000-4000-8000-0000000000c2";
+  const read = "00000000-0000-4000-8000-0000000000c3";
+  const service = scriptedService();
+  const tab = mount(service);
+  const base = answered([
+    message(1),
+    message(2, { channelId: other }),
+    message(3, { channelId: read }),
+  ]);
+  service.push("acme", {
+    ...base,
+    channels: [
+      ...base.channels,
+      { id: other, kind: CHANNEL_KIND.TOPIC, name: "other", archived: false },
+      { id: read, kind: CHANNEL_KIND.TOPIC, name: "read", archived: false },
+    ],
+    reads: [{ channelId: read, readSeq: 3 }],
+  });
+  await settle();
+  act(() => tab.control().onRead([CHANNEL, other, read]));
+  await settle();
+  assert.deepEqual(
+    service.writes.map((write) => write.params.write),
+    [
+      { readTo: 1, channelId: CHANNEL },
+      { readTo: 2, channelId: other },
+    ],
+  );
+  // The second read's answer lands first, the first's after it, holding less.
+  service.writes[1]?.settle({
+    readSeq: 0,
+    reads: [
+      { channelId: CHANNEL, readSeq: 1 },
+      { channelId: other, readSeq: 2 },
+      { channelId: read, readSeq: 3 },
+    ],
+  });
+  await settle();
+  service.writes[0]?.settle({
+    readSeq: 0,
+    reads: [
+      { channelId: CHANNEL, readSeq: 1 },
+      { channelId: read, readSeq: 3 },
+    ],
+  });
+  await settle();
+  const reads = new Map(tab.control().chat?.reads?.map((each) => [each.channelId, each.readSeq]));
+  assert.deepEqual([reads.get(CHANNEL), reads.get(other), reads.get(read)], [1, 2, 3]);
+});
+
+test("a push read before Mark as read landed sets the channel's cursor back no further than the read put it", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  const stale = {
+    ...answered([message(1), message(2)]),
+    reads: [{ channelId: CHANNEL, readSeq: 1 }],
+  };
+  service.push("acme", stale);
+  await settle();
+  act(() => tab.control().onRead([CHANNEL]));
+  await settle();
+  service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
+  await settle();
+  service.push("acme", stale);
+  await settle();
+  assert.deepEqual(tab.control().chat?.reads, [{ channelId: CHANNEL, readSeq: 2 }]);
+});
+
+test("a push carrying no channel's cursor, read before Mark as read landed, keeps the cursor the read put", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  const stale = answered([message(1), message(2)]);
+  service.push("acme", stale);
+  await settle();
+  act(() => tab.control().onRead([CHANNEL]));
+  await settle();
+  service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
+  await settle();
+  service.push("acme", stale);
+  await settle();
+  assert.deepEqual(tab.control().chat?.reads, [{ channelId: CHANNEL, readSeq: 2 }]);
+});

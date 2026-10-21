@@ -1886,6 +1886,169 @@
   pointer-events: auto;
 }
 
+/* The agent's pointer over a cloud Browser tab (cloud-browser-cursor.tsx):
+   an arrow over the drawn page, never in its frame, taking no pointer
+   events. It stands at the agent's point, scaled onto the page by the
+   component, and glides to each new one over --duration-fast on
+   --spring-fast, about the beat its action waits; a still pointer jumps.
+   While the agent is active it rocks about its tip, and fades once it is
+   not. A click presses it once it has arrived, with a ripple at the point;
+   typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
+   lighter over a dark page, so it reads on any page, an accent button
+   included. The rock and the bob are endless loops held by
+   --loop-motion, so their periods may be literals (docs/DESIGN.md). */
+.cloud-browser-stage {
+  position: relative;
+  flex: none;
+}
+
+.cloud-browser-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  opacity: 0;
+  translate: var(--cloud-browser-cursor-x) var(--cloud-browser-cursor-y);
+  transition:
+    translate var(--duration-fast) var(--spring-fast),
+    opacity var(--duration-quick) ease;
+}
+
+.cloud-browser-cursor[data-shown] {
+  opacity: 1;
+}
+
+.cloud-browser-cursor[data-still] {
+  transition: opacity var(--duration-quick) ease;
+}
+
+.cloud-browser-cursor-rock {
+  transform-origin: 0 0;
+}
+
+/* Near the page's right or bottom edge the arrow is mirrored about its tip,
+   so its body stays on the page; the rock turns it with `rotate` alone. */
+.cloud-browser-cursor[data-flip-x] .cloud-browser-cursor-rock {
+  scale: -1 1;
+}
+
+.cloud-browser-cursor[data-flip-y] .cloud-browser-cursor-rock {
+  scale: 1 -1;
+}
+
+.cloud-browser-cursor[data-flip-x][data-flip-y] .cloud-browser-cursor-rock {
+  scale: -1 -1;
+}
+
+.cloud-browser-cursor[data-shown]:not([data-still]) .cloud-browser-cursor-rock {
+  animation: cloud-browser-cursor-rock 1.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.cloud-browser-cursor-arrow {
+  display: block;
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+  overflow: visible;
+  fill: var(--agent-pointer);
+  stroke: var(--agent-pointer);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  transform-origin: 0 0;
+}
+
+.cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-arrow {
+  fill: var(--agent-pointer-on-dark);
+  stroke: var(--agent-pointer-on-dark);
+}
+
+.cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-ripple {
+  border-color: var(--agent-pointer-on-dark);
+}
+
+/* The soft halo behind the arrowhead, centred a little inside it from the
+   tip, which holds it apart from whatever the page draws under it. */
+.cloud-browser-cursor-halo {
+  position: absolute;
+  top: calc(var(--luke-space-6) - var(--luke-space-40) / 2);
+  left: calc(var(--luke-space-6) - var(--luke-space-40) / 2);
+  width: var(--luke-space-40);
+  height: var(--luke-space-40);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--agent-pointer-halo), transparent);
+}
+
+.cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
+  animation: cloud-browser-cursor-press var(--duration-fast) ease-in-out var(--duration-fast)
+    backwards;
+}
+
+.cloud-browser-cursor[data-shown][data-kind="type"]:not([data-still]) .cloud-browser-cursor-arrow {
+  animation: cloud-browser-cursor-type 0.6s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.cloud-browser-cursor-ripple {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--luke-space-24);
+  height: var(--luke-space-24);
+  margin: calc(var(--luke-space-24) / -2);
+  border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
+  border-radius: 50%;
+  opacity: 0;
+  animation: cloud-browser-cursor-ripple var(--duration-shape) ease-out var(--duration-fast)
+    backwards;
+}
+
+@keyframes cloud-browser-cursor-rock {
+  0%,
+  100% {
+    rotate: 0deg;
+  }
+  25% {
+    rotate: -6deg;
+  }
+  75% {
+    rotate: 6deg;
+  }
+}
+
+@keyframes cloud-browser-cursor-press {
+  0%,
+  100% {
+    scale: 1;
+  }
+  45% {
+    scale: 0.82;
+  }
+}
+
+@keyframes cloud-browser-cursor-type {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 calc(var(--luke-space-2) * -1);
+  }
+}
+
+@keyframes cloud-browser-cursor-ripple {
+  0% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  15% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.6;
+  }
+}
+
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
 /* A Browser tab (browser-pane.tsx): the page's bar, its address field
@@ -5076,6 +5239,24 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   flex-direction: column;
 }
 
+/* An agent's tab while its transcript or the agent is read
+   (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
+   the newest lines draw, on the log's own inset, over the composer's card. */
+.agent-tab > .luke-skeleton-region {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.agent-log-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+}
+
 .transcript-luke-mark {
   display: flex;
   width: 16px;
@@ -5812,7 +5993,7 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
    opens for them hangs where the ⋯ stands. */
 @container composer (max-width: 399px) {
   .agent-composer :is(.agent-servers-button, .agent-context-button),
-  .agent-composer > form:not(.inbox-answer) .dictate-button {
+  .agent-composer:not(.chat-composer) > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 

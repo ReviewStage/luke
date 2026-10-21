@@ -6,7 +6,7 @@ import { Dialog } from "@luke/ui";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { useAppCommand, useMenuCommands } from "./app-commands.js";
+import { useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 
 /**
@@ -89,4 +89,34 @@ test("a dialog standing holds off the menu bar's Back and Forward, which run aga
   draw(false);
   menu(APP_COMMAND.BACK);
   assert.deepEqual(moves, ["back"]);
+});
+
+/** A window whose keymap answers, offering the Inbox's J or Chat's, each press recorded, with a field to type in. */
+function KeyedWindow({ moves, chat }: { moves: string[]; chat: boolean }): ReactElement {
+  useAppKeymap(true);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, chat ? undefined : () => moves.push("inbox"));
+  useAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL, chat ? () => moves.push("chat") : undefined);
+  return createElement("textarea", { "aria-label": "Message" });
+}
+
+/** Presses J where the press lands. */
+function pressJ(target: EventTarget): void {
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "j", code: "KeyJ", bubbles: true }));
+  });
+}
+
+test("J runs whichever of the Inbox's and Chat's commands is offered, and nothing while the press is typing into a field", () => {
+  const moves: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const draw = (chat: boolean) =>
+    act(() => root.render(createElement(KeyedWindow, { moves, chat })));
+  draw(true);
+  pressJ(document.body);
+  draw(false);
+  pressJ(document.body);
+  draw(true);
+  pressJ(document.querySelector("textarea") ?? assert.fail("the field"));
+  assert.deepEqual(moves, ["chat", "inbox"]);
 });

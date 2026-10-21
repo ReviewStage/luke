@@ -376,7 +376,12 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     },
   );
   const plan = card(dialog, "Subscription");
-  assert.match(plan.textContent ?? "", /Connected · Not yet checked/u);
+  assert.match(plan.textContent ?? "", /Connected/u);
+  assert.doesNotMatch(
+    dialog.textContent ?? "",
+    /checked/iu,
+    "an unchecked plan reads as a connected one",
+  );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
   assert.ok(radio(dialog, "Subscription").querySelector(".agent-auth-check"));
   assert.equal(rowButton(page, "Claude Code").textContent, "Connected via subscription");

@@ -2,7 +2,6 @@ import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_WRITE,
   type TaskSection,
-  type TaskSectionEntry,
   type TaskSectionIcon,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
@@ -21,10 +20,14 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
+import { TASK_ROW, type TaskRow } from "@luke/ui/task-list-model";
 import {
+  memberOf,
+  memberSection,
   placeAllWrites,
   placeWrites,
-  sectionEntries,
+  type SectionEntry,
+  type SectionMember,
   sectionMoveWrites,
   sectionOrder,
   unplaceAllWrites,
@@ -44,18 +47,20 @@ import { SidebarGroupHeader } from "./sidebar-group-header.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
- * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks kept in it, the dialog that makes and edits one, and the task menu's Move to section.
+ * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks and agents kept in it, the dialog that makes and edits one, and the Move to section of a task's menu and an agent's.
  *
  * A section is the reader's own (`task-section-wire.ts`), so nothing here
  * is a teammate's. Each stands under a header like a repository's, its icon
  * where a repository's picture stands, or its title alone where it has none,
  * folded and kept as a repository's
  * fold is, with Edit section and Delete section on its ⋯ and a right-click,
- * and between them, while it holds tasks, what acts on all of them at once:
- * Mark all as read while any is unread, Move tasks to another section or a
- * new one, Remove tasks from section, and Mark tasks done, which sets them
- * all Done and asks nothing, as a repository's does.
- * Its tasks stand in the order dragged, and a row is dragged within its
+ * and between them, while it holds rows, what acts on all of them at once:
+ * Mark all as read while any task is unread, Move tasks to another section
+ * or a new one and Remove tasks from section, which take its agents with
+ * its tasks, and Mark tasks done, which sets its tasks all Done and asks
+ * nothing, as a repository's does. An agent with no task stands among its
+ * tasks as a task does, in the one order, and is dragged as one.
+ * Its rows stand in the order dragged, and a row is dragged within its
  * section, into another, onto Tasks, which takes it out of every section,
  * or onto Pinned, which pins it there and takes it out of every section too
  * (`use-row-drag.ts`'s drop zones); a section is dragged among the others
@@ -213,22 +218,31 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
   };
 }
 
+/** The row a sidebar row is in a section: its task, or its agent with no task. */
+export function rowMember(row: TaskRow): SectionMember {
+  return row.kind === TASK_ROW.TASK
+    ? { agent: false, id: row.task.id }
+    : { agent: true, id: row.agent.id };
+}
+
 /**
- * The task menu's Move to section: the task's workspace's sections, the one
- * it stands in checked, New section… to make one with the task in it, and
- * Remove from section while it stands in one. A task moved here lands on
- * top of its new section, as one dragged onto its header would.
+ * The Move to section of a task's menu or an agent's: the row's workspace's
+ * sections, the one it stands in checked, New section… to make one with the
+ * row in it, and Remove from section while it stands in one. A row moved
+ * here lands on top of its new section, as one dragged onto its header
+ * would.
  */
 export function moveToSectionEntry(
   tasks: TasksControl,
-  task: TaskSummary,
+  member: SectionMember,
+  workspaceId: string,
   askNew: SectionDialogs["askNew"],
 ): MenuEntry {
   const state = tasks.taskSections;
-  const standing = sectionEntries(state).get(task.id)?.sectionId;
+  const standing = memberSection(state, member);
   const put = (sectionId: string) =>
-    placeWrites(sectionOrder(state, sectionId), task.id, sectionId, 0, Date.now());
-  const sections = workspaceSections(state, task.workspaceId).map((section): MenuAction => {
+    placeWrites(sectionOrder(state, sectionId), member, sectionId, 0, Date.now());
+  const sections = workspaceSections(state, workspaceId).map((section): MenuAction => {
     const glyph = sectionGlyph(section.icon);
     return {
       label: section.title,
@@ -245,10 +259,7 @@ export function moveToSectionEntry(
       : [
           {
             label: "Remove from section",
-            onSelect: () =>
-              tasks.onWriteSections([
-                { kind: TASK_SECTION_WRITE.PLACE, taskId: task.id, sectionId: null },
-              ]),
+            onSelect: () => tasks.onWriteSections(unplaceAllWrites([member])),
           },
         ];
   return {
@@ -256,35 +267,40 @@ export function moveToSectionEntry(
     icon: <LayersIcon />,
     items: [
       ...sections,
-      { label: "New section…", onSelect: () => askNew(task.workspaceId, put) },
+      { label: "New section…", onSelect: () => askNew(workspaceId, put) },
       ...remove,
     ],
   };
 }
 
-/** One section's tasks as the sidebar draws them: the entries in its order, each with the task the list holds. */
+/** One section's rows as the sidebar draws them: the entries in its order, each with the task's or the agent's row the list holds, one for one. */
 export interface DrawnSection {
   readonly section: TaskSection;
-  readonly entries: readonly TaskSectionEntry[];
-  readonly tasks: readonly TaskSummary[];
+  readonly entries: readonly SectionEntry[];
+  readonly rows: readonly TaskRow[];
+}
+
+/** The tasks among a section's rows, in its order. */
+export function drawnSectionTasks(drawn: DrawnSection): TaskSummary[] {
+  return drawn.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
 }
 
 /** What every section is drawn with. */
 interface SectionContext {
   readonly tasks: TasksControl;
   readonly dialogs: SectionDialogs;
-  /** Whether a task is the open one, which a fold leaves standing. */
-  readonly current: (taskId: string) => boolean;
+  /** Whether a row is the open one, the open task's or the agent's whose page stands, which a fold leaves standing. */
+  readonly current: (row: TaskRow) => boolean;
   /** Whether a task is unread, as its row's weight says. */
   readonly unread: (task: TaskSummary) => boolean;
   /** Whether the sidebar is in sight, which the menus close without. */
   readonly inSight: boolean;
   readonly folded: (sectionId: string) => boolean;
   readonly onToggle: (sectionId: string) => void;
-  /** A task's row, as it stands in any list of the sidebar. */
-  readonly row: (task: TaskSummary) => React.JSX.Element;
-  /** Hears a task let go over another zone: a section by its id, Tasks, or Pinned. */
-  readonly onDropTask: (taskId: string, zone: string, at: number) => void;
+  /** A task's row or an agent's, as it stands in any list of the sidebar. */
+  readonly row: (row: TaskRow) => React.JSX.Element;
+  /** Hears a row let go over another zone: a section by its id, Tasks, or Pinned. */
+  readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
 }
 
 /** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
@@ -296,15 +312,15 @@ interface SectionDoors {
 
 /**
  * Move tasks to: the workspace's other sections and New section…, each
- * taking every task of the section, in its order, onto the top of the one
- * chosen.
+ * taking every row of the section, its agents' with its tasks', in its
+ * order, onto the top of the one chosen.
  */
 function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry {
   const { section } = drawn;
   const { tasks, dialogs } = context;
-  const taskIds = drawn.tasks.map(({ id }) => id);
+  const members = drawn.entries.map(memberOf);
   const put = (sectionId: string) =>
-    placeAllWrites(tasks.taskSections, taskIds, sectionId, Date.now());
+    placeAllWrites(tasks.taskSections, members, sectionId, Date.now());
   const others = workspaceSections(tasks.taskSections, section.workspaceId)
     .filter((other) => other.id !== section.id)
     .map((other): MenuAction => {
@@ -326,10 +342,11 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
 }
 
 /**
- * A section's menu: Edit section, then what acts on every task it draws
- * while it draws any, then Delete section. Only the tasks drawn are acted
+ * A section's menu: Edit section, then what acts on every row it draws
+ * while it draws any, then Delete section. Only the rows drawn are acted
  * on, so one kept in it but pinned or archived, which it draws not, is
- * left where it stands.
+ * left where it stands; what only a task takes, a read mark or Done, acts
+ * on its tasks alone.
  */
 function sectionActionGroups(
   drawn: DrawnSection,
@@ -349,8 +366,9 @@ function sectionActionGroups(
       onSelect: () => dialogs.askDelete(section),
     },
   ];
-  if (drawn.tasks.length === 0) return [edit, remove];
-  const read: MenuEntry[] = drawn.tasks.some(context.unread)
+  if (drawn.rows.length === 0) return [edit, remove];
+  const held = drawnSectionTasks(drawn);
+  const read: MenuEntry[] = held.some(context.unread)
     ? [{ label: "Mark all as read", icon: <MailOpenIcon />, onSelect: doors.onMarkRead }]
     : [];
   const bulk: MenuEntry[] = [
@@ -359,16 +377,16 @@ function sectionActionGroups(
     {
       label: "Remove tasks from section",
       icon: <FolderOutputIcon />,
-      onSelect: () => tasks.onWriteSections(unplaceAllWrites(drawn.tasks.map(({ id }) => id))),
+      onSelect: () => tasks.onWriteSections(unplaceAllWrites(drawn.entries.map(memberOf))),
     },
-    ...(drawn.tasks.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
+    ...(held.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
       ? [{ label: "Mark tasks done", icon: <MarkDoneIcon />, onSelect: doors.onMarkDone }]
       : []),
   ];
   return [edit, bulk, remove];
 }
 
-/** One section: its header, its menu, and its tasks, or a word that tasks are dragged in while it holds none. */
+/** One section: its header, its menu, and its rows, or a word that tasks are dragged in while it holds none. */
 function SidebarSection({
   drawn,
   context,
@@ -382,26 +400,27 @@ function SidebarSection({
   const { section } = drawn;
   const { tasks } = context;
   const folded = context.folded(section.id);
-  const rows = folded ? drawn.tasks.filter((task) => context.current(task.id)) : drawn.tasks;
+  const rows = folded ? drawn.rows.filter(context.current) : drawn.rows;
   const move = folded
     ? undefined
     : (from: number, to: number) => tasks.onWriteSections(placeWritesWithin(drawn, from, to));
   const drag = useRowDrag(move, {
     onDropOut: (from, zone, at) => {
-      const task = rows[from];
-      if (task !== undefined) context.onDropTask(task.id, zone, at);
+      const row = rows[from];
+      if (row !== undefined) context.onDropRow(row, zone, at);
     },
   });
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
+  const held = drawnSectionTasks(drawn);
   const groups = sectionActionGroups(drawn, context, {
     onMarkRead: () => {
-      for (const task of drawn.tasks.filter(context.unread)) reads.mark(task, false);
+      for (const task of held.filter(context.unread)) reads.mark(task, false);
     },
     onMarkDone: () =>
       tasks.onSettleTasks(
-        drawn.tasks.map(({ id }) => id),
+        held.map(({ id }) => id),
         SETTLED_STATUS.DONE,
       ),
   });
@@ -416,7 +435,7 @@ function SidebarSection({
         glyph={glyph}
         name={section.title}
         folded={folded}
-        count={drawn.tasks.length}
+        count={drawn.rows.length}
         menuOpen={menu.open !== undefined}
         contextMenu={menu.contextMenu(ellipsis)}
         onToggle={() => context.onToggle(section.id)}
@@ -451,12 +470,12 @@ function SidebarSection({
           data-row-drop-rows={folded ? undefined : ""}
           onPointerDown={drag}
         >
-          {rows.map((task, at) => (
+          {rows.map((row, at) => (
             <RowPlaced
-              key={task.id}
+              key={row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id}
               place={move === undefined ? undefined : { at, count: rows.length, onMove: move }}
             >
-              {context.row(task)}
+              {context.row(row)}
             </RowPlaced>
           ))}
         </ul>
@@ -465,17 +484,17 @@ function SidebarSection({
   );
 }
 
-/** The writes that stand the task at `from` in a section, as drawn, at `to`. */
+/** The writes that stand the row at `from` in a section, as drawn, at `to`. */
 function placeWritesWithin(drawn: DrawnSection, from: number, to: number): TaskSectionWrite[] {
   const entry = drawn.entries[from];
   if (entry === undefined) return [];
-  return placeWrites(drawn.entries, entry.taskId, drawn.section.id, to, Date.now());
+  return placeWrites(drawn.entries, memberOf(entry), drawn.section.id, to, Date.now());
 }
 
 /**
  * The account's sections in the listed workspace, between Pinned and Tasks,
  * in the order dragged: a section's header is its handle, so a press on one
- * of its tasks drags the task and not the section.
+ * of its rows drags the row and not the section.
  */
 export function SidebarSections({
   sections,

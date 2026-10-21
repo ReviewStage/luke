@@ -258,7 +258,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
+import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -646,6 +646,7 @@ const standing = (
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
       sessionSandboxes,
+      keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -4654,7 +4655,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a model change of a Claude Code agent is refused another provider's model, a fast version, or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
+    "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
     () =>
       Effect.gen(function* () {
         const onEve = yield* startedAgent(fakeEve(), undefined);
@@ -4678,7 +4679,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         const refused = [
           yield* change(onClaudeCode, { model: SOL, effort: "low" }),
-          yield* change(onClaudeCode, { model: `${SMALL_WINDOW.model}-fast`, effort: "low" }),
           yield* change(onClaudeCode, {
             model: SMALL_WINDOW.model,
             effort: "low",

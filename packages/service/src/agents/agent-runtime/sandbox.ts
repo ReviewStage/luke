@@ -37,9 +37,9 @@
  *
  * What the role's policy (`role.ts`) does with the sandbox once open is
  * read here by the store hook that watches the session's stream: whether a
- * turn's end stops it, whether a step keeps it alive past its short
- * timeout, and whether a step renews the credential the
- * checkout set at its firewall, which a shallow checkout's deepen sets on
+ * turn's end stops it, whether a long pause inside a turn does, whether a
+ * step keeps it alive past its short timeout, and whether a step renews the
+ * credential the checkout set at its firewall, which a shallow checkout's deepen sets on
  * its first write and which stands only from then on. A member's own GitHub token is never
  * renewed, since it does not expire: a turn's end takes it off the firewall
  * where the sandbox stops, and the next turn's first step sets it again. No
@@ -47,6 +47,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
@@ -228,6 +229,56 @@ export function stopsAtTurnEnd(
 ): boolean {
   return (
     lifecycleOf(role).stopsAtTurnEnd && endsTurn(event) && record.openedAt !== undefined && !held
+  );
+}
+
+/** The seconds of a pause past which the sandbox is stopped for it. */
+const SLEEP_STOPS_AT_SECONDS = Duration.toSeconds(CODER.SLEEP_STOPS_AT);
+
+/** Whether a call's input asks a pause of at least the bound, read from the JSON object the model emitted. */
+function longPause(input: unknown): boolean {
+  if (typeof input !== "object" || input === null || !("seconds" in input)) return false;
+  return typeof input.seconds === "number" && input.seconds >= SLEEP_STOPS_AT_SECONDS;
+}
+
+/**
+ * Whether the role's policy stops its sandbox for this event: a step whose
+ * one call is a pause (`coder-host/sleep.ts`) of at least
+ * `CODER.SLEEP_STOPS_AT`, once a sandbox tool has opened the sandbox. A
+ * step that calls anything beside the pause may still be using the
+ * sandbox, so it is left up. The caller stops it only where no developer's
+ * terminal holds it and no process the agent started still runs
+ * (`sandbox-idle.ts`); the next step's first call into the sandbox resumes
+ * it from the snapshot its stop wrote, as Vercel resumes a stopped
+ * persistent sandbox on its next command
+ * (https://vercel.com/kb/guide/vercel-sandbox-duration-and-persistence).
+ */
+export function parksForLongSleep(
+  role: AgentRole,
+  event: MessageStreamEvent,
+  record: SandboxRecord,
+): boolean {
+  if (!lifecycleOf(role).stopsAtTurnEnd || event.type !== "actions.requested") return false;
+  const [only, ...rest] = event.data.actions;
+  return (
+    only !== undefined &&
+    rest.length === 0 &&
+    only.kind === "tool-call" &&
+    only.toolName === AGENT_TOOL.SLEEP &&
+    longPause(only.input) &&
+    record.openedAt !== undefined
+  );
+}
+
+/**
+ * Whether a stop for a long pause takes a member's own token off the
+ * firewall, and lapses it for the next step to set again, as a turn's end
+ * that stops the sandbox does (`withdrawsCredential`): once the token
+ * stands at all.
+ */
+export function withdrawsCredentialForSleep(role: AgentRole, record: SandboxRecord): boolean {
+  return (
+    lifecycleOf(role).renewsCredential && credentialStands(record) && record.memberToken === true
   );
 }
 

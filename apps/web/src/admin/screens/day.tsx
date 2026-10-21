@@ -1,6 +1,6 @@
+import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
+import type { AdminDayQuery } from "@luke/features/admin-wire";
 import { browserClient } from "@luke/features/contract/browser-client";
-import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
-import type { AdminDayQuery } from "@luke/service/admin/http";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -26,7 +26,7 @@ const DAY_ERROR = "The day endpoint did not answer.";
 const readDayDetail =
   (query: AdminDayQuery): AdminReader<AdminDayDetail> =>
   async (signal) =>
-    // SAFETY: the admin day procedure answers an AdminDayDetail (`@luke/service/admin/admin-day`), which the contract cannot name.
+    // SAFETY: the admin day procedure answers an AdminDayDetail (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.day(query, { signal })) as AdminDayDetail;
 
 /** One day's own sections. */

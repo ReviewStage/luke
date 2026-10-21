@@ -291,7 +291,7 @@ interface TranscriptRow extends TranscriptLine {
 }
 
 /** The lines of a call heard here that no row holds yet, and whether the call's divider stands above already. */
-export interface HeardTail {
+interface HeardTail {
   readonly call: TranscriptCallRow;
   readonly opened: boolean;
   readonly lines: readonly UIMessage[];

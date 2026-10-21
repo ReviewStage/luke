@@ -108,7 +108,6 @@ function drawn(): HTMLElement {
         },
         subject: taskVersionSubject(tasks),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
-        call: undefined,
         onExit: ignore,
         onRestored: ignore,
       }),

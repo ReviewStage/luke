@@ -1,11 +1,11 @@
-import { browserClient } from "@luke/features/contract/browser-client";
-import type { AdminUserList, AdminUserListRow } from "@luke/service/admin/admin-users";
+import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
 import {
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   type AdminMetricsWindow,
   type AdminUsersQuery,
-} from "@luke/service/admin/http";
+} from "@luke/features/admin-wire";
+import { browserClient } from "@luke/features/contract/browser-client";
 import {
   COLLECTION_STATE,
   EmptyState,
@@ -51,7 +51,7 @@ const USERS_EMPTY = "No account matches.";
 const readUserList =
   (query: AdminUsersQuery): AdminReader<AdminUserList> =>
   async (signal) =>
-    // SAFETY: the admin users procedure answers an AdminUserList (`@luke/service/admin/admin-users`), which the contract cannot name.
+    // SAFETY: the admin users procedure answers an AdminUserList (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.users(query, { signal })) as AdminUserList;
 
 /** One favorite intent as the star's PUT or DELETE; a refusal did not land. */

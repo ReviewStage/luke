@@ -11,6 +11,7 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ChatShown } from "@luke/host/contract";
 import {
   APP_SETTING_SCHEMA,
   EXPERIMENT,
@@ -20,7 +21,7 @@ import {
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
-import { callBarAgentId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { callBarAgentId } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
@@ -28,13 +29,7 @@ import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
-import type { VoiceSpeakers } from "@luke/voice/voice-view";
-import {
-  outputSilent,
-  type VolumeHintDismissal,
-  volumeHintDismissed,
-  volumeHintText,
-} from "@luke/voice/volume-hint";
+import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,9 +38,6 @@ import { appBridge } from "./app-bridge.js";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { type SettingsDoors, useSettingsPanel, useShownUpdate } from "./app-settings.js";
-import { type CallCardInput, callControls } from "./call/call-card.js";
-import { useCallCardVideo } from "./call/panel-avatar.js";
-import { useWindowFocused } from "./call/use-window-focused.js";
 import { useDraftsOwner } from "./composer-drafts.js";
 import { CommandPalette } from "./desktop/command-palette.js";
 import { DesktopShell } from "./desktop/desktop-shell.js";
@@ -65,10 +57,12 @@ import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { installPressIntent } from "./press-intent.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { useStageRoom } from "./stage-room.js";
+import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatOn } from "./tasks/chat-gate.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
@@ -94,9 +88,9 @@ import {
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
-import { useVoiceNotice } from "./use-voice-notice.js";
-import { fixtureVoice, useCallTranscript, useVoiceView } from "./use-voice-view.js";
+import { voiceViewNow } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
+import { CallChords, WindowVoice } from "./window-voice.js";
 import { useWindowZoom } from "./window-zoom.js";
 
 /** No agent ended unseen, as the document reads before main has answered. */
@@ -104,6 +98,7 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxTask[] = [];
+const NO_CHAT_WAITING: readonly string[] = [];
 
 /** No task holds an inbox item, as the document reads before main has answered. */
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
@@ -130,9 +125,6 @@ const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
   (codingAgents) => codingAgents?.unseen ?? NO_UNSEEN_AGENTS,
 );
 
-/** The Mac's output as last read, which the volume hint answers. */
-const OUTPUT_AUDIO = Atom.map(APP_SLICE.AUDIO, (audio) => audio?.outputAudio);
-
 /** The microphone's grant, which the Tasks tab's microphone answers. */
 const MICROPHONE_GRANT: Atom.Atom<MicrophoneStatus> = Atom.map(
   APP_SLICE.AUDIO,
@@ -149,6 +141,12 @@ const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
 const INBOX_WAITING: Atom.Atom<readonly AppInboxTask[]> = Atom.map(
   APP_SLICE.INBOX,
   (inbox) => inbox?.waiting ?? NOTHING_WAITING,
+);
+
+/** The chat messages that wait on the developer across the account's workspaces, by id. */
+const CHAT_WAITING: Atom.Atom<readonly string[]> = Atom.map(
+  APP_SLICE.INBOX,
+  (inbox) => inbox?.chat ?? NO_CHAT_WAITING,
 );
 
 /** The version of main's document the window holds, which moves with every delivery. */
@@ -223,6 +221,18 @@ function InboxToasts({
   return null;
 }
 
+/** The toasts of chat messages that wait on the developer, withdrawn as they stop waiting, on the same terms as {@link InboxToasts}. */
+function ChatToasts({
+  onView,
+  shown,
+}: {
+  onView: (workspaceId: string, messageId: string) => void;
+  shown: ChatShown | null;
+}): null {
+  useChatToasts(onView, useAppSlice(CHAT_WAITING), useAppSlice(APP_STATE_VERSION), shown);
+  return null;
+}
+
 /**
  * The window, drawn once a fixture run's synthetic tasks have landed. They are
  * imported apart from the bundle every launch parses, and drawn from the first
@@ -258,7 +268,6 @@ function AppWindow(): React.JSX.Element {
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  const outputAudio = useAppSlice(OUTPUT_AUDIO);
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
   const settingsPlace = useSettingsPlace();
   const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
@@ -270,14 +279,6 @@ function AppWindow(): React.JSX.Element {
     setFeedbackAbout(about);
     setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
   }, []);
-  /**
-   * Which stretch of unbroken silence is on screen, advanced each time one
-   * begins. A "Got it" is remembered against the stretch it answered, so it
-   * holds for that whole mute and lapses naturally with it.
-   */
-  const [silenceStretch, setSilenceStretch] = useState(0);
-  const wasSilent = useRef(false);
-  const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
 
   // Session replay and the editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions.
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
@@ -324,6 +325,15 @@ function AppWindow(): React.JSX.Element {
     [changeTab, guardLeave, chooseSettingsView],
   );
 
+  const openIntegrations = useCallback(
+    () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+    [openSettings],
+  );
+  const openApiKeys = useCallback(
+    () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
+    [openSettings],
+  );
+
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
   const accountGated =
     run?.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
@@ -363,37 +373,14 @@ function AppWindow(): React.JSX.Element {
     }
   }, [act]);
 
-  // A capture run stages its conversation from the launch profile, since no
-  // voice window stands in one: who is heard, and for the muted run the hint
-  // drawn over Luke's words, which a capture has no system output to read.
-  const fixture = fixtureVoice(run?.profile ?? RUN_PROFILE.IDLE);
-  const fixtureSpeaking = fixture !== undefined;
-  const fixtureMuted = fixture?.muted ?? false;
-  const {
-    view: voiceView,
-    speaking,
-    listening,
-    stopSpeaking,
-    requestMicrophoneAccess,
-  } = useVoiceView();
-  const callTranscript = useCallTranscript();
-  const { voiceError, voiceNotice } = voiceView;
-  // Who the wings, the face, and the strip answer to: the staged pair in a
-  // capture run, the voice window's report otherwise.
-  const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
-  // The hint asks while Luke speaks, and only over a silence the helper
-  // actually reported. "Got it" quiets it for this stretch of silence and any
-  // that follows too soon.
-  const volumeHintWanted =
-    fixtureMuted ||
-    (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
   // The room the stage's width gives, on the desktop the window's: whether
   // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
   // folds. Only crossing a line draws the shell again, never a pixel's drag.
+  // Note that the window reads nothing of the voice, which moves with every
+  // word said on a call: what draws it reads it (`window-voice.tsx`).
   const stage = useStageRoom();
   const room = stage.room;
-  // The Tasks tab, drawn from the same voice report the strip reads, so a
-  // task call's words and levels are the shape's as any call's are.
+  // The Tasks tab, which reads the call standing where it draws it.
   const tasks = useTasksTab({
     acts: { act, tell },
     tasks: planning ?? IDLE_TASKS_VIEW,
@@ -409,10 +396,9 @@ function AppWindow(): React.JSX.Element {
     inboxTasks: inbox?.tasks ?? NO_TASKS_HOLDING,
     inboxTaskless: inbox?.taskless ?? NOTHING_TASKLESS,
     failedRuns: inbox?.failedRuns ?? NO_FAILED_RUNS,
-    voice: { view: voiceView, callTranscript, listening, requestMicrophoneAccess },
-    onOpenSettings: (link) => openSettings(link),
-    onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
-    onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
+    onOpenSettings: openSettings,
+    onOpenIntegrations: openIntegrations,
+    onOpenApiKeys: openApiKeys,
     leaveGuard,
     room,
   });
@@ -474,7 +460,8 @@ function AppWindow(): React.JSX.Element {
     () => [...tasks.tasks, ...tasks.archived],
     [tasks.tasks, tasks.archived],
   );
-  const openLukeLink = (link: ReadLink) => {
+  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
+  const openLukeLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
@@ -490,7 +477,7 @@ function AppWindow(): React.JSX.Element {
         tasks.onOpenLink(link);
       })();
     }
-  };
+  });
   // A Luke link the system handed the app opens once sign-in no longer stands in the way, and
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
@@ -509,11 +496,10 @@ function AppWindow(): React.JSX.Element {
     [],
   );
   useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
-  // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another agent's tab or none, the home page, Settings, or the
+  // The agent whose call bar is on screen, which the call card gives way to
+  // (`WindowVoice`): another agent's tab or none, the home page, Settings, or the
   // agent's own task under its version history, the Inbox, an agent's page,
-  // or a side panel filling the window.
-  const focused = useWindowFocused();
+  // or a side panel filling the window draw the card instead.
   const columnTab = tasks.mainTabs.tab;
   const agentShown = callBarAgentId({
     tasksTab: tab === PANEL_TAB.TASKS,
@@ -524,16 +510,6 @@ function AppWindow(): React.JSX.Element {
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
     columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
   });
-  const callVideo = useCallCardVideo();
-  const call: CallCardInput | undefined =
-    !accountGated && callCardShown({ view: voiceView, focused, agentShown })
-      ? {
-          card: callCard({ view: voiceView, tasks: planning ?? IDLE_TASKS_VIEW }),
-          speakerMuted: voiceView.speakerMuted,
-          controls: callControls(tell, voiceView.speakerMuted),
-          video: callVideo,
-        }
-      : undefined;
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
@@ -572,19 +548,20 @@ function AppWindow(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
-  // the workspace the message waits in, listing that workspace first where another is listed.
+  // the workspace the message waits in, listing that workspace first where another is listed, and
+  // from a toast on the channel the message stands in, as an inbox item's toast opens the item.
   const openChat = useCallback(
-    (workspaceId: string) =>
+    (workspaceId: string, messageId?: string) =>
       guardLeave(() => {
         const doors = inboxDoors.current;
         changeTab(PANEL_TAB.TASKS);
         if (doors.workspace?.id !== workspaceId) doors.onChooseWorkspace(workspaceId);
-        doors.chatView.onOpen();
+        if (messageId === undefined) doors.chatView.onOpen();
+        else doors.chatView.onShowMessage(messageId);
       })(),
     [changeTab, guardLeave],
   );
   useEffect(() => appBridge().onShowChat(({ workspaceId }) => openChat(workspaceId)), [openChat]);
-  useChatToasts(openChat, tasks.chatShown);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
@@ -601,7 +578,9 @@ function AppWindow(): React.JSX.Element {
     tasks,
   });
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
-  const shellTasks = throughHistory(tasks, history.lists);
+  const shellTasks = useSteadyDoors(
+    useMemo(() => throughHistory(tasks, history.lists), [tasks, history.lists]),
+  );
   // Escape reads the latest of them as it lands, so its listener stays the same across renders.
   const shellDoors = useRef(shellTasks);
   shellDoors.current = shellTasks;
@@ -609,14 +588,6 @@ function AppWindow(): React.JSX.Element {
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
   const sidebar = useSidebarCollapse(run?.fixtureMode === true, stage.compact);
-
-  const notice = useVoiceNotice({
-    voiceError,
-    voiceNotice,
-    speakers,
-    fixtureSpeaking,
-    volumeHint: { wanted: volumeHintWanted, text: volumeHintText(outputAudio) },
-  });
 
   // Rings and keyboard-only hints follow focus the keyboard actually moved.
   useKeyboardModality();
@@ -635,24 +606,6 @@ function AppWindow(): React.JSX.Element {
     appBridge().notifyReady();
   }, [settingsHeld]);
 
-  // Silence is counted in stretches — one per unbroken run of muted-or-zero —
-  // because that is the unit a "Got it" answers. The edge into silence is the
-  // only thing counted; every reading inside one stretch leaves it alone.
-  useEffect(() => {
-    const silent = outputSilent(outputAudio);
-    if (silent && !wasSilent.current) setSilenceStretch((stretch) => stretch + 1);
-    wasSilent.current = silent;
-  }, [outputAudio]);
-
-  /**
-   * The hint's own button. It quiets the hint for this stretch of silence;
-   * Luke's words go on streaming into the transcript, which is what "got
-   * it" leaves the user reading him by.
-   */
-  const dismissVolumeHint = useCallback(() => {
-    setHintDismissal({ at: Date.now(), stretch: silenceStretch });
-  }, [silenceStretch]);
-
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -669,8 +622,9 @@ function AppWindow(): React.JSX.Element {
       // have done a frame earlier: a fall-through past a reply just begun
       // closes the layer below instead. Not worth a round trip on every
       // Escape.
-      if (listening || speaking) {
-        stopSpeaking();
+      const voice = voiceViewNow();
+      if (voice.listening || voice.lukeSpeaking) {
+        tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
         return;
       }
       // Escape on a gate waiting for the browser withdraws the sign-in, as
@@ -694,8 +648,8 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.INBOX_LIST) || tasks.inboxView.open) return;
-      // Chat is the Inbox's like: Escape stops at it rather than reaching the plan beneath.
-      if (tasks.chatView.open) return;
+      // Chat is the Inbox's like: a place standing alone steps back to the rail, and there the press stops rather than reaching the plan beneath.
+      if (runAppCommand(APP_COMMAND.CHAT_LIST) || tasks.chatView.open) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
@@ -709,60 +663,119 @@ function AppWindow(): React.JSX.Element {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [
-    signIn.cancelSignIn,
-    signIn.signInWait,
-    listening,
-    tasks.inboxView.open,
-    tasks.chatView.open,
-    speaking,
-    stopSpeaking,
-  ]);
+  }, [signIn.cancelSignIn, signIn.signInWait, tasks.inboxView.open, tasks.chatView.open, tell]);
 
   // The window's shortcuts, from the keys and from the menu bar alike.
   useAppKeymap(true);
   useMenuCommands(true);
   useHistoryMouseButtons(history, true);
+  // A link pressed with ⌘ goes where it leads, rather than opening as a preview beside the reader.
+  useEffect(() => installPressIntent(window), []);
+
+  // The doors the window hands every page are held across draws, each part that reads one holding while it does.
+  const requestMicrophone = useCallback(
+    () => tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }),
+    [tell],
+  );
+  const leftWorkspace = useSteadyDoor((workspaceId: string) => {
+    tasks.onLeftWorkspace(workspaceId);
+    changeTab(PANEL_TAB.TASKS);
+  });
+  // The Workspace page shows the workspace the sidebar lists, or one a link named.
+  const workspace = useMemo(
+    () => ({
+      workspaces: tasks.workspaces,
+      workspaceId: settingsWorkspace.shownId,
+      // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
+      onLeft: leftWorkspace,
+      listFailed: tasks.listFailed,
+      onRetryList: tasks.onRetryList,
+    }),
+    [
+      tasks.workspaces,
+      settingsWorkspace.shownId,
+      leftWorkspace,
+      tasks.listFailed,
+      tasks.onRetryList,
+    ],
+  );
+  // What Settings and ⌘K answer through; the settings themselves they read where they draw them.
+  const settingsDoors = useMemo<SettingsDoors>(
+    () => ({
+      view: shownView,
+      onViewChange: chooseSettingsView,
+      onSignOut: signOut,
+      onDeleteAccount: deleteAccount,
+      onRequestMicrophone: requestMicrophone,
+      workspace,
+    }),
+    [shownView, chooseSettingsView, signOut, deleteAccount, requestMicrophone, workspace],
+  );
+
+  // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.
+  const repositoryRemedies = useMemo<RepositoryRemedyDoors>(
+    () => ({
+      openWorkspaceGitHub: tasks.onOpenWorkspaceGitHub,
+      openGitHub: tasks.repositories.openGitHub,
+      chooseRepository: tasks.onChangeRepository,
+      moveTask: tasks.onMoveTask,
+    }),
+    [
+      tasks.onOpenWorkspaceGitHub,
+      tasks.repositories.openGitHub,
+      tasks.onChangeRepository,
+      tasks.onMoveTask,
+    ],
+  );
+  const gitHubConnect = useMemo(
+    () => ({
+      connection: tasks.github,
+      connect: tasks.onConnectAccountGitHub,
+      disconnect: tasks.onDisconnectAccountGitHub,
+    }),
+    [tasks.github, tasks.onConnectAccountGitHub, tasks.onDisconnectAccountGitHub],
+  );
+  const messageReveal = useMemo(
+    () => ({ reveal: tasks.messageReveal, onRevealed: tasks.onMessageRevealed }),
+    [tasks.messageReveal, tasks.onMessageRevealed],
+  );
+  const threadReveal = useMemo(
+    () => ({ reveal: tasks.threadReveal, onRevealed: tasks.onThreadRevealed }),
+    [tasks.threadReveal, tasks.onThreadRevealed],
+  );
+
+  // A person pressed anywhere in the window opens their page on the Plans tab, in the workspace the place named them in.
+  const openPerson = useSteadyDoor((userId: string, name?: string, workspaceId?: string) => {
+    changeTab(PANEL_TAB.TASKS);
+    tasks.personView.onOpen(userId, name, workspaceId);
+  });
+
+  const gates = useMemo(
+    () => ({
+      accountRequired: run?.accountRequired === true,
+      signInWait: signIn.signInWait,
+      signInFailure: signIn.signInFailure,
+      lastSignIn,
+      onBeginSignIn: signIn.beginSignIn,
+      onCancelSignIn: signIn.cancelSignIn,
+    }),
+    [
+      run?.accountRequired,
+      signIn.signInWait,
+      signIn.signInFailure,
+      lastSignIn,
+      signIn.beginSignIn,
+      signIn.cancelSignIn,
+    ],
+  );
+  const settingsStep = useMemo(
+    () => ({ listed: settingsPlace.listed, onList: history.lists.settings }),
+    [settingsPlace.listed, history.lists.settings],
+  );
 
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
   if (run === undefined || !settingsHeld) return <div />;
-
-  // The Workspace page shows the workspace the sidebar lists, or one a link named.
-  const workspace = {
-    workspaces: tasks.workspaces,
-    workspaceId: settingsWorkspace.shownId,
-    // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
-    onLeft: (workspaceId: string) => {
-      tasks.onLeftWorkspace(workspaceId);
-      changeTab(PANEL_TAB.TASKS);
-    },
-    listFailed: tasks.listFailed,
-    onRetryList: tasks.onRetryList,
-  };
-  // What Settings and ⌘K answer through; the settings themselves they read where they draw them.
-  const settingsDoors: SettingsDoors = {
-    view: shownView,
-    onViewChange: chooseSettingsView,
-    onSignOut: signOut,
-    onDeleteAccount: deleteAccount,
-    onRequestMicrophone: requestMicrophoneAccess,
-    workspace,
-  };
-
-  // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.
-  const repositoryRemedies: RepositoryRemedyDoors = {
-    openWorkspaceGitHub: tasks.onOpenWorkspaceGitHub,
-    openGitHub: tasks.repositories.openGitHub,
-    chooseRepository: tasks.onChangeRepository,
-    moveTask: tasks.onMoveTask,
-  };
-
-  // A person pressed anywhere in the window opens their page on the Plans tab, in the workspace the place named them in.
-  const openPerson = (userId: string, name?: string, workspaceId?: string) => {
-    changeTab(PANEL_TAB.TASKS);
-    tasks.personView.onOpen(userId, name, workspaceId);
-  };
 
   return (
     <OpenSettingsProvider value={openSettings}>
@@ -772,102 +785,82 @@ function AppWindow(): React.JSX.Element {
             <OpenPersonProvider value={openPerson}>
               <OpenFeedbackProvider value={openFeedbackAbout}>
                 <RepositoryRemedyProvider value={repositoryRemedies}>
-                  <GitHubConnectProvider
-                    value={{
-                      connection: tasks.github,
-                      connect: tasks.onConnectAccountGitHub,
-                      disconnect: tasks.onDisconnectAccountGitHub,
-                    }}
-                  >
+                  <GitHubConnectProvider value={gitHubConnect}>
                     <ListedAutomations tasks={tasks}>
-                      <div
-                        ref={stage.ref}
-                        className="app-stage"
-                        data-capture={String(run.captureMode)}
-                        // The panel is drawn as an ordinary app window's content; desktop.css
-                        // lays it out.
-                        data-surface="desktop"
-                        // The sidebar's width lays out the shell and Settings' page list, and
-                        // places the voice's notice line over the work column beside it.
-                        style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-                      >
-                        {/* The window's content. */}
-                        <div className="desktop-stage">
-                          <MessageRevealProvider
-                            value={{
-                              reveal: tasks.messageReveal,
-                              onRevealed: tasks.onMessageRevealed,
-                            }}
-                          >
-                            <ThreadRevealProvider
-                              value={{
-                                reveal: tasks.threadReveal,
-                                onRevealed: tasks.onThreadRevealed,
-                              }}
-                            >
-                              <SettingsShell
-                                gates={{
-                                  accountRequired: run.accountRequired,
-                                  signInWait: signIn.signInWait,
-                                  signInFailure: signIn.signInFailure,
-                                  lastSignIn,
-                                  onBeginSignIn: signIn.beginSignIn,
-                                  onCancelSignIn: signIn.cancelSignIn,
-                                }}
-                                tab={tab}
-                                onTabChange={changeTab}
-                                tasks={shellTasks}
-                                history={history}
-                                sidebar={sidebar}
-                                room={room}
-                                settingsStep={{
-                                  listed: settingsPlace.listed,
-                                  onList: history.lists.settings,
-                                }}
-                                call={call}
-                                notice={{ notice, onDismissHint: dismissVolumeHint }}
-                                doors={settingsDoors}
-                              />
-                            </ThreadRevealProvider>
-                          </MessageRevealProvider>
-                        </div>
-                        {/* A note to the people who make Luke, written in a dialog over the
+                      <CallChords />
+                      <WindowVoice available={!accountGated} agentShown={agentShown}>
+                        <div
+                          ref={stage.ref}
+                          className="app-stage"
+                          data-capture={String(run.captureMode)}
+                          // The panel is drawn as an ordinary app window's content; desktop.css
+                          // lays it out.
+                          data-surface="desktop"
+                          // The sidebar's width lays out the shell and Settings' page list, and
+                          // places the voice's notice line over the work column beside it.
+                          style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                        >
+                          {/* The window's content. */}
+                          <div className="desktop-stage">
+                            <MessageRevealProvider value={messageReveal}>
+                              <ThreadRevealProvider value={threadReveal}>
+                                <SettingsShell
+                                  gates={gates}
+                                  tab={tab}
+                                  onTabChange={changeTab}
+                                  tasks={shellTasks}
+                                  history={history}
+                                  sidebar={sidebar}
+                                  room={room}
+                                  settingsStep={settingsStep}
+                                  doors={settingsDoors}
+                                />
+                              </ThreadRevealProvider>
+                            </MessageRevealProvider>
+                          </div>
+                          {/* A note to the people who make Luke, written in a dialog over the
           window. */}
-                        <FeedbackDialog
-                          kind={feedbackKind}
-                          about={feedbackAbout}
-                          account={account}
-                          onClose={() => setFeedbackKind(undefined)}
-                        />
-                        {/* The window's passing notice: the thank-you after a note lands, what
+                          <FeedbackDialog
+                            kind={feedbackKind}
+                            about={feedbackAbout}
+                            account={account}
+                            onClose={() => setFeedbackKind(undefined)}
+                          />
+                          {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
-                        <ToastHost />
-                        {/* The menu a right-click on any link in the window hangs. */}
-                        <LinkMenu />
-                        <UpdatedToast />
-                        <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
-                        {/* The plans, the open plan's agents and files, every command the
+                          <ToastHost />
+                          {/* The menu a right-click on any link in the window hangs. */}
+                          <LinkMenu />
+                          <UpdatedToast />
+                          <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
+                          <ChatToasts onView={openChat} shown={tasks.chatShown} />
+                          {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-                        <SettingsPalette
-                          available={!accountGated}
-                          tab={tab}
-                          onTabChange={changeTab}
-                          tasks={tasks}
-                          links={copyLink}
-                          doors={settingsDoors}
-                          readFiles={(taskId) =>
-                            act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
-                          }
-                        />
-                        {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
-                        <TabSwitcher
-                          available={!accountGated}
-                          tab={tab}
-                          onTabChange={changeTab}
-                          tasks={tasks}
-                        />
-                      </div>
+                          <SettingsPalette
+                            available={!accountGated}
+                            tab={tab}
+                            onTabChange={changeTab}
+                            tasks={tasks}
+                            links={copyLink}
+                            doors={settingsDoors}
+                            readFiles={(taskId) =>
+                              act(ACT_KIND.TASKS_TREE, {
+                                planId: taskId,
+                                path: "",
+                                recursive: true,
+                              })
+                            }
+                          />
+                          {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
+                          <TabSwitcher
+                            available={!accountGated}
+                            tab={tab}
+                            onTabChange={changeTab}
+                            tasks={tasks}
+                          />
+                        </div>
+                      </WindowVoice>
                     </ListedAutomations>
                   </GitHubConnectProvider>
                 </RepositoryRemedyProvider>

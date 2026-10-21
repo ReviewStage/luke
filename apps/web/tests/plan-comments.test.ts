@@ -48,6 +48,7 @@ import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
 } from "@luke/service/testing/integration-connect";
+import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
@@ -187,6 +188,7 @@ const answer = (routes: "comments" | "plans", request: Request) =>
         workspaces: yield* fakeWorkspaceSeams,
         eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
+        keepAwake: keepAwakeDetached,
       }),
     });
     const response = yield* Effect.promise(() => plans(request, services));

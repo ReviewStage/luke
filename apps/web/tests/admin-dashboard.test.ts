@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-import type { AdminMetrics } from "@luke/service/admin/admin-metrics";
-import type { AdminOverview } from "@luke/service/admin/admin-overview";
+import type { AdminMetrics, AdminOverview } from "@luke/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "@luke/service/admin/admin-overview-vocabulary";
+} from "@luke/features/admin-overview-vocabulary";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

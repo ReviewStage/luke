@@ -179,6 +179,7 @@ export const APP_SLICE = {
   RUN: sliceAtom("run"),
   SETTINGS: sliceAtom("settings"),
   ACCOUNT: sliceAtom("account"),
+  ACCESS: sliceAtom("access"),
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
   VOICE: sliceAtom("voice"),
@@ -269,6 +270,12 @@ const capabilityAtom = Atom.family((capability: HostCapability) =>
   Atom.map(APP_SLICE.RUN, (run) => run?.capabilities.includes(capability) === true),
 );
 
+/** Whether the signed-in account is an admin, which tells its readers only as it turns. */
+const ADMIN_ACCESS: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.ACCESS,
+  (access) => access?.admin === true,
+);
+
 /**
  * Whether the signed-in account is an admin, redrawn as it moves: what the
  * sidebar offers the admin dashboard by. Signed out, before the first read,
@@ -276,7 +283,7 @@ const capabilityAtom = Atom.family((capability: HostCapability) =>
  * dashboard's own gate on the service decides every admin read.
  */
 export function useAdminAccess(): boolean {
-  return useAppState()?.access.admin === true;
+  return useAtomValue(ADMIN_ACCESS);
 }
 
 /**

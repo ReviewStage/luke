@@ -1286,7 +1286,12 @@ it.effect(
       const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
       assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
       const answer = Schema.decodeUnknownSync(sidebarLiveAnswerSchema)(sealed.body);
-      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["entries", "pins", "sections"]);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), [
+        "agentEntries",
+        "entries",
+        "pins",
+        "sections",
+      ]);
       for (const query of Object.values(answer.queries)) {
         assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
       }

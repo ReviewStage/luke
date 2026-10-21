@@ -22,6 +22,7 @@ import {
   openTokenMember,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
+import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
 /**
@@ -67,6 +68,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           ),
         eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
+        keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,
       }),
     });

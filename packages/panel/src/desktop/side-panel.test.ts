@@ -85,21 +85,21 @@ test('an agent\'s pull request chip opens the one tab the "+" offers for its pul
   });
 });
 
-test("an agent's pull request opens in the one Pull request tab of its pull request, on the overview or on the files", () => {
+test("an agent's pull request opens in the one Pull request tab of its pull request, on the overview or on the files, as the panel's preview, since a chip is a link", () => {
   const control = agents();
   const asked: unknown[] = [];
   const panel = {
     changes: [],
-    onChoose: (tab: SidePanelTab) => asked.push(["choose", tab]),
+    onPreview: (tab: SidePanelTab) => asked.push(["preview", tab]),
     onPullRequestView: (tab: SidePanelTab, view: string) => asked.push(["view", tab, view]),
   };
   showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.CONVERSATION);
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.FILES);
   assert.deepEqual(asked, [
     ["view", { changes: FIRST.id }, PULL_REQUEST_VIEW.CONVERSATION],
-    ["choose", { changes: FIRST.id }],
+    ["preview", { changes: FIRST.id }],
     ["view", { changes: THIRD.id }, PULL_REQUEST_VIEW.FILES],
-    ["choose", { changes: THIRD.id }],
+    ["preview", { changes: THIRD.id }],
   ]);
 });
 
@@ -108,16 +108,16 @@ test("a pull request named by its number opens a Pull request tab of its own for
   const asked: unknown[] = [];
   const panel = {
     changes: [],
-    onChoose: (tab: SidePanelTab) => asked.push(["choose", tab]),
+    onPreview: (tab: SidePanelTab) => asked.push(["preview", tab]),
     onPullRequestView: (tab: SidePanelTab, view: string) => asked.push(["view", tab, view]),
   };
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.CONVERSATION, 40);
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.CONVERSATION, 42);
   assert.deepEqual(asked, [
     ["view", { changes: THIRD.id, number: 40 }, PULL_REQUEST_VIEW.CONVERSATION],
-    ["choose", { changes: THIRD.id, number: 40 }],
+    ["preview", { changes: THIRD.id, number: 40 }],
     ["view", { changes: THIRD.id }, PULL_REQUEST_VIEW.CONVERSATION],
-    ["choose", { changes: THIRD.id }],
+    ["preview", { changes: THIRD.id }],
   ]);
   // A tab naming another pull request is not the agent's own, so the agent's own still opens its own.
   assert.deepEqual(changesTabOf(control, SECOND.id, [{ changes: SECOND.id, number: 40 }]), {

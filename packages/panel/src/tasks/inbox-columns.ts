@@ -26,18 +26,7 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-
-/**
- * The Inbox's widths, in CSS pixels, between which it shows one column or
- * two. Narrower than `ENTER`, its list at its least width (300) would leave
- * the item beside it less than the 560 a question, a code card, and its
- * options read in (`inbox-list.tsx`); only wider than `LEAVE` does it split again, so an Inbox dragged
- * across the line does not split and join at every pixel.
- */
-const INBOX_SPLIT = {
-  ENTER: 860,
-  LEAVE: 892,
-} as const;
+import { useColumnSplit } from "../column-split.js";
 
 /** Which of the Inbox's columns stand. */
 export const INBOX_COLUMNS = {
@@ -136,11 +125,6 @@ function useListing(kept: InboxListing | undefined): InboxListing {
   return kept ?? { asked, onAsk: setAsked };
 }
 
-/** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
-function oneColumn(width: number, was: boolean): boolean {
-  return width < (was ? INBOX_SPLIT.LEAVE : INBOX_SPLIT.ENTER);
-}
-
 /** Which columns stand: both where split, else the item unless the list was asked for and is worth going back to, or nothing is chosen. */
 function shownColumns(
   single: boolean,
@@ -171,7 +155,7 @@ export function useInboxColumns(
   kept?: InboxListing,
 ): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
-  const [measured, setMeasured] = useState<boolean | undefined>(undefined);
+  const { ref: measure, single: measured } = useColumnSplit();
   const single = measured === true;
   const { asked: listAsked, onAsk: setListAsked } = useListing(kept);
   // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
@@ -179,18 +163,13 @@ export function useInboxColumns(
   const view = useRef<HTMLElement | null>(null);
   const pressed = useRef(false);
   const rows = useInboxRowPresses();
-  const ref = useCallback((element: HTMLElement | null) => {
-    view.current = element;
-    if (element === null) return undefined;
-    const measure = () => {
-      const width = element.getBoundingClientRect().width;
-      if (width > 0) setMeasured((was) => oneColumn(width, was === true));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+  const ref = useCallback(
+    (element: HTMLElement | null) => {
+      view.current = element;
+      return measure(element);
+    },
+    [measure],
+  );
   // Note that an Inbox measured split forgets the list was asked for, so narrowing it lands on its
   // item; one not yet measured keeps it, since the list a holder kept may be what it narrows onto.
   const split = measured === false;

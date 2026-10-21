@@ -23,7 +23,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card.js";
+import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
@@ -46,7 +46,7 @@ import {
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { VoiceNoticeStrip, type VoiceNoticeStripProps } from "../voice-notice-strip.js";
+import { WindowVoiceNotice } from "../window-voice.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -356,6 +356,17 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // Chat is an experiment as Factory is, so ⌘K offers it only on the terms its sidebar row stands on.
+  const chatOn = useChatOn();
+  useAppCommand(
+    APP_COMMAND.CHAT,
+    pastGate && tasks.signedIn && chatOn && tasks.chatView.available
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.chatView.onOpen();
+        }
+      : undefined,
+  );
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,
     pastGate && tasks.signedIn
@@ -408,6 +419,9 @@ function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element 
     </Tooltip>
   );
 }
+
+/** The voice's notice line, one element for every draw, which reads the line where it is drawn (`WindowVoiceNotice`). */
+const NOTICE_STRIP = <WindowVoiceNotice />;
 
 /**
  * Whether the tab of the agent the call speaks into is on screen, where its
@@ -503,8 +517,6 @@ export function DesktopShell({
   sidebar,
   room,
   settingsStep,
-  call,
-  notice,
   settings,
 }: {
   gates: DesktopGates;
@@ -517,9 +529,6 @@ export function DesktopShell({
   room: ShellRoom;
   /** Whether Settings stands on its page list or a page, which a narrow room draws one at a time. */
   settingsStep: SettingsStep;
-  /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
-  call: CallCardInput | undefined;
-  notice: VoiceNoticeStripProps;
   settings: SettingsPanelProps;
 }): React.JSX.Element {
   const { account } = settings;
@@ -621,7 +630,6 @@ export function DesktopShell({
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   const calling = useCallingAgent();
   const callShown = taskDrawn && callTabShown(tasks, calling);
-  const noticeStrip = useMemo(() => <VoiceNoticeStrip {...notice} />, [notice]);
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (
@@ -664,11 +672,10 @@ export function DesktopShell({
             step={settingsStep}
             history={history}
             settings={settings}
-            call={call}
             onExit={exitSettings}
           />
         </Suspense>
-        {noticeStrip}
+        {NOTICE_STRIP}
       </div>
     );
   }
@@ -695,14 +702,13 @@ export function DesktopShell({
                 history={history}
                 tasks={tasks}
                 account={account}
-                call={call}
                 onExit={exitHistory}
                 onRestored={history.onLeaveVersionHistory}
               />
             </Suspense>
           </ChipCards>
         </MentionedAgents>
-        {noticeStrip}
+        {NOTICE_STRIP}
         {newTaskDialog}
       </div>
     );
@@ -743,7 +749,6 @@ export function DesktopShell({
         account={account}
         updates={settings.updates}
         onSignOut={settings.onSignOut}
-        call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
         room={room}
         inboxListing={sharedListing}
@@ -753,11 +758,15 @@ export function DesktopShell({
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
             {chatOpen ? (
-              <DesktopChat
-                tasks={tasks}
-                room={room}
-                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-              />
+              <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
+                <DesktopChat
+                  tasks={tasks}
+                  room={room}
+                  accountName={
+                    account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
+                  }
+                />
+              </PageFind>
             ) : inboxOpen ? (
               <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (
@@ -809,7 +818,7 @@ export function DesktopShell({
               <DesktopTasks
                 tasks={tasks}
                 looks={looks}
-                notice={noticeInColumn ? noticeStrip : undefined}
+                notice={noticeInColumn ? NOTICE_STRIP : undefined}
                 summary={summary}
                 room={room}
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
@@ -818,12 +827,9 @@ export function DesktopShell({
           </ChipCards>
         </MentionedAgents>
       </main>
-      {noticeInColumn ? null : noticeStrip}
+      {noticeInColumn ? null : NOTICE_STRIP}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
-      <CallCardDock
-        call={sidebar.collapsed ? call : undefined}
-        surface={CALL_CARD_SURFACE.FLOATING}
-      />
+      <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&

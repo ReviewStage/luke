@@ -74,7 +74,7 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
     tasks: [task(1, "Invite expiry"), task(2, "Retry audit")],
     workspaces: [WORKSPACE],
     workspace: WORKSPACE,
-    taskSections: { sections: [], entries: [] },
+    taskSections: { sections: [], entries: [], agentEntries: [] },
   });
   act(() =>
     root.render(

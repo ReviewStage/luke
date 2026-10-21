@@ -111,7 +111,6 @@ function drawn(): HTMLElement {
             email: "dev@example.com",
             provider: "github",
           },
-          call: undefined,
           onExit: ignore,
           onRestored: ignore,
         }),

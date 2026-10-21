@@ -1,16 +1,24 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
-import type { MentionPlace } from "@luke/features/mention-link";
+import { LINK_PLACE } from "@luke/features/luke-link";
+import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
+import type { CodeRef } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   BackIcon,
-  DocumentIcon,
+  BUTTON_SIZE,
   EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FoldingButton,
+  type FoldingButtonHint,
   IconButton,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
+  LIST_ROW_INK,
   LIST_ROW_META,
   ListRow,
   PencilIcon,
@@ -30,31 +38,42 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
-import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
-import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
-import { useMemo, useState } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import { FoldingButton } from "../folding-button.js";
+import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
+import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
+import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
+import { AttentionMark } from "../attention-mark.js";
+import { useColumnSplit } from "../column-split.js";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
+import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor } from "../tasks/chat-actors.js";
-import { ChatPane } from "../tasks/chat-pane.js";
+import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
+import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
+import { tasklessMentions } from "../tasks/task-mentions.js";
+import { markReadItem } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
 import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
+import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { sectionGlyph } from "./section-icon-picker.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { TaskStatusMark, taskCardOf } from "./task-card.js";
 import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
@@ -68,16 +87,27 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * (`.section-heading`), each row counting what in it the developer has not read and
  * in the unread weight while anything is (`chat-model.ts`). A direct
  * message's row leads with the other member's mark and is named by who it
- * is with. A press on a row shows its place in
+ * is with. Each row behaves as a sidebar task's and an Inbox item's do: it
+ * hangs its card while the pointer rests on it, a task's channel ends in its
+ * task's mark, and a right-click, a hover button, or a swipe marks it read;
+ * each task group is headed as the sidebar heads the same tasks, and a
+ * group's ⋯ marks every place in it read. A press on a row shows its place in
  * the pane beside the rail (`chat-pane.tsx`). The agents are named from
  * the plans' summaries, the way the sidebar names them, and from the lines
  * the chat read carries where those name more. With nothing read, it says
  * so under Chat's glyph. Any row of the sidebar leaves it for the plan it
  * stood over; Escape does not, as it does not leave the Inbox, so a stray
- * press never loses the place being read. A narrow room shows the rail or
- * the place, one at a time (`hiddenColumns`): Chat opens on its rail, and a
- * place chosen there, or shown from elsewhere, stands alone the whole width,
- * under a way back to the rail.
+ * press never loses the place being read. Chat narrower than the Inbox's
+ * line, by its own width (`column-split.ts`) or a narrow room's, shows the
+ * rail or the place, one at a time (`hiddenColumns`): Chat opens on its
+ * rail, and a place chosen there, or shown from elsewhere, stands alone the
+ * whole width, under a way back to the rail, which Back's chord and Escape
+ * take as well, as the Inbox's item's does. K and J step to the place above
+ * and below in the rail as drawn, stopping at its ends, and ⇧J to the next
+ * channel holding anything unread, wrapping round, as the Inbox's keys step
+ * through its items, the row they land on taking the keyboard where the
+ * rail stands. For you, and any channel with an ask waiting on the reader,
+ * wears the Inbox's attention mark; the blue dot is for the unread alone.
  */
 
 /** The workspace a chip's link is written in, the chat's own; none while no workspace is listed. */
@@ -87,8 +117,73 @@ function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
   return { workspace: workspace.slug ?? workspace.id, repository: null };
 }
 
+/** What a press on a task's chip does with no opener at hand, as in a test of one surface: nothing. */
+const OPEN_NOTHING = (): void => undefined;
+
+/**
+ * The doors of each task the window lists, by its id, that its channel's
+ * messages read through: its code read through the task and opened in it,
+ * as the window's Inbox opens an item's (`desktop-inbox.tsx`), and, where
+ * `mentions` asks, its mentions, so a file's chip opens the file in its
+ * task and a GitHub link is read against its repository. Note that the
+ * mentions name no task, as a page no task holds does (`tasklessMentions`),
+ * because the window holds no text of the plan here, and a section of it
+ * would otherwise be drawn gone. The plan's Chat tab asks no mentions,
+ * since the task's page it stands on hands its own.
+ */
+function useTaskDoors(
+  tasks: TasksControl,
+  mentions: boolean,
+): (taskId: string) => ChatTaskDoors | undefined {
+  const { act } = useAct();
+  const openTask = useOpenTask() ?? OPEN_NOTHING;
+  // Note that a file is opened through the latest control, so the doors stand while the window's lists move.
+  const latest = useRef(tasks);
+  latest.current = tasks;
+  const workspace = mentionPlaceOf(tasks)?.workspace;
+  const { tasks: listed, archived } = tasks;
+  const doors = useMemo(() => {
+    const held = new Map<string, ChatTaskDoors>();
+    for (const task of [...listed, ...archived]) {
+      const showFile = (ref: CodeRef, commit: string | undefined) =>
+        latest.current.onShowFile(task.id, ref, commit);
+      const code: InboxCodeDoors = {
+        repository: task.repository,
+        readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
+        onOpenFile: showFile,
+      };
+      if (!mentions || workspace === undefined) {
+        held.set(task.id, { code });
+        continue;
+      }
+      const { repository, workspaceId } = task;
+      const taskless = tasklessMentions({ workspace, workspaceId, repository }, openTask);
+      const onOpenFile = (path: string, lines: MentionLines | undefined) =>
+        lines === undefined
+          ? showFile({ path }, undefined)
+          : showFile({ path, startLine: lines.startLine, endLine: lines.endLine }, lines.commit);
+      held.set(task.id, {
+        code,
+        mentions: { ...taskless, taskName: task.name, doors: { ...taskless.doors, onOpenFile } },
+      });
+    }
+    return held;
+  }, [listed, archived, act, openTask, workspace, mentions]);
+  return (taskId) => doors.get(taskId);
+}
+
 /** What the way back from a place to the rail says, in a narrow room. */
 const CHAT_LIST = "Chat";
+
+/**
+ * The way back's pill, which says where it goes and names Back's chord
+ * whether its word is folded away or not, as the Inbox's way back does.
+ */
+const BackHint: FoldingButtonHint = ({ children }) => (
+  <Tooltip label="Back to chat" command={APP_COMMAND.BACK}>
+    {children}
+  </Tooltip>
+);
 
 /**
  * How the rail groups the tasks' channels: as the reader's sidebar groups
@@ -108,7 +203,8 @@ function taskGrouping(tasks: TasksControl): ChatTaskGrouping {
       : workspaceSections(state, workspaceId).map((section) => ({
           id: section.id,
           title: section.title,
-          taskIds: sectionOrder(state, section.id).map((entry) => entry.taskId),
+          icon: section.icon,
+          taskIds: sectionTaskIds(state, section.id),
         }));
   return { pinned, sections };
 }
@@ -181,8 +277,9 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
         (group): RailGroupShown => ({
           space: RAIL_SPACE.TASKS,
           key: group.key,
-          name: group.title ?? "Tasks",
-          glyph: <DocumentIcon />,
+          name: group.title,
+          // Note that Pinned and Tasks wear no glyph, and a section its own icon or none, as the sidebar heads them.
+          glyph: sectionGlyph(group.icon),
           rows: group.rows,
           foldedAtFirst: false,
         }),
@@ -240,34 +337,113 @@ function shows(place: ChatPlace, row: ChatRailRow): boolean {
   return place.kind === CHAT_PLACE.CHANNEL && place.channelId === row.channel.id;
 }
 
-/** One channel's or direct message's row: its glyph or the other member's mark, its name, what it says after, and its count. */
+/** What a row's hover button and swipe that mark it read are called. */
+const MARK_READ = "Mark as read";
+const SWIPE_READ = "Read";
+
+/** What the press on a group's header that marks every place in it read is called. */
+const MARK_ALL_READ = "Mark all as read";
+
+/**
+ * The card a place's row hangs, as the sidebar and the Inbox hang the same
+ * thing: a task's channel its task's, a direct message the other member's,
+ * an agent's tab's card naming its task or a person's; none for a channel
+ * of the workspace's own, whose row names it whole.
+ */
+function placeCard(
+  tasks: TasksControl,
+  row: ChatRailRow,
+  actorOf: (memberId: string) => Actor,
+  now: number,
+): React.ReactNode {
+  const { channel, other } = row;
+  if (channel.kind === CHANNEL_KIND.TASK) {
+    const task = tasks.tasks.find((each) => each.id === channel.planId);
+    return task === undefined ? undefined : taskCardOf(tasks, task, now);
+  }
+  if (other?.member === undefined) return undefined;
+  if (other.agent !== undefined) {
+    const { models } = tasks.agents;
+    const subject = lineSubject(other.agent, models, tasks.me);
+    return <AgentCard subject={subject} models={models} foot={other.taskName} />;
+  }
+  return actorCard(actorOf(other.member.id));
+}
+
+/** A topic's actions, from its head's ⋯ or its row's menu: edit its name and purpose and archive it, or bring an archived one back. */
+function topicActionGroups(channel: ChatChannel, dialogs: ChannelDialogs): MenuAction[][] {
+  if (channel.archived) {
+    return [
+      [
+        {
+          label: "Bring back channel",
+          icon: <UnarchiveIcon />,
+          onSelect: () => dialogs.askArchive(channel),
+        },
+      ],
+    ];
+  }
+  return [
+    [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
+    [
+      {
+        label: "Archive channel",
+        icon: <ArchiveIcon />,
+        onSelect: () => dialogs.askArchive(channel),
+      },
+    ],
+  ];
+}
+
+/** One channel's or direct message's row: its glyph or the other member's mark, its name, what it says after, its count, its card, and its menu. */
 function RailRow({
+  tasks,
   row,
   current,
   actorOf,
   now,
+  dialogs,
+  shown,
+  onRead,
   onChoose,
 }: {
+  tasks: TasksControl;
   row: ChatRailRow;
   current: boolean;
   actorOf: (memberId: string) => Actor;
   now: number;
+  dialogs: ChannelDialogs;
+  /** Whether Chat is on screen, which a menu does not outlive. */
+  shown: boolean;
+  onRead: (channelIds: readonly string[]) => void;
   onChoose: () => void;
 }): React.JSX.Element {
   const other = row.other?.member;
-  const { latest } = row;
+  const { latest, channel } = row;
   // A direct message is named by who it is with, both of its two where the reader is neither (`channelLabel`).
   const title = row.label;
-  const taskStatus = useTaskStatus(row.channel.planId);
+  const taskStatus = useTaskStatus(channel.planId);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.CHAT, channelId: channel.id });
   const mark =
     other !== undefined ? (
       <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
-    ) : row.channel.kind === CHANNEL_KIND.TASK ? (
+    ) : channel.kind === CHANNEL_KIND.TASK ? (
       <PlanGlyph status={taskStatus} />
     ) : (
       <HashIcon />
     );
+  const task =
+    channel.kind === CHANNEL_KIND.TASK
+      ? tasks.tasks.find((each) => each.id === channel.planId)
+      : undefined;
   const said = latest === undefined ? "" : previewWords(latest);
+  // Note that the service never moves a read back, so a row offers Mark as read alone, while something waits.
+  const read = row.unread > 0 ? () => onRead([channel.id]) : undefined;
+  const groups = [
+    read === undefined ? [] : [markReadItem({ unread: true, onMark: read })],
+    copyLink === undefined ? [] : [copyLink],
+    ...(channel.kind === CHANNEL_KIND.TOPIC ? topicActionGroups(channel, dialogs) : []),
+  ].filter((group) => group.length > 0);
   return (
     <PlaceRow
       mark={mark}
@@ -280,7 +456,17 @@ function RailRow({
       at={latest?.postedAt}
       now={now}
       unread={row.unread > 0}
+      needsYou={row.asks > 0}
       current={current}
+      card={placeCard(tasks, row, actorOf, now)}
+      end={
+        task === undefined ? undefined : (
+          <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
+        )
+      }
+      groups={groups}
+      shown={shown}
+      onRead={read}
       onChoose={onChoose}
     />
   );
@@ -289,8 +475,13 @@ function RailRow({
 /**
  * One place of the rail as a row of the Inbox's own list (`ListRow`): the
  * blue dot in a gutter where something waits unread, its mark, its name in
- * the unread weight while it does, when it last spoke at the line's end,
- * and under it who said what last.
+ * the unread weight while it does, at the line's end the attention mark
+ * where something in it needs the reader, as an Inbox item's needing them
+ * wears it, what its row says there and when it last spoke, and under it
+ * who said what last. It hangs its card, or its name alone, while the
+ * pointer rests on it, a right-click opens its menu where it has one, and
+ * while something waits unread in it, Mark as read stands at its end on
+ * hover and a swipe right does it, as an Inbox row's do.
  */
 function PlaceRow({
   mark,
@@ -299,7 +490,13 @@ function PlaceRow({
   at,
   now,
   unread,
+  needsYou,
   current,
+  card,
+  end,
+  groups,
+  shown,
+  onRead,
   onChoose,
 }: {
   mark: React.ReactNode;
@@ -308,44 +505,111 @@ function PlaceRow({
   at: number | undefined;
   now: number;
   unread: boolean;
+  needsYou: boolean;
   current: boolean;
+  /** The card it hangs while the pointer rests on it; none hangs its name alone. */
+  card: React.ReactNode;
+  /** Said at the line's end before its time: a task's agent at work or its pull request. */
+  end: React.ReactNode;
+  /** Its menu's groups of actions, a right-click away; none opens no menu. */
+  groups: readonly MenuAction[][];
+  /** Whether Chat is on screen, which its menu does not outlive. */
+  shown: boolean;
+  /** Marks it read; none where nothing in it waits unread. */
+  onRead: (() => void) | undefined;
   onChoose: () => void;
 }): React.JSX.Element {
+  const menu = useMenu(shown);
+  const press = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
+  const region = useRef<HTMLElement | null>(null);
+  const hold = useCallback((element: HTMLElement | null) => {
+    press.current = element;
+    region.current = element?.parentElement ?? null;
+  }, []);
   return (
-    <ListRow
-      leading={
-        <>
-          {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
-          <span className="inbox-row-gutter">
-            {unread ? <span className="inbox-row-unread" /> : null}
-          </span>
-          <span className="inbox-row-mark">{mark}</span>
-        </>
-      }
-      title={title}
-      description={preview}
-      meta={
-        <span className="home-row-meta">
-          {unread ? <span className="visually-hidden">{UNREAD_WORDS}</span> : null}
-          {at === undefined ? null : <RelativeTime at={at} now={now} hint={false} />}
-        </span>
-      }
-      metaAt={LIST_ROW_META.TITLE}
-      current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-      unread={unread}
-      hint={{ Hint: Tooltip, label: title }}
-      onPress={onChoose}
-    />
+    <>
+      <RowHintOptions card={card} cardBeside cardRegion={region}>
+        <ListRow
+          ref={hold}
+          leading={
+            <>
+              {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
+              <span className="inbox-row-gutter">
+                {unread ? <span className="inbox-row-unread" /> : null}
+              </span>
+              <span className="inbox-row-mark">{mark}</span>
+            </>
+          }
+          title={title}
+          description={preview}
+          meta={
+            <span className="home-row-meta">
+              {unread ? <span className="visually-hidden">{UNREAD_WORDS}</span> : null}
+              {needsYou ? (
+                <span className="inbox-row-attention">
+                  <AttentionMark />
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : null}
+              {end}
+              {at === undefined ? null : <RelativeTime at={at} now={now} hint={false} />}
+            </span>
+          }
+          metaAt={LIST_ROW_META.TITLE}
+          ink={LIST_ROW_INK.SIDEBAR}
+          current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+          unread={unread}
+          menuOpen={menu.open !== undefined}
+          hint={{ Hint: RowHint, label: title }}
+          onPress={onChoose}
+          contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
+          actions={
+            onRead === undefined ? undefined : (
+              <Tooltip label={MARK_READ}>
+                <IconButton
+                  icon={<MailOpenIcon />}
+                  label={MARK_READ}
+                  size={BUTTON_SIZE.COMPACT}
+                  onClick={onRead}
+                />
+              </Tooltip>
+            )
+          }
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
+          swipe={
+            onRead === undefined
+              ? undefined
+              : { label: SWIPE_READ, icon: <MailOpenIcon />, onAct: onRead }
+          }
+        />
+      </RowHintOptions>
+      {menu.drawn === undefined || groups.length === 0 ? null : (
+        <ActionMenu
+          label={`${title} actions`}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
-/** A group of the rail under the sidebar's own group header: its name, folding, and how many of its places wait unread; folded, the place shown stays in sight. */
+/**
+ * A group of the rail under the sidebar's own group header: its name,
+ * folding, and how many of its places wait unread; folded, the place shown
+ * stays in sight. Its ⋯, and a right-click on its header, offer Mark all
+ * as read, as a sidebar section's head does.
+ */
 function RailGroup({
   name,
   glyph,
   rows,
   folded,
+  shown,
   onToggle,
+  onRead,
   row,
   current,
 }: {
@@ -353,25 +617,152 @@ function RailGroup({
   glyph: React.ReactNode;
   rows: readonly ChatRailRow[];
   folded: boolean;
+  /** Whether Chat is on screen, which its menu does not outlive. */
+  shown: boolean;
   onToggle: () => void;
+  onRead: (channelIds: readonly string[]) => void;
   row: (each: ChatRailRow) => React.JSX.Element;
   current: (each: ChatRailRow) => boolean;
 }): React.JSX.Element {
   const drawn = folded ? rows.filter(current) : rows;
+  const unread = rows.filter((each) => each.unread > 0);
+  const menu = useMenu(shown);
+  const ellipsis = useRef<HTMLButtonElement | null>(null);
+  const groups: MenuAction[][] = [
+    [
+      {
+        label: MARK_ALL_READ,
+        icon: <MailOpenIcon />,
+        disabled: unread.length === 0,
+        onSelect: () => onRead(unread.map((each) => each.channel.id)),
+      },
+    ],
+  ];
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
         glyph={glyph}
         name={name}
         folded={folded}
-        count={rows.filter((each) => each.unread > 0).length}
+        count={unread.length}
         noun={UNREAD_NOUN}
         steady
+        menuOpen={menu.open !== undefined}
+        contextMenu={menu.contextMenu(ellipsis)}
         onToggle={onToggle}
+        actions={
+          <Tooltip label="Group actions">
+            <IconButton
+              ref={ellipsis}
+              icon={<EllipsisIcon />}
+              label={`Actions for ${name}`}
+              size={BUTTON_SIZE.COMPACT}
+              {...menu.trigger()}
+            />
+          </Tooltip>
+        }
       />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={`${name} actions`}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
       {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
     </div>
   );
+}
+
+/** Every place of the rail in its order, For you first, whether drawn or folded away. */
+function railPlaces(groups: RailGroupsShown): readonly ChatRailRow[] {
+  return [...groups.lead, ...groups.tasks, ...groups.trail].flatMap((group) => group.rows);
+}
+
+/** The places K and J step through: For you, then each row the rail draws, a folded group's place shown alone among its rows. */
+function drawnSteps(
+  groups: RailGroupsShown,
+  folded: (group: RailGroupShown) => boolean,
+  place: ChatPlace,
+): readonly ChatPlace[] {
+  const rows = [...groups.lead, ...groups.tasks, ...groups.trail].flatMap((group) =>
+    folded(group) ? group.rows.filter((each) => shows(place, each)) : group.rows,
+  );
+  return [FOR_YOU, ...rows.map((each) => channelPlace(each))];
+}
+
+/** A row's channel as a place. */
+function channelPlace(row: ChatRailRow): ChatPlace {
+  return { kind: CHAT_PLACE.CHANNEL, channelId: row.channel.id };
+}
+
+/** Whether two places are the same one. */
+function samePlace(one: ChatPlace, other: ChatPlace): boolean {
+  if (one.kind !== CHAT_PLACE.CHANNEL || other.kind !== CHAT_PLACE.CHANNEL) {
+    return one.kind === other.kind;
+  }
+  return one.channelId === other.channelId;
+}
+
+/** The next row after the place shown holding anything unread, wrapping round the rail, folded groups among it; none where no other does. */
+function nextUnread(groups: RailGroupsShown, place: ChatPlace): ChatPlace | undefined {
+  const rows = railPlaces(groups);
+  const at = rows.findIndex((each) => shows(place, each));
+  const after = [...rows.slice(at + 1), ...rows.slice(0, Math.max(at, 0))];
+  const found = after.find((each) => each.unread > 0 && !shows(place, each));
+  return found === undefined ? undefined : channelPlace(found);
+}
+
+/**
+ * K, J, and ⇧J while Chat is on screen: the place above or below the one
+ * shown in the rail as drawn, stopping at its ends, and the next channel
+ * holding anything unread. The row a key lands on takes the keyboard where
+ * the rail stands, as the Inbox's row does, so the keys go on from there;
+ * where the place stands alone, the narrow focus hands it on instead.
+ */
+function useChannelKeys({
+  groups,
+  folded,
+  place,
+  onChoose,
+  active,
+  railShown,
+  rail,
+}: {
+  groups: RailGroupsShown | undefined;
+  folded: (group: RailGroupShown) => boolean;
+  place: ChatPlace;
+  onChoose: (place: ChatPlace) => void;
+  active: boolean;
+  railShown: boolean;
+  rail: React.RefObject<HTMLDivElement | null>;
+}): void {
+  const stepped = useRef(false);
+  const steps = groups === undefined ? [] : drawnSteps(groups, folded, place);
+  const at = steps.findIndex((each) => samePlace(each, place));
+  const go = (to: ChatPlace | undefined) =>
+    to === undefined
+      ? undefined
+      : () => {
+          stepped.current = true;
+          onChoose(to);
+        };
+  const previous = at > 0 ? steps[at - 1] : undefined;
+  const next = at >= 0 ? steps[at + 1] : undefined;
+  const unread = groups === undefined ? undefined : nextUnread(groups, place);
+  useAppCommand(APP_COMMAND.PREVIOUS_CHAT_CHANNEL, active ? go(previous) : undefined);
+  useAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL, active ? go(next) : undefined);
+  useAppCommand(APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL, active ? go(unread) : undefined);
+  // Note that the row is focused before paint, so the keyboard is never left on a row no longer marked.
+  useLayoutEffect(() => {
+    if (!stepped.current) return;
+    stepped.current = false;
+    if (!railShown) return;
+    rail.current
+      ?.querySelector<HTMLElement>('.chat-rail [aria-current]:not([aria-current="false"])')
+      ?.focus();
+  });
 }
 
 /**
@@ -417,6 +808,8 @@ function ChatView({
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   const actorOf = useChatActor(read?.answer, names);
   const folds = useRailFolds();
+  // Note that For you is where Chat opens, so its link is Chat's own.
+  const copyChat = useCopyLinkItem()({ kind: LINK_PLACE.CHAT });
   const { width, onResize } = useChatListWidth();
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
@@ -426,8 +819,44 @@ function ChatView({
     label: "Resize chat list",
     onResize,
   });
-  const screen = useNarrowFocus(room, view.listed);
-  if (read === undefined || view.failed) {
+  // Note that Chat narrower than the Inbox's line by its own width stands as a narrow room's does.
+  const split = useColumnSplit();
+  const single = room === SHELL_ROOM.NARROW || split.single === true;
+  const chatRoom = single ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE;
+  const { onSingle } = view;
+  useLayoutEffect(() => {
+    onSingle?.(split.single === true);
+  }, [split.single, onSingle]);
+  const screen = useNarrowFocus(chatRoom, view.listed);
+  const measure = split.ref;
+  const rootRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      screen.current = element;
+      const unmeasure = measure(element);
+      return () => {
+        screen.current = null;
+        unmeasure?.();
+      };
+    },
+    [screen, measure],
+  );
+  const hidden = hiddenColumns(chatRoom, view.listed);
+  // A place standing alone steps back to the rail by Escape too, as the Inbox's item does.
+  useAppCommand(APP_COMMAND.CHAT_LIST, hidden.list ? view.onList : undefined);
+  const rail = read === undefined ? undefined : chatRail(read.answer, names, taskGrouping(tasks));
+  const groups = rail === undefined ? undefined : railGroups(rail);
+  useChannelKeys({
+    groups,
+    folded: folds.folded,
+    place: view.place,
+    onChoose: view.onChoose,
+    active: tasks.shown && read !== undefined && !view.failed,
+    railShown: !hidden.list,
+    rail: screen,
+  });
+  // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
+  const taskDoors = useTaskDoors(tasks, true);
+  if (read === undefined || view.failed || rail === undefined || groups === undefined) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
       <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
@@ -448,16 +877,18 @@ function ChatView({
     );
   }
   const chat = read.answer;
-  const rail = chatRail(chat, names, taskGrouping(tasks));
-  const hidden = hiddenColumns(room, view.listed);
-  const groups = railGroups(rail);
+  const forYouGroups = copyChat === undefined ? [] : [[copyChat]];
   const row = (each: ChatRailRow) => (
     <RailRow
       key={each.channel.id}
+      tasks={tasks}
       row={each}
       current={shows(view.place, each)}
       actorOf={actorOf}
       now={now}
+      dialogs={dialogs}
+      shown={view.open}
+      onRead={view.onRead}
       onChoose={() => view.onChoose({ kind: CHAT_PLACE.CHANNEL, channelId: each.channel.id })}
     />
   );
@@ -468,18 +899,20 @@ function ChatView({
       glyph={shown.glyph}
       rows={shown.rows}
       folded={folds.folded(shown)}
+      shown={view.open}
       onToggle={() => folds.toggle(shown)}
+      onRead={view.onRead}
       row={row}
       current={(each) => shows(view.place, each)}
     />
   );
   return (
-    <div ref={screen} className="chat-view">
+    <div ref={rootRef} className="chat-view" data-single={String(single)}>
       <nav
         className="chat-rail"
         aria-label="Chat"
         hidden={hidden.list}
-        style={{ width: room === SHELL_ROOM.NARROW ? undefined : drawnWidth(width) }}
+        style={{ width: single ? undefined : drawnWidth(width) }}
       >
         <header className="desktop-toolbar chat-rail-bar">
           <div className="desktop-toolbar-heading">
@@ -500,8 +933,14 @@ function ChatView({
                 preview={rail.forYou === 0 ? NOTHING_WAITS : waitingWords(rail.forYou)}
                 at={undefined}
                 now={now}
-                unread={rail.forYou > 0}
+                unread={false}
+                needsYou={rail.forYou > 0}
                 current={view.place.kind === CHAT_PLACE.FOR_YOU}
+                card={undefined}
+                end={undefined}
+                groups={forYouGroups}
+                shown={view.open}
+                onRead={undefined}
                 onChoose={() => view.onChoose(FOR_YOU)}
               />
             </ul>
@@ -510,7 +949,7 @@ function ChatView({
             {groups.trail.map(group)}
           </div>
         </ScrollArea>
-        {room === SHELL_ROOM.NARROW ? null : <SidebarResizeEdge edge={edge} />}
+        {single ? null : <SidebarResizeEdge edge={edge} />}
       </nav>
       <ChatPane
         chat={chat}
@@ -527,9 +966,15 @@ function ChatView({
           ) : undefined
         }
         readPicture={view.readPicture}
+        taskDoors={taskDoors}
         lead={
-          room === SHELL_ROOM.NARROW ? (
-            <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={view.onList} />
+          single ? (
+            <FoldingButton
+              label={CHAT_LIST}
+              icon={<BackIcon />}
+              onClick={view.onList}
+              hint={BackHint}
+            />
           ) : undefined
         }
         hidden={hidden.item}
@@ -551,26 +996,7 @@ function TopicActions({
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const label = `#${channel.name ?? ""} actions`;
-  const groups: MenuAction[][] = channel.archived
-    ? [
-        [
-          {
-            label: "Bring back channel",
-            icon: <UnarchiveIcon />,
-            onSelect: () => dialogs.askArchive(channel),
-          },
-        ],
-      ]
-    : [
-        [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
-        [
-          {
-            label: "Archive channel",
-            icon: <ArchiveIcon />,
-            onSelect: () => dialogs.askArchive(channel),
-          },
-        ],
-      ];
+  const groups = topicActionGroups(channel, dialogs);
   return (
     <>
       <Tooltip label="Channel actions">
@@ -605,6 +1031,7 @@ export function TaskChatTab({
   const read = view.chat;
   const listed = tasks.tasks;
   const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
+  const taskDoors = useTaskDoors(tasks, false);
   const channel = read?.answer.channels.find(
     (each) => each.kind === CHANNEL_KIND.TASK && each.planId === taskId,
   );
@@ -634,6 +1061,7 @@ export function TaskChatTab({
       onPost={view.onPost}
       onAnswer={view.onAnswer}
       readPicture={view.readPicture}
+      taskDoors={taskDoors}
     />
   );
 }

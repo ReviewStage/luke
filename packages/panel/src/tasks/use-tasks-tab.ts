@@ -51,7 +51,7 @@ import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
-import { callCard } from "@luke/ui/call-card-model";
+import { callTaskName } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
@@ -66,6 +66,7 @@ import {
   isAgentTab,
   isBrowserTab,
   isChangesTab,
+  isCloudBrowserTab,
   isDraftTab,
   isFileTab,
   isMacTerminalTab,
@@ -136,7 +137,7 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { callInProgress, type VoiceCallTranscript, type VoiceView } from "@luke/voice/voice-view";
+import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -145,9 +146,12 @@ import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
+import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallDoors } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
@@ -161,6 +165,7 @@ import {
 import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
+  agentStillWriting,
   agentTabLabel,
   choiceRequest,
 } from "./coding-agent-model.js";
@@ -171,10 +176,16 @@ import type { RepositoryChooser } from "./repository-chip.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
+import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
-import { type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
+import {
+  type MainTab,
+  type MainTabsControl,
+  type NamedAgents,
+  useMainTabs,
+} from "./use-main-tabs.js";
 import { usePanelArrivals } from "./use-panel-arrivals.js";
 import {
   type HistorySpot,
@@ -188,6 +199,7 @@ import {
   drawsSubagent,
   drawsTerminal,
   inColumn,
+  isPinnable,
   type PinnedTab,
   SIDE_PANEL_TAB,
   type SidePanelControl,
@@ -358,6 +370,8 @@ type StandIn =
       readonly place: ChatPlace;
       /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
       readonly listed: boolean;
+      /** The message a toast's View asked for, whose channel is shown once the read holds it. */
+      readonly seek?: string | undefined;
     }
   | { readonly kind: typeof STAND_IN.BOARD };
 
@@ -456,6 +470,12 @@ interface ChatViewControl {
   readonly listed: boolean;
   /** Goes back from the place shown to the rail. */
   readonly onList: () => void;
+  /** Whether the open Chat shows one column by its own width (`column-split.ts`), which the window's history steps between its rail and its place by, as it does in a narrow room. */
+  readonly single?: boolean;
+  /** Says whether Chat shows one column. */
+  readonly onSingle?: (single: boolean) => void;
+  /** Opens it from wherever the window stands, on the channel a message stands in once the read holds it: what a chat toast's View asks. */
+  readonly onShowMessage: (messageId: string) => void;
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
@@ -467,6 +487,8 @@ interface ChatViewControl {
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
+  /** Marks channels read to the newest message each holds, as a rail row's or group's Mark as read asks. */
+  readonly onRead: (channelIds: readonly string[]) => void;
   /** Reads one picture a message carries, by the message and the attachment its block names; a fixture run's are not there to read. */
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
@@ -687,8 +709,8 @@ export interface TasksControl {
   talkingTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
   chatView: ChatViewControl;
-  /** Opens a task's file in its side panel at the commit named, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
-  onShowFile: (taskId: string, ref: CodeRef, commit: string) => void;
+  /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code, and a chat message's, opens. */
+  onShowFile: (taskId: string, ref: CodeRef, commit: string | undefined) => void;
   /** Opens a tab pinned to the sidebar: its task, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
   /** Opens the tab closed latest again as it stood, on its task, opening the task first where it is not the open one; none while no closed tab is kept. */
@@ -1132,13 +1154,6 @@ export function useTasksTab(input: {
   inboxTaskless: readonly AppInboxTasklessItem[];
   /** The newest run of each of the account's own automations main says failed to start lately. */
   failedRuns: readonly AccountFailedRun[];
-  voice: {
-    view: VoiceView;
-    /** What was said on the standing call so far (`voice.callTranscript`), which the live transcript draws. */
-    callTranscript: VoiceCallTranscript | undefined;
-    listening: boolean;
-    requestMicrophoneAccess: () => void;
-  };
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page, where the developer's API keys are. */
@@ -1150,7 +1165,7 @@ export function useTasksTab(input: {
   /** The room the panel's stage gives, which holds the side panel only full screen while it is narrow (`shell-room.ts`). */
   room: ShellRoom;
 }): TasksControl {
-  const { shown, voice, leaveGuard } = input;
+  const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
   const { act, tell } = input.acts;
   const copyWithToast = useCopyToast();
@@ -1178,6 +1193,7 @@ export function useTasksTab(input: {
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
+  const [chatSingle, setChatSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
   const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
@@ -1215,7 +1231,8 @@ export function useTasksTab(input: {
   };
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
-    { readonly taskId: string; readonly ref: CodeRef; readonly commit: string } | undefined
+    | { readonly taskId: string; readonly ref: CodeRef; readonly commit: string | undefined }
+    | undefined
   >(undefined);
   const [sectionReveal, setSectionReveal] = useState<TasksControl["sectionReveal"]>(undefined);
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
@@ -1393,7 +1410,7 @@ export function useTasksTab(input: {
       shown &&
       standIn?.kind === STAND_IN.CHAT &&
       standIn.place.kind === CHAT_PLACE.CHANNEL &&
-      !(standIn.listed && input.room === SHELL_ROOM.NARROW)
+      !(standIn.listed && (input.room === SHELL_ROOM.NARROW || chatSingle))
         ? standIn.place.channelId
         : tabReading,
     followChat: chatFollowerOf(act),
@@ -1441,6 +1458,22 @@ export function useTasksTab(input: {
         : held,
     );
   }, [shownChannel, heldAnswer, liveRun]);
+  // A message a toast's View asked for opens its channel once a read holds it; till then Chat stands on For you, which lists it.
+  const chatSeek = standIn?.kind === STAND_IN.CHAT ? standIn.seek : undefined;
+  useEffect(() => {
+    if (chatSeek === undefined) return;
+    const message = heldAnswer?.messages.find((each) => each.id === chatSeek);
+    if (message === undefined) return;
+    setStandIn((held) =>
+      held?.kind === STAND_IN.CHAT && held.seek === chatSeek
+        ? {
+            kind: STAND_IN.CHAT,
+            place: { kind: CHAT_PLACE.CHANNEL, channelId: message.channelId },
+            listed: false,
+          }
+        : held,
+    );
+  }, [chatSeek, heldAnswer]);
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -1504,10 +1537,22 @@ export function useTasksTab(input: {
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
     [viewed.shownCode],
   );
+  // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
+  const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
+  const rowAgents = openRow?.agents;
+  const rowListed = openRow !== undefined;
+  const named = useMemo<NamedAgents | undefined>(() => {
+    if (!rowListed) return undefined;
+    // Note that a row names agents only for a task with one, so a row with none names a task with none.
+    if (rowAgents === undefined) return { ids: [], total: 0, working: 0 };
+    const { agents: lines, total, working } = rowAgents;
+    return { ids: lines.map((line) => line.id), total, working };
+  }, [rowListed, rowAgents]);
   const mainTabs = useMainTabs(
     fixture !== undefined,
     viewed.activeTaskId,
     agents.agentIds,
+    named,
     agents.draft?.id,
   );
   // The task's Inbox stands on a task holding an agent, an archived one among them, since only an
@@ -2309,7 +2354,9 @@ export function useTasksTab(input: {
   // A platform with no voice, the web's, takes no calls.
   const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
   // A call into one of the open task's agents is in progress, so the plan may still be written.
-  const live = callInProgress(voice.view) && voice.view.call?.taskId === tasks.activeTaskId;
+  // Note that the call is read apart from who is heard on it, so the tab is not drawn again with every breath of a call.
+  const standingCall = useStandingCall();
+  const live = standingCall !== undefined && standingCall.taskId === tasks.activeTaskId;
   // A Call press that would open a call into one agent while another's call
   // stands ends that call, so it asks first; the answer is the same press,
   // and Cancel leaves the call standing as it was. The question is the
@@ -2318,7 +2365,7 @@ export function useTasksTab(input: {
   // covers.
   const [askedFor, setAskedFor] = useState<{ taskId: string; agentId: string }>();
   const otherCall = (agentId: string) =>
-    callInProgress(voice.view) && voice.view.call?.agentId !== agentId;
+    standingCall !== undefined && standingCall.agentId !== agentId;
   const secondCallFor =
     askedFor !== undefined && otherCall(askedFor.agentId) ? askedFor : undefined;
   const secondCall = useConfirmDialog(
@@ -2339,17 +2386,19 @@ export function useTasksTab(input: {
   // or toggles it. It is read off the document as the press lands, so a door
   // handed down once answers for the voice as it stands.
   const pressCall = (agentId: string) => {
-    const now = voiceNow.current;
+    const now = voiceViewNow();
     const button = microphoneButton({
       voiceAvailable: input.voiceAvailable,
       microphoneStatus: input.microphoneStatus,
       agentId,
       archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
       listening: now.listening,
-      call: now.view.call,
-      voiceStatus: now.view.voiceStatus,
+      call: now.call,
+      voiceStatus: now.voiceStatus,
     });
-    if (button.press === MICROPHONE_PRESS.ASK_ACCESS) now.requestMicrophoneAccess();
+    if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
+      tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
+    }
     if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (button.press !== MICROPHONE_PRESS.TALK || tasks.activeTaskId === undefined) return;
     if (!otherCall(agentId)) tell(ACT_KIND.TASKS_TALK, { agentId });
@@ -2358,8 +2407,6 @@ export function useTasksTab(input: {
       secondCall.ask();
     }
   };
-  const voiceNow = useRef(voice);
-  voiceNow.current = voice;
   const pressCallNow = useRef(pressCall);
   pressCallNow.current = pressCall;
   // The doors an agent's tab takes calls through, the same from draw to draw; none where the window has no voice.
@@ -2392,7 +2439,7 @@ export function useTasksTab(input: {
   // task's, else the one New task starts in.
   const repositoriesOf =
     region.kind === DOCUMENT_REGION.READY ? region.task.workspaceId : listedWorkspace?.id;
-  const openGitHub = (url: string) => appPlatform().openGitHub(url);
+  const openGitHub = useCallback((url: string) => appPlatform().openGitHub(url), []);
   /**
    * The repository chip's list for one workspace: the repositories its tasks
    * were about lately that its GitHub reaches, newest first, so a task never
@@ -2404,38 +2451,46 @@ export function useTasksTab(input: {
    * chip still points somewhere, and its recent repositories are left to the
    * service's read to judge.
    */
-  const repositoriesIn = (workspaceId: string | undefined): RepositoryChooser => {
-    const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
-    const own =
-      workspaceId === undefined
-        ? tasks.tasks
-        : tasks.tasks.filter((task) => task.workspaceId === workspaceId);
-    // Note that the tasks are filtered before the recent ones are counted,
-    // because a few newer stranded tasks would otherwise crowd out an older
-    // repository the workspace does reach.
-    const offered =
-      workspace === undefined
-        ? own
-        : own.filter(
-            (task) => task.repository !== null && workspaceReaches(workspace, task.repository),
-          );
-    return {
-      recent: recentRepositories(offered),
-      read: () =>
-        tasksFixture !== undefined && fixture !== undefined
-          ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
-          : act(
-              ACT_KIND.TASKS_REPOSITORIES,
-              workspaceId === undefined ? {} : { workspaceId },
-            ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
-      openGitHub,
-      pictures: fixture === undefined,
-      scope: workspaceId,
-      manages: workspace === undefined || managesWorkspace(workspace),
-      ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
-      ...(workspace?.github == null ? undefined : { connected: true }),
-    };
-  };
+  const repositoriesIn = useCallback(
+    (workspaceId: string | undefined): RepositoryChooser => {
+      const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
+      const own =
+        workspaceId === undefined
+          ? tasks.tasks
+          : tasks.tasks.filter((task) => task.workspaceId === workspaceId);
+      // Note that the tasks are filtered before the recent ones are counted,
+      // because a few newer stranded tasks would otherwise crowd out an older
+      // repository the workspace does reach.
+      const offered =
+        workspace === undefined
+          ? own
+          : own.filter(
+              (task) => task.repository !== null && workspaceReaches(workspace, task.repository),
+            );
+      return {
+        recent: recentRepositories(offered),
+        read: () =>
+          tasksFixture !== undefined && fixture !== undefined
+            ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
+            : act(
+                ACT_KIND.TASKS_REPOSITORIES,
+                workspaceId === undefined ? {} : { workspaceId },
+              ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
+        openGitHub,
+        pictures: fixture === undefined,
+        scope: workspaceId,
+        manages: workspace === undefined || managesWorkspace(workspace),
+        ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
+        ...(workspace?.github == null ? undefined : { connected: true }),
+      };
+    },
+    [viewed.workspaces, tasks.tasks, tasksFixture, fixture, act, openGitHub],
+  );
+  // The open task's chip, or New task's, made again only as what it lists from moves.
+  const repositories = useMemo(
+    () => repositoriesIn(repositoriesOf),
+    [repositoriesIn, repositoriesOf],
+  );
   // A fixture's GitHub is connected nowhere. Connecting opens the service's
   // page, and the connection arrives on the view once the panel comes forward
   // again; disconnecting asks the service under the Mac's session, and the
@@ -2523,10 +2578,15 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
-  const edit = (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
-    if (fixture !== undefined) return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-    return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
-  };
+  const edit = useCallback(
+    (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
+      if (fixture !== undefined) {
+        return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+      }
+      return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
+    },
+    [fixture, act],
+  );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
   // opened first; the ask is counted so each press opens it again.
@@ -2667,20 +2727,29 @@ export function useTasksTab(input: {
     mainTabs.onShow(planId, { draft: id });
   };
 
+  // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
+  const steadyStartTask = useSteadyDoor(startTask);
+
   // The dialog matches its name against the Linear issues of the workspace
   // it starts in, and searches them, where that workspace has Linear connected.
-  const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] = (workspaceId) => {
-    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-    if (linked?.linear?.active !== true) return undefined;
-    return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
-  };
+  const linearIssuesIn = useCallback<TasksControl["newTask"]["linearIssuesIn"]>(
+    (workspaceId) => {
+      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+      if (linked?.linear?.active !== true) return undefined;
+      return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
+    },
+    [viewed.workspaces, act],
+  );
   // The dialog lists the chosen repository's GitHub issues, where the workspace has GitHub connected.
-  const githubIssuesIn: TasksControl["newTask"]["githubIssuesIn"] = (workspaceId) => {
-    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-    if (linked?.github == null || !linked.github.active) return undefined;
-    return (repository, ask) =>
-      act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
-  };
+  const githubIssuesIn = useCallback<TasksControl["newTask"]["githubIssuesIn"]>(
+    (workspaceId) => {
+      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+      if (linked?.github == null || !linked.github.active) return undefined;
+      return (repository, ask) =>
+        act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
+    },
+    [viewed.workspaces, act],
+  );
 
   // New task opens the dialog over whatever stands, an open task and its
   // call included, which stay until a task is started. Note that a press
@@ -2716,6 +2785,14 @@ export function useTasksTab(input: {
     setStandIn(undefined);
     setHistoryFor(undefined);
     sidePanel.onShow(taskId, tab);
+  };
+  // A link to a tab of the task standing opens it as the panel's preview, as
+  // any link pressed there does; one to another task's, or pressed with ⌘,
+  // goes there and opens it as a tab of its own.
+  const linkPanelTab = (taskId: string, tab: SidePanelTab) => {
+    const here = taskId === tasks.activeTaskId && standIn === undefined && historyFor === undefined;
+    if (here && !pressedWithCommand()) sidePanel.onPreview(tab);
+    else showPanelTab(taskId, tab);
   };
 
   // Note that a pull request two of the open task's agents share opens in the tab already open on it, whichever agent it stands under, as the panel's own door picks it (`changesTabOf`), so a link never stands a second tab on one pull request.
@@ -2788,7 +2865,7 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.PAGE:
-        showPanelTab(place.planId, { page: place.pageId });
+        linkPanelTab(place.planId, { page: place.pageId });
         return;
       // A turn of Luke's own work on the task is drawn nowhere now, so its link opens the task's plan.
       case LINK_PLACE.TURN:
@@ -2803,19 +2880,19 @@ export function useTasksTab(input: {
           return;
         }
         showColumnTab(place.planId, { agent: place.agentId });
-        showPanelTab(place.planId, {
+        linkPanelTab(place.planId, {
           subagent: place.callId,
           delegation: { agent: place.agentId, task: "" },
         });
         return;
       case LINK_PLACE.CHANGES:
-        showPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
+        linkPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
         return;
       // A review thread opens its agent's Pull request tab on the view the link names, which takes the ask once drawn; each ask is its own.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(place.planId, place.agentId);
         sidePanel.onPullRequestView({ changes }, place.view);
-        showPanelTab(place.planId, { changes });
+        linkPanelTab(place.planId, { changes });
         setThreadReveal((last) => ({
           agentId: changes,
           threadId: place.threadId,
@@ -2931,7 +3008,7 @@ export function useTasksTab(input: {
 
   // An inbox item's code opens in its task's File tab; on a task not yet
   // open, once the host has it open, since the panel draws the open task's.
-  const showFile = (taskId: string, ref: CodeRef, commit: string) => {
+  const showFile = (taskId: string, ref: CodeRef, commit: string | undefined) => {
     setStandIn(undefined);
     setHistoryFor(undefined);
     if (taskId === tasks.activeTaskId) {
@@ -2954,8 +3031,8 @@ export function useTasksTab(input: {
   // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
   // which lets its draft go.
   const openTabs = mainTabs.tabs;
-  const closeMainTab = mainTabs.onClose;
-  const closeColumnTab = useCallback(
+  const { onClose: closeMainTab, onDoze: dozeMainTab } = mainTabs;
+  const keepColumnClosed = useCallback(
     (tab: MainTab) => {
       const at = openTabs.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
@@ -2963,9 +3040,24 @@ export function useTasksTab(input: {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
+    },
+    [openTabs, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
+  );
+  const closeColumnTab = useCallback(
+    (tab: MainTab) => {
+      keepColumnClosed(tab);
       closeMainTab(tab);
     },
-    [openTabs, closeMainTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
+    [keepColumnClosed, closeMainTab],
+  );
+  // Note that an agent's tab closed for being idle opens again as the agent wakes (`use-idle-tabs.ts`).
+  const dozeColumnTab = useCallback(
+    (tab: MainTab) => {
+      keepColumnClosed(tab);
+      if (isAgentTab(tab)) dozeMainTab(tab);
+      else closeMainTab(tab);
+    },
+    [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
   const closeSidePanelTab = useCallback(
@@ -3008,6 +3100,67 @@ export function useTasksTab(input: {
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
+
+  // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
+  // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
+  // a draft's, which lets the draft go, a Browser tab's or a terminal of this Mac's, which take their
+  // page or shell with them, and a cloud Browser tab's, which the strip draws again on no open. The
+  // side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  const workingAgents = useMemo(
+    () =>
+      (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
+    [agents.agents],
+  );
+  const waitingAgents = useMemo(
+    () => input.inboxWaiting.flatMap((task) => task.items.map((item) => item.agentId)),
+    [input.inboxWaiting],
+  );
+  const awakeAgents = useMemo(
+    () => [...new Set([...workingAgents, ...waitingAgents])],
+    [workingAgents, waitingAgents],
+  );
+  // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
+  const taskOnScreen =
+    shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
+  const pinnedHere = (tab: StripTab) =>
+    isPinnable(tab) &&
+    sidePanel.pins.some((pin) => pin.task === viewed.activeTaskId && sameTab(pin.tab, tab));
+  useIdleTabs({
+    taskId: fixture === undefined ? viewed.activeTaskId : undefined,
+    column:
+      agents.agentIds === undefined
+        ? undefined
+        : {
+            tabs: mainTabs.tabs,
+            shown: taskOnScreen && !sidePanel.fullScreen ? mainTabs.tab : undefined,
+            viewedAt: mainTabs.viewedAt,
+            onViewedAt: mainTabs.onViewedAt,
+            onIdle: dozeColumnTab,
+            keeps: (tab) =>
+              isDraftTab(tab) ||
+              pinnedHere(tab) ||
+              awakeAgents.includes(tab.agent) ||
+              input.unseenAgents.includes(tab.agent),
+          },
+    panel:
+      inboxView !== undefined || pageAgents !== undefined
+        ? undefined
+        : {
+            tabs: sidePanel.strip,
+            shown: taskOnScreen && sidePanel.open ? sidePanel.tab : undefined,
+            viewedAt: sidePanel.viewedAt,
+            onViewedAt: sidePanel.onViewedAt,
+            onIdle: closeSidePanelTab,
+            keeps: (tab) =>
+              typeof tab === "string" ||
+              isBrowserTab(tab) ||
+              isCloudBrowserTab(tab) ||
+              isMacTerminalTab(tab) ||
+              pinnedHere(tab),
+          },
+    awake: awakeAgents,
+    onWake: mainTabs.onWake,
+  });
   // A closed tab opens again where it stood, in its strip at its place and
   // showing what it showed, so a version history or the window's Inbox over
   // the task gives way, and a side panel filling the window over its column.
@@ -3099,7 +3252,8 @@ export function useTasksTab(input: {
     return true;
   }, [leaveTask, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
 
-  return {
+  // Note that the tab is handed back steady, so a part that holds while its share of the tab does (`memo`) holds for every draw that moved nothing it reads.
+  return useSteadyDoors({
     page,
     restoring,
     shown,
@@ -3258,9 +3412,16 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place, listed: false } : held,
         ),
+      single: standIn?.kind === STAND_IN.CHAT && chatSingle,
+      onSingle: setChatSingle,
       onShow: guard((place: ChatPlace) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.CHAT, place, listed: false });
+      }),
+      onShowMessage: guard((messageId: string) => {
+        setHistoryFor(undefined);
+        // Note that For you stands while the read is sought, since it lists the message, where the channel shown before need not.
+        setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU, listed: false, seek: messageId });
       }),
       onPost: (post) =>
         liveRun
@@ -3274,6 +3435,10 @@ export function useTasksTab(input: {
         liveRun
           ? liveChat.onChannel(change)
           : stage((held, staging) => staging.stagedChannel(held, change)),
+      onRead: (channelIds) =>
+        liveRun
+          ? liveChat.onRead(channelIds)
+          : void stage((held, staging) => staging.stagedRead(held, channelIds)),
       readPicture: liveChat.readPicture,
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
@@ -3345,7 +3510,7 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    talkingTaskId: callInProgress(voice.view) ? voice.view.call?.taskId : undefined,
+    talkingTaskId: standingCall?.taskId,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the task's Call tab, asked to
@@ -3354,7 +3519,7 @@ export function useTasksTab(input: {
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {
       confirm: secondCall,
-      question: secondCallQuestion(callCard({ view: voice.view, tasks }).taskName),
+      question: secondCallQuestion(callTaskName(tasks, standingCall?.taskId)),
     },
     onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
@@ -3389,7 +3554,7 @@ export function useTasksTab(input: {
     }),
     chosenPin: chosen !== undefined && chosen.pin.task === boundFor ? chosen.pin : undefined,
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
-    repositories: repositoriesIn(repositoriesOf),
+    repositories,
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
@@ -3424,7 +3589,7 @@ export function useTasksTab(input: {
       workspaces: viewed.workspaces,
       workspaceId: listedWorkspace?.id,
       repositoriesIn,
-      start: startTask,
+      start: steadyStartTask,
       models: agents.models,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
@@ -3451,5 +3616,5 @@ export function useTasksTab(input: {
     onDeleteTask: deleteTask,
     back,
     leaveGuard,
-  };
+  });
 }

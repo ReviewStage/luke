@@ -28,7 +28,7 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/brain-host/eve-sessions.js";
-import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -153,7 +153,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
       readRole: readAccountRole,
-      anthropicFastAccess,
+      accountFastOffer,
       writePreferences: writeAccountPreferences,
       readPlanTemplate,
       writePlanTemplate,

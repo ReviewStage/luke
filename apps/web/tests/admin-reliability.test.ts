@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
+import type { AdminReliability } from "@luke/features/admin-answer-wire";
+import { ADMIN_ATTENTION_KIND } from "@luke/features/admin-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { adminIntegrations } from "@luke/service/admin/admin-health";
-import type { AdminReliability } from "@luke/service/admin/admin-reliability";
-import { ADMIN_ATTENTION_KIND } from "@luke/service/admin/http";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";

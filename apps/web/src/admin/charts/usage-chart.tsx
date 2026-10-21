@@ -1,4 +1,4 @@
-import type { AdminDailyUsage, AdminTrend } from "@luke/service/admin/admin-metrics";
+import type { AdminDailyUsage, AdminTrend } from "@luke/features/admin-answer-wire";
 import { formatDayTick, formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,

@@ -18,7 +18,7 @@ import {
   SubscriptionRef,
 } from "effect";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows, liveShown } from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
@@ -117,7 +117,7 @@ export function accountInboxes(
           ),
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(Stream.switchMap(rows, answersOf), (answer) =>
+          Stream.runForEach(liveShown(Stream.switchMap(rows, answersOf)), (answer) =>
             SubscriptionRef.set(inbox, { kind: "standing", answer }),
           ).pipe(
             Effect.catch(() => Effect.void),

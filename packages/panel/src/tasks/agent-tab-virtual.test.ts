@@ -428,7 +428,10 @@ test("the log first draws once the agent's pull request is read, so its dock nev
     }),
   );
   assert.equal(drawnRows(container).length, 0, "no line is drawn while the pull request is read");
-  assert.ok(container.querySelector(".conversation-empty"), "the tab stands as loading");
+  assert.ok(
+    container.querySelector(".agent-tab > .luke-skeleton-region[aria-busy]"),
+    "the tab stands as loading",
+  );
 
   await published.hand({
     repository: "acme/app",

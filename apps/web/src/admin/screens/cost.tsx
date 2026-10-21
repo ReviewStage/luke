@@ -3,12 +3,8 @@ import { browserClient } from "@luke/features/contract/browser-client";
  * cost.tsx -- the Cost screen: what the hosted service spends, priced at list price from the usage its tables keep.
  */
 
-import type {
-  AdminCost,
-  AdminCostAccount,
-  AdminCostModel,
-} from "@luke/service/admin/admin-cost-wire";
-import type { AdminMetricsWindow, AdminWindowedQuery } from "@luke/service/admin/http";
+import type { AdminCost, AdminCostAccount, AdminCostModel } from "@luke/features/admin-cost-wire";
+import type { AdminMetricsWindow, AdminWindowedQuery } from "@luke/features/admin-wire";
 import {
   BADGE_TONE,
   Badge,
@@ -39,7 +35,7 @@ const COST_ERROR = "The cost endpoint did not answer.";
 const readCost =
   (query: AdminWindowedQuery): AdminReader<AdminCost> =>
   async (signal) =>
-    // SAFETY: the admin cost procedure answers an AdminCost (`@luke/service/admin/admin-cost-wire`), which the contract cannot name.
+    // SAFETY: the admin cost procedure answers an AdminCost (`@luke/features/admin-answer-wire`), for which the contract declares no output.
     (await browserClient.admin.cost(query, { signal })) as AdminCost;
 
 /** What every figure on the screen is, said once at the top of the page. */

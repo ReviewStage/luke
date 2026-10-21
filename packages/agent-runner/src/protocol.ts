@@ -129,6 +129,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   executable: Schema.String,
   model: Schema.String,
   effort: Schema.optionalKey(EffortSchema),
+  /** Whether Claude Code's own fast mode is on, for an agent on a model's fast version. */
+  fast: Schema.optionalKey(Schema.Boolean),
   /** Luke's coder instructions, appended to Claude Code's own system prompt. */
   append: Schema.String,
   /** The CLI's session id to resume, where this launch continues one. */
@@ -223,12 +225,14 @@ const StopLineSchema = Schema.Struct({
 /**
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not
- * take is skipped.
+ * take is skipped. `fast` turns Claude Code's own fast mode on or off; Codex
+ * has none and skips it.
  */
 const ModelLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MODEL),
   model: Schema.optionalKey(Schema.String),
   effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
+  fast: Schema.optionalKey(Schema.Boolean),
 });
 /**
  * A refreshed ChatGPT access token, for a Codex launch that reads
@@ -323,7 +327,29 @@ export interface RunnerEvent {
   readonly message: RunnerMessage;
 }
 
-/** One POST's body: consecutive events, in order. Luke applies each sequence at most once. */
+/**
+ * One POST's body: consecutive events, in order. Luke applies each sequence
+ * at most once. A batch with no events is the launch's heartbeat
+ * (`RUNNER_HEARTBEAT`), which applies nothing.
+ */
 export interface RunnerEventBatch {
   readonly events: readonly RunnerEvent[];
 }
+
+/**
+ * How often a launch tells Luke it still runs, as a batch with no events,
+ * for as long as it runs. A harness may say nothing for an hour while a
+ * background command or a wakeup it waits on runs, and Luke keeps the
+ * sandbox alive only on what the runner posts (its keep-alive interval is
+ * ten minutes, its timeout an hour), so five minutes leaves room for a
+ * heartbeat Luke did not take, and costs one small post each.
+ */
+export const RUNNER_HEARTBEAT = {
+  EVERY_MS: 5 * 60 * 1_000,
+  /**
+   * How long one heartbeat waits on Luke's answer before it is let go, well
+   * inside the interval, so a post Luke never answers cannot hold back the
+   * next one.
+   */
+  TIMEOUT_MS: 30 * 1_000,
+} as const;

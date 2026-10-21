@@ -145,10 +145,8 @@ protected_by_vercel() {
 
 # Prints the address of the preview built from `$sha` and exits, or returns
 # when the commit has no build of its own: Vercel skipped it, or it is not
-# the head and has no record. `$1` is the commit's role: the `head`, an
-# `ancestor` of it, or an `earlier` head of its branch, which also returns
-# where its own build did not succeed. Every other ending exits with its own
-# code.
+# the head and has no record. `$1` is the commit's role: the `head` or an
+# `ancestor` of it. Every other ending exits with its own code.
 read_preview() {
     local role=$1 attempt record status state description address vercel_status
     for ((attempt = 1; attempt <= attempts; attempt++)); do
@@ -168,13 +166,6 @@ read_preview() {
                 state=$(field "$status" state)
                 description=$(field "$status" description)
                 address=$(field "$status" address)
-            fi
-            # Note that the build serving a skipped head ended before the head was
-            # pushed, so an earlier head whose own build failed or is still on
-            # its way is not it, and an older one is looked at instead.
-            if [[ $role == earlier && $state != success ]]; then
-                printf 'preview: record %s for %s is %s, not the build serving %s; passing over it\n' "$record" "$sha" "${state:-unsettled}" "$head" >&2
-                return
             fi
             case $state in
             success)
@@ -239,6 +230,42 @@ read_pushed_heads() {
         --jq '.[] | select(.activity_type == "push" or .activity_type == "force_push" or .activity_type == "branch_creation") | .after'
 }
 
+# Every Preview record for the commit, newest first, one id a line.
+read_records() {
+    gh api "repos/$repo/deployments?sha=$sha&environment=$PREVIEW_ENVIRONMENT&per_page=10" \
+        --jq 'sort_by(.created_at) | reverse | .[].id'
+}
+
+# Prints the address of the newest build of `$sha`, an earlier head of the
+# branch, that succeeded, and exits; or returns where none did. Note that
+# every record is read and nothing is waited on, because the build serving a
+# skipped head had succeeded before the head was pushed: a record of the same
+# commit that failed, or is still on its way, is a redeployment beside it.
+read_earlier_preview() {
+    local records record status address
+    if ! records=$(read_records); then
+        printf 'UNREADABLE: gh could not read the deployments of %s\n' "$sha" >&2
+        exit "$EXIT_UNREADABLE"
+    fi
+    while IFS= read -r record; do
+        [[ -n $record ]] || continue
+        if ! status=$(read_status "$record"); then
+            printf 'UNREADABLE: gh could not read the statuses of record %s\n' "$record" >&2
+            exit "$EXIT_UNREADABLE"
+        fi
+        [[ -n $status && $(field "$status" state) == success ]] || continue
+        address=$(field "$status" address)
+        [[ -n $address ]] || continue
+        if protected_by_vercel "$address"; then
+            printf 'PROTECTED: %s redirects to Vercel SSO; a Mac cannot sign in through that. Turn Deployment Protection off for Preview in the Vercel project, or point at an unprotected address with --preview URL.\n' "$address" >&2
+            exit "$EXIT_PROTECTED"
+        fi
+        printf '%s\n' "$address"
+        exit 0
+    done <<<"$records"
+    printf 'preview: no build of %s succeeded; passing over it\n' "$sha" >&2
+}
+
 # Whether the commit `$1` deploys what the head does, fetched by its sha where
 # the checkout lacks it, as a rebased branch's earlier head is lacked.
 deploys_the_head() {
@@ -252,13 +279,14 @@ deploys_the_head() {
 
 head=$sha
 read_preview head
-# Note that a branch whose pushes cannot be read is passed on to the ancestor
-# walk rather than ended, since that walk alone finds what an unrebased
-# branch serves.
+# Note that a branch whose pushes cannot be read ends the lookup rather than
+# going on to the ancestor walk alone: after a rebase, the walk cannot tell
+# the branch's own build from that of the branch it was rebased onto, whose
+# preview runs on that branch's own database.
 pushed=
 if [[ -n $branch ]] && ! pushed=$(read_pushed_heads); then
-    printf 'preview: gh could not read the pushes to %s; walking ancestors alone\n' "$branch" >&2
-    pushed=
+    printf 'UNREADABLE: gh could not read the pushes to %s\n' "$branch" >&2
+    exit "$EXIT_UNREADABLE"
 fi
 if [[ -n $pushed ]]; then
     while IFS= read -r candidate; do
@@ -268,7 +296,7 @@ if [[ -n $pushed ]]; then
         if deploys_the_head "$candidate"; then
             printf 'preview: %s, an earlier head of %s, deploys what %s does; looking there\n' "$candidate" "$branch" "$head" >&2
             sha=$candidate
-            read_preview earlier
+            read_earlier_preview
         fi
     done <<<"$pushed"
     sha=$head

@@ -18,7 +18,7 @@ import {
   type AdminWindowedQuery,
   type AdminWorkspacesQuery,
   isUtcDayKey,
-} from "@luke/service/admin/http";
+} from "@luke/features/admin-wire";
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted

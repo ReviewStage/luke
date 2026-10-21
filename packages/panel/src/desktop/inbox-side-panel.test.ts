@@ -29,6 +29,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
+import { installPressIntent } from "../press-intent.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -214,7 +215,9 @@ async function inbox(
   const main: MainBrowserEvents = {};
   const links: ReadLink[] = [];
   const tasks: string[] = [];
-  const left = { links, tasks };
+  /** The tabs asked for on a task the window was to go to, as a link pressed with ⌘ asks. */
+  const went: string[] = [];
+  const left = { links, tasks, went };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeActs({
     act: answer,
@@ -272,6 +275,7 @@ async function inbox(
           },
           sidePanel,
           onShowTask: (taskId) => left.tasks.push(taskId),
+          onShowPanelTab: (taskId, tab) => left.went.push(`${taskId} ${JSON.stringify(tab)}`),
         }),
       }),
     );
@@ -304,6 +308,11 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
   await settle();
 }
 
+/** How many tabs of the panel beside the Inbox stand as its preview. */
+function previewTabs(container: HTMLElement): number {
+  return container.querySelectorAll('aside[aria-label="Panel"] .tab[data-preview="true"]').length;
+}
+
 /** The panel beside the Inbox as a reader hears it: each tab's label, `▸ ` before the one shown; nothing where no panel stands. */
 function panelTabs(container: HTMLElement): string[] | undefined {
   const panel = container.querySelector('aside[aria-label="Panel"]');
@@ -313,16 +322,15 @@ function panelTabs(container: HTMLElement): string[] | undefined {
   );
 }
 
-test("a pull request, a page, and a file the item names open as tabs of the panel beside the Inbox, which still stands, and a page of another plan leaves for that plan", async () => {
+test("a pull request, a page, and a file the item names open one after another in the one preview tab of the panel beside the Inbox, which still stands, and a page of another plan leaves for that plan", async () => {
   const { container, left } = await inbox();
   assert.equal(panelTabs(container), undefined, "no panel stands until the item opens one");
 
   await pressChip(container, "relay#42");
   await pressChip(container, "Invite funnel");
   await pressChip(container, "invites.ts");
-  const tabs = panelTabs(container);
-  assert.ok(tabs, "the panel stands beside the Inbox");
-  assert.deepEqual(tabs, ["#42 Send invitations in batches", "Invite funnel", "▸ invites.ts"]);
+  assert.deepEqual(panelTabs(container), ["▸ invites.ts"], "each link took the last one's place");
+  assert.equal(previewTabs(container), 1, "and it stands as the panel's preview");
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 
@@ -331,7 +339,44 @@ test("a pull request, a page, and a file the item names open as tabs of the pane
     left.links.map((link) => link.place),
     [{ kind: "page", planId: OTHER_TASK, pageId: FUNNEL.id }],
   );
-  assert.equal(panelTabs(container)?.length, 3, "nothing of another plan opens in the panel");
+  assert.equal(panelTabs(container)?.length, 1, "nothing of another plan opens in the panel");
+});
+
+test("a preview beside the Inbox kept by a double-click stands as a tab of its own, so the next link opens beside it", async () => {
+  const { container } = await inbox();
+  await pressChip(container, "relay#42");
+  const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
+  assert.ok(tab);
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  });
+  await settle();
+  assert.equal(previewTabs(container), 0, "kept");
+  await pressChip(container, "invites.ts");
+  assert.deepEqual(panelTabs(container), ["#42 Send invitations in batches", "▸ invites.ts"]);
+});
+
+test("a link the item names pressed with ⌘ asks to go to its task, opening what it names there, rather than beside the Inbox", async () => {
+  const stop = installPressIntent(window);
+  try {
+    const { container, left } = await inbox();
+    const chip = [
+      ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+    ].find((each) =>
+      each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Invite funnel"),
+    );
+    assert.ok(chip);
+    act(() => {
+      chip.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+      );
+    });
+    await settle();
+    assert.deepEqual(left.went, [`${TASK.id} ${JSON.stringify({ page: FUNNEL.id })}`]);
+    assert.equal(panelTabs(container), undefined, "nothing opened beside the Inbox");
+  } finally {
+    stop();
+  }
 });
 
 test("a page the item names before its plan's pages are read is still the panel's to open, its tab standing once they land", async () => {
@@ -410,4 +455,32 @@ test("closing the last tab drawn beside the Inbox shuts the panel, as on a task'
   await settle();
 
   assert.equal(panelTabs(container), undefined, "the panel shut with its last tab");
+});
+
+test("a pull request and a file the item names pressed with ⌘ ask to go to the task on the tab a plain press would open, the file drawn there", async () => {
+  const stop = installPressIntent(window);
+  try {
+    const { container, left } = await inbox();
+    const pressWithCommand = async (name: string) => {
+      const chip = [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[data-inbox-markdown] [data-mention-ref]",
+        ),
+      ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
+      assert.ok(chip, `no chip says ${name}`);
+      act(() => {
+        chip.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+        );
+      });
+      await settle();
+    };
+    await pressWithCommand("relay#42");
+    await pressWithCommand("invites.ts");
+    assert.equal(left.went.length, 2, left.went.join("\n"));
+    assert.match(left.went[0] ?? "", /"changes"/);
+    assert.match(left.went[1] ?? "", /"file"/);
+  } finally {
+    stop();
+  }
 });

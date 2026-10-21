@@ -10,6 +10,7 @@ import { describe, it } from "vitest";
 import {
   applySectionWrite,
   entryMoveWrites,
+  memberOf,
   NO_TASK_SECTIONS,
   placeAllWrites,
   placeWrites,
@@ -29,6 +30,9 @@ const WORKSPACE = "workspace-1";
 const LAUNCH = "0a1b2c3d-0000-4000-8000-000000000001";
 const LATER = "0a1b2c3d-0000-4000-8000-000000000002";
 const TASK = (n: number) => `0a1b2c3d-0000-4000-8000-1000000000${String(n).padStart(2, "0")}`;
+const AGENT = (n: number) => `0a1b2c3d-0000-4000-8000-2000000000${String(n).padStart(2, "0")}`;
+const task = (id: string) => ({ agent: false, id });
+const agent = (id: string) => ({ agent: true, id });
 
 const applyAll = (state: TaskSections, writes: readonly TaskSectionWrite[], now: number) =>
   writes.reduce((held, write) => applySectionWrite(held, write, now), state);
@@ -59,7 +63,7 @@ function launchWithThree(): TaskSections {
 }
 
 const tasksIn = (state: TaskSections, sectionId: string) =>
-  sectionOrder(state, sectionId).map((entry) => entry.taskId);
+  sectionOrder(state, sectionId).map((entry) => memberOf(entry).id);
 
 describe("a task dropped into a section", () => {
   it("stands where it was let go: on top, between two, or at the foot", () => {
@@ -69,7 +73,7 @@ describe("a task dropped into a section", () => {
       [2, [TASK(1), TASK(2), TASK(9), TASK(3)]],
       [3, [TASK(1), TASK(2), TASK(3), TASK(9)]],
     ] as const) {
-      const writes = placeWrites(sectionOrder(state, LAUNCH), TASK(9), LAUNCH, to, 20);
+      const writes = placeWrites(sectionOrder(state, LAUNCH), task(TASK(9)), LAUNCH, to, 20);
       assert.deepEqual(tasksIn(applyAll(state, writes, 20), LAUNCH), expected);
     }
   });
@@ -78,7 +82,7 @@ describe("a task dropped into a section", () => {
     const state = launchWithThree();
     const moved = applyAll(
       state,
-      placeWrites(sectionOrder(state, LATER), TASK(2), LATER, 0, 20),
+      placeWrites(sectionOrder(state, LATER), task(TASK(2)), LATER, 0, 20),
       20,
     );
     assert.deepEqual(tasksIn(moved, LAUNCH), [TASK(1), TASK(3)]);
@@ -98,7 +102,7 @@ describe("a task dropped into a section", () => {
     assert.deepEqual(tasksIn(once, LAUNCH), [TASK(2), TASK(3), TASK(1)]);
     const twice = applyAll(
       once,
-      placeWrites(sectionOrder(once, LAUNCH), TASK(1), LAUNCH, 0, 21),
+      placeWrites(sectionOrder(once, LAUNCH), task(TASK(1)), LAUNCH, 0, 21),
       21,
     );
     assert.deepEqual(tasksIn(twice, LAUNCH), [TASK(1), TASK(2), TASK(3)]);
@@ -107,22 +111,26 @@ describe("a task dropped into a section", () => {
 
 describe("tasks moved together", () => {
   it("stand on top of the section chosen in their order, even stamped in one instant", () => {
-    const state = applyAll(launchWithThree(), placeWrites([], TASK(9), LATER, 0, 15), 15);
-    const writes = placeAllWrites(state, [TASK(1), TASK(2), TASK(3)], LATER, 20);
+    const state = applyAll(launchWithThree(), placeWrites([], task(TASK(9)), LATER, 0, 15), 15);
+    const writes = placeAllWrites(state, [task(TASK(1)), task(TASK(2)), task(TASK(3))], LATER, 20);
     const moved = applyAll(state, writes, 20);
     assert.deepEqual(tasksIn(moved, LATER), [TASK(1), TASK(2), TASK(3), TASK(9)]);
     assert.deepEqual(tasksIn(moved, LAUNCH), []);
   });
 
   it("stand above a section's dragged tasks as well as its loose ones", () => {
-    const later = applyAll(launchWithThree(), placeWrites([], TASK(8), LATER, 0, 14), 14);
+    const later = applyAll(launchWithThree(), placeWrites([], task(TASK(8)), LATER, 0, 14), 14);
     const loose = applyAll(
       later,
-      placeWrites(sectionOrder(later, LATER), TASK(9), LATER, 1, 15),
+      placeWrites(sectionOrder(later, LATER), task(TASK(9)), LATER, 1, 15),
       15,
     );
     const dragged = applyAll(loose, entryMoveWrites(sectionOrder(loose, LATER), LATER, 0, 1), 16);
-    const moved = applyAll(dragged, placeAllWrites(dragged, [TASK(3), TASK(1)], LATER, 20), 20);
+    const moved = applyAll(
+      dragged,
+      placeAllWrites(dragged, [task(TASK(3)), task(TASK(1))], LATER, 20),
+      20,
+    );
     assert.deepEqual(tasksIn(moved, LATER), [TASK(3), TASK(1), TASK(9), TASK(8)]);
     assert.deepEqual(tasksIn(moved, LAUNCH), [TASK(2)]);
   });
@@ -130,13 +138,16 @@ describe("tasks moved together", () => {
   it("into a section made with them stand there in their order", () => {
     const NEW = "0a1b2c3d-0000-4000-8000-000000000003";
     const state = launchWithThree();
-    const writes = [create(NEW, "New"), ...placeAllWrites(state, [TASK(2), TASK(1)], NEW, 20)];
+    const writes = [
+      create(NEW, "New"),
+      ...placeAllWrites(state, [task(TASK(2)), task(TASK(1))], NEW, 20),
+    ];
     assert.deepEqual(tasksIn(applyAll(state, writes, 20), NEW), [TASK(2), TASK(1)]);
   });
 
   it("taken out of their section stand in none, and the others stay", () => {
     const state = launchWithThree();
-    const out = applyAll(state, unplaceAllWrites([TASK(1), TASK(3)]), 20);
+    const out = applyAll(state, unplaceAllWrites([task(TASK(1)), task(TASK(3))]), 20);
     assert.deepEqual(tasksIn(out, LAUNCH), [TASK(2)]);
     assert.deepEqual(
       out.entries.map((entry) => entry.taskId),
@@ -162,7 +173,7 @@ describe("a section", () => {
   });
 
   it("deleted takes its tasks out of every section and leaves the others' standing", () => {
-    const state = applyAll(launchWithThree(), placeWrites([], TASK(9), LATER, 0, 20), 20);
+    const state = applyAll(launchWithThree(), placeWrites([], task(TASK(9)), LATER, 0, 20), 20);
     const deleted = applySectionWrite(state, { kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }, 21);
     assert.deepEqual(
       deleted.entries.map((entry) => entry.taskId),
@@ -199,5 +210,72 @@ describe("a section", () => {
       1,
     );
     assert.deepEqual(state, NO_TASK_SECTIONS);
+  });
+});
+
+describe("an agent with no task in a section", () => {
+  it("is dropped among the section's tasks in the one order, and dragged within it", () => {
+    const state = launchWithThree();
+    const dropped = applyAll(
+      state,
+      placeWrites(sectionOrder(state, LAUNCH), agent(AGENT(1)), LAUNCH, 1, 20),
+      20,
+    );
+    assert.deepEqual(tasksIn(dropped, LAUNCH), [TASK(1), AGENT(1), TASK(2), TASK(3)]);
+    assert.deepEqual(
+      dropped.agentEntries.map((entry) => entry.agentId),
+      [AGENT(1)],
+    );
+    const dragged = applyAll(
+      dropped,
+      entryMoveWrites(sectionOrder(dropped, LAUNCH), LAUNCH, 1, 3),
+      21,
+    );
+    assert.deepEqual(tasksIn(dragged, LAUNCH), [TASK(1), TASK(2), TASK(3), AGENT(1)]);
+    // A task dragged below the agent is placed past it, as past any task.
+    const onTop = applyAll(
+      dragged,
+      placeWrites(sectionOrder(dragged, LAUNCH), task(TASK(3)), LAUNCH, 3, 22),
+      22,
+    );
+    assert.deepEqual(tasksIn(onTop, LAUNCH), [TASK(1), TASK(2), AGENT(1), TASK(3)]);
+  });
+
+  it("moves to another section whole, with the tasks moved beside it, and leaves under null", () => {
+    const state = applyAll(launchWithThree(), placeWrites([], agent(AGENT(1)), LAUNCH, 0, 13), 13);
+    const moved = applyAll(
+      state,
+      placeAllWrites(state, [agent(AGENT(1)), task(TASK(2))], LATER, 20),
+      20,
+    );
+    assert.deepEqual(tasksIn(moved, LATER), [AGENT(1), TASK(2)]);
+    assert.deepEqual(tasksIn(moved, LAUNCH), [TASK(1), TASK(3)]);
+    const out = applyAll(moved, unplaceAllWrites([agent(AGENT(1))]), 21);
+    assert.deepEqual(out.agentEntries, []);
+    assert.deepEqual(tasksIn(out, LATER), [TASK(2)]);
+  });
+
+  it("goes back under Tasks with its section's tasks when the section is deleted", () => {
+    const state = applyAll(
+      launchWithThree(),
+      [
+        ...placeWrites([], agent(AGENT(1)), LAUNCH, 0, 20),
+        ...placeWrites([], agent(AGENT(2)), LATER, 0, 20),
+      ],
+      20,
+    );
+    const deleted = applySectionWrite(state, { kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }, 21);
+    assert.deepEqual(
+      deleted.agentEntries.map((entry) => entry.agentId),
+      [AGENT(2)],
+    );
+    assert.deepEqual(deleted.entries, []);
+  });
+
+  it("with the same id as a task's is no task, so placing one moves neither the other", () => {
+    const shared = TASK(1);
+    const state = applyAll(launchWithThree(), placeWrites([], agent(shared), LATER, 0, 20), 20);
+    assert.deepEqual(tasksIn(state, LATER), [shared]);
+    assert.deepEqual(tasksIn(state, LAUNCH), [TASK(1), TASK(2), TASK(3)]);
   });
 });

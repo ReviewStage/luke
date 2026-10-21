@@ -30,6 +30,7 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import {
   LIVE_SIGNED_OUT,
   type TaskBoardLiveAnswer,
+  type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
@@ -165,6 +166,8 @@ interface FakeService extends TasksClient {
   recordSeals: Record<string, TaskRecordLiveAnswer>;
   /** What the service seals for following each task's pages; none answers unanswered. */
   pageSeals: Record<string, TaskPagesLiveAnswer>;
+  /** What the service seals for following each task's Browser tabs; none answers unanswered. */
+  browserTabSeals: Record<string, TaskBrowserTabsLiveAnswer>;
   /** What the service seals for following each task's newest page of history; none answers unanswered. */
   historySeals: Record<string, TaskHistoryLiveAnswer>;
   /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
@@ -325,6 +328,11 @@ const SIDEBAR_SEALED = {
   queries: {
     sections: { capability: "capability-sections", queryFingerprint: "s", expiresAt: 1e15 },
     entries: { capability: "capability-entries", queryFingerprint: "e", expiresAt: 1e15 },
+    agentEntries: {
+      capability: "capability-agent-entries",
+      queryFingerprint: "a",
+      expiresAt: 1e15,
+    },
     pins: { capability: "capability-pins", queryFingerprint: "p", expiresAt: 1e15 },
   },
 };
@@ -338,6 +346,10 @@ function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly Repo
       position: section.position ?? null,
     })),
     entries: (sections?.entries ?? []).map((entry) => ({
+      ...entry,
+      position: entry.position ?? null,
+    })),
+    agentEntries: (sections?.agentEntries ?? []).map((entry) => ({
       ...entry,
       position: entry.position ?? null,
     })),
@@ -413,6 +425,7 @@ function fakeService(tasks: Task[]): FakeService {
     if (part === "capability-installations") return rows.installations;
     if (part === "capability-sections") return sidebar.sections;
     if (part === "capability-entries") return sidebar.entries;
+    if (part === "capability-agent-entries") return sidebar.agentEntries;
     return part === "capability-pins" ? sidebar.pins : undefined;
   };
   /** The workspaces told to every subscription that stands, as Realtime tells a change. */
@@ -478,6 +491,7 @@ function fakeService(tasks: Task[]): FakeService {
     boardSeals: {},
     recordSeals: {},
     pageSeals: {},
+    browserTabSeals: {},
     historySeals: {},
     recordReads: [],
     images: {},
@@ -972,6 +986,13 @@ function fakeService(tasks: Task[]): FakeService {
     historyLive: (taskId) =>
       Effect.sync(() => {
         const sealed = service.historySeals[taskId];
+        return sealed === undefined
+          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
+          : { ok: true, answer: sealed };
+      }),
+    browserTabsLive: (taskId) =>
+      Effect.sync(() => {
+        const sealed = service.browserTabSeals[taskId];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
           : { ok: true, answer: sealed };
@@ -1475,12 +1496,15 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
 );
 
 it.effect(
-  "a rename that answers its transaction is answered once the followed list carries it",
+  "a rename that answers its transaction is drawn at once and answered once the followed list carries it, holding no other task write meanwhile",
   () =>
     Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Invites", 10),
+        task(BILLING, "Billing export", "# Billing", 20),
+      ]);
       service.renameTxid = "7301";
-      const { call, listed, realtime, settled } = yield* subject(service);
+      const { call, listed, realtime, settled, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
 
@@ -1490,6 +1514,18 @@ it.effect(
       yield* settled;
       assert.deepEqual(realtime.awaitingTxids(), ["7301"]);
       assert.equal(renaming.pollUnsafe(), undefined, "the rename waits for its transaction");
+      assert.equal(
+        last()?.tasks.find((each) => each.id === INVITES)?.name,
+        "Invitations",
+        "the answer is drawn before the wait, so a newer row the list carries lands over it",
+      );
+
+      service.renameTxid = undefined;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: BILLING, name: "Billing" }),
+        { renamed: true },
+        "another write is not held behind the wait",
+      );
 
       realtime.arrive("7301");
       assert.deepEqual(yield* Fiber.join(renaming), { renamed: true });
@@ -1510,6 +1546,45 @@ it.effect(
         { renamed: true },
       );
       assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
+);
+
+it.effect(
+  "opening a task tells the window it is reading, then its document, board, code, and pages in one view",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const funnel = {
+        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        title: "Invite funnel",
+        version: 2,
+        at: 1_500,
+      };
+      const board = { elements: [], appliedDrawing: 0 };
+      service.boards[BILLING] = board;
+      service.codes[BILLING] = [];
+      service.pageLines[BILLING] = [funnel];
+      const { call, told } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+
+      const before = told.length;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      const opened = told.slice(before);
+
+      assert.deepEqual(
+        opened.map((view) => [view.activeTaskId, view.document.status, view.codeStatus]),
+        [
+          [BILLING, TASKS_READ.READING, TASKS_READ.READING],
+          [BILLING, TASKS_READ.READY, TASKS_READ.READY],
+        ],
+      );
+      const landed = opened.at(-1);
+      assert.deepEqual(landed?.document, { status: TASKS_READ.READY, task: billing });
+      assert.deepEqual(landed?.board, board);
+      assert.deepEqual(landed?.shownCode, []);
+      assert.deepEqual(landed?.pages, [funnel]);
     }),
 );
 
@@ -1700,7 +1775,7 @@ it.effect(
         title: "Launch",
         createdAt: 5,
       };
-      service.sections = { sections: [launch], entries: [] };
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
       service.pins = [{ repository: "acme/relay", pinnedAt: 3 }];
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
@@ -1711,17 +1786,25 @@ it.effect(
       assert.equal(service.reads.filter((read) => read === "sidebar-live").length, 1);
 
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
-      service.sections = { sections: [launch], entries: [placed] };
+      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place), { changed: true });
-      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(last()?.taskSections, {
+        sections: [launch],
+        entries: [placed],
+        agentEntries: [],
+      });
 
       service.sections = undefined;
       const removal = { ...place, sectionId: null };
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, removal), {
         changed: false,
       });
-      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(last()?.taskSections, {
+        sections: [launch],
+        entries: [placed],
+        agentEntries: [],
+      });
       assert.deepEqual(service.sectionWrites, [place, removal]);
 
       const later = {
@@ -1732,7 +1815,7 @@ it.effect(
       };
       service.realtime.deliver(
         "sections",
-        sidebarLiveRows({ sections: [later, launch], entries: [] }, []).sections,
+        sidebarLiveRows({ sections: [later, launch], entries: [], agentEntries: [] }, []).sections,
       );
       service.realtime.deliver("pins", [
         { repository: "acme/relay", pinnedAt: 3 },
@@ -1762,7 +1845,7 @@ it.effect(
         title: "Launch",
         createdAt: 5,
       };
-      service.sections = { sections: [launch], entries: [] };
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
 
       // Before the first refresh nothing follows the sidebar, so a write's transaction is not waited on.
       service.sidebarTxid = "40";
@@ -1780,7 +1863,7 @@ it.effect(
 
       service.sidebarTxid = "41";
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
-      service.sections = { sections: [launch], entries: [placed] };
+      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
       const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
       yield* settled;
@@ -1788,7 +1871,11 @@ it.effect(
       assert.equal(placing.pollUnsafe(), undefined, "the write waits for its transaction");
       service.realtime.arrive("41");
       assert.deepEqual(yield* Fiber.join(placing), { changed: true });
-      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(last()?.taskSections, {
+        sections: [launch],
+        entries: [placed],
+        agentEntries: [],
+      });
 
       service.sidebarTxid = "42";
       const pinning = yield* Effect.forkChild(
@@ -3427,10 +3514,13 @@ it.effect(
       service.boardSaveTxid = undefined;
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
 
-      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once.
+      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once,
+      // while a save queued behind it goes out under the follow standing then, and waits on that one.
       service.boardSaveTxid = "44";
       service.boardSaveHeld = yield* Deferred.make<void>();
       const inFlight = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
+      yield* boardSettled;
+      const queued = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
       yield* boardSettled;
       realtime.fail("board");
       yield* TestClock.adjust(Duration.seconds(15));
@@ -3442,7 +3532,15 @@ it.effect(
       yield* Deferred.succeed(service.boardSaveHeld, undefined);
       service.boardSaveHeld = undefined;
       assert.deepEqual(yield* Fiber.join(inFlight), { saved: true });
-      assert.deepEqual(realtime.awaitingTxids(), []);
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["44"]);
+      assert.equal(
+        queued.pollUnsafe(),
+        undefined,
+        "the queued save waits on the follow it went out under",
+      );
+      realtime.arrive("44");
+      assert.deepEqual(yield* Fiber.join(queued), { saved: true });
 
       // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
       delete service.boardSeals[INVITES];
@@ -3682,6 +3780,92 @@ it.effect(
       );
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+/** A task's Browser tabs sealed for following, named by the round it was sealed in. */
+function sealedBrowserTabs(round: number): TaskBrowserTabsLiveAnswer {
+  return {
+    url: "wss://realtime.example/v1",
+    queries: {
+      tabs: { capability: `tabs-${round}`, queryFingerprint: "tabs", expiresAt: 3_600_000 },
+    },
+  };
+}
+
+/** One kept tab's row, as the live read delivers it, the agent's pointer on it. */
+const SIGN_IN_TAB = {
+  id: "7c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+  agentId: "8d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a",
+  address: "https://example.com/sign-in",
+  title: "Sign in",
+  openedBy: "agent",
+  openedByUserId: null,
+  driverUserId: null,
+  heldUntil: null,
+  createdAt: 1_000,
+  lastActedAt: 1_500,
+  cursorX: 320,
+  cursorY: 200,
+  cursorKind: "click",
+  cursorViewportW: 1280,
+  cursorViewportH: 800,
+  cursorAt: 1_500,
+} as const;
+
+it.effect(
+  "a task's Browser tabs followed for the side panel are told as they move, the agent's pointer among them, told again as a takeover lapses, and let go they stop",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeBoardRealtime();
+      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const changed = (view: WireValue) => [
+        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
+        { taskId: INVITES, view },
+      ];
+      const tab = {
+        id: SIGN_IN_TAB.id,
+        agentId: SIGN_IN_TAB.agentId,
+        address: SIGN_IN_TAB.address,
+        title: SIGN_IN_TAB.title,
+        openedBy: { kind: "agent" },
+        createdAt: 1_000,
+        lastActedAt: 1_500,
+        cursor: {
+          x: 320,
+          y: 200,
+          kind: "click",
+          viewport: { width: 1280, height: 800 },
+          at: 1_500,
+        },
+      };
+
+      yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+
+      service.browserTabSeals[INVITES] = sealedBrowserTabs(1);
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      // Dana takes the tab over until ten seconds in.
+      realtime.deliver("tabs-1", [
+        { ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 },
+      ]);
+      yield* boardSettled;
+      assert.deepEqual(pushed.slice(1), [
+        changed({ tabs: [{ ...tab, driver: { userId: "user-dana", heldUntil: 10_000 } }] }),
+      ]);
+
+      // Her window goes away, so the takeover lapses with no row moving.
+      yield* TestClock.adjust(Duration.seconds(8));
+      yield* boardSettled;
+      assert.deepEqual(pushed.slice(2), [changed({ tabs: [{ ...tab, driver: null }] })]);
+      assert.equal(told.length, 0, "a task's Browser tabs are never told in the view");
+
+      yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), []);
     }),

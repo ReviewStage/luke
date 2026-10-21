@@ -4,7 +4,7 @@
  * failed.
  */
 
-import type { AdminReliabilityDay } from "@luke/service/admin/admin-reliability";
+import type { AdminReliabilityDay } from "@luke/features/admin-answer-wire";
 import { formatDayTick, formatShare, formatTooltipDay } from "@luke/ui/admin-format";
 import {
   type ChartConfig,

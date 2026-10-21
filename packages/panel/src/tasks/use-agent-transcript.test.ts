@@ -319,6 +319,7 @@ test("a follow is timed to its first page drawn and to the page that caught it u
         attributes: {
           [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 1,
           [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(first),
+          [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: 0,
         },
       },
       {
@@ -327,10 +328,46 @@ test("a follow is timed to its first page drawn and to the page that caught it u
         attributes: {
           [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 1,
           [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(caughtUp),
+          [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: 0,
         },
       },
     ],
   );
+});
+
+test("a follow whose first page is the window the host held draws it at once and is timed as a cache hit", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(1_000_000);
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  const { follower, push } = scriptedFollower();
+  const { seen, draw } = drawn(follower);
+
+  draw(true);
+  push(AGENT, { ...newestOf(["m-1", "m-2"], "1"), held: true });
+  uninstall();
+
+  assert.deepEqual(
+    seen.current?.messages.map((message) => message.id),
+    ["m-1", "m-2"],
+  );
+  assert.deepEqual(
+    spans.map((span) => [span.name, span.attributes()[PANEL_SPAN_ATTRIBUTE.CACHE_HIT]]),
+    [[PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, 1]],
+  );
+});
+
+test("a transcript the account no longer reaches draws nothing the host held of it", () => {
+  const { follower, push } = scriptedFollower();
+  const { seen, draw } = drawn(follower);
+
+  draw(true);
+  push(AGENT, { ...newestOf(["m-1", "m-2"], "1"), held: true });
+  push(AGENT, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+
+  assert.deepEqual(seen.current?.messages, []);
+  assert.equal(seen.current?.hasOlder, false);
+  assert.equal(seen.current?.failed, true);
 });
 
 test("a follow let go before its first page landed is timed by no span", () => {
