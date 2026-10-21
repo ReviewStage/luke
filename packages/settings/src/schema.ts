@@ -26,7 +26,7 @@ import {
   INLINE_DIFF_LABEL,
 } from "./diff-view.js";
 import { EXPERIMENT, experimentOn } from "./experiments.js";
-import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
+import { choiceSetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
@@ -93,6 +93,10 @@ const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
 const videoCallsDrawn = (view: SettingsVisibility): boolean =>
   view.accountDrawn && experimentOn(view.settings.experiments, EXPERIMENT.VIDEO_CALLS);
 
+/** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
+const desktopAppDrawn = (view: SettingsVisibility): boolean =>
+  view.capabilities.includes(HOST_CAPABILITY.DESKTOP_APP);
+
 /** Signed in: a choice the account carries is drawn only while there is an account to carry it. */
 const accountDrawn = (view: SettingsVisibility): boolean => view.accountDrawn;
 
@@ -126,6 +130,8 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 7,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    // A browser zooms its tab itself, by its own keys.
+    visible: desktopAppDrawn,
     // Nothing to run per write, as for the theme: main zooms the windows
     // from every settings snapshot it publishes.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
@@ -138,6 +144,7 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 10,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    visible: desktopAppDrawn,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
   macCommands: toggleSetting({
@@ -246,18 +253,6 @@ export const APP_SETTING_SCHEMA = {
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: voiceControlDrawn,
-  }),
-  voiceHotkey: hotkeySetting({
-    field: "voiceHotkey",
-    id: APP_SETTING_ID.TALK_HOTKEY,
-    order: 60,
-    sideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
-  }),
-  stopHotkey: hotkeySetting({
-    field: "stopHotkey",
-    id: APP_SETTING_ID.STOP_HOTKEY,
-    order: 80,
-    sideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
   }),
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",

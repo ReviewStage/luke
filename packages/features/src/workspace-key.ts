@@ -14,13 +14,13 @@ const TASK_FALLBACK_PREFIX = "TASK";
 /** The most characters a prefix spells. */
 const MAX_PREFIX_CHARS = 4;
 
-/** The prefix a workspace's numbered things are named by, or `fallback` where its name holds no letter or digit. */
-export function workspacePrefix(workspaceName: string, fallback: string): string {
+/** The prefix a workspace's tasks are keyed by, or `TASK_FALLBACK_PREFIX` where its name holds no letter or digit. */
+function workspacePrefix(workspaceName: string): string {
   const words = workspaceName
     .replaceAll(/['’]/gu, "")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((word) => word.length > 0);
-  if (words.length === 0) return fallback;
+  if (words.length === 0) return TASK_FALLBACK_PREFIX;
   const prefix =
     words.length === 1
       ? Array.from(words[0] ?? "").slice(0, MAX_PREFIX_CHARS)
@@ -30,5 +30,5 @@ export function workspacePrefix(workspaceName: string, fallback: string): string
 
 /** A task's key in its workspace, as `ACME-42`. */
 export function taskKey(workspaceName: string, number: number): string {
-  return `${workspacePrefix(workspaceName, TASK_FALLBACK_PREFIX)}-${number}`;
+  return `${workspacePrefix(workspaceName)}-${number}`;
 }

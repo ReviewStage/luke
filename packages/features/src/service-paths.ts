@@ -14,11 +14,25 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
+   * Whether the signed-in account is an admin (GET), so a client can offer
+   * the admin dashboard; `account-wire.ts` declares the answer.
+   */
+  ACCOUNT_ACCESS: "/api/account/access",
+  /**
    * The account's own Anthropic and OpenAI API keys: read what they are
-   * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
+   * (GET), save one (PUT), remove one (DELETE), or turn a connected plan's
+   * default for coding agents (PATCH). No answer carries a key.
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
+  /**
+   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
+   * its kind. The answer is the provider keys' and never carries a token.
+   */
+  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
    * The Markdown the account's new tasks start from: read it (GET), or keep
    * one verbatim or go back to the default (PUT).
@@ -71,6 +85,40 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
+  /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
+  LIVE_TASK_BOARD: "/api/live/task-board",
+  /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_RECORD: "/api/live/task-record",
+  /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
+  LIVE_TASK_PAGES: "/api/live/task-pages",
+  /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
+  LIVE_TASK_HISTORY: "/api/live/task-history",
+  /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
+  LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
+  /** One task's planning conversation under `?id=`, its mark and running workers sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_CONVERSATION: "/api/live/task-conversation",
+  /** One planning worker's transcript under `?id=` (the plan) and `&call=` (the call that started it), sealed for following over Neon Realtime (GET), as an agent's worker's is, or `not-found` or `unavailable`. */
+  LIVE_TASK_WORKER_TRANSCRIPT: "/api/live/task-worker-transcript",
+  /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
+  LIVE_TASK_INBOX: "/api/live/task-inbox",
+  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
+  LIVE_AGENT_INBOX: "/api/live/agent-inbox",
+  /** A workspace's chat under `?workspaceId=`, sealed for following over Neon Realtime (GET) as the account's person reads it, once they have joined it; or `not-found` or `unavailable`. */
+  LIVE_WORKSPACE_CHAT: "/api/live/workspace-chat",
+  /** The task list sealed for following over Neon Realtime (GET): its tasks and every agent of them and with no task, or `unavailable`. `task-list-live.ts` declares the answer. */
+  LIVE_TASKS: "/api/live/tasks",
+  /** A workspace's automations under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `automation-live.ts` declares the answer. */
+  LIVE_AUTOMATIONS: "/api/live/automations",
+  /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
+  /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
+  LIVE_WORKSPACES: "/api/live/workspaces",
+  /** The account's sidebar sections, the tasks in them, and its pinned repositories, sealed for following over Neon Realtime (GET), or their rows inline where polled. */
+  LIVE_SIDEBAR: "/api/live/sidebar",
+  /** One workspace's people under `?workspaceId=`, sealed for following over Neon Realtime (GET): its members and who its work names but left, or `not-found`, or their rows inline where polled. */
+  LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
+  /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
+  LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
@@ -86,18 +134,28 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /** One waiting command, named by its id, claimed for the Mac that heard of it live (POST). `mac-command-wire.ts` declares the bodies. */
+  MAC_COMMAND_CLAIM: "/api/mac-commands/claim",
+  /** That a Mac of the account listens now for the kinds it names (POST), which a Mac following its commands live says on a timer, since its read writes nothing. */
+  MAC_COMMANDS_LISTENING: "/api/mac-commands/listening",
+  /**
+   * The commands of the kinds named that no Mac of the account has claimed,
+   * sealed for following (GET), or with `?poll=true` their rows inline.
+   * `live-wire.ts` declares the answer.
+   */
+  LIVE_MAC_COMMANDS: "/api/live/mac-commands",
+  /**
+   * One browser command's result, posted by the Mac that took it (POST): its
+   * JSON and at most one image, under a body cap of its own that fits the
+   * image. `mac-command-wire.ts` declares the body.
+   */
+  MAC_COMMAND_BROWSER_RESULTS: "/api/mac-commands/browser",
   /**
    * The account's automations: list them, newest first, or one task's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
-  /**
-   * A workspace's issues: list them, the most recently changed first, where
-   * `workspaceId` names it (GET), or file one (POST). `issue-wire.ts`
-   * declares the bodies.
-   */
-  ISSUES: "/api/issues",
   /**
    * One workspace's Factory world, read as it stands now, to a member of it
    * (POST). `factory-world-wire.ts` declares the bodies.
@@ -210,6 +268,13 @@ export const HOSTED_SERVICE_PATH = {
    * `github-token-wire.ts` declares every body.
    */
   GITHUB_TOKEN: "/api/github/token",
+  /**
+   * The repositories members added to a workspace on their own GitHub
+   * tokens: read them for the workspace the query names (GET), or add or
+   * remove one (PUT), answered with them all as they then stand.
+   * `github-repositories-wire.ts` declares the answer.
+   */
+  GITHUB_TOKEN_REPOSITORIES: "/api/github/token-repositories",
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**
@@ -298,11 +363,6 @@ export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
 }
 
-/** An automation's "Run now" (POST), answered with the run as it came out. */
-export function automationRunPath(automationId: string): string {
-  return `${automationPath(automationId)}/run`;
-}
-
 /**
  * An automation's webhook address (POST), called by the sender the developer
  * hands it to under the trigger's secret rather than an account bearer.
@@ -311,13 +371,8 @@ export function automationWebhookPath(automationId: string): string {
   return `${automationPath(automationId)}/webhook`;
 }
 
-/** An automation's runs, newest first (GET). */
-export function automationRunsPath(automationId: string): string {
-  return `${automationPath(automationId)}/runs`;
-}
-
 /** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
-export function taskPath(taskId: string): string {
+function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
@@ -337,42 +392,9 @@ export function planAttachmentPath(taskId: string, attachmentId: string): string
   return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
-/**
- * One task's inbox: every item its coding agents posted for the developer,
- * past a cursor (GET), held open while nothing changed, as an agent's
- * transcript is. `inbox-wire.ts` declares the answer.
- */
-export function taskInboxPath(taskId: string, after?: string): string {
-  const path = `${taskPath(taskId)}/inbox`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `taskInboxPath`'s read. */
-export function agentInboxPath(agentId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
-}
-
-/** One item of a task's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
-export function inboxItemPath(itemId: string): string {
+/** One item of a task's inbox, which its attachments are under. */
+function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
-}
-
-/** One item closed by a member without an answer (POST) against the revision they saw; `inbox-wire.ts` declares the request, and it answers as an answer does. */
-export function inboxClosePath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/close`;
-}
-
-/** One item's thread, a member's message written on it (POST), open or settled; `inbox-wire.ts` declares the request and the answer. */
-export function inboxMessagesPath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/messages`;
-}
-
-/** One item's read state for the asking member: marked read (PUT), as opening it does, or unread (DELETE); `inbox-wire.ts` declares the answer. */
-export function inboxItemReadPath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/read`;
 }
 
 /** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */

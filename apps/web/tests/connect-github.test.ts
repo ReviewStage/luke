@@ -3,7 +3,7 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";
-import { appTab } from "./support/connect-app-tab";
+import { appTab, closeAppTabs } from "./support/connect-app-tab";
 
 /**
  * connect-github.test.ts -- the GitHub connection page says where a connect
@@ -82,6 +82,7 @@ async function titled(page: HTMLElement, title: string): Promise<void> {
 }
 
 afterEach(() => {
+  closeAppTabs();
   vi.restoreAllMocks();
   document.body.replaceChildren();
   sessionStorage.clear();
@@ -187,6 +188,8 @@ function links(page: HTMLElement): (string | null)[][] {
 test("a connect the app's tab handed off closes once GitHub is connected, and not before", async () => {
   const closed = vi.spyOn(window, "close").mockImplementation(() => undefined);
   const app = await appTab(2);
+  // The connect's own tab comes to this page with its intent, goes to GitHub, and lands back here.
+  app.landIn(1);
   const connecting = await openPage(new Map([[SESSION_PATH, () => SIGNED_IN]]));
   // The page is on its way to GitHub: the channel is given a turn, and nothing closes.
   await act(() => new Promise((resolve) => setImmediate(resolve)));
@@ -201,7 +204,6 @@ test("a connect the app's tab handed off closes once GitHub is connected, and no
     expect(links(page)).toEqual([["Back to Luke", "/app"]]);
   });
   expect(closed).toHaveBeenCalled();
-  app.close();
 });
 
 test("a same-tab connect GitHub refused says why and offers the way back", async () => {

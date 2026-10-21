@@ -3,7 +3,8 @@
  *
  * Every concern but the platform ones runs wherever the host does. A
  * platform concern reaches something only some hosts have: a process
- * spawner, a terminal's relay socket, this Mac's own repositories. The
+ * spawner, a terminal's relay socket, this Mac's own repositories, a
+ * loopback the browser hands a sign-in back to. The
  * assembly is built with the platform concerns its host chose; one left out
  * is never started, asks for nothing, and answers each of its methods with a
  * refusal, so a client that asks anyway is told no rather than crashing.
@@ -27,12 +28,12 @@ export const HOST_CONCERN = {
   TASKS: "tasks",
   CODING_AGENTS: "codingAgents",
   AUTOMATIONS: "automations",
-  ISSUES: "issues",
   FACTORY: "factory",
   INTEGRATIONS: "integrations",
   MAC_COMMANDS: "macCommands",
   MAC_TERMINAL: "macTerminal",
   TERMINALS: "terminals",
+  CHATGPT_SIGN_IN: "chatGptSignIn",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -42,6 +43,7 @@ export const HOST_PLATFORM_CONCERN = {
   MAC_COMMANDS: HOST_CONCERN.MAC_COMMANDS,
   MAC_TERMINAL: HOST_CONCERN.MAC_TERMINAL,
   TERMINALS: HOST_CONCERN.TERMINALS,
+  CHATGPT_SIGN_IN: HOST_CONCERN.CHATGPT_SIGN_IN,
 } as const;
 
 export type HostPlatformConcern =
@@ -62,6 +64,7 @@ const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: HOST_CAPABILITY.MAC_TERMINAL,
   [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
+  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: HOST_CAPABILITY.CHATGPT_SIGN_IN,
 } as const satisfies Readonly<Record<HostPlatformConcern, HostCapability>>;
 
 /** A capability the client answers for itself, rather than a concern of the host it runs. */
@@ -69,6 +72,23 @@ export type ClientCapability = Exclude<
   HostCapability,
   (typeof CAPABILITY_OF_CONCERN)[HostPlatformConcern]
 >;
+
+const CONCERN_CAPABILITIES: ReadonlySet<HostCapability> = new Set(
+  Object.values(CAPABILITY_OF_CONCERN),
+);
+
+/** Whether a capability is one a client answers for itself. */
+const isClientCapability = (capability: HostCapability): capability is ClientCapability =>
+  !CONCERN_CAPABILITIES.has(capability);
+
+/**
+ * Every capability a client may answer for itself: what the desktop, which
+ * answers them all, offers. Derived rather than listed, so a capability added
+ * to `HOST_CAPABILITY` stands on the desktop without a second list to forget
+ * it in.
+ */
+export const ALL_CLIENT_CAPABILITIES: readonly ClientCapability[] =
+  Object.values(HOST_CAPABILITY).filter(isClientCapability);
 
 /**
  * What the platform offers: the client's own capabilities and the one each
@@ -104,6 +124,13 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.TERMINALS_ACK,
     GATEWAY_METHOD.TERMINALS_DISCONNECT,
     GATEWAY_METHOD.TERMINALS_WAKE,
+    GATEWAY_METHOD.BROWSER_LIVE_CONNECT,
+    GATEWAY_METHOD.BROWSER_LIVE_SEND,
+    GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
+  ],
+  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: [
+    GATEWAY_METHOD.CHATGPT_SIGN_IN,
+    GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL,
   ],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 

@@ -1,26 +1,17 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-store";
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
-import { boardText } from "@luke/features/board-text";
-import type { Board } from "@luke/features/board-wire";
-import { dateLabel } from "@luke/features/date-mention";
-import { issueIdentifier } from "@luke/features/issue-list-model";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { PLAN_COMMENT_ACTOR, type PlanCommentThread } from "@luke/features/plan-comment-wire";
+import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import {
-  NOTE_KIND,
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
-  type PlanAgentEdit,
 } from "@luke/features/plan-template";
-import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/task-wire";
+import { PLAN_FIELD } from "@luke/features/task-wire";
 import { type UnparsedWireValue, type WireRecord, WireValueSchema } from "@luke/wire";
 import { emitJsonSchema, verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { ToolDefinition, ToolModelOutput } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
@@ -31,7 +22,7 @@ import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import { LOOK_AT_BOARD_TOOL, lookModelOutput, runLookAtBoard } from "../../tasks/board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../../tasks/board-tool.js";
-import { COMMENT_TOOLS, openThreadsText, runCommentTool } from "../../tasks/comment-tools.js";
+import { COMMENT_TOOLS, runCommentTool } from "../../tasks/comment-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../../tasks/end-call.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
@@ -49,6 +40,13 @@ import {
 import { runShowCode, SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import type { AgentBrowser } from "../browser/agent-browser.js";
+import {
+  BROWSER_TOOL,
+  type BrowserCall,
+  browserModelOutput,
+  runBrowserTool,
+} from "../browser/browser-tool.js";
 import { CHAT_TOOLS } from "../coder-host/chat.js";
 import {
   type CodingAgentCall,
@@ -74,16 +72,6 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
-import {
-  CREATE_ISSUE_TOOL,
-  LIST_ISSUES_TOOL,
-  READ_ISSUE_TOOL,
-  runCreateIssue,
-  runListIssues,
-  runReadIssue,
-  runUpdateIssue,
-  UPDATE_ISSUE_TOOL,
-} from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -106,7 +94,6 @@ import {
 import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
 import {
   type BrainChatCall,
-  type ChatSince,
   runBrainEditChannel,
   runBrainPost,
   runBrainRead,
@@ -289,13 +276,9 @@ On a request to change an agent ("rename it Billing export", "switch it to Sonne
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, update_task with a sectionId moves a task into one, or with null back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, with one exception: where you start agents on several new tasks for one piece of work at once, as when the developer asks you to roll a plan out as a set of tasks, make one section named for that work and move each of those tasks into it, so they stand together in the sidebar; leave every other task where it stands. Then say in your return what you changed.
 
-### The workspace's issues
-
-The workspace tracks its work as issues, each named by an identifier such as ACME-42. On a request about them ("what's open in the backlog", "file an issue for the flaky test", "mark ACME-12 done", "archive the old ones"), list_issues finds the issues the developer means, read_issue reads one with its description, create_issue files one, and update_issue changes one or archives it. File or change only what the developer asked for, then say in your return what you changed.
-
 ### The task's chat
 
-The task's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as the task's Luke, every member is named by the mention link read_chat lists for them, which a post writes to tell that member, and the task has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last call], and is read by then. When the developer asks you to tell the team or the task's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the task's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the task's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
+The task has a chat channel of its own, where its coding agents, the developer's team, and you talk, the way an engineering team talks in its Slack channel; you speak there as the task's Luke, and every member is named by the mention link read_chat lists for them, which a post writes to tell that member. The chat is scoped to the task: you and its agents post in its channel alone, and no one on another task hears it. What was said there since your last turn is handed to you under [chat since the last call], and is read by then. When the developer asks you to tell the team or the task's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat in the task's channel, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the task's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
 
 Never put a credential, token, or key into a message to an agent, a chat post, any tool's input, or your return, and never repeat one you see in an agent's transcript or the chat.
 
@@ -306,6 +289,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - show_code puts lines of a file in the task's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. A note names another file, a pull request, or an issue as a Markdown link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>) of the task's repository, so the developer sees a chip that opens it. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window. Code is on screen only from a call in this turn, so when the developer asks to see code again or says they cannot see it, call show_code again rather than saying it is up.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the task's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the task's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
+- browser drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over: open a page, read it with a snapshot, click, type, and see it with a screenshot. Use it for what the developer should see or help with: a flow to show them, a preview, or a page that needs them, such as a sign-in or MFA they finish in its tab. Take a snapshot for the refs before you click or type on an element. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them. When it answers not-run, say why.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the task's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
 - edit_plan writes notes into the plan in the background, as above.
@@ -326,13 +310,12 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - stop_agent stops the turn under way of a coding agent of the workspace by its id, as the developer's Stop button would, leaving the agent available for a later message.
 - update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it, or archives an idle one with a short reason its archived banner shows, or brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
-- read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issue it was started from, and its plan as last saved.
+- read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issues it links, and its plan as last saved.
 - create_task makes a task in the workspace for the developer, on the repository named or this task's, with their brief and a plan to start from where given, and no agent on it; start_agent then starts one on it.
 - create_section makes a section in the developer's sidebar for this workspace and delete_section deletes one, its tasks going back under Tasks; update_task's sectionId moves a task into a section or back under Tasks.
 - update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, the sidebar section they keep it in, or its archive, found with list_tasks and includeArchived for an archived one.
-- list_issues lists the workspace's issues, each with its id, identifier, title, status, priority, and whether it is archived; read_issue reads one by its id or identifier with its description; create_issue files one; and update_issue changes its title, description, status, or priority, or archives it or brings it back.
-- post_chat posts a message in the workspace's chat as the task's Luke, in the task's channel unless it names another place.
-- read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
+- post_chat posts a message in the task's chat channel as the task's Luke.
+- read_chat reads the task's chat: who is in it, and what you have not read, or the channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
 - edit_channel renames a topic channel, says or clears what it is for, or archives it or brings it back.
 - list_models lists the models a coding agent may be started on, each with its id, the name to say it by, and the efforts it lists, and the developer's default, so start_agent names a model and effort it takes.
@@ -367,224 +350,6 @@ export const BRAIN_EXPLORE_ASK =
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
-/** The marker the standing context rides behind, so the model reads what follows as the service's data. */
-const TASK_MARKER = "[task]";
-const DEVELOPER_TIME_MARKER = "[the developer's time]";
-const DOCUMENT_MARKER = "[saved document]";
-const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
-const BRIEF_MARKER = "[the developer's brief for the task]";
-const ISSUE_LINKS_MARKER = "[issues the task links]";
-const ISSUE_MARKER = "[workspace issue the task was started from]";
-const CHAT_SINCE_MARKER = "[chat since the last call]";
-/** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
-const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
-
-/** The most agents' saves the model is told of, the newest; the journal keeps more. */
-const RECENT_AGENT_EDITS = 5;
-
-/** The most characters of one note's text the model is told; the document itself holds the whole. */
-const AGENT_NOTE_CHARS = 300;
-
-/** A note's words, cut where they run past what one line of the history carries. */
-function noteWords(words: string): string {
-  return JSON.stringify(
-    words.length > AGENT_NOTE_CHARS ? `${words.slice(0, AGENT_NOTE_CHARS)}…` : words,
-  );
-}
-
-/** One note an agent took, in a line: what it did, where, and its words, the text it replaced or deleted among them. */
-function agentNoteLine(note: PlanAgentEdit["notes"][number]): string {
-  switch (note.kind) {
-    case NOTE_KIND.ADD:
-      return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;
-    case NOTE_KIND.REPLACE:
-      return `replace ${noteWords(note.find)} → ${noteWords(note.text)}`;
-    case NOTE_KIND.REMOVE:
-      return `remove ${noteWords(note.find)}`;
-  }
-}
-
-/** The newest saves coding agents made, one line each, newest first; nothing where none has. */
-function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] {
-  if (edits.length === 0) return [];
-  const recent = edits.slice(-RECENT_AGENT_EDITS).reverse();
-  return [
-    AGENT_EDITS_MARKER,
-    ...recent.map(
-      (edit) =>
-        `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map((note) => agentNoteLine(note)).join("; ")}`,
-    ),
-  ];
-}
-
-/** One chat message in a line: its place, where it was said and the thread it replies in, who said it, and its words whole, since the turn's read has marked them read. */
-function chatLine(message: ChatSince["messages"][number]): string {
-  const thread = message.thread === undefined ? "" : `, in the thread of m ${message.thread}`;
-  return `- m ${message.seq} in ${message.in}${thread}, ${message.from}: ${JSON.stringify(message.text)}`;
-}
-
-/** What was said in the chat since Luke last read it, one line a message, and that more waits where it does; nothing where nothing was. */
-function chatSinceText(chat: ChatSince): readonly string[] {
-  if (chat.messages.length === 0) return [];
-  const more = chat.more ? ["- More is unread: read_chat reads it."] : [];
-  return [CHAT_SINCE_MARKER, ...chat.messages.map(chatLine), ...more];
-}
-
-/** The sections the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
-function developerFieldsText(stored: StoredTask): readonly string[] {
-  const written = stored.sectionWriters.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
-  if (written.length === 0) return [];
-  return [
-    DEVELOPER_FIELDS_MARKER,
-    ...written.map((writer) => `- ${writer.section}, ${new Date(writer.at).toISOString()}`),
-  ];
-}
-
-/** The developer's own words about the task as they started it, as a JSON string; nothing for a task started with none. */
-function briefText(stored: StoredTask): readonly string[] {
-  if (stored.brief === undefined) return [];
-  return [BRIEF_MARKER, JSON.stringify(stored.brief)];
-}
-
-/**
- * The issues the task links, oldest linked first, as JSON: each one's
- * provider, key, title, and page, which keyword its pull requests write,
- * and its description as it read when it was linked; nothing for a task
- * that links none.
- */
-function issueLinksText(stored: StoredTask): readonly string[] {
-  if (stored.issueLinks.length === 0) return [];
-  const links = stored.issueLinks.map(({ provider, key, title, url, relation, description }) => ({
-    provider,
-    key,
-    title,
-    url,
-    relation,
-    description,
-  }));
-  return [ISSUE_LINKS_MARKER, JSON.stringify(links)];
-}
-
-/**
- * The workspace's own issue the plan was started from, as JSON, as it reads
- * now: its identifier, title, Luke link, and description; nothing for a
- * plan started from none, or once the issue is gone.
- */
-function issueText(stored: StoredTask): readonly string[] {
-  const { issue } = stored;
-  if (issue === undefined) return [];
-  return [
-    ISSUE_MARKER,
-    JSON.stringify({
-      identifier: issueIdentifier(issue.workspaceName, issue.number),
-      title: issue.title,
-      url: linkOf({ kind: LINK_PLACE.ISSUE, issueId: issue.id }, issue.workspaceSlug),
-      description: issue.description,
-    }),
-  ];
-}
-
-/** The zone a turn reads the day in where the developer's window named none. */
-const UTC_ZONE = "UTC";
-
-/** The language the developer's time is said in, as the plan's dates are (`date-mention.ts`). */
-const TIME_LOCALE = "en-US";
-
-/** A date names no workspace or repository, so its mention is written under none. */
-const NO_PLACE: MentionPlace = { workspace: "", repository: null };
-
-/** When a turn opens, and the zone the developer's window named for it, where it named one. */
-export interface TurnClock {
-  readonly now: number;
-  readonly timeZone: string | undefined;
-}
-
-/**
- * The developer's own time as the turn opens: the weekday, the date, and the
- * time in their zone, the zone's name and offset, and the time in UTC beside
- * them, then today as the date mention the plan writes it, so Luke counts
- * "Friday" from their today rather than UTC's and spells a time at their
- * offset. A turn whose window named no zone, a desktop released before it
- * sent one, reads UTC and says so.
- */
-function developerTimeText({ now, timeZone }: TurnClock): string {
-  const named =
-    timeZone === undefined
-      ? Option.none()
-      : Option.map(DateTime.makeZoned(now, { timeZone }), (at) => ({ zone: timeZone, at }));
-  // Note that UTC is a zone every runtime holds, so the fallback cannot throw.
-  const { zone, at } = Option.getOrElse(named, () => ({
-    zone: UTC_ZONE,
-    at: DateTime.makeZonedUnsafe(now, { timeZone: UTC_ZONE }),
-  }));
-  const day = new Intl.DateTimeFormat(TIME_LOCALE, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: zone,
-  }).format(now);
-  const time = new Intl.DateTimeFormat(TIME_LOCALE, {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: zone,
-  }).format(now);
-  const utc = new Date(now).toISOString().slice(11, 16);
-  const offset = DateTime.zonedOffsetIso(at);
-  const today = DateTime.formatIsoDate(at);
-  const todayMention = mentionMarkdown(
-    { kind: MENTION_KIND.DATE, start: today },
-    dateLabel({ start: today }),
-    NO_PLACE,
-  );
-  const unknown = Option.isSome(named) ? "" : " Their time zone is unknown, so read it as UTC.";
-  return `${DEVELOPER_TIME_MARKER} ${day}, ${time} ${zone} (UTC ${utc}), offset ${offset}. Today is ${todayMention}.${unknown}`;
-}
-
-/**
- * What a planning turn is handed beside its instructions every turn: the
- * developer's own time and today (`developerTimeText`), the plan's name, the
- * developer's brief where they wrote one as they started it, the issues it
- * links and the workspace's own issue it was started from where it was, the
- * saved document as JSON, the newest saves coding agents made on it (so Luke
- * can raise what an agent asked or decided), what was
- * said in the chat since Luke last read it (`chat.ts`), the sections
- * the developer last wrote themselves (so Luke treats them as decided), the
- * plan's open comment threads (so Luke can raise what a member asked), and the
- * whiteboard as the model reads it (`board-text.ts`), each read again every
- * turn so what Luke saved and what the developer drew is what the
- * next turn reads. A task that no longer stands gets the heading and the
- * developer's time alone.
- */
-export function brainStandingContext(
-  stored: StoredTask | undefined,
-  board: Board,
-  chat: ChatSince,
-  clock: TurnClock,
-  comments: readonly PlanCommentThread[] = [],
-): string {
-  const heading = [
-    `${TASK_MARKER} ${new Date(clock.now).toISOString()}`,
-    developerTimeText(clock),
-  ].join("\n");
-  if (!stored) return heading;
-  const { task } = stored;
-  return [
-    heading,
-    `Name: ${task.name}`,
-    ...briefText(stored),
-    ...issueLinksText(stored),
-    ...issueText(stored),
-    DOCUMENT_MARKER,
-    JSON.stringify(task.document),
-    ...agentEditsText(stored.agentEdits),
-    ...chatSinceText(chat),
-    ...developerFieldsText(stored),
-    ...openThreadsText(comments),
-    boardText(board),
-  ].join("\n");
-}
-
 /**
  * One tool as eve is told of it: the name, words, and wire schema as JSON.
  * Nothing but data, because eve keeps what a dynamic tool resolver returns
@@ -604,6 +369,8 @@ export interface HostedToolDeclaration {
 /** What one brain tool call runs under: the task the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, the task's coding agents, and Luke in the workspace's chat, nothing where Chat is off for the task's owner. */
 export interface BrainCall {
   readonly task: PlanDocumentBinding;
+  /** The browser in the session's sandbox, and the conversation its tabs belong to: the task's. */
+  readonly browser: BrowserCall;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
@@ -625,8 +392,9 @@ interface BrainTool {
   ) => Effect.Effect<WireRecord, never, BrainToolServices>;
 }
 
-/** What a brain tool call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
-type BrainToolServices =
+/** What a brain tool call may reach: the store, the network for public research, GitHub through the App for the checkout, the catalog a start's choice is checked against, and the browser in the session's sandbox. */
+export type BrainToolServices =
+  | AgentBrowser
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
@@ -680,6 +448,11 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     ...RUN_ON_MAC_TOOL,
     run: (call, input) =>
       Effect.map(runOnMacTool(call.task.userId, input), (result) => ({ ...result })),
+  },
+  {
+    ...BROWSER_TOOL,
+    run: (call, input) =>
+      Effect.map(runBrowserTool(call.browser, input), (result) => ({ ...result })),
   },
   {
     ...SEARCH_WEB_TOOL,
@@ -767,22 +540,6 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...UPDATE_TASK_TOOL,
     run: (call, input) => runUpdateTask(call.agents, input),
-  },
-  {
-    ...LIST_ISSUES_TOOL,
-    run: (call, input) => runListIssues(call.agents, input),
-  },
-  {
-    ...READ_ISSUE_TOOL,
-    run: (call, input) => runReadIssue(call.agents, input),
-  },
-  {
-    ...CREATE_ISSUE_TOOL,
-    run: (call, input) => runCreateIssue(call.agents, input),
-  },
-  {
-    ...UPDATE_ISSUE_TOOL,
-    run: (call, input) => runUpdateIssue(call.agents, input),
   },
   {
     ...LIST_MODELS_TOOL,
@@ -905,7 +662,7 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.BRAIN_W
 export const WORKER_INSTRUCTIONS = `
 You do one job for an engineering assistant working on a task with a developer, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the task's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. run_on_mac runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+Read the task's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. run_on_mac runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. browser drives the browser in Luke's sandbox, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;
@@ -984,13 +741,19 @@ export function brainToolSet(): ToolSet {
 
 /**
  * What the model is shown of a planning call's result: a look at the board
- * or at one of the plan's pictures as its image, and anything else as the
- * JSON it is.
+ * or at one of the plan's pictures as its image, a browser call's
+ * screenshots as images beside its result, and anything else as the JSON it
+ * is.
  */
 export function tasksModelOutput(name: string, output: UnparsedWireValue): ToolModelOutput {
-  return name === LOOK_AT_PICTURE_TOOL.name
-    ? pictureLookModelOutput(output)
-    : lookModelOutput(output);
+  switch (name) {
+    case LOOK_AT_PICTURE_TOOL.name:
+      return pictureLookModelOutput(output);
+    case BROWSER_TOOL.name:
+      return browserModelOutput(output);
+    default:
+      return lookModelOutput(output);
+  }
 }
 
 /** Why a brain tool call ran nothing, in words the model can act on. */

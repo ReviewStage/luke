@@ -28,9 +28,11 @@ import { CODER } from "./bounds.js";
 /**
  * chat-page.ts -- a workspace's chat as the window reads it: everything a person sees of it past their cursor, held open while nothing moved.
  *
- * The reader is the account's own member of the workspace, minted on its
- * first read, which makes the workspace's `#general` too, so a window
- * opening an empty chat has a place to post. A person sees every channel,
+ * The reader is the account's own member of the workspace, minted when it
+ * joins (`joinWorkspaceChat`), which makes the workspace's `#general` too,
+ * so a window opening an empty chat has a place to post. The join is the
+ * one write a reader makes, once, before it reads: a read writes nothing,
+ * and answers nothing where the account has not joined. A person sees every channel,
  * DMs included, so where the chat stands for them is the workspace's head:
  * the last place its sequence handed out, which every post and every
  * change to a message takes. A read whose cursor is past the head is held,
@@ -66,7 +68,6 @@ function memberOnWire(
   return {
     id: row.id,
     kind: row.kind,
-    handle: row.handle,
     ...(name === undefined ? undefined : { name }),
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
@@ -175,9 +176,40 @@ export function readsOf(
 }
 
 /**
+ * The account's own member of the workspace's chat, and its `#general`,
+ * made where they are not yet: what a reader does once before it reads,
+ * since both are writes under the workspace's lock. Nothing where the
+ * account is not in the workspace.
+ */
+export function joinWorkspaceChat(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    const self = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+    if (Option.isNone(self)) return Option.none();
+    yield* ensureGeneral(userId, organizationId);
+    return self;
+  });
+}
+
+/** The account's own member of the workspace's chat, read and never made; nothing where it has not joined or is not in the workspace. */
+export function joinedMember(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.map(roster(userId, organizationId), (members) =>
+    Option.fromNullishOr(
+      members.find((member) => member.kind === MEMBER_KIND.HUMAN && member.userId === userId),
+    ),
+  );
+}
+
+/**
  * The workspace's chat as the account's person reads it from the cursor,
  * the next place it has yet to read, held while nothing moved past it;
- * nothing where the account is not in the workspace.
+ * nothing where the account is not in the workspace or has not joined its
+ * chat. Writes nothing.
  */
 export function workspaceChatPast(
   userId: string,
@@ -186,9 +218,8 @@ export function workspaceChatPast(
 ): ChatStoreEffect<Option.Option<ChatAnswer>> {
   return Effect.gen(function* () {
     const after = cursor - 1;
-    const self = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+    const self = yield* joinedMember(userId, organizationId);
     if (Option.isNone(self)) return Option.none();
-    yield* ensureGeneral(userId, organizationId);
     yield* heldUntilMoved(userId, organizationId, after);
     const past = yield* chatPast(userId, organizationId, self.value.id, after);
     if (Option.isNone(past)) return Option.none();

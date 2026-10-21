@@ -16,6 +16,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
@@ -44,14 +45,17 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentTranscriptChanged,
+  type CodingAgentTranscriptKey,
   type CodingAgentWorkspaceListParams,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
+import { streamed } from "./followed-stream.js";
 
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
@@ -68,6 +72,10 @@ export interface AgentProceduresDependencies {
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+    /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
+    transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
     codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
@@ -77,6 +85,7 @@ export interface AgentProceduresDependencies {
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+    codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
@@ -113,7 +122,6 @@ export interface AgentProceduresDependencies {
     | "observeTitle"
     | "observeMessaged"
     | "observeModels"
-    | "observePublished"
     | "observeTaskGone"
     | "shown"
     | "shownInbox"
@@ -134,8 +142,72 @@ function noted<Answer>(
   return Effect.tap(answer, (value) => Effect.sync(() => note(value)));
 }
 
+/** A transcript as a key that equals another naming the same one. */
+class TranscriptStreamKey extends Data.Class<{
+  readonly kind: CodingAgentTranscriptKey["kind"];
+  readonly owner: string;
+  readonly callId: string | undefined;
+}> {}
+
+function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStreamKey {
+  const owner = transcript.kind === TRANSCRIPT_KIND.AGENT ? transcript.agentId : transcript.taskId;
+  return new TranscriptStreamKey({ kind: transcript.kind, owner, callId: transcript.callId });
+}
+
+/**
+ * A transcript's pages for one stream a window holds open: the host follows
+ * it from its start as the stream opens, so the window hears it whole, and
+ * lets it go once the last stream of it closes. Every page the host tells of
+ * it reaches every stream of it, which joins a page heard again by id.
+ */
+function transcriptPages(
+  host: AgentProceduresDependencies["host"],
+  open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
+  transcript: CodingAgentTranscriptKey,
+): Stream.Stream<CodingAgentMessagesAnswerView> {
+  const key = transcriptKeyOf(transcript);
+  return Stream.callback<CodingAgentMessagesAnswerView>((queue) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          host.onTranscriptChanged((changed) => {
+            if (Equal.equals(transcriptKeyOf(changed.transcript), key)) {
+              Queue.offerUnsafe(queue, changed.page);
+            }
+          }),
+        ),
+        (stop) => Effect.sync(stop),
+      );
+      yield* Effect.acquireRelease(
+        Effect.andThen(
+          Effect.sync(() =>
+            MutableHashMap.set(
+              open,
+              key,
+              Option.getOrElse(MutableHashMap.get(open, key), () => 0) + 1,
+            ),
+          ),
+          host.transcriptFollow(transcript),
+        ),
+        () =>
+          Effect.suspend(() => {
+            const left = Option.getOrElse(MutableHashMap.get(open, key), () => 1) - 1;
+            if (left > 0) {
+              MutableHashMap.set(open, key, left);
+              return Effect.void;
+            }
+            MutableHashMap.remove(open, key);
+            return host.transcriptUnfollow(transcript);
+          }),
+      );
+    }),
+  );
+}
+
 export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const { host, notices } = dependencies;
+  /** How many streams stand open of each transcript, so the host lets one go only with the last. */
+  const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
   // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
   const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
     Effect.tap(
@@ -202,6 +274,23 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         });
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const pages = transcriptPages(host, openTranscripts, input).pipe(
+        Stream.tap((page) =>
+          Effect.sync(() => {
+            // A worker's page says where the worker stands, which is no word on the agent.
+            if (!("status" in page)) return;
+            if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
+            notices.observeTitle(input.agentId, page.title);
+            notices.observeStatus(input.agentId, page.status);
+          }),
+        ),
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(pages));
+    }),
     [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MESSAGE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -260,16 +349,17 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* host.codingAgentPage(input);
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_CALLS]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CALLS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentCalls(input);
+      },
+    ),
     [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actPort[
       AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that a read of another pull request by its number is no word on what the agent itself published.
-      return yield* noted(host.codingAgentPullRequest(input), (answer) => {
-        if ("pullRequest" in answer && input.number === undefined) {
-          notices.observePublished(input.agentId, answer.pullRequest);
-        }
-      });
+      return yield* host.codingAgentPullRequest(input);
     }),
     [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CHANGES].effect(
       function* ({ input, context, errors }) {

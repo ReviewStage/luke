@@ -70,6 +70,14 @@
   --luke-color-border: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
   --luke-color-border-strong: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.12));
   --luke-color-border-selected: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.32));
+  /* A chip's own face, opaque so it reads the same on any ground: its fill
+     at rest, under the pointer, and standing chosen, and its hairline, the
+     strong one round a chosen chip. */
+  --luke-color-chip: light-dark(#ffffff, #18181b);
+  --luke-color-chip-hover: light-dark(#f5f5f6, #202024);
+  --luke-color-chip-selected: light-dark(#ececee, #2c2c31);
+  --luke-color-chip-edge: light-dark(#dfdfe3, #2b2b30);
+  --luke-color-chip-edge-strong: light-dark(#b9b9c0, #45454c);
   --luke-color-input: light-dark(#fff, rgba(0, 0, 0, 0.4));
   --luke-color-input-focus: light-dark(#fff, rgba(0, 0, 0, 0.55));
   --luke-color-match: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.16));
@@ -179,6 +187,11 @@
   --luke-color-border: oklch(0.922 0 0);
   --luke-color-border-strong: oklch(0.922 0 0);
   --luke-color-border-selected: oklch(0.145 0 0);
+  --luke-color-chip: #ffffff;
+  --luke-color-chip-hover: #f5f5f5;
+  --luke-color-chip-selected: #ebebeb;
+  --luke-color-chip-edge: #e5e5e5;
+  --luke-color-chip-edge-strong: #b5b5b5;
   --luke-color-input: oklch(1 0 0);
   --luke-color-input-focus: oklch(1 0 0);
   --luke-color-match: rgba(0, 0, 0, 0.09);
@@ -244,8 +257,9 @@
   --luke-color-chart-5: #868b94;
 }
 
-/* The admin dashboard's and the OAuth cards' dark ground, the product's state
-   palette on it verbatim. */
+/* The site's dark ground, worn where the account's Theme setting (or the
+   machine, under System) asks for it, as the app and the admin dashboard do,
+   and where a page asks for it itself, as the OAuth cards do. The product's state palette on it verbatim. */
 [data-luke-profile="web"][data-luke-theme="dark"] {
   --luke-color-text: rgba(255, 255, 255, 0.92);
   --luke-color-text-muted: rgba(255, 255, 255, 0.56);
@@ -270,6 +284,11 @@
   --luke-color-border: rgba(255, 255, 255, 0.08);
   --luke-color-border-strong: rgba(255, 255, 255, 0.08);
   --luke-color-border-selected: rgba(255, 255, 255, 0.92);
+  --luke-color-chip: #16171b;
+  --luke-color-chip-hover: #1d1e23;
+  --luke-color-chip-selected: #272930;
+  --luke-color-chip-edge: #26272c;
+  --luke-color-chip-edge-strong: #3f4148;
   --luke-color-input: #101114;
   --luke-color-input-focus: #101114;
   --luke-color-match: rgba(255, 255, 255, 0.16);
@@ -324,7 +343,7 @@
   --luke-color-identity-6: #477a3a;
   --luke-color-on-identity: #fff;
 
-  /* The admin dashboard's chart series. The accent cyan sits too light for a
+  /* The chart series on the dark ground. The accent cyan sits too light for a
      mark on the dark card, so the slot is a darker step of the same hue
      family, validated against the card at #101114 (6.1:1, ≥ 3:1); the series
      after it hold the same bound there (4.7:1 to 5.7:1). */

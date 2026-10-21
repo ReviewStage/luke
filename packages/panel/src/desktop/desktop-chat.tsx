@@ -1,7 +1,6 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
-import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   BackIcon,
@@ -43,16 +42,18 @@ import { SpinnerRegion } from "../spinner.js";
 import { useChatActor } from "../tasks/chat-actors.js";
 import { ChatPane } from "../tasks/chat-pane.js";
 import { RelativeTime } from "../tasks/relative-time.js";
+import { PlanGlyph } from "../tasks/tab-look.js";
 import { useMinute } from "../tasks/task-time.js";
+import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
 import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
+import { useNarrowFocus } from "./narrow-focus.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
 import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
@@ -92,9 +93,9 @@ const CHAT_LIST = "Chat";
 /**
  * How the rail groups the tasks' channels: as the reader's sidebar groups
  * the tasks, the pinned first in the pins' order, then each of the
- * reader's sections in the listed workspace, while sections are on.
+ * reader's sections in the listed workspace.
  */
-function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGrouping {
+function taskGrouping(tasks: TasksControl): ChatTaskGrouping {
   const pinned = inPinOrder(
     tasks.tasks.filter((task) => task.pinnedAt !== undefined),
     (task) => ({ position: task.pinPosition, at: task.pinnedAt ?? 0 }),
@@ -102,7 +103,7 @@ function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGroupin
   const workspaceId = tasks.workspace?.id;
   const state = tasks.taskSections;
   const sections =
-    !sectionsOn || workspaceId === undefined
+    workspaceId === undefined
       ? []
       : workspaceSections(state, workspaceId).map((section) => ({
           id: section.id,
@@ -257,11 +258,12 @@ function RailRow({
   const { latest } = row;
   // A direct message is named by who it is with, both of its two where the reader is neither (`channelLabel`).
   const title = row.label;
+  const taskStatus = useTaskStatus(row.channel.planId);
   const mark =
     other !== undefined ? (
       <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
     ) : row.channel.kind === CHANNEL_KIND.TASK ? (
-      <DocumentIcon />
+      <PlanGlyph status={taskStatus} />
     ) : (
       <HashIcon />
     );
@@ -412,7 +414,6 @@ function ChatView({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   const actorOf = useChatActor(read?.answer, names);
   const folds = useRailFolds();
@@ -425,6 +426,7 @@ function ChatView({
     label: "Resize chat list",
     onResize,
   });
+  const screen = useNarrowFocus(room, view.listed);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -446,7 +448,7 @@ function ChatView({
     );
   }
   const chat = read.answer;
-  const rail = chatRail(chat, names, taskGrouping(tasks, sectionsOn));
+  const rail = chatRail(chat, names, taskGrouping(tasks));
   const hidden = hiddenColumns(room, view.listed);
   const groups = railGroups(rail);
   const row = (each: ChatRailRow) => (
@@ -472,7 +474,7 @@ function ChatView({
     />
   );
   return (
-    <div className="chat-view">
+    <div ref={screen} className="chat-view">
       <nav
         className="chat-rail"
         aria-label="Chat"

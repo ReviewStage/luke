@@ -7,7 +7,8 @@ import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
 import {
   eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
+  SPANS_NAMING_ACCESS_TOKENS,
+  spanWithoutAccessTokens,
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
@@ -53,7 +54,8 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     integrations: [Sentry.startupTracingIntegration()],
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendTransaction: transactionWithoutAccessTokens,
+    ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
+    beforeSendSpan: Sentry.withStreamedSpan(spanWithoutAccessTokens),
   });
 }
 

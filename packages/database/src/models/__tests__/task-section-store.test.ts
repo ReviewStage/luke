@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { sidebarLiveRowsSchema, sidebarOfLiveRows } from "@luke/features/sidebar-live";
 import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_KIND,
@@ -9,12 +10,23 @@ import {
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { organization, user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
-import { deleteTaskSectionIn, listTaskSections, writeTaskSections } from "../task-section-store.js";
+import {
+  listRepositoryPins,
+  repositoryPinsLiveStatement,
+  setRepositoryPin,
+} from "../repository-pin-store.js";
+import {
+  deleteTaskSectionIn,
+  listTaskSections,
+  taskSectionsLiveStatements,
+  writeTaskSections,
+} from "../task-section-store.js";
 import { createTask, deleteTask, updateTask } from "../task-store.js";
 
 /**
@@ -70,7 +82,65 @@ const place = (taskId: string, sectionId: string | null, position?: string): Tas
   ...(position === undefined ? undefined : { position }),
 });
 
+/** The sidebar as the desktop builds it from the live statements' rows, run as Realtime runs them. */
+const liveSidebarOf = (userId: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const sections = Option.getOrThrow(taskSectionsLiveStatements(userId));
+    const pins = Option.getOrThrow(repositoryPinsLiveStatement(userId));
+    const rows = yield* Effect.all({
+      sections: sql.unsafe(sections.sections.sql, [...sections.sections.params]),
+      entries: sql.unsafe(sections.entries.sql, [...sections.entries.params]),
+      pins: sql.unsafe(pins.sql, [...pins.params]),
+    });
+    return sidebarOfLiveRows(yield* Schema.decodeUnknownEffect(sidebarLiveRowsSchema)(rows));
+  });
+
 it.layer(getTestDB())("an account's task sections", (it) => {
+  it.effect(
+    "the live statements deliver the sections, their tasks, and the pins the held reads answer, to their maker, and none of them to a teammate or an outsider",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, workspace, first, second } = yield* openSharedWorkspace;
+        const outsider = yield* openAccount;
+        yield* openWorkspace(outsider);
+        const launch = randomUUID();
+        const later = randomUUID();
+        yield* written(dean, create(workspace, "Launch", launch));
+        yield* TestClock.adjust("1 minute");
+        yield* written(dean, create(workspace, "Later", later));
+        const icon = { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph: TASK_SECTION_GLYPH.ROCKET };
+        yield* written(dean, { kind: TASK_SECTION_WRITE.EDIT, id: later, title: "Later", icon });
+        yield* written(dean, { kind: TASK_SECTION_WRITE.MOVE, id: later, position: "a0" });
+        yield* written(dean, place(first, launch));
+        yield* TestClock.adjust("1 minute");
+        yield* written(dean, place(second, launch, "a1"));
+        yield* setRepositoryPin(dean, "acme/relay", true);
+        yield* TestClock.adjust("1 minute");
+        yield* setRepositoryPin(dean, "acme/web", true);
+
+        for (const reader of [dean, charles, outsider]) {
+          assert.deepEqual(yield* liveSidebarOf(reader), {
+            taskSections: yield* listTaskSections(reader),
+            repositoryPins: yield* listRepositoryPins(reader),
+          });
+        }
+        const deans = yield* liveSidebarOf(dean);
+        assert.deepEqual(
+          [deans.taskSections.sections.length, deans.taskSections.entries.length],
+          [2, 2],
+        );
+        assert.deepEqual(
+          deans.repositoryPins.map((pin) => pin.repository),
+          ["acme/web", "acme/relay"],
+        );
+        assert.deepEqual(yield* liveSidebarOf(outsider), {
+          taskSections: { sections: [], entries: [] },
+          repositoryPins: [],
+        });
+      }),
+  );
+
   it.effect("a section and the tasks in it are its maker's alone", () =>
     Effect.gen(function* () {
       const { dean, charles, workspace, first } = yield* openSharedWorkspace;

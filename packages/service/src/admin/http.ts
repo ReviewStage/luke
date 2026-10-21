@@ -8,6 +8,7 @@
  * desktop tier has no notion of.
  */
 
+import { ADMIN_QUERY } from "@luke/features/admin-wire";
 import { HTTP_STATUS } from "@luke/wire";
 
 export const ADMIN_HTTP_STATUS = {
@@ -17,50 +18,7 @@ export const ADMIN_HTTP_STATUS = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
-/**
- * The addresses the dashboard's reads and its one write are served at. They
- * live with the rest of the wire vocabulary because both sides speak them:
- * the page composes its calls from them, and the group that answers those
- * calls declares its routes from them.
- */
-export const ADMIN_ROUTE_PATH = {
-  METRICS: "/api/admin/metrics",
-  COST: "/api/admin/cost",
-  USERS: "/api/admin/users",
-  USER: "/api/admin/user",
-  FAVORITE: "/api/admin/favorite",
-  DAY: "/api/admin/day",
-  WORKSPACES: "/api/admin/workspaces",
-  RELIABILITY: "/api/admin/reliability",
-} as const;
-
-export const ADMIN_ERROR = {
-  /** No signed-in browser session; the page should offer sign-in. */
-  NOT_SIGNED_IN: "not-signed-in",
-  /** Signed in, but the account has no admin row. */
-  NOT_AUTHORIZED: "not-authorized",
-  METHOD_NOT_ALLOWED: "method-not-allowed",
-  /** A detail read that named no account, or named one past the id bound. */
-  MISSING_USER_ID: "missing-user-id",
-  /** A read that named a window outside the fixed set of lengths. */
-  INVALID_WINDOW: "invalid-window",
-  /** A roster read whose search term ran past the length bound. */
-  INVALID_SEARCH: "invalid-search",
-  /** A day read that named no real UTC calendar day. */
-  INVALID_DAY: "invalid-day",
-  /** The named account has no user row — deleted, or the id never existed. */
-  USER_NOT_FOUND: "user-not-found",
-  /**
-   * A path the dashboard's route group declares no route for. Nothing routes
-   * one here — each address is its own exact-path function — so this is what
-   * the group says about itself rather than an answer the page asks for.
-   */
-  NOT_FOUND: "not-found",
-  /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
-  UNAVAILABLE: "unavailable",
-} as const;
-
-type AdminError = (typeof ADMIN_ERROR)[keyof typeof ADMIN_ERROR];
+export { ADMIN_ERROR, type AdminError } from "@luke/features/admin-wire";
 
 /**
  * How much of the user population a metrics read covers. Admin accounts are the
@@ -77,15 +35,52 @@ export const ADMIN_METRICS_SCOPE = {
 
 export type AdminMetricsScope = (typeof ADMIN_METRICS_SCOPE)[keyof typeof ADMIN_METRICS_SCOPE];
 
-export const ADMIN_METRICS_SCOPE_PARAM = "scope";
+/** A windowed read's query as its procedure hands it over: each parameter absent, or one value. */
+export interface AdminWindowedQuery {
+  readonly scope?: string;
+  readonly window?: string;
+}
+
+/** The roster read's query: a windowed read's, and the search. */
+export interface AdminUsersQuery extends AdminWindowedQuery {
+  readonly search?: string;
+}
+
+/** One account's read query: the account, and the window. */
+export interface AdminUserQuery {
+  readonly id?: string;
+  readonly window?: string;
+}
+
+/** The day read's query: the day, and the scope. */
+export interface AdminDayQuery {
+  readonly date?: string;
+  readonly scope?: string;
+}
+
+/** The Workspaces read's query: the scope, which workspaces, and the search. */
+export interface AdminWorkspacesQuery {
+  readonly scope?: string;
+  readonly kind?: string;
+  readonly search?: string;
+}
+
+/** Any admin read's query. */
+export type AdminQuery =
+  | AdminWindowedQuery
+  | AdminUsersQuery
+  | AdminUserQuery
+  | AdminDayQuery
+  | AdminWorkspacesQuery;
+
+export const ADMIN_METRICS_SCOPE_PARAM = ADMIN_QUERY.SCOPE;
 
 /**
  * The scope a request asked for. Anything but the explicit `all` — absent,
  * misspelled, or unknown — falls to the default, because the narrower answer is
  * the safe one to give a request that did not clearly ask for more.
  */
-export function adminMetricsScope(url: string): AdminMetricsScope {
-  const value = new URL(url).searchParams.get(ADMIN_METRICS_SCOPE_PARAM);
+export function adminMetricsScope(value: string | undefined): AdminMetricsScope {
   return value === ADMIN_METRICS_SCOPE.ALL
     ? ADMIN_METRICS_SCOPE.ALL
     : ADMIN_METRICS_SCOPE.NON_ADMINS;
@@ -105,7 +100,7 @@ export const ADMIN_METRICS_WINDOW = {
 
 export type AdminMetricsWindow = (typeof ADMIN_METRICS_WINDOW)[keyof typeof ADMIN_METRICS_WINDOW];
 
-export const ADMIN_METRICS_WINDOW_PARAM = "window";
+export const ADMIN_METRICS_WINDOW_PARAM = ADMIN_QUERY.WINDOW;
 
 export const ADMIN_METRICS_WINDOW_DEFAULT = ADMIN_METRICS_WINDOW.MONTH;
 
@@ -126,9 +121,8 @@ export const ADMIN_RELIABILITY_WINDOWS: readonly AdminMetricsWindow[] = [
  * safely, where a window misread would reshape every number on the page while
  * the response still names the window it substituted.
  */
-export function adminMetricsWindow(url: string): AdminMetricsWindow | undefined {
-  const value = new URL(url).searchParams.get(ADMIN_METRICS_WINDOW_PARAM);
-  if (value === null) return ADMIN_METRICS_WINDOW_DEFAULT;
+export function adminMetricsWindow(value: string | undefined): AdminMetricsWindow | undefined {
+  if (value === undefined) return ADMIN_METRICS_WINDOW_DEFAULT;
   return Object.values(ADMIN_METRICS_WINDOW).find((candidate) => String(candidate) === value);
 }
 
@@ -146,7 +140,7 @@ export const ADMIN_ATTENTION_KIND = {
 
 export const ADMIN_ATTENTION_AGENT_DAYS = 7;
 
-export const ADMIN_USERS_SEARCH_PARAM = "search";
+export const ADMIN_USERS_SEARCH_PARAM = ADMIN_QUERY.SEARCH;
 
 /**
  * Generous against any name or address worth finding, and small against a
@@ -161,9 +155,10 @@ export const ADMIN_USERS_SEARCH_MAX_LENGTH = 100;
  * or only whitespace, and no answer at all past the length bound — refused
  * rather than silently clipped to a search nobody asked for.
  */
-export function adminUsersSearch(url: string): { term: string | undefined } | undefined {
-  const value = new URL(url).searchParams.get(ADMIN_USERS_SEARCH_PARAM);
-  if (value === null) return { term: undefined };
+export function adminUsersSearch(
+  value: string | undefined,
+): { term: string | undefined } | undefined {
+  if (value === undefined) return { term: undefined };
   if (value.length > ADMIN_USERS_SEARCH_MAX_LENGTH) return undefined;
   const term = value.trim();
   return { term: term.length === 0 ? undefined : term };
@@ -182,21 +177,20 @@ export const ADMIN_WORKSPACES_KIND = {
 export type AdminWorkspacesKind =
   (typeof ADMIN_WORKSPACES_KIND)[keyof typeof ADMIN_WORKSPACES_KIND];
 
-export const ADMIN_WORKSPACES_KIND_PARAM = "kind";
+export const ADMIN_WORKSPACES_KIND_PARAM = ADMIN_QUERY.KIND;
 
 /**
  * The kind a Workspaces read asked for. Like the scope, anything but the
  * explicit `all` falls to the narrower default: a misread list leaves out
  * personal workspaces rather than burying the shared ones among them.
  */
-export function adminWorkspacesKind(url: string): AdminWorkspacesKind {
-  const value = new URL(url).searchParams.get(ADMIN_WORKSPACES_KIND_PARAM);
+export function adminWorkspacesKind(value: string | undefined): AdminWorkspacesKind {
   return value === ADMIN_WORKSPACES_KIND.ALL
     ? ADMIN_WORKSPACES_KIND.ALL
     : ADMIN_WORKSPACES_KIND.SHARED;
 }
 
-export const ADMIN_DAY_PARAM = "date";
+export const ADMIN_DAY_PARAM = ADMIN_QUERY.DAY;
 
 const UTC_DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -214,12 +208,11 @@ export function isUtcDayKey(value: string): boolean {
 }
 
 /** The UTC day a detail read named, or nothing when it named no real one. */
-export function adminDayKey(url: string): string | undefined {
-  const value = new URL(url).searchParams.get(ADMIN_DAY_PARAM) ?? "";
-  return isUtcDayKey(value) ? value : undefined;
+export function adminDayKey(value: string | undefined): string | undefined {
+  return value !== undefined && isUtcDayKey(value) ? value : undefined;
 }
 
-export const ADMIN_USER_ID_PARAM = "id";
+export const ADMIN_USER_ID_PARAM = ADMIN_QUERY.USER_ID;
 
 /**
  * The account a detail read named, or nothing when it named none worth asking
@@ -227,25 +220,8 @@ export const ADMIN_USER_ID_PARAM = "id";
  * it exists so an arbitrarily long query string never reaches a query, not to
  * validate the id's shape, which only the user table itself can answer.
  */
-export function adminUserId(url: string): string | undefined {
-  const value = new URL(url).searchParams.get(ADMIN_USER_ID_PARAM)?.trim() ?? "";
-  if (value.length === 0 || value.length > 128) return undefined;
-  return value;
-}
-
-/**
- * Every admin answer is viewer-gated account data, so every path — refusals
- * included, since even a refusal names how far a viewer got — is marked
- * no-store: a shared machine's browser or an intermediary cache must never
- * replay one admin's view to whoever sits down next.
- */
-export function jsonResponse<Body extends object>(status: number, body: Body): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
-  });
-}
-
-export function errorResponse(status: number, error: AdminError): Response {
-  return jsonResponse(status, { error });
+export function adminUserId(value: string | undefined): string | undefined {
+  const id = value?.trim() ?? "";
+  if (id.length === 0 || id.length > 128) return undefined;
+  return id;
 }

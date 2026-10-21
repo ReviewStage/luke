@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -43,6 +42,9 @@ const PHONE = {
   SCREEN: 390,
 } as const;
 
+/** The Inbox's draft reply's card in a 360px window: the screen less the thread's insets and the reply's face beside it. */
+const INBOX_CARD_AT_360 = 288;
+
 const DESKTOP = {
   STAGE: 800,
   CARD: 720,
@@ -58,7 +60,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({ act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }) });
+  fakeAppBridge({});
   fakeActPort({});
 });
 
@@ -69,6 +71,7 @@ afterEach(() => {
   document.head.innerHTML = "";
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-luke-profile");
+  document.documentElement.removeAttribute("data-luke-room");
 });
 
 /** Draws `node` into the body, under a shell in the room given where one is. */
@@ -174,6 +177,7 @@ async function openNewTask(): Promise<Element> {
 
 test("on a phone with the keyboard up, New task's dialog, drawn outside the shell, caps its field at the same share of what is seen", async () => {
   document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-luke-room", "narrow");
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM, composer: PHONE.CARD }, { touch: true });
   stageAt(PHONE.STAGE_WITH_KEYBOARD);
   const field = await openNewTask();
@@ -181,6 +185,7 @@ test("on a phone with the keyboard up, New task's dialog, drawn outside the shel
 });
 
 test("on a desktop, New task's dialog lets its field grow to its eight lines whatever the window's height", async () => {
+  document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM, composer: DESKTOP.CARD });
   stageAt(DESKTOP.STAGE);
   const field = await openNewTask();
@@ -227,6 +232,7 @@ function composerDialog(): HTMLElement {
 
 test("on a phone, New task's dialog stands 12px from the screen's edges at a card's snug inset", () => {
   document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-luke-room", "narrow");
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
   const dialog = composerDialog();
   const style = getComputedStyle(dialog);
@@ -238,6 +244,7 @@ test("on a phone, New task's dialog stands 12px from the screen's edges at a car
 });
 
 test("on a desktop, New task's dialog keeps the dimmed window's margins", () => {
+  document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM });
   const dialog = composerDialog();
   const style = getComputedStyle(dialog);
@@ -288,4 +295,47 @@ test("on a touch screen the @ list names no keys at its foot, and with a mouse i
 
   layContainersAt({});
   assert.equal(shown(mentionFoot()), true);
+});
+
+test("a phone on its side, its room narrow though its dimmed window is wide, stands New task's dialog as a phone's", () => {
+  document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-luke-room", "narrow");
+  layContainersAt({ "luke-dialog-room": 702 }, { touch: true });
+  const dialog = composerDialog();
+  assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
+});
+
+test("a page that says no room of its own is answered by its dimmed window's width", () => {
+  layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
+  const dialog = composerDialog();
+  assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
+});
+
+/** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot of +, microphone, and Send. */
+function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "send", HTMLElement> {
+  const part = (parent: Element, tag: string, className: string) => {
+    const element = parent.appendChild(document.createElement(tag));
+    element.className = className;
+    return element;
+  };
+  const card = part(document.body, "div", "agent-composer");
+  const form = part(card, "form", "prompt-input inbox-answer");
+  const line = part(form, "div", "agent-composer-field");
+  part(line, "div", "agent-composer-input");
+  const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");
+  const attach = part(part(foot, "div", "prompt-input-tools"), "button", "");
+  const actions = part(foot, "div", "inbox-answer-actions");
+  const mic = part(actions, "button", "dictate-button");
+  const send = part(actions, "button", "prompt-input-submit");
+  return { foot, attach, line, actions, mic, send };
+}
+
+test("in a 360px window, the Inbox box keeps its +, its microphone, and Send in one row under its note line, the presses never giving way", () => {
+  layContainersAt({ composer: INBOX_CARD_AT_360 }, { touch: true });
+  const { foot, attach, line, actions, mic, send } = inboxBox();
+  assert.deepEqual([line, attach, mic, send].map(shown), [true, true, true, true]);
+  assert.equal(getComputedStyle(foot).flexWrap, "nowrap", "one row");
+  assert.equal(getComputedStyle(actions).flexShrink, "0", "the microphone and Send never give way");
+  const input = line.querySelector(".agent-composer-input") ?? assert.fail("the line's input");
+  assert.equal(getComputedStyle(input).width, "100%", "the note line spans the card");
 });

@@ -7,7 +7,7 @@ import {
   INTEGRATION_STATUS,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -79,9 +79,7 @@ const TOOLS = new Map<string, readonly IntegrationTool[]>([
 const roots: Root[] = [];
 
 beforeEach(() => {
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
       Promise.resolve({ tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] }),

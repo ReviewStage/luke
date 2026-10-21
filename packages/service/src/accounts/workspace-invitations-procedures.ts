@@ -35,12 +35,9 @@ import {
   hostedStoreOrUnavailable,
   type SessionUserIdResolver,
 } from "../http/http-effect.js";
-import { bodyLimit, hosted, sessionMiddleware } from "../orpc/base.js";
+import { hosted, sessionMiddleware } from "../orpc/base.js";
 import { invitationOffer } from "./invitation-offers.js";
 import { managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
-
-/** A workspace's id, an address, and a role are a few dozen characters, so a body past this is not one. */
-const MAXIMUM_BODY_BYTES = 1_024;
 
 /** The plugin's word for an invitation not yet accepted, rejected, or canceled. */
 const INVITATION_PENDING = "pending";
@@ -94,9 +91,7 @@ function pendingInvitations(
 
 /** The workspace invitations resource: the list, the make, and the cancel to an owner or an admin, and the offer to its recipient. */
 export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProcedureSeams) {
-  const resource = hosted.workspaceInvitations
-    .use(sessionMiddleware(seams.resolveSessionUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const resource = hosted.workspaceInvitations.use(sessionMiddleware(seams.resolveSessionUserId));
 
   /** The workspace's pending invitations as the plugin lists them under the session, read for the Mac. */
   const pendingOf = Effect.fn("web/workspacePendingInvitations")(function* (

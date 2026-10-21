@@ -12,7 +12,7 @@ import {
 } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
 import { acceptAsk } from "../agents/brain-host/brain-ask.js";
-import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -143,7 +143,7 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const { userId, taskId, to, clientKey, text, words } = input;
   if (to.actor === PLAN_COMMENT_ACTOR.AGENT) {
-    const eve = yield* eveFor(seams, request, userId);
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     const writer = storeWriter({ tools: CODER_TOOL_SET });
     yield* steerCodingAgent(eve, writer, userId, to.agent, {
       text,
@@ -156,7 +156,7 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const conversation = yield* hostedStoreOrUnavailable(openTaskConversation(userId, taskId));
   if (Option.isNone(conversation))
     return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.NOT_FOUND);
-  const eve = yield* eveFor(seams, request, userId, EVE_MOUNT.TASKS);
+  const eve = yield* eveFor<EveTypedTurn>(seams, request, userId, EVE_MOUNT.TASKS);
   const accepted = yield* hostedStoreOrUnavailable(
     acceptAsk(
       { asks: askRecord(), eve },

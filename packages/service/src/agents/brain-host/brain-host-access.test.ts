@@ -234,11 +234,12 @@ test("who reaches the runtime session and the conversation reads from the rows",
 
 /** The deployment acting for an account: admitted for its turns on a message and refused, under its own secret, for everything else. */
 
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const DEPLOYMENT = {
-  secret: Redacted.make(CRON_SECRET),
+  secret: Redacted.make(DEPLOYMENT_SECRET),
   admits: DEPLOYMENT_TURNS,
   presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+  streams: true,
 };
 
 /** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */
@@ -250,7 +251,7 @@ function scheduled(
 ): Request {
   return request(
     path,
-    CRON_SECRET,
+    DEPLOYMENT_SECRET,
     {
       ...(account !== undefined ? { [BRAIN_HOST_HEADER.ACCOUNT]: account } : undefined),
       ...(turn !== undefined ? { [BRAIN_HOST_HEADER.TURN]: turn } : undefined),
@@ -467,7 +468,7 @@ test("at the door the deployment's retire of a session, which a delete a browser
   const control = (account: string, sessionId: string, route: string, method = "POST") =>
     request(
       `/eve/v1/session/${sessionId}/${route}`,
-      CRON_SECRET,
+      DEPLOYMENT_SECRET,
       { [BRAIN_HOST_HEADER.ACCOUNT]: account },
       method,
     );

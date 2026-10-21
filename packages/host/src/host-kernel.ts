@@ -3,33 +3,12 @@ import type { WireValue } from "@luke/wire";
 import { Effect } from "effect";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
-import type { SecretCipher } from "./settings-store.js";
-
-export interface HostSeams {
-  /** Luke's own application-state root, given explicitly: never derived from the hosting process's profile. */
-  stateRoot: string;
-  runMode: RunMode;
-  appVersion: string;
-  packaged: boolean;
-  /** The environment the host reads its development overrides from. */
-  environment: NodeJS.ProcessEnv;
-  cipher: SecretCipher;
-  createId: () => string;
-  report: (message: string) => void;
-  /**
-   * Hears the protocol's shutdown method: the client's explicit Quit, or a
-   * newer build draining this one. The process hosting the runtime leaves in
-   * the coordinator's order; a host with no process to leave (a fixture run)
-   * hears nothing.
-   */
-  onShutdownRequested?: () => void;
-}
 
 /**
  * What every composer of the host is handed: the seams the host was given,
- * the two derived base URLs, the node registry, the one event door, and the
- * agent's own directory. It holds no concern of its own, so
- * nothing a composer owns can be reached through it by another.
+ * the two derived base URLs, the node registry, and the one event door. It
+ * holds no concern of its own, so nothing a composer owns can be reached
+ * through it by another.
  */
 export interface HostKernel {
   readonly runMode: RunMode;
@@ -57,7 +36,6 @@ export interface HostKernel {
    * holds.
    */
   openExternalThroughNode: (url: string) => Promise<void>;
-  reportOpenFailure: (error: Error) => void;
 }
 
 /**
@@ -130,9 +108,6 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
       );
       if (result.status === NODE_CAPABILITY_STATUS.OK) return;
       throw new Error(result.reason);
-    },
-    reportOpenFailure: (error) => {
-      report(`An address could not be opened: ${error.message}`);
     },
   };
 }

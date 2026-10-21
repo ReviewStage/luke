@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import {
@@ -19,6 +19,12 @@ import {
   QUIET_COMPOSER,
 } from "../testing/composer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import {
+  installScrollTo,
+  pressLineNumber,
+  wholeFileDrawn,
+  wholeFileRoot,
+} from "../testing/whole-file.js";
 import { AgentComposer } from "./agent-composer.js";
 import { FileTab } from "./file-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -26,10 +32,11 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 
 /**
  * A File tab's lines mentioned in the agent's message box on the same task's
- * page, over the real editor bundle: the lines selected in the tab, the
- * command ⌥⌘K runs, and the box holding the mention as its chip, pinned to
- * the commit the lines were read at, sent as the lines' GitHub address.
- * Synthetic plan and repository.
+ * page, over the real editor bundle and the real diff bundle: the lines
+ * picked by their numbers or selected as text in the tab, the command ⌥⌘K
+ * runs, and the box holding the mention as its chip, pinned to the commit
+ * the lines were read at, sent as the lines' GitHub address. Synthetic plan
+ * and repository.
  */
 
 const TASK_ID = "pl_1";
@@ -46,11 +53,9 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
+  installScrollTo();
   installEditorLayout();
-  fakeAppBridge({
-    act: (_request: Act): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -80,19 +85,30 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** The file as the service read it at the head's commit. */
-const readFile = (): Promise<TasksFileAnswer> =>
-  Promise.resolve({
-    file: {
-      path: "src/invite.ts",
-      repository: "acme/relay",
-      branch: "main",
-      commit: HEAD,
-      firstLine: 1,
-      lineCount: 4,
-      lines: [[{ text: "one" }], [{ text: "two" }], [{ text: "three" }], [{ text: "four" }]],
-    },
-  });
+/** The file as the service reads it: its first line naming the head's commit, and its whole text raw. */
+const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> =>
+  Promise.resolve(
+    request.raw === true
+      ? {
+          text: {
+            path: "src/invite.ts",
+            repository: "acme/relay",
+            branch: "main",
+            text: "one\ntwo\nthree\nfour\n",
+          },
+        }
+      : {
+          file: {
+            path: "src/invite.ts",
+            repository: "acme/relay",
+            branch: "main",
+            commit: HEAD,
+            firstLine: 1,
+            lineCount: 4,
+            lines: ["one"],
+          },
+        },
+  );
 
 /** The agent's box on the composer's own control, its sends answered by `sender`. */
 function Box({ sender }: { sender: MessageSender }): ReactNode {
@@ -130,7 +146,7 @@ async function page({ box = true }: { box?: boolean } = {}) {
             key: "file",
             file: { path: "src/invite.ts", range: undefined, opened: 1 },
             snippet: undefined,
-            notes: { notes: [], folded: [], onFold: ignore, onShow: ignore },
+            notes: { notes: [], folded: [], onFold: ignore, taskId: undefined },
             readFile,
             onRead: ignore,
           }),
@@ -140,15 +156,13 @@ async function page({ box = true }: { box?: boolean } = {}) {
     ),
   );
   await settle();
+  await wholeFileDrawn(container);
   return { container, sent };
 }
 
 /** The text of a line the tab draws, by its number. */
 function lineText(container: HTMLElement, line: number): Node {
-  const row = [...container.querySelectorAll(".file-tab .code-line")].find(
-    (each) => each.querySelector(".code-line-number")?.textContent === String(line),
-  );
-  const text = row?.querySelector(".code-line-text")?.firstChild?.firstChild;
+  const text = wholeFileRoot(container)?.querySelector(`[data-line="${line}"] span`)?.firstChild;
   assert.ok(text, `line ${line} is drawn`);
   return text;
 }
@@ -171,20 +185,38 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   return read;
 }
 
-/** A selection from a place in one line's text to a place in another's. */
-function select(from: Node, fromOffset: number, to: Node, toOffset: number): void {
+/**
+ * Runs ⌥⌘K over a selection from a place in one line's text to a place in
+ * another's. Note that jsdom keeps no selection of nodes in a shadow root,
+ * so the window's selection is stood in for while the command reads it, as
+ * a browser hands it: the one range, read across the shadow root.
+ */
+function mentionSelected(from: Node, fromOffset: number, to: Node, toOffset: number): boolean {
   const range = document.createRange();
   range.setStart(from, fromOffset);
   range.setEnd(to, toOffset);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
+  const held: Selection = Object.create(Selection.prototype, {
+    isCollapsed: { value: false },
+    rangeCount: { value: 1 },
+    getComposedRanges: { value: () => [range] },
+  });
+  // Note that only the tab's reads are stood in for, the message box reading the window's own.
+  const read = vi
+    .spyOn(document, "getSelection")
+    .mockReturnValueOnce(held)
+    .mockReturnValueOnce(held);
+  try {
+    return runAppCommand(APP_COMMAND.MENTION_LINES);
+  } finally {
+    read.mockRestore();
+  }
 }
 
-test("lines selected in a File tab, ⌥⌘K, are a chip in the agent's box naming the file and its lines, sent as the lines' address at the commit they were read at", async () => {
+test("lines picked by their numbers in a File tab, ⌥⌘K, are a chip in the agent's box naming the file and its lines, sent as the lines' address at the commit they were read at", async () => {
   const { container, sent } = await page();
 
-  select(lineText(container, 2), 1, lineText(container, 3), 2);
+  pressLineNumber(container, 2);
+  pressLineNumber(container, 3, true);
   const ran = runAppCommand(APP_COMMAND.MENTION_LINES);
   await settle();
   const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
@@ -203,11 +235,10 @@ test("lines selected in a File tab, ⌥⌘K, are a chip in the agent's box namin
   ]);
 });
 
-test("a selection that ends where the next line begins, as a line selected whole does, pins that line alone", async () => {
+test("lines selected as text, a selection that ends where the next line begins, as a line selected whole does, pin that line alone", async () => {
   const { container, sent } = await page();
 
-  select(lineText(container, 2), 0, lineText(container, 3), 0);
-  runAppCommand(APP_COMMAND.MENTION_LINES);
+  mentionSelected(lineText(container, 2), 0, lineText(container, 3), 0);
   await settle();
   pressInComposer(container, "Enter");
   await settle();
@@ -220,7 +251,5 @@ test("a selection that ends where the next line begins, as a line selected whole
 test("with no agent's box on the page, ⌥⌘K is not offered, so the key is left to whatever else wants it", async () => {
   const { container } = await page({ box: false });
 
-  select(lineText(container, 2), 1, lineText(container, 3), 2);
-
-  assert.equal(runAppCommand(APP_COMMAND.MENTION_LINES), false);
+  assert.equal(mentionSelected(lineText(container, 2), 1, lineText(container, 3), 2), false);
 });

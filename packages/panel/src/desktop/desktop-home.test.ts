@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -19,7 +19,7 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -38,7 +38,9 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { commandKeyshortcuts } from "../tooltip.js";
@@ -132,7 +134,7 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** Each agent with no task's inbox as the service answers a read of it. */
+/** Each agent with no task's inbox as main pushes it. */
 const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
 
 /** The tasks holding items, and those of them with an item waiting, as main reads the account. */
@@ -182,21 +184,13 @@ beforeEach(() => {
   automationReads = [];
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
+  // The host pushes each task's inbox, and each agent's with no task, as it is followed.
+  const host = followedInboxes(({ kind, id }) => ({
+    items: (kind === INBOX_SCOPE_KIND.PLAN ? INBOXES : AGENT_INBOXES).get(id) ?? [],
+  }));
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
-      const value: CodingAgentInboxAnswerView = {
-        items: AGENT_INBOXES.get(agentId) ?? [],
-        cursor: "1",
-      };
-      return Promise.resolve(value);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
-      return Promise.resolve(value);
-    },
+    ...host.procedures,
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId ?? "");
@@ -211,14 +205,14 @@ afterEach(() => {
   window.localStorage.clear();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  document.documentElement.removeAttribute("data-luke-profile");
 });
 
-/** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
+/** A task the composer started: its name, repository, workspace, the agent it asked for, and the brief it handed on. */
 interface Started {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
-  readonly planning: boolean;
   readonly agent: NewTaskAgent | undefined;
   readonly brief: string | undefined;
 }
@@ -239,12 +233,11 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
     workspaceId: LISTED_WORKSPACE,
     repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
     readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
-    start: (name, repository, workspaceId, planning, from) => {
+    start: (name, repository, workspaceId, from) => {
       started.push({
         name,
         repository,
         workspaceId,
-        planning,
         agent: from?.handed,
         brief: from?.brief,
       });
@@ -275,10 +268,10 @@ function mount(
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      onOpenItem: () => undefined,
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     ...overrides,
@@ -435,6 +428,42 @@ test("on a phone, where the sidebar is a drawer, Recent lists the 20 plans saved
   const desktop = mount({ tasks: many, listed }, "Dean", SHELL_ROOM.WIDE);
   await settle();
   assert.deepEqual(rows(desktop.page, "home-recent"), latest.slice(0, 6));
+});
+
+/** How tall a row's press stands at least, in pixels, its token read where the sheets name one; none where nothing holds it up. */
+function leastHeight(press: Element): number | undefined {
+  const drawn = getComputedStyle(press).minHeight;
+  const token = /^var\((--[a-z-]+)\)$/u.exec(drawn)?.[1];
+  const length = token === undefined ? drawn : getComputedStyle(press).getPropertyValue(token);
+  const pixels = Number.parseFloat(length);
+  return Number.isNaN(pixels) || pixels === 0 ? undefined : pixels;
+}
+
+test("on a touch screen each Recent row on Home stands a finger's 44px tall at least, and with a mouse it keeps its own height", async () => {
+  const recentPresses = async (touch: boolean) => {
+    const sheet = layContainersAt({}, { touch });
+    const { page } = mount({}, "Dean", touch ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE);
+    await settle();
+    const region = page.querySelector('section[aria-labelledby="home-recent"]');
+    assert.ok(region, "Recent stands");
+    const heights = [...region.querySelectorAll(".luke-list-row-main")].map(leastHeight);
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    sheet.remove();
+    return heights;
+  };
+  document.documentElement.setAttribute("data-luke-profile", "web");
+
+  const touch = await recentPresses(true);
+  assert.ok(touch.length > 0, "Recent lists rows");
+  assert.ok(
+    touch.every((height) => height !== undefined && height >= 44),
+    "every row is a finger's target tall",
+  );
+  assert.ok(
+    (await recentPresses(false)).every((height) => height === undefined),
+    "with a mouse nothing holds a row up past its own height",
+  );
 });
 
 test("a waiting item's row opens the Inbox on its item, and a recent plan opens the plan", async () => {
@@ -627,7 +656,7 @@ test("Home's composer leaves the caret in a field the developer is typing in as 
   assert.ok(document.activeElement === field, "the field keeps the caret");
 });
 
-test("Agent mode: Return in Home's composer starts the task in the workspace Home lists, without planning, and an agent on the words with the chip's model", async () => {
+test("Return in Home's composer starts the task in the workspace Home lists, without planning, and an agent on the words with the chip's model", async () => {
   const { page, opened } = mount();
   await settle();
   typeInComposer(page, "Make the sidebar keep its folds.");
@@ -640,7 +669,6 @@ test("Agent mode: Return in Home's composer starts the task in the workspace Hom
     name: "",
     repository: "acme/relay",
     workspaceId: LISTED_WORKSPACE,
-    planning: false,
     brief: undefined,
   });
   assert.deepEqual(handed, {
@@ -651,26 +679,6 @@ test("Agent mode: Return in Home's composer starts the task in the workspace Hom
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
   assert.equal(opened.started.length, 1);
   assert.equal(opened.newTasks, 0, "no dialog is asked for");
-});
-
-test("Plan mode: Shift+Tab in Home's composer turns it on, and Return starts the plan and its call in the workspace Home lists, Untitled, handing Luke the words as its brief, with no agent", async () => {
-  const { page, opened } = mount();
-  await settle();
-  pressInComposer(page, "Tab", { shiftKey: true });
-  typeInComposer(page, "Rethink automations");
-  pressInComposer(page, "Enter");
-  await settle();
-
-  assert.deepEqual(opened.started, [
-    {
-      name: "",
-      repository: "acme/relay",
-      workspaceId: LISTED_WORKSPACE,
-      planning: true,
-      agent: undefined,
-      brief: "Rethink automations",
-    },
-  ]);
 });
 
 test("words typed in the composer while the task list is read are still there once it lands", async () => {
@@ -804,7 +812,7 @@ test("an account with no plan yet but an automation's question waiting on it is 
   assert.deepEqual(rows(page, "home-inbox"), ["Quarantine the flaky test? · Nightly flake sweep"]);
 });
 
-test("a waiting row wears its agent's tile, whose card names the teammate who started it by their face, read against the listed workspace's members", async () => {
+test("a waiting row wears its agent's tile, and hangs the thread's card, its task leading it and the agent that asked at its foot with the spinner while it works", async () => {
   const agents = {
     total: 1,
     working: 1,
@@ -837,20 +845,23 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
   await settle();
 
   const row = button(page, "Email the invitee when an invite is withdrawn?");
-  const mark = row.querySelector("[data-agent-ref]");
-  assert.ok(mark, "the row's mark hangs its agent's card");
-  assert.ok(mark.querySelector('.actor-mark[data-kind="agent"]'), "the mark is the agent's tile");
+  assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
+  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the row wears the agent's tile");
   act(() => {
-    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.match(card?.textContent ?? "", /Started by.*Charles Pan/u);
-  const face = card?.querySelector<HTMLImageElement>('.actor-mark[data-kind="person"] img');
-  assert.equal(
-    face?.getAttribute("src"),
-    CHARLES_PICTURE,
-    "the starter wears their member picture",
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.match(card?.textContent ?? "", /Email the invitee when an invite is withdrawn\?/u);
+  assert.match(
+    card?.textContent ?? "",
+    /Invite emails$/u,
+    "the agent that asked stands at its foot",
   );
+  assert.ok(
+    card?.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
+    "the spinner beside the agent says it works, in no words",
+  );
+  assert.doesNotMatch(card?.textContent ?? "", /Working/u);
 });
 
 test("a waiting row of an agent with no plan names the automation that started it on its card, the window reading the automations for it alone", async () => {
@@ -897,13 +908,12 @@ test("a waiting row of an agent with no plan names the automation that started i
   );
   await settle();
 
-  const mark = button(container, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
-  assert.ok(mark, "the row's mark hangs its agent's card");
+  const row = button(container, "Quarantine the flaky test?");
   act(() => {
-    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.match(card?.textContent ?? "", /Sweep the flaky tests.*Started by.*Nightly flake sweep/u);
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.match(card?.textContent ?? "", /^Nightly flake sweep.*Sweep the flaky tests$/su);
 });
 
 test("a question of another workspace's automation, which Home does not list, reads none of the listed workspace's automations", async () => {
@@ -1033,19 +1043,16 @@ async function mountUnderDialog() {
   };
 }
 
-test("Plan turned on in the dialog over Home and the dialog put away, Home's composer is in Plan mode too, and starts the plan and its call", async () => {
+test("Home's composer is drawn as the dialog's: New task's title with the repository chip after it in the head row over the box, and no chip in the box's foot", async () => {
   const page = await mountUnderDialog();
-  pressInComposer(page.dialog(), "Tab", { shiftKey: true });
-  await page.closeDialog();
+  /** A card's head row, by its title and the chip after it, and what its box's foot holds besides the +. */
+  const drawn = (card: HTMLElement) => ({
+    title: card.querySelector(".new-task-head h2")?.textContent,
+    chip: card.querySelector(".new-task-head .repository-chip")?.textContent,
+    footChips: card.querySelectorAll(".prompt-input-tools .repository-chip").length,
+  });
 
-  const toggle = page.home().querySelector('button[aria-label="Plan with Luke first"]');
-  assert.equal(toggle?.getAttribute("aria-pressed"), "true", "Home's card shows Plan mode");
-  typeInComposer(page.home(), "Rethink automations");
-  pressInComposer(page.home(), "Enter");
-  await settle();
-
-  assert.deepEqual(
-    page.started.map(({ planning, agent }) => ({ planning, agent })),
-    [{ planning: true, agent: undefined }],
-  );
+  const home = drawn(page.home());
+  assert.deepEqual(home, { title: "New task", chip: "acme/relay", footChips: 0 });
+  assert.deepEqual(drawn(page.dialog()), home, "the dialog's card is drawn the same");
 });

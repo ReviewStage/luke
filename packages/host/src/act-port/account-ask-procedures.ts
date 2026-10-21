@@ -1,20 +1,23 @@
 import type {
+  ChatGptSignInAnswerView,
   DictationTranscribeAnswerView,
   DictationTranscribeParams,
+  GitHubTokenAnswerView,
+  GitHubTokenSaveParams,
   PlanTemplateAnswerView,
   PlanTemplateRevisionAnswerView,
   PlanTemplateRevisionParams,
   PlanTemplateRevisionsAnswerView,
   PlanTemplateRevisionsParams,
   PlanTemplateWriteParams,
+  ProviderKeyForAgentsParams,
   ProviderKeyRemoveParams,
   ProviderKeySaveParams,
   ProviderKeysAnswerView,
 } from "@luke/features/coding-agent-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { ACCOUNT_ASK_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /**
  * account-ask-procedures.ts -- the account's own asks of the host from Settings and a dictating box.
@@ -31,6 +34,12 @@ export interface AccountAskProceduresDependencies {
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+    providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
+    chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
+    chatGptSignInCancel(): Effect.Effect<void>;
+    githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+    githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
+    githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
     planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateRevisions(
@@ -71,6 +80,42 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.providerKeyRemove(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]: actPort[
+      ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.providerKeyForAgents(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actPort[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN].effect(
+      function* ({ context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.chatGptSignIn();
+      },
+    ),
+    [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actPort[
+      ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.chatGptSignInCancel();
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.githubTokenRead();
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.githubTokenSave(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.githubTokenRemove();
     }),
     [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actPort[
       ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ

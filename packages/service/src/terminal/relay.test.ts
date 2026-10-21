@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
@@ -35,7 +36,8 @@ import {
  * resizes reaching the PTY and its output reaching the desktop; the shell's
  * exit ends the connection as exited; nobody typing for the idle bound ends
  * it as idle, and typing keeps it; and the GitHub token at the firewall is
- * set when due, once between two connections.
+ * set when due, once between two connections, or, where it is a member's
+ * own, at every check and taken off at the close.
  */
 
 const AGENT = "agent-1";
@@ -44,6 +46,11 @@ const CONVERSATION = "conversation-1";
 const SANDBOX_SESSION = "sbs_running";
 const ASK = { userId: "user-1", agentId: AGENT, terminalId: SHELL, cols: 120, rows: 32 };
 const encode = (text: string) => new TextEncoder().encode(text);
+const CREDENTIAL = {
+  token: Redacted.make("ghs_fixture"),
+  fullName: "Acme/Relay",
+  access: { kind: GITHUB_ACCESS.APP },
+} as const;
 
 /** One side of the relay as a test drives it: frames pushed in, and what the relay sent and how it closed, kept. */
 const scriptedSocket = Effect.gen(function* () {
@@ -81,11 +88,16 @@ function world(options: {
   readonly tokensRefused?: number;
   /** What GitHub answers a mint only after; never, where it is never done. */
   readonly tokensWait?: Deferred.Deferred<void>;
+  /** Whether the agent's credential is its starter's own token. */
+  readonly memberToken?: boolean;
+  /** Whether a turn of the agent is under way. */
+  readonly turnUnderWay?: boolean;
 }) {
   let heldUntil = 0;
   let credentialAt: number | undefined;
   const policies: string[] = [];
-  const asked = { attached: 0, resumed: 0, tokens: 0, released: 0, policies };
+  const withdrawn: string[] = [];
+  const asked = { attached: 0, resumed: 0, tokens: 0, released: 0, policies, withdrawn };
   const sandbox: AgentSandboxService = {
     terminals: () => Effect.die("the relay lists nothing"),
     start: () => Effect.die("the relay starts nothing"),
@@ -111,22 +123,26 @@ function world(options: {
             }
           : { state };
       }),
-    setGitHubToken: (sandboxSessionId) =>
+    setCredential: (sandboxSessionId) =>
       Effect.sync(() => void asked.policies.push(sandboxSessionId)),
+    withdrawCredential: (sandboxSessionId) =>
+      Effect.sync(() => void asked.withdrawn.push(sandboxSessionId)),
   };
   const agent: RelayAgent = {
     conversationId: CONVERSATION,
     sessionId: "wrun_1",
-    repositoryToken: Effect.suspend(() => {
+    repositoryCredential: Effect.suspend(() => {
       asked.tokens += 1;
       const answer =
         asked.tokens <= (options.tokensRefused ?? 0)
           ? Effect.fail("GitHub refused the mint")
-          : Effect.succeed(Redacted.make("ghs_fixture"));
+          : Effect.succeed(CREDENTIAL);
       return options.tokensWait === undefined
         ? answer
         : Effect.andThen(Deferred.await(options.tokensWait), answer);
     }),
+    memberToken: options.memberToken ?? false,
+    turnUnderWay: Effect.succeed(options.turnUnderWay ?? false),
   };
   const deps: RelayDependencies = {
     reach: () => Effect.succeed(options.agent ?? Option.some(agent)),
@@ -171,7 +187,9 @@ it.effect(
         agent: Option.some({
           conversationId: CONVERSATION,
           sessionId: undefined,
-          repositoryToken: Effect.die("no token"),
+          repositoryCredential: Effect.die("no token"),
+          memberToken: false,
+          turnUnderWay: Effect.die("no turn"),
         }),
         pty,
       });
@@ -255,7 +273,7 @@ it.effect(
 
       const [start, resize] = texts(pty.sent);
       assert.equal(start.type, "start");
-      assert.equal(start.command, "sh", "tmux is installed where the sandbox lacks it, then run");
+      assert.equal(start.command, "setpriv", "the shell attaches with every capability dropped");
       assert.ok(
         start.args.includes(`=luke-${SHELL}`),
         "the start names the shell's session exactly",
@@ -346,6 +364,44 @@ it.effect(
 
       assert.equal(shared.asked.tokens, 1);
       assert.deepEqual(shared.asked.policies, [SANDBOX_SESSION]);
+    }),
+);
+
+it.effect(
+  "a member's own token is set at every check rather than claimed, and taken off as the terminal closes unless a turn of the agent is under way",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const idle = yield* scriptedSocket;
+      const busy = yield* scriptedSocket;
+      const alone = world({ pty, memberToken: true });
+      const beside = world({ pty, memberToken: true, turnUnderWay: true });
+
+      const one = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(idle.socket, ASK, alone.deps)),
+      );
+      yield* settle;
+      yield* TestClock.adjust(Duration.minutes(4));
+      yield* idle.push({ bytes: encode("x") });
+      yield* settle;
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* settle;
+      const setWhileOpen = [...alone.asked.policies];
+      const withdrawnWhileOpen = [...alone.asked.withdrawn];
+      yield* idle.leave;
+      yield* Fiber.join(one);
+      yield* Effect.scoped(
+        Effect.andThen(
+          Effect.forkScoped(relayTerminal(busy.socket, ASK, beside.deps)),
+          Effect.andThen(settle, busy.leave),
+        ),
+      );
+
+      assert.deepEqual(setWhileOpen, [SANDBOX_SESSION, SANDBOX_SESSION]);
+      assert.deepEqual(withdrawnWhileOpen, []);
+      assert.deepEqual(alone.asked.withdrawn, [SANDBOX_SESSION]);
+      assert.deepEqual(beside.asked.policies, [SANDBOX_SESSION]);
+      assert.deepEqual(beside.asked.withdrawn, [], "a turn under way keeps the token");
     }),
 );
 

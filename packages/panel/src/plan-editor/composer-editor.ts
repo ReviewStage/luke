@@ -925,7 +925,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
   const guard = guardPlugin(state, props);
   const editor = new Editor({
     element: host,
-    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`, `../index.html`) refuses; the owner's stylesheet styles the box instead.
+    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; the owner's stylesheet styles the box instead.
     injectCSS: false,
     extensions: [
       ...composerExtensions(

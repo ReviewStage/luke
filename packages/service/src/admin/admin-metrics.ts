@@ -4,15 +4,13 @@ import { Clock, Effect } from "effect";
 import { DAY_MS } from "../core.js";
 import type { AdminOverview } from "./admin-overview.js";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
   type AdminMetricsWindow,
+  type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -300,7 +298,7 @@ export function buildAdminMetrics(
 }
 
 export interface AdminMetricsOptions {
-  request: Request;
+  query: AdminWindowedQuery;
   readMetrics: (
     now: number,
     scope: AdminMetricsScope,
@@ -319,18 +317,15 @@ export interface AdminMetricsOptions {
  */
 export function handleAdminMetrics(
   options: AdminMetricsOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminMetrics, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
-      Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
-      Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause)),
-    ),
+    options
+      .readMetrics(now, adminMetricsScope(query.scope), windowDays)
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause))),
   );
 }

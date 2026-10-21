@@ -11,6 +11,9 @@ import {
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useEffect, useReducer, useState, useSyncExternalStore } from "react";
 import { DIAGRAM_REFUSED_LINE, useSideBundles } from "./bundle-loader.js";
+import { coarsePointerNow } from "./coarse-pointer.js";
+import { AttachmentViewer } from "./tasks/attachment-viewer.js";
+import { IMAGE_OPENING } from "./tasks/use-image-zoom.js";
 
 /**
  * plan-diagram.tsx -- a plan's ```` ```mermaid ```` fence drawn as its diagram: the diagram bundle loaded the first time one is shown, each picture kept by its code and appearance, and the figure the read view and the editor's preview draw it in.
@@ -23,6 +26,13 @@ import { DIAGRAM_REFUSED_LINE, useSideBundles } from "./bundle-loader.js";
  * each shown diagram again in the new one. A diagram can hold words, so the
  * figure is left out of the screen recording (`ph-no-capture`): a picture
  * of words is the one thing the recording's masking cannot reach.
+ *
+ * A diagram is drawn no wider than its column, which on a phone shrinks a
+ * wide one's words past reading, so where the room is narrow or the window
+ * is worked by a finger a tap on the picture, or its head's Full screen,
+ * opens it over the window at its own pixels, to be moved about and pinched
+ * (`tasks/attachment-viewer.tsx`). With a mouse in a wide room the picture
+ * takes no press, and the head offers no Full screen (`tasks.css`).
  */
 
 /** How many pictures the window keeps in each appearance, the oldest let go first; enough for every diagram in a plan, and the drafts the editor's preview drew. */
@@ -109,14 +119,70 @@ function useDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing
   return AsyncResult.isFailure(bundle) ? { kind: DIAGRAM_DRAWING.REFUSED } : undefined;
 }
 
-/** A diagram's picture, at its own size up to the column's. */
-function DiagramPicture({ url }: { url: string }): React.JSX.Element {
-  return <img className="plan-diagram-picture" src={url} alt="Diagram" decoding="async" />;
+/** What a diagram opened over the window is named, its header's title and the file Download saves. */
+const DIAGRAM_FILE = "Diagram.svg";
+
+/** What the head's press that opens the diagram over the window says. */
+const FULL_SCREEN_LABEL = "Full screen";
+
+/** The shell standing as one pane, a phone's, which the stylesheet reads off its `data-room` (`shell-room.ts`). */
+const NARROW_ROOM = '[data-room="narrow"]';
+
+/** Whether a press on `element` opens its diagram over the window: in a narrow room, or on a device worked by a finger, asked as the press lands. */
+function opensFullScreen(element: Element): boolean {
+  return coarsePointerNow() || element.closest(NARROW_ROOM) !== null;
+}
+
+/** A diagram's picture, at its own size up to the column's; a press opens it over the window where `onPress` lets it. */
+function DiagramPicture({
+  url,
+  onPress,
+}: {
+  url: string;
+  onPress?: (event: React.MouseEvent<HTMLImageElement>) => void;
+}): React.JSX.Element {
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the tap is a finger's way to the head's Full screen, which is the keyboard's.
+    <img
+      className="plan-diagram-picture"
+      src={url}
+      alt="Diagram"
+      decoding="async"
+      onClick={onPress}
+    />
+  );
 }
 
 /** The line a refused fence stands under. */
 function RefusedLine(): React.JSX.Element {
   return <p className="plan-diagram-failed">{DIAGRAM_REFUSED_LINE}</p>;
+}
+
+/** What reaches the viewer stays there: React carries a portal's events up the tree it was drawn in, where the section would open to be edited at a press, or step its blocks at an arrow. */
+function stopped(event: React.SyntheticEvent): void {
+  event.stopPropagation();
+}
+
+/** A diagram opened over the window at its own pixels, until it is closed. */
+function OpenDiagram({ url, onClose }: { url: string; onClose: () => void }): React.JSX.Element {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the span takes nothing itself; it keeps what the viewer it holds took from reaching the section around it.
+    <span
+      className="plan-diagram-viewer"
+      onClick={stopped}
+      onKeyDown={stopped}
+      onPointerDown={stopped}
+      onMouseDown={stopped}
+    >
+      <AttachmentViewer
+        files={[{ name: DIAGRAM_FILE, mediaType: "image/svg+xml", url }]}
+        at={0}
+        onAt={() => undefined}
+        onClose={onClose}
+        opening={IMAGE_OPENING.OWN_PIXELS}
+      />
+    </span>
+  );
 }
 
 /**
@@ -134,19 +200,43 @@ export function PlanDiagram({
 }): React.JSX.Element {
   const drawingNow = useDrawing(code, useAppearance());
   const [showingCode, setShowingCode] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
   const picture = drawingNow?.kind === DIAGRAM_DRAWING.DRAWN ? drawingNow.url : undefined;
+  const pictureShown = picture !== undefined && !showingCode;
   return (
     <figure className="plan-diagram ph-no-capture" aria-busy={drawingNow === undefined}>
       <div className="plan-diagram-head">
         <span>Diagram</span>
         {picture === undefined ? null : (
-          <Button onClick={() => setShowingCode((was) => !was)}>
-            {showingCode ? "Show diagram" : "Show code"}
-          </Button>
+          <span className="plan-diagram-actions">
+            <Button onClick={() => setShowingCode((was) => !was)}>
+              {showingCode ? "Show diagram" : "Show code"}
+            </Button>
+            {pictureShown ? (
+              <span className="plan-diagram-full-screen">
+                <Button onClick={() => setFullScreen(true)}>{FULL_SCREEN_LABEL}</Button>
+              </span>
+            ) : null}
+          </span>
         )}
       </div>
       {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
-      {picture === undefined || showingCode ? source : <DiagramPicture url={picture} />}
+      {pictureShown ? (
+        <DiagramPicture
+          url={picture}
+          onPress={(event) => {
+            if (!opensFullScreen(event.currentTarget)) return;
+            // The press is the picture's, so the section around it does not open to be edited.
+            event.stopPropagation();
+            setFullScreen(true);
+          }}
+        />
+      ) : (
+        source
+      )}
+      {fullScreen && picture !== undefined ? (
+        <OpenDiagram url={picture} onClose={() => setFullScreen(false)} />
+      ) : null}
     </figure>
   );
 }

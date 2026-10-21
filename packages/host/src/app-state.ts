@@ -8,7 +8,7 @@ import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
 import type { AvatarState } from "@luke/voice/avatar";
 import type { NotificationsStatus } from "@luke/voice/settings-controls";
-import type { VoiceView } from "@luke/voice/voice-view";
+import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Result, Schema } from "effect";
@@ -66,23 +66,6 @@ export interface AppAudioSlice {
   outputAudio?: OutputAudioState;
 }
 
-export interface AppHotkeysSlice {
-  /**
-   * The accelerator each key was registered as, absent where the system
-   * refused one — a chord nothing can trigger must not be drawn as though it
-   * works. Raw rather than labelled, because the panel draws the keys apart
-   * and says the chord whole.
-   */
-  talk?: string;
-  /**
-   * Whether the talk key reports being let go of. Only a key that does can
-   * hold a turn open for as long as it is down; the fallback can only toggle
-   * one, and the panel says which of the two the developer actually has.
-   */
-  talkHeld: boolean;
-  stop?: string;
-}
-
 interface AppVoiceSlice {
   /**
    * The live conversation as the voice window last reported it, so a panel
@@ -96,6 +79,12 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
+  /**
+   * What was said on the standing call so far, held whole from the changes
+   * the voice window reports beside its view (`VoiceCallTranscript`); absent
+   * while no call stands, before its first line, and once that window is gone.
+   */
+  callTranscript?: VoiceCallTranscript | undefined;
   /**
    * Luke's avatar on the call, as the panel reports it: what puts the video
    * tile at the top of the Call tab and what the tile draws. Main's rather than
@@ -212,6 +201,20 @@ interface AppNetworkSlice {
 }
 
 /**
+ * What the signed-in account may open in the app, as the host last read it
+ * from the service for that account (`account-access-client.ts`): whether
+ * it is an admin, which the sidebar offers the admin dashboard by, and
+ * whether it is in the native-agents cohort. Neither while nobody is signed
+ * in, for another account than the one read, or where the read failed. A window draws by it and authorizes nothing:
+ * the dashboard's own gate on the service decides every admin read.
+ */
+export interface AppAccessSlice {
+  admin: boolean;
+  /** Whether the account is in the cohort whose coding agents may run on a provider's plan, which draws the plan sign-ins in Settings. */
+  nativeAgents: boolean;
+}
+
+/**
  * Everything main keeps of what the host tells it and what this machine
  * answers for itself: one document, read whole and replaced a slice at a
  * time, so the state a window is handed and the state main answers a call
@@ -227,15 +230,15 @@ export interface AppState {
   run: AppRunFacts;
   settings?: AppSettings;
   account: AccountSnapshot;
+  access: AppAccessSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
-  hotkeys: AppHotkeysSlice;
   voice: AppVoiceSlice;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list, the one active task, and its saved document. Only
-   * the panel's Tasks tab draws it, and the active task is the one a voice
-   * session and the talk key bind to.
+   * the panel's Tasks tab draws it, and the active task is the one whose
+   * agents a voice session may be created into.
    */
   tasks: TasksView;
   codingAgents: AppCodingAgentsSlice;
@@ -308,3 +311,6 @@ export function sessionReplayBootstrap(
     ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
   };
 }
+
+/** The access of nobody, of another account, or of a read that failed: nothing opened. */
+export const NO_ACCESS: AppAccessSlice = { admin: false, nativeAgents: false };

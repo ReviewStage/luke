@@ -20,7 +20,7 @@ import { readKept, writeKept } from "./desktop/folded-groups.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, and per issue where it was opened on one, and an inbox
+ * the task starts in, and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked, the fields filled, and, on a thread, the steps ticked and
  * the answer pressed beside its note. A draft is known by where
@@ -99,20 +99,40 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
     /** The workspace the task starts in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
-    /** The workspace's own issue New task was opened on, whose words are that issue's alone. */
-    issueId: Schema.optionalKey(Schema.String),
   }),
 ]);
 
 /** Where one draft goes. */
 export type DraftPlace = typeof draftPlaceSchema.Type;
 
+/**
+ * New task's words on one of the workspace's own issues, as a build from
+ * before Luke kept no issues stored them. No card opens on an issue now, so
+ * such an entry is read past rather than taken for the workspace's own
+ * draft, which it would displace, and goes once its account writes again.
+ */
+const issueDraftPlaceSchema = Schema.Struct({
+  kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
+  workspaceId: Schema.NullOr(Schema.String),
+  issueId: Schema.String,
+});
+
+/** A place as storage may hold it: one of today's, or New task's on an issue (`issueDraftPlaceSchema`). */
+const storedPlaceSchema = Schema.Union([issueDraftPlaceSchema, draftPlaceSchema]);
+
+type StoredPlace = typeof storedPlaceSchema.Type;
+
+/** Whether a place storage holds is one a box opens today. */
+function isDraftPlace(place: StoredPlace): place is DraftPlace {
+  return !("issueId" in place);
+}
+
 /** The drafts as storage keeps them: each place's words, a card's picks where it holds some, and the account that wrote them, the latest written last. */
 const storedDrafts = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
       accountId: Schema.NullOr(Schema.String),
-      place: draftPlaceSchema,
+      place: storedPlaceSchema,
       text: Schema.String,
       choices: Schema.optionalKey(Schema.Array(Schema.String)),
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
@@ -172,19 +192,25 @@ function readStored(): readonly StoredDraft[] {
   return readKept(STORAGE_KEY, storedDrafts, []);
 }
 
-/** The owner's kept drafts; storage keeps no files, and no draft of files alone. */
+/** The owner's kept drafts; storage keeps no files, and no draft of files alone, or of a place no box opens now. */
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .map(({ place, text, choices = [], values = [], steps, press }) => ({
-      place,
-      text,
-      attachments: [],
-      choices,
-      values,
-      ...(steps === undefined ? undefined : { steps }),
-      ...(press === undefined ? undefined : { press }),
-    }))
+    .flatMap(({ place, text, choices = [], values = [], steps, press }) =>
+      isDraftPlace(place)
+        ? [
+            {
+              place,
+              text,
+              attachments: [],
+              choices,
+              values,
+              ...(steps === undefined ? undefined : { steps }),
+              ...(press === undefined ? undefined : { press }),
+            },
+          ]
+        : [],
+    )
     .filter(stored);
 }
 
@@ -378,6 +404,20 @@ const draftedAtom = Atom.withEquality(
   Equal.equals,
 );
 
+/**
+ * The started agents a draft waits in, read off every draft, compared by
+ * its contents as `draftedAtom` is, so a tab marking one draws again only
+ * as a draft comes or goes.
+ */
+const draftedAgentsAtom = Atom.withEquality(
+  Atom.make((get): readonly string[] =>
+    get(draftsAtom).flatMap(({ place }) =>
+      place.kind === DRAFT_PLACE.AGENT ? [place.agentId] : [],
+    ),
+  ),
+  Equal.equals,
+);
+
 /** One box's draft and the presses that change it. */
 export interface DraftControl {
   readonly draft: Draft;
@@ -449,17 +489,16 @@ export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "s
 }
 
 /**
- * The steps of an inbox thread's open `do` ask its draft ticks, as the box
- * reads it now (`draftOfItem`), which its row counts; none where no draft
- * stands. Note that it answers the draft's own list, so a row draws again
- * only as a tick changes, never on a word typed.
+ * The draft an inbox item's box holds as it now stands (`draftOfItem`), its
+ * steps ticked and the answer pressed, which its row and its card read to
+ * show the steps as the box does; none where no draft stands. Note that it
+ * answers the kept draft itself, the same until it changes.
  */
-export function useInboxItemTicked(
+export function useInboxItemDraft(
   item: Pick<InboxItem, "id" | "revision" | "status">,
-): readonly number[] | undefined {
-  return useAtomValue(
-    draftsAtom,
-    (drafts) => drafts.find((kept) => isInbox(kept) && draftOfItem(kept.place, item))?.steps,
+): KeptDraft | undefined {
+  return useAtomValue(draftsAtom, (drafts) =>
+    drafts.find((kept) => isInbox(kept) && draftOfItem(kept.place, item)),
   );
 }
 
@@ -500,21 +539,23 @@ export function usePlanDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
 
+/** The started agents whose boxes hold a draft, which their tabs mark with the pencil (`draft-mark.tsx`). */
+export function useDraftedAgents(): readonly string[] {
+  return useAtomValue(draftedAgentsAtom);
+}
+
 /**
  * Whether New task holds a draft in a workspace, none before the workspaces
  * are read, which the sidebar's New task row marks with the pencil
- * (`draft-mark.tsx`): the words its own card keeps there, never those of a
- * card opened on one of the workspace's issues, which that press alone
- * brings back. Note that it answers a boolean, so the row draws again only
- * as the draft comes or goes, never on each word typed.
+ * (`draft-mark.tsx`): the words its card keeps there. Note that it answers
+ * a boolean, so the row draws again only as the draft comes or goes, never
+ * on each word typed.
  */
 export function useNewTaskDrafted(workspaceId: string | undefined): boolean {
   return useAtomValue(draftsAtom, (drafts) =>
     drafts.some(
       ({ place }) =>
-        place.kind === DRAFT_PLACE.NEW_TASK &&
-        place.workspaceId === (workspaceId ?? null) &&
-        !("issueId" in place),
+        place.kind === DRAFT_PLACE.NEW_TASK && place.workspaceId === (workspaceId ?? null),
     ),
   );
 }

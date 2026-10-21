@@ -2,17 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -22,7 +17,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { AgentTab } from "./agent-tab.js";
@@ -68,10 +63,7 @@ let copied: string[] = [];
 beforeEach(() => {
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -94,25 +86,19 @@ async function drawn(
 }> {
   const revealed: number[] = [];
   const registry = AtomRegistry.make();
-  // Note that the transcript ends on a page with nothing on it, as an ended agent's does, and nothing is read past it.
-  let reads = 0;
+  // Note that the transcript ends on a page with nothing on it, as an ended agent's does.
   const control = codingAgentsControl({
     agents: [agent],
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > pages.length + 1) {
-        return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      }
-      const page = {
-        messages: [...(pages[reads - 1] ?? [])],
-        cursor: `${reads}:0`,
-        status: agent.status,
-        title: null,
-      };
-      return held !== undefined && held.page === reads - 1
-        ? held.release.then(() => page)
-        : Promise.resolve(page);
-    },
+    transcripts: pushedTranscripts(
+      () =>
+        [...pages, []].map((messages, at) => ({
+          messages: [...messages],
+          cursor: `${at + 1}:0`,
+          status: agent.status,
+          title: null,
+        })),
+      held,
+    ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

@@ -6,14 +6,21 @@ import { bearer, organization as organizationPlugin } from "better-auth/plugins"
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Option } from "effect";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
-import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS, SESSION_BEARER } from "../auth/auth-policy.js";
+import {
+  DISABLED_AUTH_PATHS,
+  ORGANIZATION_OPTIONS,
+  SESSION_BEARER,
+  SESSION_COOKIE_CACHE,
+  USER_FIELDS,
+} from "../auth/auth-policy.js";
 
 /**
- * workspace-plugin.ts -- Better Auth with the organization and bearer plugins over a migrated PGlite of its own.
+ * workspace-plugin.ts -- Better Auth with the organization and bearer plugins, and the user's fields and session cookie cache `auth.ts` declares, over a migrated PGlite of its own.
  *
  * The plugin writes through its own adapter and the store reads through
  * `database`, the same PGlite, so a test sees the plugin's real rows: the
- * organization and owner a create makes, and the member an add makes. A
+ * organization and owner a create makes, and the member an add makes, and a
+ * session answers its user's `role` as the deployment's does. A
  * member write is the plugin's own call under a session, which
  * `sessionBearerOf` mints for an account and signs as the bearer plugin
  * hands one out, so the plugin reads it back exactly as it reads the Mac's.
@@ -32,6 +39,8 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     database: authDatabaseAdapter(drizzle({ client })),
     baseURL: "http://127.0.0.1",
     secret: SECRET,
+    user: USER_FIELDS,
+    session: SESSION_COOKIE_CACHE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     plugins: [organizationPlugin(ORGANIZATION_OPTIONS), bearer(SESSION_BEARER)],
   });

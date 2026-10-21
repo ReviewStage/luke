@@ -50,6 +50,7 @@ import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
+import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
@@ -62,6 +63,7 @@ import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentModelControl } from "./use-agent-model.js";
+import { DICTATION_PHASE } from "./use-dictation.js";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -169,7 +171,9 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * (`new-task-composer.tsx`): its owner names what the box asks for and
  * calls its round button (`wording`), lays its issue over the words
  * (`above`), stands its repository and Issue chips after the "+" (`tools`)
- * and its Plan toggle before the model chip (`actions`), holds Start while
+ * and its File for later just before Start (`beforeSend`), told whether the
+ * card is too narrow for its words, so on a phone it draws its mark alone,
+ * holds Start while
  * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
@@ -202,12 +206,12 @@ const BUTTON = {
 } as const;
 
 /**
- * The card widths below which a chip draws its mark alone: the branch's
- * chip first, then the owner's actions where they carry words (New task's
- * Plan toggle, at the step the ⋯ stands), then the model chip. Note that
- * they are steps of the same order as the stylesheet's (tasks.css's
- * `composer` queries, at 400 and 240), because the room each leaves is
- * counted on the steps before it.
+ * The card widths below which a press draws its mark alone: the branch's
+ * chip first, then the owner's presses that carry words (New task's Plan
+ * toggle and File for later, at the step the ⋯ stands), then the model
+ * chip. Note that they are steps of the same order as the stylesheet's
+ * `composer` queries (tasks.css's, and New task's in desktop.css, at 400
+ * and 240), because the room each leaves is counted on the steps before it.
  */
 const FOLD_WIDTH = {
   PUBLISHED: 520,
@@ -349,6 +353,8 @@ export function AgentComposer({
   tools,
   actions,
   beforeSend,
+  call,
+  dictates = true,
   sendable = true,
   onKey,
   onLeave,
@@ -397,10 +403,14 @@ export function AgentComposer({
   above?: ReactNode;
   /** What stands after the "+" at the foot's left: New task's repository and Issue chips. */
   tools?: ReactNode;
-  /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words: New task's Plan toggle. */
+  /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands just before the round button: New task's File for later. */
-  beforeSend?: ReactNode;
+  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is: New task's File for later. */
+  beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
+  /** What stands beside Dictate: an agent's Call, or on a call its controls, where the platform takes calls (`agent-call.tsx`). */
+  call?: ReactNode;
+  /** Whether the box offers Dictate; not while a call holds the microphone, whose own mute stands in the row. */
+  dictates?: boolean;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -563,6 +573,15 @@ export function AgentComposer({
     side: listSide,
   });
   const { dictation, dictating } = pickers;
+  // Note that a call taking the microphone ends a dictation under way, keeping
+  // the words already said, so the row it hands the call to is never hidden
+  // under the dictation's strip.
+  const { phase, startedAt, finish, cancel } = dictation;
+  useEffect(() => {
+    if (dictates || phase !== DICTATION_PHASE.RECORDING) return;
+    if (startedAt === undefined) cancel();
+    else finish();
+  }, [dictates, phase, startedAt, finish, cancel]);
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
 
@@ -719,33 +738,25 @@ export function AgentComposer({
           quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
         />
         <PromptInputFooter ref={foot}>
-          {dictating ? (
-            <DictationStrip dictation={dictation} />
+          {/* Note that a clip already being read as a call begins keeps its strip
+              and its Cancel until it lands, with the call's controls beside it,
+              so neither the clip nor the call is left with no way to reach it. */}
+          {dictating && (dictates || dictation.phase === DICTATION_PHASE.TRANSCRIBING) ? (
+            <>
+              <DictationStrip dictation={dictation} />
+              {dictates ? null : call}
+            </>
           ) : (
             <>
               <PromptInputTools>
                 <span className="agent-composer-attach">
-                  <Tooltip label={BUTTON.ATTACH}>
-                    <IconButton
-                      icon={<PlusIcon />}
-                      label={BUTTON.ATTACH}
-                      disabled={held}
-                      onClick={() => picker.current?.click()}
-                    />
-                  </Tooltip>
+                  <AttachFilesButton
+                    label={BUTTON.ATTACH}
+                    disabled={held}
+                    picker={picker}
+                    onFiles={attach}
+                  />
                 </span>
-                <input
-                  ref={picker}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    const picked = Array.from(event.currentTarget.files ?? []);
-                    // Cleared so the same file can be picked again after it was taken off.
-                    event.currentTarget.value = "";
-                    attach(picked);
-                  }}
-                />
                 <BranchChip
                   published={published}
                   doors={doors}
@@ -778,9 +789,12 @@ export function AgentComposer({
                   open={contextOpen}
                   onOpenChange={handBack(setContextOpen)}
                 />
-                <DictateButton dictation={dictation} disabled={held || module === undefined} />
+                {call}
+                {dictates ? (
+                  <DictateButton dictation={dictation} disabled={held || module === undefined} />
+                ) : null}
                 <ComposerMore foot={foot} offers={offers} />
-                {beforeSend}
+                {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit

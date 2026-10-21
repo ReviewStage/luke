@@ -15,7 +15,7 @@
   "ignore": [".opencode/**"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/fixtures/discarded-effect/*.ts", "scripts/fixtures/task-names/*.ts"],
+      "entry": ["scripts/fixtures/discarded-effect/*.ts"],
       "project": ["scripts/**"]
     },
     "apps/desktop": {
@@ -41,6 +41,7 @@
     "apps/web": {
       "entry": [
         "server/routes/**/*.ts",
+        "server/orpc-route.ts",
         "src/*.tsx",
         "src/app/main.tsx",
         "src/entry-server.tsx",
@@ -115,6 +116,16 @@
         "evals/*.eval.ts"
       ],
       "project": ["**/*.ts"]
+    },
+    "packages/agent-runner": {
+      "entry": ["src/main.ts", "scripts/generate-codex-protocol.mjs"],
+      "project": ["src/**", "scripts/**"],
+      "ignore": ["src/codex-protocol/**"]
+    },
+    "tools/claude-code-probe": {
+      "entry": ["src/cli.ts", "src/sandbox/driver.mjs"],
+      "project": ["src/**", "tests/**"],
+      "ignoreDependencies": ["@anthropic-ai/claude-agent-sdk"]
     },
     "tools/anti-slop": {
       "entry": ["index.ts"],

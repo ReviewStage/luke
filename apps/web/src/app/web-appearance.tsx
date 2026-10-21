@@ -15,24 +15,11 @@
  * dark from its first frame rather than light until the state is read.
  */
 
-import { useAppState } from "@luke/panel/use-app-state";
-import { appSettingsView } from "@luke/settings/wire";
+import { APP_SETTINGS_VIEW, useAppSlice } from "@luke/panel/use-app-state";
 import type { Theme } from "@luke/ui";
 import { wearTheme } from "@luke/ui/appearance";
 import { useLayoutEffect } from "react";
-
-/** Where the last theme chosen is kept for the next load's first frame, as `public/app-theme.js` reads it. */
-const THEME_KEY = "luke.theme";
-
-/** The palette's own ground, which the browser's chrome is drawn in to blend into the page. */
-const GROUND_TOKEN = "--luke-color-ground";
-
-/** Says the ground of the theme just worn to the browser, for the chrome around the page. */
-function tintChrome(root: HTMLElement): void {
-  const ground = getComputedStyle(root).getPropertyValue(GROUND_TOKEN).trim();
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (meta !== null && ground !== "") meta.content = ground;
-}
+import { THEME_KEY, tintChrome } from "../theme-chrome";
 
 /** Keeps the choice for the next load; a storage the browser refuses keeps none, and that load starts as the page's default. */
 function keepChoice(theme: Theme): void {
@@ -55,8 +42,7 @@ function wearAccountTheme(theme: Theme, root = document.documentElement): () => 
 
 /** Draws nothing: wears the account's Theme setting on the tab's root for as long as the app is drawn. */
 export function WebAppearance(): null {
-  const settings = useAppState()?.settings;
-  const theme = settings === undefined ? undefined : appSettingsView(settings).theme;
+  const theme = useAppSlice(APP_SETTINGS_VIEW)?.theme;
   useLayoutEffect(() => (theme === undefined ? undefined : wearAccountTheme(theme)), [theme]);
   return null;
 }

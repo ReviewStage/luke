@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
-import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
+import {
+  AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
+  type AutomationFollowed,
+} from "@luke/features/automation-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import {
   type ActPortClient,
   AUTOMATION_ACT_KIND,
@@ -10,6 +14,7 @@ import {
   type PortActResult,
 } from "../contract/index.js";
 import { automationProcedures } from "./automation-procedures.js";
+import type { ActSender } from "./base.js";
 import type { AutomationProceduresDependencies } from "./index.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
@@ -18,7 +23,9 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * only a panel of this build's own renderer asks; the voice and call
  * windows, and a frame this build does not trust, are refused in each
  * kind's own words before the host is asked; and a panel's ask reaches the
- * host with its payload as the panel sent it.
+ * host with its payload as the panel sent it. A follow's stream has the
+ * host follow what it names from its first stream to its last, and hears
+ * what the host tells of it alone.
  */
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -137,6 +144,9 @@ function windowPort(actor: typeof PANEL, trusted = true) {
     automationRun: unanswered("run"),
     automationRuns: unanswered("runs"),
     automationNewWebhookSecret: unanswered("new secret"),
+    automationsFollow: () => Effect.void,
+    automationsUnfollow: () => Effect.void,
+    onAutomationsChanged: () => () => undefined,
   };
   const client = windowClient(automationProcedures({ host }), actor, trusted);
   return { client, asked };
@@ -182,4 +192,55 @@ it("a payload carrying a key its kind does not name is refused in the kind's own
     refused: REFUSAL[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS],
   });
   assert.deepEqual(asked, []);
+});
+
+/** Turns the event loop until `ready` holds, as a page waits on its port. */
+async function until(ready: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
+}
+
+it("a panel's follow stream follows at the host once for every stream of it, hears what is told of it alone, and lets it go once its last stream closes", async () => {
+  const asked: string[] = [];
+  const listeners = new Set<(changed: AutomationFollowed) => void>();
+  const follows: Pick<
+    HostAsk,
+    "automationsFollow" | "automationsUnfollow" | "onAutomationsChanged"
+  > = {
+    automationsFollow: () => Effect.sync(() => void asked.push("follow")),
+    automationsUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    onAutomationsChanged: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  // SAFETY: the stream reaches the follow asks alone.
+  const host = follows as HostAsk;
+  const port = testActPort(automationProcedures({ host }));
+  ports.push(port);
+  const client = port.as(PANEL);
+  const scope = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: "workspace-1" } as const;
+  const view = { automations: [] };
+
+  const one = await client[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW](scope);
+  const two = await client[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW](scope);
+  const first = one.next();
+  const second = two.next();
+  await until(() => listeners.size === 2);
+  assert.deepEqual(asked, ["follow"], "two streams of one list share one follow");
+  for (const listener of [...listeners]) {
+    listener({
+      scope: { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID },
+      view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND },
+    });
+    listener({ scope, view });
+  }
+  assert.deepEqual((await first).value, view);
+  assert.deepEqual((await second).value, view);
+
+  await one.return(undefined);
+  await until(() => listeners.size === 1);
+  assert.deepEqual(asked, ["follow"]);
+  await two.return(undefined);
+  await until(() => asked.length === 2);
+  assert.deepEqual(asked, ["follow", "unfollow"]);
 });

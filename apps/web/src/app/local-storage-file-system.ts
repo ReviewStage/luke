@@ -8,7 +8,9 @@
  * directory made, a mode set, a rename, and a removal. Every other call is
  * `FileSystem.layerNoop`'s refusal. Files are held as one JSON record under
  * one key rather than a key each, so a path is a record key and never part
- * of a storage key.
+ * of a storage key. Where the browser blocks the site's storage, reading
+ * `localStorage` throws, so the files are held in memory for the tab's life
+ * instead (`tabStorage`), and the tab still draws, signed in or not.
  */
 
 import { Effect, type Layer, Option, Schema } from "effect";
@@ -24,6 +26,42 @@ type Files = Readonly<Record<string, string>>;
 const FilesSchema = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
 
 const decodeFiles = Schema.decodeUnknownOption(FilesSchema);
+
+/**
+ * A `Storage` held in memory for the tab's life, as a blocked storage is
+ * answered: the settings written stand until the tab closes and reach no
+ * other tab.
+ */
+function memoryStorage(): Storage {
+  const items = new Map<string, string>();
+  return {
+    get length() {
+      return items.size;
+    },
+    clear: () => items.clear(),
+    getItem: (key) => items.get(key) ?? null,
+    key: (index) => [...items.keys()][index] ?? null,
+    removeItem: (key) => {
+      items.delete(key);
+    },
+    setItem: (key, value) => {
+      items.set(key, String(value));
+    },
+  };
+}
+
+/**
+ * The tab's own `localStorage`, or one in memory where the browser blocks the
+ * site's storage, which throws on the read rather than answering nothing.
+ */
+export function tabStorage(): Storage {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    console.warn("The browser blocks this site's storage; settings last only this tab.", error);
+    return memoryStorage();
+  }
+}
 
 /** Every file held, or none where nothing was ever written or the entry is not ours to read. */
 function readFiles(storage: Storage): Files {
@@ -63,9 +101,9 @@ function within(path: string, folder: string): boolean {
   return path === folder || path.startsWith(folder.endsWith("/") ? folder : `${folder}/`);
 }
 
-/** The host's `FileSystem` over the storage given: the tab's own `localStorage` where none is. */
+/** The host's `FileSystem` over the storage given: the tab's own (`tabStorage`) where none is. */
 export function localStorageFileSystem(
-  storage: Storage = localStorage,
+  storage: Storage = tabStorage(),
 ): Layer.Layer<FileSystem.FileSystem> {
   const write = (method: string, path: string, change: (files: Files) => Files) =>
     Effect.try({

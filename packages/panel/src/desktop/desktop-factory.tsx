@@ -49,6 +49,7 @@ import {
   FactoryViewPicker,
   useFactoryViews,
 } from "../factory-world/world-picker.js";
+import { FadingWords } from "../fading-words.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -153,11 +154,7 @@ function opensOnGitHub(task: TaskSummary, pullRequest: TaskPullRequestLine): boo
 }
 
 /** A pull request opens in its agent's Pull request tab, else on GitHub, where it is worked on and merged; one the service sent no page for opens its task. */
-export function openPullRequest(
-  tasks: TasksControl,
-  task: TaskSummary,
-  pullRequest: TaskPullRequestLine,
-) {
+function openPullRequest(tasks: TasksControl, task: TaskSummary, pullRequest: TaskPullRequestLine) {
   const place = pullRequestPlace(task, pullRequest);
   if (place !== undefined) tasks.onOpenLink({ workspace: "", place });
   else if (pullRequest.url === undefined) tasks.onSelect(task.id);
@@ -223,12 +220,12 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
       factoryBoard({
         tasks: listed,
         waiting,
-        callTaskId: tasks.callTaskId,
+        talkingTaskId: tasks.talkingTaskId,
         oneOff,
         oneOffWaiting,
         now,
       }),
-    [listed, waiting, tasks.callTaskId, oneOff, oneOffWaiting, now],
+    [listed, waiting, tasks.talkingTaskId, oneOff, oneOffWaiting, now],
   );
   return { board, questions };
 }
@@ -374,7 +371,9 @@ function FactoryRow({
           }
           meta={
             <span className="home-row-meta">
-              {context === undefined ? null : <span className="home-row-context">{context}</span>}
+              {context === undefined ? null : (
+                <FadingWords className="home-row-context" words={context} />
+              )}
               {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
               {end}
               {waiting ? (

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { changeIssue, createIssue } from "@luke/database/models/issue-store";
 import {
   actOnPlanCommentThread,
   startPlanCommentThread,
@@ -246,34 +245,6 @@ test("a task started with the developer's brief hands every turn the brief as th
 
   assert.ok(started.includes(`[the developer's brief for the task]\n${JSON.stringify(brief)}`));
   assert.equal(other.includes("[the developer's brief"), false);
-});
-
-test("a plan started from one of the workspace's issues hands every turn the issue as it reads now, by its identifier and its link", async () => {
-  const userId = await database.createUser();
-  const plain = await database.run(startTask(userId, { name: TASK_NAME }));
-  const filed = Option.getOrThrow(
-    await database.run(
-      createIssue(userId, { organizationId: plain.workspaceId, title: "Invites expire too soon" }),
-    ),
-  );
-  const task = await database.run(startTask(userId, { name: filed.title, issueId: filed.id }));
-  await database.run(changeIssue(userId, filed.id, { description: "Steps to reproduce." }));
-  const targetOf = async (taskId: string) => ({
-    userId,
-    conversationId: Option.getOrThrow(await database.run(openTaskConversation(userId, taskId)))
-      .conversationId,
-  });
-
-  const started = await standingContextOf(await targetOf(task.id));
-  const other = await standingContextOf(await targetOf(plain.id));
-
-  const [, handed] = started.split("[workspace issue the task was started from]\n");
-  const issue = JSON.parse(handed?.split("\n")[0] ?? "null");
-  assert.equal(issue.title, "Invites expire too soon");
-  assert.equal(issue.description, "Steps to reproduce.");
-  assert.match(issue.identifier, new RegExp(`-${filed.number}$`));
-  assert.ok(String(issue.url).endsWith(`/issue/${filed.id}`));
-  assert.equal(other.includes("[workspace issue"), false);
 });
 
 test("a turn of a task's conversation is handed its plan's open comment threads, each with its words and comments, and no resolved one", async () => {

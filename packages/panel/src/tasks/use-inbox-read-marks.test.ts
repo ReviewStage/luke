@@ -78,7 +78,6 @@ afterEach(() => {
 /** The hook over the reads given, every write it sends held until the test answers it; and how to give it newer reads. */
 function marks(first: readonly InboxItem[]) {
   const sent: Sent[] = [];
-  let rereads = 0;
   /** One write held until the test answers it, with the value it answers when it does not fail. */
   const sending = <Value>(words: string, value: Value) =>
     new Promise<Value | { failure: typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND }>((resolve) => {
@@ -106,9 +105,6 @@ function marks(first: readonly InboxItem[]) {
     control = useInboxReadMarks({
       act: send,
       workspaceId: TASK.workspaceId,
-      onMarkedAll: () => {
-        rereads += 1;
-      },
     });
     drawn = useSettledItems(items);
     return null;
@@ -122,7 +118,6 @@ function marks(first: readonly InboxItem[]) {
   return {
     sent,
     read,
-    rereads: () => rereads,
     /** Each item's dot as the hook draws it. */
     dots: () => drawn.map((each) => [each.id, isUnread(each)]),
     mark: (target: InboxItem, unread: boolean) => act(() => held().onMark(target, unread)),
@@ -172,12 +167,10 @@ test("marks reach the service one at a time in the order they were made, an item
     [`unread:${X}`, "all:workspace-acme"],
     "X's later marks stood for one another, the last already sent, so Mark all as read went next",
   );
-  assert.equal(hook.rereads(), 0);
   await hook.sent[1]?.answer();
-  assert.equal(hook.rereads(), 1, "every item marked read asks the reads again once taken");
 });
 
-test("a mark the service refused is let go, and Mark all as read refused asks nothing again", async () => {
+test("a mark the service refused is let go, and Mark all as read refused lets its marks go", async () => {
   const hook = marks([item(X, false), item(Y, true)]);
   hook.mark(item(X, false), true);
   await settle();
@@ -197,7 +190,6 @@ test("a mark the service refused is let go, and Mark all as read refused asks no
     [X, false],
     [Y, true],
   ]);
-  assert.equal(hook.rereads(), 0);
 });
 
 test("two opposite marks out at once stand as the latest made, though the held read lands the earlier one's write before the later one goes", async () => {

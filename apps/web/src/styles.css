@@ -26,8 +26,8 @@
    reads is drift waiting to happen. Every value is a shared role's, the one the
    plain-CSS blocks further down read too, and merely aliased here, so the
    utilities and those blocks draw the same vocabulary. The chart slots stay out of this block for the
-   same reason: the admin dashboard's chart configs read `--chart-*` directly,
-   and no utility class does. */
+   same reason: the admin dashboard's chart configs read `--luke-color-chart-*`
+   directly, and no utility class does. */
 @theme inline {
   --color-background: var(--luke-color-ground);
   --color-foreground: var(--luke-color-text);
@@ -75,7 +75,8 @@
   /* The page's palette, its fonts, its 4px space scale, and its corner are
      the web profile's in `@luke/ui` (`tokens/palettes.css`, `profiles.css`),
      read here as its `--luke-*` roles. A page is light unless its root asks for the dark
-     theme the admin dashboard and the OAuth cards are drawn in. */
+     theme: the app and the admin dashboard ask for it from the account's
+     Theme setting (`public/app-theme.js`), the OAuth cards by their own page. */
   font-optical-sizing: auto;
   font-synthesis: none;
 }

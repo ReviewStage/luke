@@ -22,6 +22,7 @@ import {
   ensureTaskChannel,
   findOrMakeDm,
   history,
+  openTopicChannel,
   postAsk,
   postMessage,
   readAttachment,
@@ -57,13 +58,16 @@ import {
   savePlanText,
   updateTask,
 } from "@luke/database/models/task-store";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
+import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
@@ -72,6 +76,7 @@ import {
   openWorkspace,
   startTask,
 } from "@luke/database/testing";
+import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   ACCOUNT_CHAT_REASON,
@@ -158,6 +163,7 @@ import {
   inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
+import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionLinksIn, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -173,12 +179,14 @@ import {
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
+import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
+import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -221,6 +229,7 @@ import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
+import { inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   answerInboxItem,
   closeInboxItem,
@@ -256,11 +265,11 @@ import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { chatAttachmentApp } from "./chat-attachment-app.js";
@@ -309,8 +318,11 @@ import { AgentSandbox } from "./terminal/agent-sandbox.js";
 const ORIGIN = "https://luke.test";
 const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
+const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
+const AGENT_STARTS = "/api/agents/agents";
 const AGENT = "/api/agents/agent";
-const AGENT_INBOX = "/api/agents/inbox";
+const AGENT_CALLS = "/api/agents/calls";
+const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 const AGENT_OVERVIEW = [
@@ -318,15 +330,19 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
+/** The public paths the inbox's procedures answer on the hosted oRPC router, its attachment's bytes aside. */
+const INBOX_PROCEDURE_PATH = /^\/api\/(?:inbox(?:\/.*)?|(?:plans|agents)\/[^/]+\/inbox)$/u;
 /** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
 const TASKS = "/api/plans";
 /** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
 const TASK = (taskId: string) => `${TASKS}/${taskId}`;
 /** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
 const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
-/** A task's own path or its Stop, by the task's id, which the router serves where the old groups serve flattened keys. */
+/** Luke's own transcript of a task, served by the hosted oRPC router. */
+const TASK_MESSAGES = (taskId: string) => `${TASK(taskId)}/messages`;
+/** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
-  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
+  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
@@ -456,7 +472,7 @@ function fakeEve(
   const resetAs: string[] = [];
   let sessions = 0;
   let deliveries = 0;
-  const eve = (authorization: string): EveSessions => ({
+  const eve = (authorization: string): AgentSessions => ({
     open: (message) =>
       Effect.suspend(() => {
         if (options.reachable === false) {
@@ -524,8 +540,10 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */
@@ -544,7 +562,9 @@ const countedFor = (userId: string, name: string) =>
 const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/plans/agents", (id: string) => `/api/plans/${id}/agents`],
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
+  ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
+  ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
@@ -632,6 +652,7 @@ const standing = (
         ...shared,
         sandbox: Layer.effect(AgentSandbox, Effect.die("the agents routes reach no sandbox")),
       }),
+      inbox: inboxProcedures(seams),
       messages: messagesProcedures(seams),
       plans: tasksProcedures(seams),
     });
@@ -642,16 +663,24 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), chatPictures.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its Pull request tab, and the chat land on the hosted oRPC router. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its Pull request tab, the chat, and the inbox land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const procedure = publicRequest(request);
         if (procedure !== undefined) return routed(procedure, webServices);
         const url = new URL(request.url);
         const { pathname } = url;
+        if (pathname !== INBOX_ATTACHMENT && INBOX_PROCEDURE_PATH.test(pathname)) {
+          return routed(request, webServices);
+        }
         const id = url.searchParams.get("id");
         if (pathname === AGENT_MESSAGES && id !== null) {
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
+          return routed(new Request(url, request), webServices);
+        }
+        const call = url.searchParams.get("call");
+        if (pathname === SUBAGENT_MESSAGES && id !== null && call !== null) {
+          url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
           return routed(new Request(url, request), webServices);
         }
         if (pathname === CHAT || pathname === WORKSPACE_AGENTS) return routed(request, webServices);
@@ -672,6 +701,9 @@ const standing = (
     return { ask, fetch };
   });
 
+/** Where a path the hosted oRPC router answers names its id. */
+const ID_SEGMENT = "{id}";
+
 function request(
   path: string,
   bearer: string | undefined,
@@ -681,6 +713,7 @@ function request(
     id?: string;
     after?: string;
     call?: string;
+    wait?: string;
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
@@ -690,11 +723,17 @@ function request(
     cookie?: string;
   } = {},
 ): Request {
-  const url = new URL(path, ORIGIN);
-  if (init.id !== undefined) url.searchParams.set("id", init.id);
+  // A path the hosted oRPC router answers names its id as a segment; an old group's reads it from the query.
+  const named = path.includes(ID_SEGMENT);
+  const url = new URL(
+    named && init.id !== undefined ? path.replace(ID_SEGMENT, encodeURIComponent(init.id)) : path,
+    ORIGIN,
+  );
+  if (init.id !== undefined && !named) url.searchParams.set("id", init.id);
   if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
+  if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
@@ -704,8 +743,6 @@ function request(
   // Every client of the service names its JSON body so, which the hosted oRPC router reads a body by.
   if (init.body !== undefined) headers.set("content-type", "application/json");
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
-  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
-  if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
     headers,
@@ -1561,6 +1598,47 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a plan's agents, inbox, and transcript are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const now = yield* DateTime.nowAsDate;
+        // A revision a later build wrote, by a kind of writer this build has no name for.
+        yield* Database.use((db) =>
+          db.insert(planRevision).values({
+            taskId: task.id,
+            seq: 1_000,
+            actor: sql`'a-later-writer'`,
+            document: SAVED,
+            changes: 1,
+            startedAt: now,
+            at: now,
+          }),
+        );
+        // The whole read, which reads who wrote each section, cannot answer the plan.
+        assert.equal(
+          (yield* ask(request(TASK(task.id), owner))).status,
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        );
+        const reads = (bearer: string, id: string) =>
+          [
+            request(TASK_AGENTS, bearer, { id }),
+            request(TASK_INBOX, bearer, { id }),
+            request(TASK_MESSAGES(id), bearer),
+          ] as const;
+
+        const [agents, inbox, transcript] = reads(owner, task.id);
+        readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(agents));
+        readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(inbox));
+        readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(transcript));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        for (const refused of [...reads(other, task.id), ...reads(owner, randomUUID())]) {
+          assert.deepEqual(yield* ask(refused), notFound, refused.url);
+        }
+      }),
+  );
+
+  it.effect(
     "the transcript answers the conversation's rows past the cursor, with the cursor to read on from, and a cursor outside its shape is refused",
     () =>
       Effect.gen(function* () {
@@ -1748,6 +1826,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
+        // No other site's page may embed it, since its <img> would load it with the viewer's cookie.
+        assert.equal(served.headers.get("cross-origin-resource-policy"), "same-origin");
         assert.deepEqual(
           new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
           SCRIPTED_SVG,
@@ -1937,6 +2017,108 @@ function mutationName(query: string): string {
   return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
 }
 
+/**
+ * The pull request's threads as the member's own token reads them for their
+ * pending review: a published thread they replied on in it, a thread their
+ * pending review starts on a range of the old side, a published thread
+ * whose last comments are all their pending replies, a thread another's
+ * pending review starts, and one whose comments are all published.
+ */
+const PENDING_THREADS = [
+  {
+    id: "PRRT_published",
+    path: "src/invite.ts",
+    line: 12,
+    startLine: 12,
+    diffSide: "RIGHT",
+    startDiffSide: null,
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_first",
+          state: "SUBMITTED",
+          body: "Rename this.",
+          bodyHTML: "<p>Rename this.</p>",
+          createdAt: "2026-09-30T10:00:00Z",
+          author: { __typename: "User", login: "reviewer", databaseId: 7 },
+          pullRequestReview: { id: "PRR_submitted" },
+        },
+        {
+          id: "PRRC_reply",
+          state: "PENDING",
+          body: "Still?",
+          bodyHTML: "<p>Still?</p>",
+          createdAt: "2026-10-01T10:00:00Z",
+          author: { __typename: "User", login: "teammate", databaseId: 8 },
+          pullRequestReview: { id: "PRR_own" },
+        },
+      ],
+    },
+  },
+  {
+    id: "PRRT_started",
+    path: "src/invite.ts",
+    line: 40,
+    startLine: 38,
+    diffSide: "LEFT",
+    startDiffSide: "LEFT",
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_start",
+          state: "PENDING",
+          body: "Why drop these?",
+          bodyHTML: null,
+          createdAt: "2026-10-01T11:00:00Z",
+          author: { __typename: "User", login: "teammate", databaseId: 8 },
+          pullRequestReview: { id: "PRR_own" },
+        },
+      ],
+    },
+  },
+  {
+    id: "PRRT_long",
+    path: "src/invite.ts",
+    line: 20,
+    startLine: 20,
+    diffSide: "RIGHT",
+    startDiffSide: null,
+    opening: { nodes: [{ state: "SUBMITTED" }] },
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_long",
+          state: "PENDING",
+          body: "And here?",
+          createdAt: "2026-10-01T10:30:00Z",
+          author: { __typename: "User", login: "teammate", databaseId: 8 },
+          pullRequestReview: { id: "PRR_own" },
+        },
+      ],
+    },
+  },
+  {
+    id: "PRRT_others",
+    path: "src/invite.ts",
+    line: 3,
+    startLine: 3,
+    diffSide: "RIGHT",
+    startDiffSide: null,
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_others",
+          state: "PENDING",
+          body: "Not yours.",
+          createdAt: "2026-10-01T09:00:00Z",
+          author: { __typename: "User", login: "someone", databaseId: 9 },
+          pullRequestReview: { id: "PRR_other" },
+        },
+      ],
+    },
+  },
+];
+
 /** The head a line comment names, as GitHub spells a commit. */
 const LINE_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
 
@@ -1965,6 +2147,345 @@ function lineCommentAs(
 function linesAnswering(pending: readonly PendingNode[]): (call: GraphqlCall) => Response {
   return reviewsAnswering(pending);
 }
+
+it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
+  /** A call into the agent registered under the account, its segments one line by each speaker, the voice's rows written into the agent's conversation as the voice writes them; answers the call's session id and its start. */
+  const callInto = (
+    agent: { readonly id: string; readonly conversationId: string },
+    caller: string,
+    starter: string,
+    taskId: string,
+    words: readonly [developer: string, agent: string],
+  ) =>
+    Effect.gen(function* () {
+      const liveSessionId = `live-${randomUUID()}`;
+      const voiceSessionId = yield* voiceSessionRecord().register({
+        userId: caller,
+        sessionId: liveSessionId,
+        taskId,
+        agentId: agent.id,
+        attachId: randomUUID(),
+        model: "gpt-live",
+      });
+      assert.ok(voiceSessionId !== undefined);
+      const db = yield* Database;
+      yield* db.insert(voiceTranscriptSegments).values([
+        {
+          voiceSessionId,
+          seq: 1,
+          role: VOICE_SEGMENT_ROLE.USER,
+          text: words[0],
+          startMs: 0,
+          endMs: 900,
+        },
+        {
+          voiceSessionId,
+          seq: 2,
+          role: VOICE_SEGMENT_ROLE.ASSISTANT,
+          text: words[1],
+          startMs: 1_500,
+          endMs: 2_400,
+        },
+      ]);
+      const voice = voiceWriter({ store: yield* storeWriter({ tools: CODER_TOOL_SET }) });
+      const target = {
+        userId: caller,
+        liveSessionId,
+        conversation: { userId: starter, conversationId: agent.conversationId },
+      };
+      const developerRow = randomUUID();
+      const agentRow = randomUUID();
+      yield* voice.upsertSpokenRow(target, {
+        rowId: developerRow,
+        speaker: TRANSCRIPT_SPEAKER.USER,
+        startMs: 0,
+        endMs: 900,
+      });
+      yield* voice.upsertSpokenRow(target, {
+        rowId: agentRow,
+        speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
+        startMs: 1_500,
+        endMs: 2_400,
+      });
+      const [session] = yield* db
+        .select({ startedAt: voiceSessions.startedAt })
+        .from(voiceSessions)
+        .where(eq(voiceSessions.id, voiceSessionId));
+      assert.ok(session !== undefined);
+      return { voiceSessionId, startedAt: session.startedAt.getTime(), developerRow, agentRow };
+    });
+
+  it.effect(
+    "a blank Start, on a task with no repository or with one, hands the agent nothing and opens no session, and the agent reads as blank and as done, not failed, long past the grace a first turn lands in; a blank Start naming a prompt is refused, and any other Start on a task with no repository still is",
+    () =>
+      Effect.gen(function* () {
+        const bare = yield* openTask({ repository: null });
+        const coded = yield* openTask();
+        const standingOf = (opened: typeof bare) =>
+          Effect.map(readTask(opened.owner, opened.task.id), (read) => {
+            const { status, assignee } = Option.getOrThrow(read).task;
+            return { status, assignee: assignee?.userId };
+          });
+        const before = yield* standingOf(coded);
+        assert.notEqual(before.status, TASK_STATUS.IN_PROGRESS);
+        assert.equal(before.assignee, undefined);
+
+        const blankOn = (opened: typeof bare) =>
+          Effect.map(
+            opened.ask(
+              startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID(), blank: true }),
+            ),
+            (started) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent,
+          );
+        const onBare = yield* blankOn(bare);
+        const onCoded = yield* blankOn(coded);
+
+        for (const agent of [onBare, onCoded]) {
+          assert.equal(agent.brief, CODING_AGENT_BRIEF.BLANK);
+          assert.equal(agent.model, CODING_AGENT_DEFAULT_CHOICE.model);
+          assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
+          assert.equal(agent.status, CODING_AGENT_STATUS.COMPLETED);
+        }
+        const stored = (owner: string, id: string) =>
+          Effect.map(readCodingAgent(owner, id), (read) => {
+            const { planSnapshot, prompt, repository } = Option.getOrThrow(read);
+            return { planSnapshot, prompt, repository };
+          });
+        assert.deepEqual(yield* stored(bare.owner, onBare.id), {
+          planSnapshot: null,
+          prompt: null,
+          repository: null,
+        });
+        assert.deepEqual(yield* stored(coded.owner, onCoded.id), {
+          planSnapshot: null,
+          prompt: null,
+          repository: RELAY_FULL_NAME,
+        });
+        assert.deepEqual([...bare.eve.opened, ...coded.eve.opened], []);
+        // No work was handed, so the task stands where it was, though its starter is now on it.
+        assert.deepEqual(yield* standingOf(coded), {
+          status: before.status,
+          assignee: coded.owner,
+        });
+
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.minutes(1)));
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* bare.ask(request(TASK_AGENTS, bare.owner, { id: bare.task.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map((agent) => [agent.id, agent.brief, agent.status]),
+          [[onBare.id, CODING_AGENT_BRIEF.BLANK, CODING_AGENT_STATUS.COMPLETED]],
+        );
+        const page = readAnswer(
+          codingAgentPageAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* bare.ask(request(AGENT, bare.owner, { id: onBare.id })),
+        );
+        assert.equal(page.agent.status, CODING_AGENT_STATUS.COMPLETED);
+
+        assert.deepEqual(
+          yield* bare.ask(
+            startAs(bare.owner, bare.task.id, {
+              idempotencyKey: randomUUID(),
+              blank: true,
+              prompt: "Expire invitations.",
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* bare.ask(startAs(bare.owner, bare.task.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+        );
+        assert.deepEqual(bare.eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "an agent's transcript carries the lines said on calls into it in the order said, each on the voice channel naming its call and at the instant its words began, the agent's own with no turn's record though it was read aloud from one, and a line said awaits no turn",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask({ repository: null });
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
+        ).agent;
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const call = yield* callInto(agent, owner, owner, task.id, [
+          "What did you change?",
+          "I moved the export.",
+        ]);
+        const read = Effect.map(ask(request(AGENT_MESSAGES, owner, { id: agent.id })), (answered) =>
+          readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+        );
+
+        const page = yield* read;
+        assert.deepEqual(
+          page.messages.map((message) => ({
+            role: message.role,
+            words: message.parts.map((part) => (isRecord(part) ? part.text : undefined)),
+            channel: isRecord(message.metadata) ? message.metadata.channel : undefined,
+            call: isRecord(message.metadata) ? message.metadata.voice_session_id : undefined,
+            sentAt: message.sentAt,
+          })),
+          [
+            {
+              role: MESSAGE_ROLE.USER,
+              words: ["What did you change?"],
+              channel: MESSAGE_CHANNEL.VOICE,
+              call: call.voiceSessionId,
+              sentAt: call.startedAt,
+            },
+            {
+              role: MESSAGE_ROLE.ASSISTANT,
+              words: ["I moved the export."],
+              channel: MESSAGE_CHANNEL.VOICE,
+              call: call.voiceSessionId,
+              sentAt: call.startedAt + 1_500,
+            },
+          ],
+        );
+        // A line the voice answered itself opened no turn and waits on none.
+        assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+
+        // The store names the turn the agent's words were read aloud from; the line still carries no turn's record.
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        const target = { userId: owner, conversationId: agent.conversationId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.SPOKEN,
+          eveTurnId: "turn_0",
+        });
+        const db = yield* Database;
+        yield* db
+          .update(messages)
+          .set({ turnId })
+          .where(
+            and(
+              eq(messages.conversationId, agent.conversationId),
+              eq(messages.clientId, call.agentRow),
+            ),
+          );
+        const spoken = (yield* read).messages.find(
+          (message) => message.role === MESSAGE_ROLE.ASSISTANT,
+        );
+        assert.ok(spoken !== undefined);
+        assert.deepEqual(
+          { startedAt: spoken.startedAt, model: spoken.model, sentAt: spoken.sentAt },
+          { startedAt: undefined, model: undefined, sentAt: call.startedAt + 1_500 },
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's calls are read by every member of its workspace, each call with when it started and ended, its record, whose it was, and its lines naming their rows, and by no one outside it, as an agent that is none is not found",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other: teammate, task, ask } = yield* openTask({ repository: null });
+        const outsider = yield* openTask();
+        yield* joinWorkspace(task.workspaceId, teammate);
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
+        ).agent;
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const sibling = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
+        ).agent;
+        const first = yield* callInto(agent, owner, owner, task.id, [
+          "Start on the export.",
+          "Starting on it.",
+        ]);
+        yield* Database.use((db) =>
+          db
+            .update(voiceSessions)
+            .set({
+              closedAt: new Date(first.startedAt + 60_000),
+              closeReason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+            })
+            .where(eq(voiceSessions.id, first.voiceSessionId)),
+        );
+        yield* TestClock.adjust(Duration.minutes(5));
+        const second = yield* callInto(agent, teammate, owner, task.id, ["Is it done?", "It is."]);
+        yield* callInto(
+          Option.getOrThrow(yield* readCodingAgent(owner, sibling.id)),
+          owner,
+          owner,
+          task.id,
+          ["Not this one.", "No."],
+        );
+        const callsAs = (reader: string, id: string) => ask(request(AGENT_CALLS, reader, { id }));
+
+        const read = readAnswer(
+          taskTranscriptAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* callsAs(owner, agent.id),
+        );
+        assert.deepEqual(
+          read.transcript.calls.map((each) => ({
+            id: each.id,
+            startedAt: each.startedAt,
+            endedAt: each.endedAt,
+            ending: each.ending,
+            by: each.by?.userId,
+            lines: each.messages.map((line) => [
+              line.role,
+              line.parts.map((part) => part.text).join(""),
+              line.metadata?.rowIds,
+            ]),
+          })),
+          [
+            {
+              id: first.voiceSessionId,
+              startedAt: first.startedAt,
+              endedAt: first.startedAt + 60_000,
+              ending: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+              by: owner,
+              lines: [
+                [TRANSCRIPT_SPEAKER.USER, "Start on the export.", [first.developerRow]],
+                [TRANSCRIPT_SPEAKER.ASSISTANT, "Starting on it.", [first.agentRow]],
+              ],
+            },
+            {
+              id: second.voiceSessionId,
+              startedAt: second.startedAt,
+              endedAt: undefined,
+              ending: undefined,
+              by: teammate,
+              lines: [
+                [TRANSCRIPT_SPEAKER.USER, "Is it done?", [second.developerRow]],
+                [TRANSCRIPT_SPEAKER.ASSISTANT, "It is.", [second.agentRow]],
+              ],
+            },
+          ],
+        );
+        assert.deepEqual(
+          readAnswer(
+            taskTranscriptAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* callsAs(teammate, agent.id),
+          ),
+          read,
+        );
+
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(
+          yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
+          notFound,
+        );
+        assert.deepEqual(yield* callsAs(owner, randomUUID()), notFound);
+        assert.deepEqual(yield* callsAs(owner, "not-an-id"), notFound);
+      }),
+  );
+});
 
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
   /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
@@ -2944,6 +3465,81 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "a member edits and deletes a comment of their own pending review on this pull request, and is refused in words for another's, a published one, or one on another pull request",
+    () =>
+      Effect.gen(function* () {
+        // The comments GitHub answers for, by id, as the member's token reads them.
+        const commentNode = (viewerDidAuthor: boolean, state: string, pullRequest: string) => ({
+          viewerDidAuthor,
+          state,
+          pullRequest: { id: pullRequest },
+        });
+        const COMMENTS = new Map([
+          ["PRRC_own", commentNode(true, "PENDING", PULL_REQUEST_NODE_ID)],
+          ["PRRC_theirs", commentNode(false, "PENDING", PULL_REQUEST_NODE_ID)],
+          ["PRRC_published", commentNode(true, "SUBMITTED", PULL_REQUEST_NODE_ID)],
+          ["PRRC_elsewhere", commentNode(true, "PENDING", "PR_elsewhere")],
+        ]);
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: (call) => {
+            if (call.query.includes("mutation")) return Response.json({ data: {} });
+            if (call.query.includes("PullRequestReviewComment")) {
+              return Response.json({
+                data: { node: COMMENTS.get(String(call.variables.id)) ?? null },
+              });
+            }
+            return Response.json({
+              data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+
+        const edited = yield* ask(
+          actionAs(other, agent.id, "edit-review-comment", {
+            commentId: "PRRC_own",
+            body: "Renamed.",
+          }),
+        );
+        const deleted = yield* ask(
+          actionAs(other, agent.id, "delete-review-comment", { commentId: "PRRC_own" }),
+        );
+        const refusals = [];
+        for (const commentId of ["PRRC_theirs", "PRRC_published", "PRRC_elsewhere", "PRRC_gone"]) {
+          refusals.push(
+            yield* ask(actionAs(other, agent.id, "edit-review-comment", { commentId, body: "x" })),
+            yield* ask(actionAs(other, agent.id, "delete-review-comment", { commentId })),
+          );
+        }
+
+        assert.deepEqual(edited, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables, call.authorization]),
+          [
+            [
+              "updatePullRequestReviewComment",
+              { id: "PRRC_own", body: "Renamed." },
+              "Bearer ghu_teammate",
+            ],
+            ["deletePullRequestReviewComment", { id: "PRRC_own" }, "Bearer ghu_teammate"],
+          ],
+        );
+        for (const refused of refusals) {
+          assert.deepEqual(refused, {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: {
+              outcome: "refused",
+              words: "That comment is not one of your pending review's on this pull request.",
+            },
+          });
+        }
+      }),
+  );
+
+  it.effect(
     "each member reads the review they hold pending beside the conversation, on their own token, and one with no sign-in or whom GitHub would not answer reads none",
     () =>
       Effect.gen(function* () {
@@ -2952,11 +3548,23 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           if (call.authorization === "Bearer ghu_broken") {
             return Response.json({ message: "Server Error" }, { status: 502 });
           }
-          const nodes =
-            call.authorization === "Bearer ghu_teammate"
-              ? [{ viewerDidAuthor: true, comments: { totalCount: 2 } }]
-              : [];
-          return Response.json({ data: { repository: { pullRequest: { reviews: { nodes } } } } });
+          const teammate = call.authorization === "Bearer ghu_teammate";
+          const nodes = teammate
+            ? [
+                { id: "PRR_other", viewerDidAuthor: false, comments: { totalCount: 1 } },
+                { id: "PRR_own", viewerDidAuthor: true, comments: { totalCount: 2 } },
+              ]
+            : [];
+          return Response.json({
+            data: {
+              repository: {
+                pullRequest: {
+                  reviews: { nodes },
+                  reviewThreads: { nodes: teammate ? PENDING_THREADS : [] },
+                },
+              },
+            },
+          });
         };
         const pendingOf = (
           opened: { readonly ask: (request: Request) => Effect.Effect<Answer> },
@@ -2976,7 +3584,49 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         const unsigned = yield* published({ otherToken: null, answer: pendingAnswer });
         const broken = yield* published({ otherToken: "ghu_broken", answer: pendingAnswer });
 
-        assert.deepEqual(yield* pendingOf(two, two.other, two.agent.id), { comments: 2 });
+        assert.deepEqual(yield* pendingOf(two, two.other, two.agent.id), {
+          comments: 2,
+          drafts: [
+            {
+              id: "PRRC_reply",
+              threadId: "PRRT_published",
+              path: "src/invite.ts",
+              line: 12,
+              startLine: null,
+              side: "right",
+              startSide: null,
+              html: "<p>Still?</p>",
+              body: "Still?",
+              at: Date.parse("2026-10-01T10:00:00Z"),
+              by: { login: "teammate", bot: false },
+            },
+            {
+              id: "PRRC_long",
+              threadId: "PRRT_long",
+              path: "src/invite.ts",
+              line: 20,
+              startLine: null,
+              side: "right",
+              startSide: null,
+              html: null,
+              body: "And here?",
+              at: Date.parse("2026-10-01T10:30:00Z"),
+              by: { login: "teammate", bot: false },
+            },
+            {
+              id: "PRRC_start",
+              path: "src/invite.ts",
+              line: 40,
+              startLine: 38,
+              side: "left",
+              startSide: "left",
+              html: null,
+              body: "Why drop these?",
+              at: Date.parse("2026-10-01T11:00:00Z"),
+              by: { login: "teammate", bot: false },
+            },
+          ],
+        });
         assert.equal(yield* pendingOf(two, two.owner, two.agent.id), null);
         assert.equal(yield* pendingOf(unsigned, unsigned.other, unsigned.agent.id), null);
         assert.equal(yield* pendingOf(broken, broken.other, broken.agent.id), null);
@@ -3906,6 +4556,88 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           "the owner's Start is all eve heard",
         );
         assert.ok(Option.isSome(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "a task's archive naming an assignee who is no member is refused before any of its agents is stopped",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, ask } = yield* startedAgent(eve, { running: true });
+
+        const refused = yield* ask(
+          request(TASK(task.id), owner, {
+            method: "PATCH",
+            body: { archived: true, assigneeId: other },
+          }),
+        );
+
+        assert.deepEqual(
+          refused,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(eve.cancelled, [], "no agent's turn was stopped");
+        const standing = Option.getOrUndefined(yield* readTask(owner, task.id))?.task;
+        // The agent's Start by hand assigned its starter, which the refused change leaves standing.
+        assert.deepEqual([standing?.archivedAt, standing?.assignee?.userId], [undefined, owner]);
+      }),
+  );
+
+  it.effect(
+    "a model change of a Claude Code agent is refused another provider's model, a fast version, or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
+    () =>
+      Effect.gen(function* () {
+        const onEve = yield* startedAgent(fakeEve(), undefined);
+        const onClaudeCode = yield* startedAgent(fakeEve(), undefined);
+        const stored = Option.getOrThrow(
+          yield* readCodingAgent(onClaudeCode.owner, onClaudeCode.agent.id),
+        );
+        yield* Database.use((db) =>
+          db
+            .update(conversations)
+            .set({ runtime: "claude_code" })
+            .where(eq(conversations.id, stored.conversationId)),
+        );
+        const change = (
+          started: typeof onEve,
+          body: { model: string; effort: string; contextWindow?: string },
+        ) =>
+          started.ask(
+            request(AGENT, started.owner, { method: "PATCH", id: started.agent.id, body }),
+          );
+
+        const refused = [
+          yield* change(onClaudeCode, { model: SOL, effort: "low" }),
+          yield* change(onClaudeCode, { model: `${SMALL_WINDOW.model}-fast`, effort: "low" }),
+          yield* change(onClaudeCode, {
+            model: SMALL_WINDOW.model,
+            effort: "low",
+            contextWindow: "standard",
+          }),
+        ];
+        const taken = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "low" }),
+        ).agent;
+        const onEveTaken = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change(onEve, { model: SOL, effort: "low" }),
+        ).agent;
+
+        for (const answered of refused) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.deepEqual(
+          [taken.model, taken.effort, taken.runtime],
+          [SMALL_WINDOW.model, "low", "claude_code"],
+        );
+        assert.deepEqual([onEveTaken.model, onEveTaken.runtime], [SOL, undefined]);
       }),
   );
 
@@ -5019,12 +5751,13 @@ function startAs(bearer: string | undefined, taskId: string, body: WireBoundaryI
   return request(TASK_AGENTS, bearer, { method: "POST", id: taskId, body });
 }
 
-const TASK_INBOX = "/api/plans/inbox";
-const INBOX_ITEM = "/api/inbox/item";
+const TASK_INBOX = "/api/plans/{id}/inbox";
+const INBOX_ITEM = "/api/inbox/{id}";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
-const INBOX_MESSAGES = "/api/inbox/messages";
-const INBOX_CLOSE = "/api/inbox/close";
+const INBOX_MESSAGES = "/api/inbox/{id}/messages";
+const INBOX_ITEM_READ = "/api/inbox/{id}/read";
+const INBOX_CLOSE = "/api/inbox/{id}/close";
 const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
@@ -5276,6 +6009,56 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
         assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
         assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
+      }),
+  );
+
+  it.effect(
+    "a notice waits on the account until Got it settles it, which messages nobody, and a reply with words settles another as it reaches the agent",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, agent, answer, message, waiting } = yield* openInbox(eve);
+        const owned = { userId: owner, taskId: task.id, agentId: agent.id };
+        const notice = (key: string) =>
+          postInboxThread(owned, {
+            key,
+            title: "The preview is up",
+            body: "It deploys from main.",
+          });
+        const nodded = yield* notice("preview-nod");
+        const replied = yield* notice("preview-reply");
+        assert.ok(Result.isSuccess(nodded) && Result.isSuccess(replied));
+        const waitingIds = Effect.map(waiting(), (read) =>
+          read.items.map((item) => item.id).sort(),
+        );
+        assert.deepEqual(yield* waitingIds, [nodded.success.id, replied.success.id].sort());
+        const before = eve.sent.length;
+
+        const pressed = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(nodded.success.id, {
+            revision: nodded.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.ACKNOWLEDGED,
+          }),
+        );
+        assert.deepEqual([pressed.taken, pressed.item.status], [true, INBOX_STATUS.ANSWERED]);
+        assert.equal(eve.sent.length, before, "Got it messages nobody");
+
+        const sent = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(replied.success.id, {
+            text: "Nice work.",
+            clientKey: randomUUID(),
+            revision: replied.success.revision,
+          }),
+        );
+        assert.equal(sent.item.status, INBOX_STATUS.ANSWERED);
+        assert.equal(eve.sent.length, before + 1, "a reply with words reaches the agent");
+        assert.ok(JSON.stringify(eve.sent.at(-1)?.message.message).includes("Nice work."));
+        assert.deepEqual(yield* waitingIds, []);
       }),
   );
 
@@ -5891,7 +6674,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const unread = () =>
           Effect.map(read(), (page) => page.items.find((item) => item.id === id)?.unread);
         const mark = (method: string, bearer = owner) =>
-          ask(request(INBOX_READ, bearer, { method, id }));
+          ask(request(INBOX_ITEM_READ, bearer, { method, id }));
         assert.equal(yield* unread(), true, "a new item is unread");
         assert.deepEqual(
           (yield* waiting()).items.map((entry) => [entry.id, entry.unread]),
@@ -5942,6 +6725,171 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
           marked: 0,
         });
+      }),
+  );
+
+  /**
+   * Held reads driven to their answers a poll at a time, each step taken
+   * only after a round trip to the test's database (`drivenWhileStarting`
+   * says why), with how long each was held on the test's clock when it was
+   * first seen answered. The bound is past any hold, so a read that never
+   * lets go fails the test rather than hanging it.
+   */
+  const drivenToAnswers = (fibers: readonly Fiber.Fiber<unknown, unknown>[]) =>
+    Effect.gen(function* () {
+      const startedAt = yield* Clock.currentTimeMillis;
+      const heldFor: (number | undefined)[] = fibers.map(() => undefined);
+      const bound =
+        2 * (Duration.toMillis(CODER.MESSAGES_HOLD) / Duration.toMillis(CODER.MESSAGES_POLL));
+      for (let step = 0; step < bound && heldFor.includes(undefined); step += 1) {
+        yield* Effect.orDie(
+          Database.use((db) => db.select({ id: conversations.id }).from(conversations).limit(1)),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        yield* Effect.yieldNow;
+        const now = yield* Clock.currentTimeMillis;
+        fibers.forEach((fiber, index) => {
+          if (heldFor[index] === undefined && fiber.pollUnsafe() !== undefined) {
+            heldFor[index] = now - startedAt;
+          }
+        });
+      }
+      return { heldFor };
+    });
+
+  it.effect(
+    "a held inbox read answers the moment an item lands past its cursor, a task's and the account's alike",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, waiting } = yield* openInbox();
+        const task = yield* read();
+        const account = yield* waiting();
+        const heldTask = yield* Effect.forkChild(read(task.cursor));
+        const heldAccount = yield* Effect.forkChild(waiting(account.cursor));
+
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const { heldFor } = yield* drivenToAnswers([heldTask, heldAccount]);
+        const movedTask = yield* Fiber.join(heldTask);
+        const movedAccount = yield* Fiber.join(heldAccount);
+
+        assert.deepEqual(
+          movedTask.items.map((item) => item.id),
+          [posted.success.id],
+        );
+        assert.notEqual(movedTask.cursor, task.cursor);
+        assert.deepEqual(
+          movedAccount.items.map((entry) => entry.id),
+          [posted.success.id],
+        );
+        assert.notEqual(movedAccount.cursor, account.cursor);
+        for (const held of heldFor) {
+          assert.ok(
+            held !== undefined && held < Duration.toMillis(CODER.MESSAGES_HOLD),
+            `answered on the change, before the hold ends (held ${held} ms)`,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "a held inbox read lets go at the hold with the inbox unchanged, a task's and the account's alike, and not a poll before",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, waiting } = yield* openInbox();
+        assert.ok(Result.isSuccess(yield* post(QUESTION)));
+        const task = yield* read();
+        const account = yield* waiting();
+        const heldTask = yield* Effect.forkChild(read(task.cursor));
+        const heldAccount = yield* Effect.forkChild(waiting(account.cursor));
+
+        const { heldFor } = yield* drivenToAnswers([heldTask, heldAccount]);
+        const lapsedTask = yield* Fiber.join(heldTask);
+        const lapsedAccount = yield* Fiber.join(heldAccount);
+
+        assert.deepEqual(lapsedTask, task);
+        assert.deepEqual(
+          [lapsedAccount.items, lapsedAccount.cursor],
+          [account.items, account.cursor],
+        );
+        for (const held of heldFor) {
+          assert.ok(
+            held !== undefined && held >= Duration.toMillis(CODER.MESSAGES_HOLD),
+            `held until the hold ends (held ${held} ms)`,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "the inbox's refusals answer the old groups' bytes through the hosted oRPC route: the caller first, then the body's bound and shape, then the item",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, fetch, post } = yield* openInbox();
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const bytes = (sent: Request) =>
+          Effect.gen(function* () {
+            const response = yield* fetch(sent);
+            return {
+              status: response.status,
+              contentType: response.headers.get("content-type"),
+              cacheControl: response.headers.get("cache-control"),
+              text: yield* Effect.promise(() => response.text()),
+            };
+          });
+        const refused = (status: number, error: string) => ({
+          status,
+          contentType: "application/json",
+          cacheControl: null,
+          text: JSON.stringify({ error }),
+        });
+        const answering = (bearer: string | undefined, id: string, body: WireBoundaryInput) =>
+          request(INBOX_ITEM, bearer, { method: "POST", id, body });
+
+        assert.deepEqual(
+          yield* bytes(answering(undefined, posted.success.id, { malformed: true })),
+          refused(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+          "an unsigned caller is refused before its body is read",
+        );
+        const oversized = answering(owner, posted.success.id, { malformed: true });
+        oversized.headers.set("content-length", String(64 * 1024 * 1024));
+        assert.deepEqual(
+          yield* bytes(oversized),
+          refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+        assert.deepEqual(
+          yield* bytes(answering(owner, posted.success.id, { malformed: true })),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const answer = {
+          revision: posted.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+        };
+        assert.deepEqual(
+          yield* bytes(answering(owner, posted.success.id, { ...answer, unknown: 1 })),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a key the body does not declare is refused, as the old group refused it",
+        );
+        assert.deepEqual(
+          yield* bytes(answering(owner, randomUUID(), answer)),
+          refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* bytes(answering(owner, "not-a-uuid", answer)),
+          refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* bytes(request(TASK_INBOX, owner, { id: task.id, after: "" })),
+          refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a cursor outside its shape is refused",
+        );
+        assert.deepEqual(
+          yield* bytes(request(TASK_INBOX, owner, { id: randomUUID() })),
+          refused(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 
@@ -6141,6 +7089,49 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
         const teammate = yield* fetch(at(other, agentPicture.id));
         assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
+      }),
+  );
+
+  it.effect(
+    "a transcript read with wait=none is answered at once, never held, with whether the held read would have held on it: the agent's own and a worker's whose call is not recorded yet",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        // Nothing stands yet and the agent is starting, which the held read would hold on; this answers at once.
+        const own = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
+        );
+        assert.deepEqual(own.messages, []);
+        assert.equal(own.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(own.holds, true);
+
+        const worker = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(SUBAGENT_MESSAGES, owner, {
+              id: agent.id,
+              call: "call-7",
+              after: "0:0",
+              wait: "none",
+            }),
+          ),
+        );
+        assert.deepEqual(worker.messages, []);
+        assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(worker.holds, true);
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_MESSAGES, other, { id: agent.id, wait: "none" })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 });
@@ -6578,22 +7569,22 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "an agent whose session eve no longer runs is stamped as having left, and posts nothing more",
+    "an agent whose session eve no longer runs is told all the same, on a fresh session opened over its conversation, and stays in the chat",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED });
         const chat = yield* openChat(eve);
+        const openedBefore = eve.opened.length;
         const toSecond = yield* chat.post(chat.person, `${chat.links.second} are you?`);
-        assert.deepEqual(toSecond.receipt.left, [chat.links.second]);
-        const left = (yield* roster(chat.owner, chat.workspace)).filter(
-          (row) => row.leftAt !== null,
+        assert.deepEqual([toSecond.receipt.told, toSecond.receipt.left], [[chat.links.second], []]);
+        assert.deepEqual(
+          eve.opened.slice(openedBefore).map((each) => each.message.conversationId),
+          [chat.second.target.conversationId],
         );
         assert.deepEqual(
-          left.map((row) => row.agentId),
-          [chat.second.agent.id],
+          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+          [],
         );
-        const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
-        assert.ok(Result.isFailure(silenced));
       }),
   );
 
@@ -6613,12 +7604,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
             channelId: dm.id,
           },
         );
-        assert.deepEqual(sent.receipt, {
-          told: [],
-          held: [chat.links.person],
-          left: [],
-          unresolved: [],
-        });
+        // The other agent cannot read the DM, so naming it there names no one.
+        assert.deepEqual(sent.receipt.told, []);
+        assert.deepEqual(sent.receipt.held, [chat.links.person]);
+        assert.equal(sent.receipt.unresolved.length, 1);
         assert.equal(eve.sent.length, 0);
       }),
   );
@@ -7076,32 +8065,23 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post to a member's mention link is a DM the other agent reads by the poster's link, a reply lands in the thread it answers and tells its poster, and every message names its thread's root",
+    "a post to a member's mention link is refused, since a task's agents talk in its channel; a reply lands in the thread it answers and tells its poster, and every message names its thread's root",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openAgents(eve);
         const { first: one, second: two } = chat.links;
-        const dm = yield* chat.post(chat.first, { text: "Is the invite table yours?", to: two });
-        assert.ok("told" in dm);
-        assert.deepEqual([dm.in, dm.told], [two, [two]]);
-        const direct = yield* chat.read(chat.second, { channel: one });
-        assert.ok("messages" in direct);
         assert.deepEqual(
-          direct.messages.map((message) => [message.in, message.text]),
-          [[one, "Is the invite table yours?"]],
+          yield* chat.post(chat.first, { text: "Is the invite table yours?", to: two }),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.ELSEWHERE },
         );
-        // The read of one channel marks nothing read.
-        const unread = yield* chat.read(chat.second);
-        assert.ok("messages" in unread);
-        assert.deepEqual(
-          unread.channels.map((channel) => [channel.name, channel.unread]),
-          [
-            ["#teammate-invitations", 0],
-            [one, 0],
-          ],
-        );
-        assert.equal(unread.messages.length, 1);
+        assert.equal(eve.sent.length, 0);
+        const named = yield* chat.post(chat.first, {
+          text: "Is the invite table yours?",
+          to: "#teammate-invitations",
+        });
+        assert.ok("in" in named);
+        assert.equal(named.in, "#teammate-invitations", "a to naming its own channel posts there");
 
         const root = yield* chat.post(chat.first, { text: "Who owns the emails?" });
         assert.ok("seq" in root);
@@ -7125,7 +8105,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "an agent started on another plan of the workspace answers to its link, written bare, before it ever posts or reads, and is told a DM to it",
+    "an agent on another plan of the workspace is out of reach: a post to its link is refused, naming it tells it nothing, and neither reads the other's chat",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -7149,29 +8129,46 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           ),
         );
         const address = link.slice(link.indexOf("](") + 2, -1);
-        const dm = yield* chat.post(chat.first, { text: "Take the emails?", to: address });
-        assert.ok("told" in dm);
-        assert.deepEqual([dm.in, dm.told], [link, [link]], "the DM is named by its link whole");
+        assert.deepEqual(yield* chat.post(chat.first, { text: "Take the emails?", to: address }), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: CHAT_TOOL_REFUSAL.ELSEWHERE,
+        });
+        const across = yield* chat.post(chat.first, { text: `${link} take the emails?` });
+        assert.ok("told" in across);
+        assert.deepEqual([across.told, across.unresolved.length], [[], 1]);
+        assert.equal(eve.sent.length, 0);
+        const outsider: ChatAgent = {
+          ...chat.first,
+          taskId: other.id,
+          self: { kind: MEMBER_KIND.AGENT, agentId: third.agent.id },
+        };
+        const theirs = yield* chat.read(outsider);
+        assert.ok("messages" in theirs);
         assert.deepEqual(
-          eve.sent.map((each) => each.sessionId),
-          [sessionId],
+          [theirs.messages, theirs.channels.map((channel) => channel.name)],
+          [[], ["#billing-export"]],
         );
+        const ours = yield* chat.read(chat.second);
+        assert.ok("members" in ours);
+        assert.ok(!ours.members.some((member) => member.mention === link));
+        assert.deepEqual(yield* chat.read(chat.second, { channel: "#billing-export" }), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: CHAT_TOOL_REFUSAL.NO_CHANNEL,
+        });
       }),
   );
 
   it.effect(
-    "a #name no channel holds opens a topic channel, and the read lists the roster and every channel the agent sees",
+    "a post to any other channel is refused and opens none, and the read lists the task's members and its own channel alone",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
-        const topic = yield* chat.post(chat.first, {
-          text: "Release notes go here.",
-          to: "#releases",
-          purpose: "What ships, and when",
-        });
-        assert.ok("in" in topic);
-        assert.equal(topic.in, "#releases");
-        yield* chat.post(chat.first, { text: "Hello all.", to: "#general" });
+        for (const to of ["#releases", "#general"]) {
+          assert.deepEqual(yield* chat.post(chat.first, { text: "Hello all.", to }), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: CHAT_TOOL_REFUSAL.ELSEWHERE,
+          });
+        }
         const read = yield* chat.read(chat.second);
         assert.ok("members" in read);
         assert.equal(read.you, chat.links.second);
@@ -7182,15 +8179,9 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
             { mention: chat.links.second, kind: MEMBER_KIND.AGENT },
           ].toSorted((a, b) => a.mention.localeCompare(b.mention)),
         );
-        assert.deepEqual(read.channels.map((channel) => [channel.name, channel.kind]).toSorted(), [
-          ["#general", CHANNEL_KIND.GENERAL],
-          ["#releases", CHANNEL_KIND.TOPIC],
-          ["#teammate-invitations", CHANNEL_KIND.TASK],
-        ]);
-        // The topic says what it is for, as its opener wrote it, to every agent that reads.
-        assert.equal(
-          read.channels.find((channel) => channel.name === "#releases")?.purpose,
-          "What ships, and when",
+        assert.deepEqual(
+          read.channels.map((channel) => [channel.name, channel.kind]),
+          [["#teammate-invitations", CHANNEL_KIND.TASK]],
         );
       }),
   );
@@ -7200,8 +8191,16 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
-        yield* chat.post(chat.first, { text: "Notes.", to: "#releases", purpose: "What ships" });
-        yield* chat.post(chat.first, { text: "Hi.", to: "#design" });
+        // The topics are a person's, opened from the window, since an agent posts in its task's channel alone.
+        const workspace = chat.task.workspaceId;
+        const person = Option.getOrThrow(
+          yield* ensureMember(chat.owner, workspace, {
+            kind: MEMBER_KIND.HUMAN,
+            userId: chat.owner,
+          }),
+        );
+        yield* openTopicChannel(chat.owner, workspace, "releases", person.id, "What ships");
+        yield* openTopicChannel(chat.owner, workspace, "design", person.id);
         const renamed = yield* chat.editChannel(chat.second, {
           channel: "#releases",
           name: "release-train",
@@ -7260,7 +8259,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post refused names why: both a reply and a target, a link naming no member or the agent itself, a handle, a message that is not there, words that do not read, and a turn past its bound; a read of a channel or a DM the agent does not see",
+    "a post refused names why: both a reply and a target, any place but its own channel, a handle, a message that is not there, words that do not read, and a turn past its bound; a read of a channel or a DM the agent does not see",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -7275,14 +8274,14 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
             text: "Hi.",
             to: `[@Ghost](https://tryluke.dev/acme/agent/${randomUUID()})`,
           }),
-          refused(CHAT_TOOL_REFUSAL.NO_MEMBER),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
         );
         assert.deepEqual(
           yield* chat.post(chat.first, {
             text: "Hi.",
             to: "https://tryluke.dev/acme/plan/pl_1",
           }),
-          refused(CHAT_TOOL_REFUSAL.NO_MEMBER),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
           "a task's link names no member",
         );
         assert.deepEqual(
@@ -7291,7 +8290,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.deepEqual(
           yield* chat.post(chat.first, { text: "Hi.", to: chat.links.first }),
-          refused(CHAT_TOOL_REFUSAL.TO_SELF),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
         );
         assert.deepEqual(
           yield* chat.post(chat.first, { text: "Hi.", replyTo: 9_999 }),
@@ -7350,7 +8349,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a post to a person's link is a DM with that person, and one to the task's Luke's link mints the Luke and DMs him, each named back by its link",
+    "a post to a person's or the task's Luke's link is refused, while their links in a post's words tell them, the Luke minted as he is named, each named back by its link",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -7363,70 +8362,54 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
             }),
           ),
         );
+        const personLink = `[@Someone](https://tryluke.dev/acme/person/${chat.owner})`;
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Can I take the invite file?", to: personLink }),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.ELSEWHERE },
+        );
         const toPerson = yield* chat.post(chat.first, {
-          text: "Can I take the invite file?",
-          to: `[@Someone](https://tryluke.dev/acme/person/${chat.owner})`,
+          text: `${personLink} can I take the invite file?`,
         });
         assert.ok("held" in toPerson);
-        assert.deepEqual([toPerson.in, toPerson.held], [person.link, [person.link]]);
+        assert.deepEqual(toPerson.held, [person.link]);
 
         const lukes = Effect.map(roster(chat.owner, workspace), (rows) =>
           rows.filter((row) => row.kind === MEMBER_KIND.LUKE),
         );
         assert.deepEqual(yield* lukes, [], "no Luke is a member before he is named");
         const toLuke = yield* chat.post(chat.first, {
-          text: "Is the plan settled?",
-          to: `https://tryluke.dev/acme/plan/${chat.task.id}/luke`,
+          text: `[@Luke](https://tryluke.dev/acme/plan/${chat.task.id}/luke) is the plan settled?`,
         });
         const [luke] = yield* lukes;
         assert.ok(luke !== undefined && "held" in toLuke);
         assert.equal(luke.taskId, chat.task.id);
         const lukeLink = (yield* memberNaming(luke)).link;
-        assert.deepEqual([toLuke.in, toLuke.held], [lukeLink, [lukeLink]]);
-        const read = yield* chat.read(chat.first, { channel: lukeLink });
-        assert.ok("messages" in read);
-        assert.deepEqual(
-          read.messages.map((message) => message.text),
-          ["Is the plan settled?"],
-        );
+        assert.deepEqual(toLuke.held, [lukeLink]);
       }),
   );
 
   it.effect(
-    "an agent whose coding agent is gone, and a Luke whose task is gone, are named by a plain label that names no one",
+    "an agent whose coding agent is gone is named by a plain label that names no one, and the task's chat lists it no more",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
         const said = yield* chat.post(chat.second, { text: "Handing the table over." });
         assert.ok("seq" in said);
-        const other = yield* startTask(chat.owner, { name: "Billing export" });
-        yield* chat.post(chat.first, {
-          text: "Is billing yours?",
-          to: `https://tryluke.dev/acme/plan/${other.id}/luke`,
-        });
         const db = yield* Database;
         const secondId = "agentId" in chat.second.self ? chat.second.self.agentId : "";
         yield* db.delete(codingAgent).where(eq(codingAgent.id, secondId));
-        yield* db.delete(task).where(eq(task.id, other.id));
 
         const read = yield* chat.read(chat.first, { channel: "#teammate-invitations" });
         assert.ok("members" in read);
         assert.deepEqual(
-          read.members.filter((member) => !member.mention.startsWith("[")),
-          [
-            { mention: CHAT_MEMBER_LABEL.FORMER_AGENT, kind: MEMBER_KIND.AGENT },
-            { mention: CHAT_MEMBER_LABEL.LUKE, kind: MEMBER_KIND.LUKE },
-          ],
+          read.members.map((member) => member.mention),
+          [chat.links.first],
         );
         assert.deepEqual(
           read.messages
             .filter((message) => message.seq === said.seq)
             .map((message) => message.from),
           [CHAT_MEMBER_LABEL.FORMER_AGENT],
-        );
-        assert.ok(
-          read.channels.some((channel) => channel.name === CHAT_MEMBER_LABEL.LUKE),
-          "the DM with the gone Luke is named by his label",
         );
       }),
   );
@@ -7559,7 +8542,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "an ask stays where it was first posted, and one whose shape asks what it cannot is refused before anything is posted",
+    "an ask goes nowhere but the task's channel, and one whose shape asks what it cannot is refused before anything is posted",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -7567,7 +8550,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         yield* chat.post(chat.first, QUEUE_ASK);
         assert.deepEqual(
           yield* chat.post(chat.first, { ...QUEUE_ASK, to: "#general" }),
-          refused(ASK_REFUSAL.ELSEWHERE),
+          refused(CHAT_TOOL_REFUSAL.ELSEWHERE),
         );
         assert.deepEqual(
           yield* chat.post(chat.first, {
@@ -7739,9 +8722,9 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
 
         const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
         const root = yield* chat.post(chat.first, QUEUE_ASK);
-        const dm = yield* chat.post(chat.first, { text: "Is the table yours?", to: two });
+        const dm = yield* chat.post(chat.first, { text: `${two} is the table yours?` });
         assert.ok("seq" in plain && "seq" in root && "told" in dm);
-        assert.deepEqual(dm.told, [two], "the DM is told as a notice");
+        assert.deepEqual(dm.told, [two], "the mention is told as a notice");
         assert.equal(
           yield* chatDigest(chat.second),
           [
@@ -8205,6 +9188,50 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of a source on no task, keyed by that source, copies its checkout to a branch of its own as a task's continue does, checked against the repository the source's own place clones",
+    (t) =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, checkout } = yield* copyScenario(t);
+        // An automation's run leaves an agent so: in its workspace, on no task, handed a prompt.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({
+              taskId: null,
+              organizationId: task.workspaceId,
+              planSnapshot: null,
+              prompt: SNAPSHOT,
+            })
+            .where(eq(codingAgent.id, source.id)),
+        );
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(AGENT_STARTS, owner, {
+              method: "POST",
+              id: source.id,
+              body: { idempotencyKey: randomUUID(), from: { agentId: source.id } },
+            }),
+          ),
+        ).agent;
+        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+
+        assert.equal(started.planId, null);
+        const branch = started.from?.branch ?? "";
+        assert.match(branch, /^luke\/teammate-invitations-continued-[0-9a-f]{8}$/u);
+        assert.ok(
+          preamble.includes(
+            `with what it had not committed or pushed recorded as one snapshot commit on top, is copied to the branch \`${branch}\`, made for you`,
+          ),
+        );
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+      }),
+  );
+
+  it.effect(
     "a continue of a source whose pull request is still open is told to carry the copy onto that pull request's branch and open no second one, and the words it is handed bring the branch to the copy",
     (t) =>
       Effect.gen(function* () {
@@ -8578,6 +9605,158 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made, even once the source is gone; a body naming another source, an account outside the workspace, a task's Start naming it, and a source in no repository start nothing; and one keyed by an agent on a task starts on that task",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, eve } = yield* openTask();
+        const BRIEF = "Sweep the flaky tests.";
+        const made = yield* createCodingAgent(owner, {
+          taskId: null,
+          organizationId: task.workspaceId,
+          planSnapshot: null,
+          prompt: BRIEF,
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          repository: RELAY_FULL_NAME,
+        });
+        const source = Option.getOrThrow(made).agent;
+        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [text(BRIEF)]);
+        const firstTurn = yield* transcriptRow(source, 2, MESSAGE_ROLE.ASSISTANT, [
+          text("Fixed the shared temp dir."),
+        ]);
+        yield* transcriptRow(source, 3, MESSAGE_ROLE.USER, [text("Now the clock.")]);
+        yield* transcriptRow(source, 4, MESSAGE_ROLE.ASSISTANT, [text("Fixed the clock read.")]);
+        const startFromAs = (bearer: string, agentId: string, body: WireBoundaryInput) =>
+          ask(request(AGENT_STARTS, bearer, { method: "POST", id: agentId, body }));
+        const replayed = () =>
+          (openedParts(eve).parts.replay?.steps ?? []).map((step) => step.summary);
+
+        const key = randomUUID();
+        const continueBody = { idempotencyKey: key, from: { agentId: source.id } };
+        const continued = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, continued.id));
+        assert.deepEqual(
+          [stored.taskId, stored.organizationId, stored.repository, stored.planSnapshot],
+          [null, task.workspaceId, RELAY_FULL_NAME, null],
+        );
+        assert.equal(openedParts(eve).parts.brief, BRIEF);
+        assert.deepEqual(replayed(), [
+          "Said: Fixed the shared temp dir.",
+          "The developer: Now the clock.",
+          "Said: Fixed the clock read.",
+        ]);
+        assert.equal(stored.prompt, openedParts(eve).text, "it keeps the message it was handed");
+        assert.deepEqual(continued.from, { agentId: source.id, steps: 3, totalSteps: 3 });
+        const opened = eve.opened.length;
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        assert.equal(again.id, continued.id);
+        assert.equal(eve.opened.length, opened, "a retry opens no session");
+        assert.deepEqual(
+          yield* startFromAs(owner, source.id, {
+            idempotencyKey: key,
+            from: { agentId: source.id, messageId: firstTurn },
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a key reused for another Start is refused, never answered with the first's agent",
+        );
+        assert.deepEqual(
+          yield* startFromAs(owner, source.id, { ...continueBody, model: SOL }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a retry naming a model without its effort is refused as the first would be",
+        );
+
+        const forked = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, source.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id, messageId: firstTurn },
+          }),
+        ).agent;
+        assert.equal(forked.planId, null);
+        assert.deepEqual(replayed(), ["Said: Fixed the shared temp dir."]);
+
+        const before = eve.opened.length;
+        assert.deepEqual(
+          yield* startFromAs(owner, continued.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id },
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* startFromAs(other, source.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id },
+          }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          "a task's Start refuses a source on no task rather than starting afresh",
+        );
+        const bare = yield* createCodingAgent(owner, {
+          taskId: null,
+          organizationId: task.workspaceId,
+          planSnapshot: null,
+          prompt: "Talk the release through.",
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          repository: null,
+        });
+        const bareId = Option.getOrThrow(bare).agent.id;
+        assert.deepEqual(
+          yield* startFromAs(owner, bareId, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: bareId },
+          }),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+          "a source on no task and in no repository has no checkout to go on from",
+        );
+        assert.equal(eve.opened.length, before);
+
+        // The same path from an agent on a task starts on that task, as the task's own Start would.
+        const onTask = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const fromTask = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, onTask.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: onTask.id },
+          }),
+        ).agent;
+        assert.equal(fromTask.planId, task.id);
+        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, fromTask.id)).taskId, task.id);
+
+        // A retry is answered with the agent its key made though the source is gone since.
+        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, source.id)));
+        const retried = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        assert.equal(retried.id, continued.id);
       }),
   );
 
@@ -9504,6 +10683,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         );
         const sent = yield* chat.wrote({
           text: `${named} take the table, please.`,
+          to: `#${chat.channel.name ?? ""}`,
           clientKey: randomUUID(),
         });
         assert.ok("posted" in sent);
@@ -9550,6 +10730,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         );
         yield* chat.wrote({
           text: `${named} see ${plan}, and ask https://tryluke.dev/acme/person/${chat.owner}.`,
+          to: `#${chat.channel.name ?? ""}`,
           clientKey: randomUUID(),
         });
         assert.equal(eve.sent.length, 2);
@@ -9774,6 +10955,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(served.headers.get("content-type"), CHAT_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
 
         const again = yield* chat.wrote(send);

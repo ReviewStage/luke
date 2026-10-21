@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -12,7 +11,7 @@ import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-m
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { notesBefore } from "./file-note.js";
+import { FileNoteAnnotation } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -51,9 +50,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installEditorLayout();
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -152,13 +149,13 @@ test("a version's diff draws a mention written in as its chip, still marked as w
 });
 
 test("Luke's note on a File tab's lines draws its links as a transcript does", () => {
-  const notes = notesBefore({
-    notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS }],
-    folded: [],
-    onFold: () => undefined,
-    onShow: () => undefined,
+  const note = { callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS };
+  const annotation = createElement(FileNoteAnnotation, {
+    note,
+    notes: { notes: [note], folded: [], onFold: () => undefined, taskId: undefined },
+    minimized: undefined,
   });
-  const container = drawn(createElement(TaskMentions, { value: PAGE, children: notes(3) }));
+  const container = drawn(createElement(TaskMentions, { value: PAGE, children: annotation }));
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(

@@ -17,14 +17,15 @@ import { LINK_ORIGIN } from "@luke/features/link-home";
 import { type ReadLink, readLink } from "@luke/features/luke-link";
 import type { AppBridge } from "@luke/host/bridge";
 import { savedEntry } from "./browser-history";
+import { addressHere, PANEL_PATH } from "./web-address";
 
 /** The paths the panel itself is served at, which name no place. */
-const PANEL_PATHS: ReadonlySet<string> = new Set(["/app", "/app.html"]);
+const PANEL_PATHS: ReadonlySet<string> = new Set([PANEL_PATH, `${PANEL_PATH}.html`]);
 
 /** The place the tab's address names, read as its link on the home; nothing for the panel's own paths or a path naming no place. */
 function linkHere(): ReadLink | undefined {
   if (PANEL_PATHS.has(location.pathname.replace(/\/$/u, ""))) return undefined;
-  return readLink(`${LINK_ORIGIN}${location.pathname}${location.search}${location.hash}`);
+  return readLink(`${LINK_ORIGIN}${addressHere()}`);
 }
 
 /**

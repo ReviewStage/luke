@@ -2,20 +2,9 @@ import { useAtom } from "@effect/atom-react";
 import { type GitHubIssuePick, isOutsideAuthor } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import { LINK_PLACE, readLink } from "@luke/features/luke-link";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import {
-  BADGE_TONE,
-  Badge,
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
-  CHIP_LOOK,
-  CHIP_WIDTH,
-  Chip,
-  ChipName,
-  ProviderMark,
-} from "@luke/ui";
+import { BADGE_TONE, Badge, CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
@@ -33,10 +22,10 @@ import {
   useGitHubIssues,
 } from "./github-issues-read.js";
 import { sinceText, useMinute } from "./task-time.js";
-import type { NewTaskIssue, TasksControl } from "./use-tasks-tab.js";
+import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * issue-picker-chip.tsx -- New task's Issue chip: a press away from one search over the chosen repository's GitHub issues, the workspace's own issues, and, where it has Linear connected, its Linear issues.
+ * issue-picker-chip.tsx -- New task's Issue chip: a press away from one search over the chosen repository's GitHub issues and, where it has Linear connected, its Linear issues.
  *
  * Where the workspace has GitHub connected, the menu lists first, under
  * "GitHub · owner/name", the issues of the repository chosen in the head
@@ -57,16 +46,15 @@ import type { NewTaskIssue, TasksControl } from "./use-tasks-tab.js";
  * glyph, "Issue", and a chevron, the chip opens the app's one searchable
  * menu, hung from its leading edge, or its trailing edge where it ends its
  * row as at the right of the New task dialog's head (`align`), and placed as
- * a Settings picker's is. The menu lists the workspace's own issues under
- * "Issues" and Linear's under "Linear", each heading only where both
- * stand. With nothing typed in the menu's field it lists every issue read as
- * the card opened, as each list came, newest changed first; as soon as
- * anything is typed, the issues of either whose title or key holds every
- * word stand nearest first, and once the typing rests Linear itself is
- * searched for the words, so a Linear issue older than those read is found
- * too; a Linear key typed whole or a link to a Linear issue pasted asks
- * Linear for that one issue instead, and a Luke link to one of the
- * workspace's own issues pasted offers that issue. ↑ and ↓ move the highlight, Return
+ * a Settings picker's is. The menu lists Linear's issues under "Linear"
+ * where GitHub's section stands beside them, and under no heading
+ * otherwise. With nothing typed in the menu's field it lists every Linear
+ * issue read as the card opened, newest changed first; as soon as anything
+ * is typed, those whose title or key holds every word stand nearest first,
+ * and once the typing rests Linear itself is searched for the words, so a
+ * Linear issue older than those read is found too; a Linear key typed whole
+ * or a link to a Linear issue pasted asks Linear for that one issue
+ * instead. ↑ and ↓ move the highlight, Return
  * chooses the highlighted issue, and Escape closes the menu, not the card,
  * handing focus back to what opened it: the chip, or the field whose ⌘L
  * asked for it (`openRequest`). The issues are read as the chip first
@@ -74,9 +62,9 @@ import type { NewTaskIssue, TasksControl } from "./use-tasks-tab.js";
  * typed in the menu's field names the task; choosing an issue is the
  * owner's to act on.
  *
- * A task's page opens the same menu from its Linked issues box
- * (`task-issue-links.tsx`), drawn as a button that names what it does
- * (`trigger`) in the chip's place, over the task's own repository, the
+ * A task's page opens the same menu from the end of its row of linked
+ * issues (`task-issue-links.tsx`), drawn as a quiet chip that names what it
+ * does (`trigger`) in the issue chip's place, over the task's own repository, the
  * issues the task links standing dimmed as linked.
  */
 
@@ -88,7 +76,6 @@ const ISSUE_WORDS = {
   CHIP: "Issue",
   LABEL: "Choose an issue",
   MENU: "Issues",
-  OWN: "Issues",
   LINEAR: "Linear",
   GITHUB: "GitHub",
   SEARCH: "Search issues, or paste a key, #number, or link",
@@ -98,7 +85,7 @@ const ISSUE_WORDS = {
   OUTSIDE_HINT: "Opened by someone outside the repository",
   GRANT_DETAIL: "Grant access",
   LINKED: "Linked",
-  FULL: "As many as a task links",
+  FULL: `At most ${TASK_BOUNDS.MAX_ISSUES} issues`,
 } as const;
 
 /** The GitHub section's heading, for the repository it lists. */
@@ -121,8 +108,7 @@ const GITHUB_ROW = {
 const SEARCH_PAUSE = Duration.millis(250);
 
 /**
- * The issues of the workspace the task starts in, its own or its Linear's,
- * read as the card opens and again for another workspace; none while they
+ * The Linear issues of the workspace the task starts in, read as the card opens and again for another workspace; none while they
  * are read, where the workspace offers none, or where the read was refused.
  */
 function useIssuesRead<Issue>(
@@ -229,19 +215,6 @@ function listedIssues(
   return offeredIssues(known, typed, found);
 }
 
-/**
- * The workspace's own issues the menu lists for the words typed so far:
- * every one read while nothing is typed, the one a pasted Luke link to it
- * names, and else those whose title or key holds the words, nearest first.
- */
-function ownOffered(issues: readonly NewTaskIssue[], typed: string): readonly NewTaskIssue[] {
-  const words = typed.trim();
-  if (words === "") return issues;
-  const place = readLink(words)?.place;
-  if (place?.kind === LINK_PLACE.ISSUE) return issues.filter((issue) => issue.id === place.issueId);
-  return offeredIssues(issues, typed);
-}
-
 /** One Linear issue as a row: its title, then its key and the state it stands in, under Linear's heading where one is drawn. */
 function linearRow(
   issue: LinearIssueSummary,
@@ -325,20 +298,8 @@ function githubRows(
   return standing.issues.map((issue) => githubRow(issue, section, now, pickable(issue)));
 }
 
-/** One of the workspace's own issues as a row: its title, then its key, under the Issues heading where one is drawn. */
-function ownRow(issue: NewTaskIssue, section: string | undefined): MenuRow {
-  return {
-    id: issue.id,
-    label: issue.title,
-    icon: <ListTodoIcon />,
-    detail: issue.identifier,
-    section,
-  };
-}
-
 export function IssuePickerChip({
   linearIn,
-  issuesIn,
   githubIn,
   workspaceId,
   repository,
@@ -349,7 +310,6 @@ export function IssuePickerChip({
   align = PICKER_ALIGN.START,
   trigger,
   onChoose,
-  onChooseOwn,
   onChooseGitHub,
 }: {
   /** The read of a workspace's Linear issues, none where it has no Linear connected (`TasksControl`'s). */
@@ -362,8 +322,6 @@ export function IssuePickerChip({
   linked: ReadonlySet<string>;
   /** Whether the card links as many issues as a task may, so no more is offered. */
   full: boolean;
-  /** The read of a workspace's own issues, none where Issues are not on (`TasksControl`'s). */
-  issuesIn: TasksControl["newTask"]["issuesIn"];
   /** The workspace the task starts in, whose issues are listed. */
   workspaceId: string | undefined;
   disabled: boolean;
@@ -371,19 +329,16 @@ export function IssuePickerChip({
   openRequest?: number | undefined;
   /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
   align?: PickerAlign | undefined;
-  /** The words of a button drawn in the chip's place, as a task page's "Link issue"; the chip where none are given. */
+  /** The words of a quiet chip drawn in the issue chip's place, as a task page's "Link issue"; the issue chip where none are given. */
   trigger?: string | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
-  onChooseOwn: (issue: NewTaskIssue) => void;
   onChooseGitHub: (issue: GitHubIssuePick) => void;
 }): React.JSX.Element | null {
   const linear = linearIn(workspaceId) !== undefined;
-  const own = issuesIn(workspaceId) !== undefined;
   const github = githubIn(workspaceId) !== undefined;
-  const connected = linear || own || github;
+  const connected = linear || github;
   const now = useMinute();
   const issues = useIssuesRead(linearIn, workspaceId);
-  const ownIssues = useIssuesRead(issuesIn, workspaceId);
   const [searched, searchLinear] = useLinearSearch(linearIn);
   const [typed, setTyped] = useState("");
   // How many times the menu has opened, each of which reads the repository's issues afresh.
@@ -435,15 +390,12 @@ export function IssuePickerChip({
   if (!connected) return null;
 
   const listed = linear ? listedIssues(issues, searched, workspaceId, typed) : [];
-  const ownListed = ownOffered(ownIssues, typed);
   const githubListed =
     githubStanding.kind === GITHUB_ISSUES_STANDING.LISTED ? githubStanding.issues : [];
-  // Note that GitHub's section always stands under its heading, and the others only where another may be listed beside them.
-  const headed =
-    [linear, own, githubStanding.kind !== GITHUB_ISSUES_STANDING.NONE].filter(Boolean).length > 1;
+  // Note that GitHub's section always stands under its heading, and Linear's only where GitHub's stands beside it.
+  const headed = linear && githubStanding.kind !== GITHUB_ISSUES_STANDING.NONE;
   const rows = [
     ...githubRows(githubStanding, now, (issue) => unpickable(linked.has(issue.nodeId), full)),
-    ...ownListed.map((issue) => ownRow(issue, headed ? ISSUE_WORDS.OWN : undefined)),
     ...listed.map((issue) =>
       linearRow(
         issue,
@@ -467,21 +419,20 @@ export function IssuePickerChip({
   };
 
   return (
-    <div className="issue-picker-chip" data-align={align} {...placement} ref={box}>
+    <div className="issue-picker-chip" {...placement} ref={box}>
       {trigger !== undefined ? (
-        <Button
+        <Chip
           ref={button}
-          variant={BUTTON_VARIANT.OUTLINE}
-          size={BUTTON_SIZE.COMPACT}
-          icon={<PlusIcon />}
+          look={CHIP_LOOK.TOOLBAR}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           disabled={disabled}
           onClick={press}
         >
-          {trigger}
-        </Button>
+          <PlusIcon />
+          <ChipName>{trigger}</ChipName>
+        </Chip>
       ) : (
         <Tooltip label={ISSUE_WORDS.LABEL} chord={ISSUE_CHORD}>
           <Chip
@@ -518,7 +469,6 @@ export function IssuePickerChip({
             searchGitHub(words);
           }}
           onPick={(id) => {
-            const mine = ownListed.find((each) => each.id === id);
             const issue = listed.find((each) => each.id === id);
             const githubIssue = githubListed.find((each) => each.nodeId === id);
             close();
@@ -528,7 +478,6 @@ export function IssuePickerChip({
             ) {
               appPlatform().openGitHub(githubStanding.settingsUrl);
             } else if (githubIssue !== undefined) onChooseGitHub(githubIssue);
-            else if (mine !== undefined) onChooseOwn(mine);
             else if (issue !== undefined) onChoose(issue);
           }}
           onClose={close}

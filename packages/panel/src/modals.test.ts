@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { FEEDBACK_KIND } from "@luke/features/feedback";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { ConfirmDialog, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -31,9 +30,7 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

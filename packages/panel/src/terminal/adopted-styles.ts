@@ -1,7 +1,8 @@
 /**
  * adopted-styles.ts -- the rules a terminal writes into `<style>` elements of its own, adopted by the document as constructed sheets, which the panel's policy admits.
  *
- * The panel's policy is `style-src 'self'` (`index.html`), which refuses an
+ * The panel's policy is `style-src 'self'` (the desktop's
+ * `renderer/index.html` and the web's `vercel.json`), which refuses an
  * inline `<style>` element, and xterm.js writes three of them inside the
  * element it draws in: the scrollbar's colours, and, where it draws without
  * WebGL, each cell's size and the theme's colours, without which its DOM

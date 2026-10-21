@@ -19,9 +19,9 @@ import { ChartEmpty, ChartFrame, SeriesLegend } from "./chart-frame";
 /** The four rates, in the order the legend names them. */
 const FAILURE_RATES_CHART = {
   lukeTurns: { label: "Luke turns", color: "var(--luke-color-chart-1)" },
-  agentRuns: { label: "Coding-agent runs", color: "var(--luke-color-identity-2)" },
-  calls: { label: "Calls dropped", color: "var(--luke-color-identity-3)" },
-  automationRuns: { label: "Automation runs", color: "var(--luke-color-identity-4)" },
+  agentRuns: { label: "Coding-agent runs", color: "var(--luke-color-chart-2)" },
+  calls: { label: "Calls dropped", color: "var(--luke-color-chart-3)" },
+  automationRuns: { label: "Automation runs", color: "var(--luke-color-chart-4)" },
 } satisfies ChartConfig;
 
 type FailureSeries = keyof typeof FAILURE_RATES_CHART;

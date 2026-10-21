@@ -20,7 +20,7 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineSkill } from "eve/skills";
-import { GitHubApp } from "../../github/github-app.js";
+import { GitHubApp, markRefusedToken } from "../../github/github-app.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { type RepositorySkill, readRepositorySkills } from "../repository-skills.js";
 
@@ -56,7 +56,9 @@ export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills"
     if (Option.isNone(workspace)) return [];
     const reached = yield* app.repositoryReadToken(workspace.value, repository, member);
     if (Option.isNone(reached)) return [];
-    return yield* readRepositorySkills(reached.value.token, reached.value.repository);
+    return yield* readRepositorySkills(reached.value.token, reached.value.repository).pipe(
+      markRefusedToken(reached.value.access),
+    );
   });
   const skills = yield* read.pipe(
     Effect.catch((failure) =>

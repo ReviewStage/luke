@@ -45,10 +45,12 @@ function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
 export const SIGN_IN_CHOSEN = rememberedFlag("luke-admin-sign-in-chosen");
 
 /**
- * Whether the sidebar was left collapsed, remembered the way the sign-in press
- * is, so a browser that refuses storage simply opens expanded every visit.
+ * Whether the sidebar was left hidden, remembered the way the sign-in press
+ * is, so a browser that refuses storage simply opens it shown every visit.
+ * Note that the key is the one the old icon rail's fold was kept under, so a
+ * sidebar left folded to its rail opens hidden.
  */
-export const SIDEBAR_COLLAPSED = rememberedFlag("luke-admin-sidebar-collapsed");
+export const SIDEBAR_HIDDEN = rememberedFlag("luke-admin-sidebar-collapsed");
 
 /**
  * Whether the "Hide admins" filter is on. The key marks the exception, so a

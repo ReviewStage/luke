@@ -51,18 +51,10 @@ export {
   settingIdVisible,
   settingRowsForPage,
   settingsScopeChanged,
+  settingVisible,
   snapshotAccountPreferences,
 } from "./schema-access.js";
 export { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
-export {
-  capturedVoiceHotkey,
-  DEFAULT_STOP_HOTKEYS,
-  DEFAULT_VOICE_HOTKEYS,
-  stopHotkeyCandidates,
-  VOICE_HOTKEY_CAPTURE,
-  VOICE_HOTKEY_NONE,
-  voiceHotkeyCandidates,
-} from "./voice-hotkey.js";
 export {
   isZoomPercent,
   ZOOM_ACTUAL_SIZE,

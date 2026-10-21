@@ -19,21 +19,15 @@
  */
 
 import { spendDictationMeter } from "@luke/database/models/quota";
-import { base64Bytes, base64Chars } from "@luke/features/coding-agent-wire";
+import { base64Bytes } from "@luke/features/coding-agent-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { Clock, Effect, type Redacted } from "effect";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, bodyLimit, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { transcribeClip } from "./transcription.js";
-
-/** Room for the words and the JSON around the clip: fifty words of a hundred characters, each escaped six bytes to a character, fit with room to spare. */
-const ENVELOPE_BYTES = 64 * 1_024;
-
-/** A body is a clip in base64 and its words, each held to its bound, so one past this is not one. */
-const MAXIMUM_BODY_BYTES = base64Chars(DICTATION_BOUNDS.MAX_AUDIO_BYTES) + ENVELOPE_BYTES;
 
 const MS_PER_SECOND = 1_000;
 
@@ -60,8 +54,7 @@ function clipBytes(base64: string): Uint8Array<ArrayBuffer> {
 export function dictationProcedures(seams: DictationProcedureSeams) {
   const dictation = hosted.dictation
     .use(accountMiddleware(seams.resolveUserId))
-    .use(openAiKeyMiddleware)
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+    .use(openAiKeyMiddleware);
   return {
     transcribe: dictation.transcribe.effect(function* ({ input, context }) {
       const { audio, durationMs, keywords } = input;

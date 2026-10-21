@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { PlanEditRequest } from "@luke/features/plan-edit";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
@@ -18,9 +18,11 @@ import { PlanBody } from "./plan-body.js";
  * A date chip in the plan's editor, pressed, opens its picker over the real
  * editor bundle: a day picked, an end date, a time, typed words, or Clear
  * change the chip in place once the picker closes, and the `@` list narrowed
- * to dates opens the same picker to write a new one. A date in words that
- * take no change opens nothing. Synthetic plan; day-only dates wherever the
- * reader's zone would otherwise change what is written.
+ * to dates opens the same picker to write a new one. A date chip in the
+ * plan's words at rest opens the same picker with no editor opened, and a
+ * date changed there saves the plan with it written anew. A date in words
+ * that take no change opens nothing. Synthetic plan; day-only dates
+ * wherever the reader's zone would otherwise change what is written.
  */
 
 /** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
@@ -42,7 +44,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   installEditorLayout();
-  fakeAppBridge({ act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }) });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -73,6 +75,45 @@ function drawn(): HTMLElement {
     ),
   );
   return container;
+}
+
+/** The plan's page drawn at rest, every save asked kept, and drawn again over a plan written anew. */
+function drawnAtRest(task: Task = TASK, editable = true) {
+  const saves: PlanEditRequest[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (plan: Task) =>
+    act(() =>
+      root.render(
+        createElement(PlanBody, {
+          task: plan,
+          live: false,
+          onEdit: editable
+            ? (request: PlanEditRequest) => {
+                saves.push(request);
+                return Promise.reject(new Error("Nothing is saved in this test."));
+              }
+            : undefined,
+          sectionLinks: {
+            workspace: "acme",
+            onOpen: () => undefined,
+            onOpenFile: () => undefined,
+            reveal: undefined,
+          },
+        }),
+      ),
+    );
+  draw(task);
+  return { container, saves, draw };
+}
+
+/** The date chip in the plan's words at rest. */
+function chipAtRest(container: HTMLElement): HTMLElement {
+  const chip = container.querySelector<HTMLElement>('.plan-unit [data-kind="date"]');
+  assert.ok(chip, "the plan's words hold a date chip");
+  return chip;
 }
 
 /** The plan's editor, opened on Rollout by Enter on its block. */
@@ -445,13 +486,130 @@ test("the picker closed with nothing changed leaves the chip as it was", async (
   ]);
 });
 
-test("a date chip in the plan's words while they are not being edited opens no picker", () => {
-  const container = drawn();
+test("a date chip in the plan's words at rest opens its picker on the date where it stands, with no editor opened", async () => {
+  const { container } = drawnAtRest();
 
-  const chip = container.querySelector<HTMLElement>("[data-mention-ref]");
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
 
-  assert.equal(chip?.tagName, "SPAN");
-  assert.equal(chip?.textContent, "Friday");
+  const dialog = picker(container);
+  assert.ok(dialog, "the picker is open");
+  assert.equal(fieldOf(dialog, "Start").value, "Oct 23, 2026");
+  assert.equal(container.querySelector(".plan-document-text"), null);
+});
+
+test("a day picked from the plan at rest saves the plan with the date named anew in its place", async () => {
+  const { container, saves } = drawnAtRest();
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+
+  assert.equal(picker(container), null);
+  assert.deepEqual(saves, [
+    {
+      document: {
+        base: TASK.document.body,
+        value: TASK.document.body.replace(
+          "[@Oct 23, 2026](luke://date/2026-10-23)",
+          "[@Oct 24, 2026](luke://date/2026-10-24)",
+        ),
+      },
+    },
+  ]);
+});
+
+test("Clear from the plan at rest saves the plan with the date taken out", async () => {
+  const { container, saves } = drawnAtRest();
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  act(() =>
+    [...dialog.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Clear")
+      ?.click(),
+  );
+  await act(async () => undefined);
+
+  assert.deepEqual(
+    saves.map((save) => save.document?.value),
+    [TASK.document.body.replace("[@Oct 23, 2026](luke://date/2026-10-23)", "")],
+  );
+});
+
+test("the picker opened from the plan at rest and closed with nothing changed saves nothing", async () => {
+  const { container, saves } = drawnAtRest();
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  await pressKey(dialog, "Escape");
+
+  assert.equal(picker(container), null);
+  assert.deepEqual(saves, []);
+});
+
+test("words written above a date while its picker is open leave the date changed where it then stands", async () => {
+  const { container, saves, draw } = drawnAtRest();
+  const grown: Task = {
+    ...TASK,
+    document: {
+      ...TASK.document,
+      body: TASK.document.body.replace("Invite by email.", "Invite by email, or by a link."),
+    },
+  };
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  draw(grown);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+
+  assert.deepEqual(
+    saves.map((save) => save.document),
+    [
+      {
+        base: grown.document.body,
+        value: grown.document.body.replace(
+          "[@Oct 23, 2026](luke://date/2026-10-23)",
+          "[@Oct 24, 2026](luke://date/2026-10-24)",
+        ),
+      },
+    ],
+  );
+});
+
+test("a page handed another task while a date's picker stands writes nothing into that task", async () => {
+  const { container, saves, draw } = drawnAtRest();
+  const other: Task = { ...TASK, id: "7d1f9cbf-1e9e-4e75-86cb-68d809e97201", name: "Another plan" };
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  draw(other);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+
+  assert.deepEqual(saves, []);
+});
+
+test("a date chip in a plan that takes no change opens no picker", () => {
+  const { container } = drawnAtRest(TASK, false);
+
+  const chip = chipAtRest(container);
+  act(() => chip.click());
+
+  assert.equal(chip.tagName, "SPAN");
+  assert.equal(chip.textContent, "Friday");
   assert.equal(picker(container), null);
 });
 

@@ -25,6 +25,9 @@ import {
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
+  CHAPTERS_GROUP_TITLE,
+  CHAPTERS_KEYS,
+  CHAPTERS_SHORTCUTS,
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
@@ -39,7 +42,8 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf, settingsPageShown } from "./settings/pages.js";
+import { settingsPageOf } from "./settings/pages.js";
+import { settingsPageShown } from "./settings/settings-rows.js";
 import { Shortcut } from "./shortcut.js";
 import { commandKeyshortcuts } from "./tooltip.js";
 
@@ -108,9 +112,6 @@ export function resultPageWord(page: SettingsView): string {
   return settingsPageOf(page).title;
 }
 
-/** The words every shortcut row can be found by, beside its own name. */
-const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
-
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
@@ -152,6 +153,14 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.GITHUB_ACCESS,
+          label: "GitHub personal access token",
+          page: SETTINGS_VIEW.ACCOUNT,
+          haystack: ["GitHub personal access token", "classic token PAT add manage"],
+        }
+      : undefined,
     // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.
     ...EXPERIMENTS.map((entry) =>
       input.accountDrawn
@@ -191,20 +200,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Microphone", "permission access allow privacy system settings"],
         }
       : undefined,
-    // The two keys, which are rows but not stored settings: what each is
-    // set to lives with the registrar, and the rows are always drawn.
-    {
-      id: SETTINGS_SEARCH_ROW.TALK_KEY,
-      label: "Talk to Luke",
-      page: SETTINGS_VIEW.VOICE,
-      haystack: ["Talk to Luke", SHORTCUT_WORDS, "talk speak hold microphone hold to talk"],
-    },
-    {
-      id: SETTINGS_SEARCH_ROW.STOP_KEY,
-      label: "Stop Luke",
-      page: SETTINGS_VIEW.VOICE,
-      haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
-    },
     // The account's plan template, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
@@ -240,6 +235,18 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           label: "Fast",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: ["Fast", "coding agent fast version speed quick model"],
+        }
+      : undefined,
+    // The chapters model, which is the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
+          label: "Chapters model",
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "Chapters model",
+            "pull request chapters generate claude haiku sonnet opus review",
+          ],
         }
       : undefined,
     // The account's own provider keys, which are the account's on the service: drawn once an account is signed in.
@@ -322,6 +329,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         WINDOW_SHORTCUT_WORDS,
         FILES_CHANGED_GROUP_TITLE,
       ],
+    })),
+    // Chapters' own keys, after Files changed's.
+    ...CHAPTERS_KEYS.map((key) => ({
+      id: key,
+      label: CHAPTERS_SHORTCUTS[key].label,
+      page: SETTINGS_VIEW.SHORTCUTS,
+      haystack: [CHAPTERS_SHORTCUTS[key].label, WINDOW_SHORTCUT_WORDS, CHAPTERS_GROUP_TITLE],
     })),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);

@@ -8,6 +8,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { barTopRadius } from "./bar-radius";
 import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
 
 export const USAGE_CHART = {
@@ -81,7 +82,7 @@ export function UsageChart({
               />
             }
           />
-          <Bar dataKey="calls" fill="var(--color-calls)" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="calls" fill="var(--color-calls)" radius={barTopRadius()}>
             {daily.map((point) => (
               <Cell
                 key={point.day}

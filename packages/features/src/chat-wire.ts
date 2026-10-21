@@ -62,23 +62,7 @@ export {
   /** @public */
   inboxBlockSchema as chatBlockSchema,
   /** @public */
-  inboxBlocksSchema as chatBlocksSchema,
-  /** @public */
-  inboxFieldSchema as chatFieldSchema,
-  /** @public */
-  inboxFieldValueSchema as chatFieldValueSchema,
-  /** @public */
-  inboxFormValueSchema as chatFormValueSchema,
-  /** @public */
-  inboxFormValuesSchema as chatFormValuesSchema,
-  /** @public */
   inboxImageTypeSchema as chatImageTypeSchema,
-  /** @public */
-  inboxKeySchema as chatKeySchema,
-  /** @public */
-  inboxOptionSchema as chatOptionSchema,
-  /** @public */
-  inboxPostBlockSchema as chatPostBlockSchema,
   /** @public */
   inboxPostBlocksSchema as chatPostBlocksSchema,
 } from "./inbox-wire.js";
@@ -91,8 +75,8 @@ export {
  * of the app names a person, an agent, or a task's Luke: by its mention
  * link (`mention-link.ts`), `[@Ada Lovelace](…/person/<userId>)`, an agent's
  * under its task or its workspace, a Luke's under his task, which a post
- * addresses a member by, a `to` names a DM by, and a reader is named by;
- * the handle each member was minted is no longer read. A channel is the workspace's
+ * addresses a member by, a `to` names a DM by, and a reader is named by.
+ * A channel is the workspace's
  * `#general`, a plan's own channel where its agents post by default, a
  * topic channel a member opened, or a DM between two members; a thread is
  * a reply to a root message. Messages are records of their own, addressed
@@ -172,10 +156,8 @@ export const CHAT_BOUNDS = {
   MAX_STEERS_PER_POST: 3,
   /** The most topic channels a workspace keeps open beside its general and plan channels. */
   MAX_TOPIC_CHANNELS: 12,
-  /** The most posts one agent's turn may make. */
-  MAX_POSTS_PER_TURN: 20,
-  /** The most characters a handle may spell. */
-  MAX_HANDLE_CHARS: 40,
+  /** The most posts one agent's turn may make: a coding agent's whole run is one turn, and it is told to keep its team posted throughout. */
+  MAX_POSTS_PER_TURN: 50,
   /** The most characters a `to` may spell: a channel's `#name`, or a member's mention link, whose label is a name and whose address an agent's task and id make long. */
   MAX_TARGET_CHARS: 512,
   /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
@@ -252,12 +234,6 @@ export type ChannelKind = (typeof CHANNEL_KIND)[keyof typeof CHANNEL_KIND];
 export const GENERAL_CHANNEL = "general";
 
 /**
- * The handle every plan's planner answers to, told apart by the plan.
- * @public
- */
-export const LUKE_HANDLE = "luke";
-
-/**
  * How a `to` names a channel, and how the window's composer opens a member's mention.
  * @public
  */
@@ -317,22 +293,12 @@ export function chatNoticeWords(text: string): string {
   return words.join("\n\n").trim();
 }
 
-/** A handle's grammar: a slug opening on a letter. */
-const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
-
 /** A channel's name, without its `#`: the same grammar as a key. */
 export const chatChannelNameSchema = inboxKeySchema;
 
 /** What a topic channel says it is for: one line of words, with no line break in it. */
 const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS).check(
   EffectSchema.isPattern(/^[^\r\n]*$/u),
-);
-
-/** A member's handle, without its `@`. */
-export const chatHandleSchema = EffectSchema.String.check(
-  EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_HANDLE_CHARS),
-  EffectSchema.isPattern(HANDLE_GRAMMAR),
 );
 
 /** A channel as a `to` names it: `#name`, within a key's grammar and bound. */
@@ -561,16 +527,14 @@ export const editChannelInputSchema = EffectSchema.Struct({
 });
 
 /**
- * A member as a reader sees one: its handle and kind, and what it stands
- * for by kind, a person's account, an agent, or a plan's planner; and
+ * A member as a reader sees one: its kind, what it is called, and what it
+ * stands for by kind, a person's account, an agent, or a plan's planner; and
  * whether it has left, an archived agent or plan, which is still named in
  * the messages it wrote.
  */
 export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
-  /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
-  handle: EffectSchema.optionalKey(EffectSchema.String),
   /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a Luke, always Luke, and for a member whose account or agent is gone. */
   name: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),
@@ -666,7 +630,7 @@ export const CHAT_ATTACHMENT_QUERY = {
 export const chatCursorSchema = filledText(CHAT_BOUNDS.MAX_CURSOR_CHARS);
 
 /** How far the reader has read one channel on that channel's own cursor, where that is past its floor. */
-export const chatChannelReadSchema = EffectSchema.Struct({
+const chatChannelReadSchema = EffectSchema.Struct({
   channelId: wireUuidSchema,
   readSeq: countedNumber,
 });
@@ -783,7 +747,7 @@ function placedOnce(post: {
  * post, which a retry carries again. A member's mention link in the words
  * tells that member.
  */
-export const chatPostRequestSchema = EffectSchema.Struct({
+const chatPostRequestSchema = EffectSchema.Struct({
   text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
   blocks: EffectSchema.optionalKey(
     EffectSchema.Array(inboxWordBlockSchema).check(
@@ -807,7 +771,7 @@ export const chatPostRequestSchema = EffectSchema.Struct({
 export type ChatPostRequest = typeof chatPostRequestSchema.Type;
 
 /** A person's answer to an ask from the window: the ask by its place, the revision they saw, the answer, and the window's key for it. */
-export const chatAnswerRequestSchema = EffectSchema.Struct({
+const chatAnswerRequestSchema = EffectSchema.Struct({
   answer: EffectSchema.Struct({
     seq: countedNumber,
     revision: countedNumber,
@@ -817,7 +781,7 @@ export const chatAnswerRequestSchema = EffectSchema.Struct({
 });
 
 /** A person resolving an ask of their own from the window: the ask by its place, and why. */
-export const chatResolveRequestSchema = EffectSchema.Struct({
+const chatResolveRequestSchema = EffectSchema.Struct({
   resolve: EffectSchema.Struct({
     seq: countedNumber,
     reason: filledText(CHAT_BOUNDS.MAX_REASON_CHARS),
@@ -825,13 +789,13 @@ export const chatResolveRequestSchema = EffectSchema.Struct({
 });
 
 /** A person's window saying they have read to a place: in the channel shown, or every channel where it names none. */
-export const chatReadToRequestSchema = EffectSchema.Struct({
+const chatReadToRequestSchema = EffectSchema.Struct({
   readTo: countedNumber,
   channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 /** A person's window opening a topic channel under a name of its own, with what it is for. */
-export const chatOpenRequestSchema = EffectSchema.Struct({
+const chatOpenRequestSchema = EffectSchema.Struct({
   open: EffectSchema.Struct({
     name: chatChannelNameSchema,
     purpose: EffectSchema.optionalKey(chatPurposeSchema),
@@ -842,7 +806,7 @@ export const chatOpenRequestSchema = EffectSchema.Struct({
 export type ChatOpenRequest = typeof chatOpenRequestSchema.Type;
 
 /** A person's window renaming a topic channel, saying or clearing its purpose, or archiving it or bringing it back; each left out stays. */
-export const chatEditRequestSchema = EffectSchema.Struct({
+const chatEditRequestSchema = EffectSchema.Struct({
   edit: EffectSchema.Struct({
     channelId: wireUuidSchema,
     name: EffectSchema.optionalKey(chatChannelNameSchema),
@@ -872,8 +836,21 @@ export const chatWriteRequestSchema = EffectSchema.Union([
 /** @public */
 export type ChatWriteRequest = typeof chatWriteRequestSchema.Type;
 
+/**
+ * A person joining a workspace's chat from the window (POST): their own
+ * member of it and its `#general` made where they are not yet, the one
+ * write a reader makes before it reads, so no read writes.
+ */
+export const chatJoinRequestSchema = EffectSchema.Struct({ join: EffectSchema.Literal(true) });
+
+/** What a join answers: the person's own member of the workspace's chat. */
+export const chatJoinAnswerSchema = EffectSchema.Struct({ self: wireUuidSchema });
+
+/** @public */
+export type ChatJoinAnswer = typeof chatJoinAnswerSchema.Type;
+
 /** Who a post came to, each member by its mention link or a plain name where none can be written: told now, held for their next read, left, and the labels of the links its words write that name no member. */
-export const chatReceiptSchema = EffectSchema.Struct({
+const chatReceiptSchema = EffectSchema.Struct({
   told: EffectSchema.Array(EffectSchema.String),
   held: EffectSchema.Array(EffectSchema.String),
   left: EffectSchema.Array(EffectSchema.String),

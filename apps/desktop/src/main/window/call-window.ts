@@ -148,6 +148,7 @@ export class CallWindow implements CallWindowSurface {
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#options.preloadPath,
         runMode: this.#options.runMode,
+        backgroundThrottling: true,
       }),
     });
     this.#window = window;

@@ -269,44 +269,49 @@ while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
 hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
-## The admin group
+## The admin resource
 
-`src/admin/admin-app.ts` is the dashboard's route group: its four reads and the
-Users tab's one star write, each its own function, with the group declaring
-all five addresses from `ADMIN_ROUTE_PATH` in `src/admin/http.ts` — the
-same constants the page composes its calls from, so an address cannot drift
-between the two ends. A path the group declares no route for is the admin
-vocabulary's own `not-found`; nothing routes one there, since each address is
-its own exact-path function, so that refusal is what the group says about
-itself.
+`src/admin/admin-procedures.ts` is the dashboard's resource on the hosted
+oRPC router (`admin` in `src/orpc/router.ts`): its reads and the Users tab's
+one star write, PUT to set it and DELETE to take it back, each a procedure
+of `@luke/features/contract`'s `admin` contract, whose addresses are
+`ADMIN_ROUTE_PATH` in `@luke/features/admin-wire` — the same constants the
+page's browser client asks through, so an address cannot drift between the
+two ends. A method an address does not answer is the handler's 405 before
+anything else runs.
 
-What the group owns is the gate, and only the gate: `src/admin/gate.ts`
-keeps the order the pages depend on — a method the address does not answer is
-a 405 before a session is even looked for, an auth seam that throws is a 503
-rather than a crash, an anonymous request is a 401 the page answers with a
-sign-in, and a signed-in non-admin is a 403 it answers with a plain refusal —
-and takes the resolver rather than reaching for it, because the real one is
-Better Auth and a gate this much depends on has to be exercisable without a
-database. The resolver answers an effect, so the one promise behind it is
+What the resource owns is the gate, and only the gate: `src/admin/gate.ts`
+is the middleware on the resource's implementer, so it runs before oRPC
+reads a procedure's input — an auth seam that throws is a 503 rather than a
+crash, an anonymous request is a 401 the page answers with a sign-in, and a
+signed-in non-admin is a 403 it answers with a plain refusal — and takes the
+resolver rather than reaching for it, because the real one is Better Auth
+and a gate this much depends on has to be exercisable without a database.
+The resolver answers an effect, so the one promise behind it is
 `getSession`'s own, wrapped with `Effect.tryPromise` where
 `src/admin/admin-route.ts` builds the seam and nowhere in the gate; a
-resolution that failed, however it failed, is the same 503. Each read still answers for its own parameters and its own body,
-and the group carries that answer as it came, status, headers, and bytes, the
-way the auth group carries Better Auth's. `src/admin/admin-route.ts` is
-the one place that hands the group this deployment's real session resolver,
+resolution that failed, however it failed, is the same 503. Each read still
+answers for its own parameters with its own refusals (`invalid-window`,
+`missing-user-id`, …, in `src/admin/http-effect.ts`), which the hosted
+handler answers as `{ error: slug }` under their own statuses, and its
+answer is written as the read built it. `src/admin/admin-route.ts` is the
+one place that hands the resource this deployment's real session resolver
+(over the auth service's `api` the web route hands it, read from the
+request's one credential, `src/auth/session-credential.ts`),
 database, and integration presence booleans. Every query behind it is an
-effect over the ambient `SqlClient`, and so is every seam the group is handed
-(`AdminSeamEffect` in `src/admin/seam.ts`): each read composes its query
-into the answer it is already building, and the edge serving the request is
-the one place the client behind it is provided, so the file names no database
-and runs nothing at all: the roster's scope and
-search conditions are builder predicates and Drizzle `sql` fragments rather
-than concatenated text, and the search term stays a bound parameter with its
-own wildcards escaped.
+effect over the ambient `SqlClient`, and so is every seam the resource is
+handed (`AdminSeamEffect` in `src/admin/seam.ts`): each read composes its
+query into the answer it is already building, and the edge serving the
+request is the one place the client behind it is provided, so the file names
+no database and runs nothing at all: the roster's scope and search
+conditions are builder predicates and Drizzle `sql` fragments rather than
+concatenated text, and the search term stays a bound parameter with its own
+wildcards escaped.
 
-Every admin answer is viewer-gated account data, refusals included, so each
-one carries `no-store`, the five refusals the group answers itself included,
-in the bytes the promise-shaped vocabulary in `src/admin/http.ts` gives.
+Every admin answer is viewer-gated account data, refusals included, so the
+gate marks each one `no-store` through the context's response headers before
+anything else; only the handler's own 405, answered before the gate, carries
+none.
 
 ## The bearer's resolution
 
@@ -347,8 +352,8 @@ its caller per request in one place (`src/agents/coder-host/stop.ts`'s
 `eveFor`): a request that carries an `Authorization` header reaches eve over
 that bearer as it came, as every desktop request does, and one that carries
 none, whose account the cookie named, reaches eve as the deployment acting
-for that account, under the deployment's own `CRON_SECRET` with the account
-in `x-luke-account`. The account is always the one the route resolved from
+for that account, under the deployment's own `EVE_DEPLOYMENT_SECRET` with the
+account in `x-luke-account`. The account is always the one the route resolved from
 that request, never one the request or a row names, and a deployment with
 no secret or no eve origin answers such a request unavailable, a delete
 included: a cookie's delete composes eve before it stops or erases anything
@@ -446,8 +451,9 @@ answers the route over a fixed catalog, byte for byte as the old group did.
 `src/accounts/provider-keys-procedures.ts` answers `/api/account/provider-keys` on the
 hosted oRPC router (`src/orpc/`), the
 account's own Anthropic and OpenAI API keys, at most one per provider:
-`GET` answers what each is, `PUT` saves one, and `DELETE
-?provider=<provider>` removes one, each answered with the keys as they then
+`GET` answers what each is, `PUT` saves one, `DELETE
+?provider=<provider>` removes one, and `PATCH` turns a connected plan's
+default for the account's coding agents on or off, each answered with the keys as they then
 stand (`@luke/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
@@ -470,6 +476,19 @@ not open. The row holds the version, the wrapped data key, the sealed key,
 the hint, and the status; it is replaced whole by a save, deleted by a
 removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
+
+A ChatGPT sign-in (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
+is a row of the same table, saved by the desktop on
+`PUT /api/account/chatgpt/credentials` after it signs in under the account's
+host id (`GET /api/account/chatgpt/host`, minted once into
+`account_chatgpt_host` and kept across sign-outs). Its seal holds the access,
+refresh and ID tokens, the issued client and the account's subject, bound to
+the kind; `access_expires_at` beside it says when a renewal is due. A
+renewal runs under the row's lock across OpenAI's token endpoint, so
+renewals of one sign-in are serialized as OpenAI asks, and replaces the
+tokens, the expiry and the scopes together. Removing it revokes its refresh
+token at OpenAI first and answers `revocationUnconfirmed` where OpenAI did
+not confirm.
 
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
 `HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
@@ -702,8 +721,8 @@ more than one sees exactly what it saw before:
   refused) never sends the browser back here at all, and the statuses read
   is what learns how it ended, from Connect's result.
 
-The rewrite moves a provider's path segment into the `provider` query
-(`apps/web/server/function-rewrites.ts`), as a task's id is moved into `id`.
+The hosted oRPC router reads the provider from its own path segment, as it
+reads a task's id.
 
 **The agents** (`src/integrations/integration-connection.ts`,
 `src/agents/agent-runtime/connections.ts`). eve hands a declared subagent
@@ -1127,7 +1146,7 @@ mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
 section the agent's starter keeps it in, and those sections; `read_task`
 and `create_task` (`src/agents/task-tools.ts`), which read one task of the
-workspace with its plan, its brief, and the issue it was started from, and
+workspace with its plan, its brief, and the issues it links, and
 make one for the starter, on the repository named or the agent's own,
 confirmed through the workspace's installation, with a brief and a plan to
 start from and no agent on it, under an id drawn from eve's key for the
@@ -1145,12 +1164,7 @@ archives it or brings it back, by the task
 menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
-task's archive keeps only when it stands from; `list_issues`, `read_issue`,
-`create_issue`, and `update_issue` (`src/agents/issue-tools.ts`), which list,
-read, file, change, archive, and bring back the issues of the agent's
-workspace, named by id or by identifier, as its starter, through the store
-`/api/issues` writes by (`issue-store.ts`), an issue of another workspace
-reading as none; and `list_models`, the models and efforts the agent's starter may
+task's archive keeps only when it stands from; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1605,8 +1619,9 @@ queued. Then it is a Start with a prompt, on the one path a Start takes
 (`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
 through the App, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and eve is reached
-as the deployment acting for the owner under `CRON_SECRET`, the opening the
-coder channel already admits for the voice brain. The prompt is the
+as the deployment acting for the owner under `EVE_DEPLOYMENT_SECRET`, never
+the bearer the cron called with, the opening the coder channel already admits
+for the voice brain. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -1754,9 +1769,7 @@ whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its coding agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
 and their conversations stamped deleted beside the task's own (`deleteTask`),
-the id moved into
-the query by the rewrite `apps/web/server/function-rewrites.ts` makes of every
-segment-captured id.
+the id read from the path by the hosted oRPC router.
 Each row of the list carries `agents` where the task has a coding agent
 (`src/agents/task-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
@@ -1782,8 +1795,8 @@ unpins one and answers them all as they then stand. A pin is a row of
 (`packages/database/src/models/repository-pin-store.ts`), stamped the first time it is made,
 deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
-nothing. It is a path of its own rather than one under `/api/plans/`, whose
-rewrite reads the next segment as a task's id.
+nothing. It is a path of its own rather than one under `/api/plans/`, where the
+next segment is a task's id.
 
 `src/accounts/workspaces-app.ts` answers the account's workspaces
 (`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
@@ -1964,9 +1977,7 @@ offered, the same `read_task` and `create_task`
 (`src/agents/task-tools.ts`), and the same
 `create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which keep the call's member's own
-sidebar sections, and `list_issues`, `read_issue`, `create_issue`, and
-`update_issue` (`src/agents/issue-tools.ts`), which keep the workspace's
-issues: a list
+sidebar sections: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent
@@ -1988,8 +1999,8 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: Luke's brain, its worker, the coding agent, and its worker.
 What each is offered is derived from it: the brain's hosted resolver
 offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
-(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` and
-its worker's are held to their roles by `coder-agent.test.ts`; each role's
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` are held to its set by
+`coder-tool-files.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
 every module may import it. eve's own injected tools (`task_wait`,
@@ -2232,35 +2243,30 @@ and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
-`check.sh` needs no service; the `postgres` CI job runs the same migrations,
-then `test:store`, against a Postgres container. Every one of those is
-Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
-embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
-any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
-dialect an opening of the test database is a database of that opening's own:
-a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
-names, made with `create database ... template ...` on the cluster's
-`postgres` maintenance database and dropped when the file closes it
-(`@luke/database/testing`). Nothing writes to the named
-database itself after `db:migrate`, so a statement a test forgets to scope by
-account or conversation reaches its own file's rows and no other file's.
-Which files `test:store` runs is read from the files, not kept
-in a list: `apps/web/scripts/store-tests.ts` selects every `apps/web/tests/**/*.test.ts` whose
-source imports the one door, `@luke/database/testing` (whose
-`openHostedStoreTestDatabase()` is the hosted store's and `getTestDB()` the
-bare one), because
-`LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
-door cannot meet a Postgres whatever it does. A new store test is therefore
-in the set the moment it imports its harness, and `package.json` is not
-edited. The runner then reads vitest's JSON report back and fails, naming
-each file, when the files vitest ran are not exactly the files selected. A reproduction against a real
-Postgres needs an 18 of your own whose role may `create database`, migrated
-by `db:migrate` alone, because that is the runner which records what it
-applied and the tests copy what it recorded, so run it first:
+`check.sh` and CI's test jobs need no service. The `postgres` CI job
+("Postgres migrations and store") proves only what PGlite cannot: it runs
+`db:migrate` against a fresh Postgres container and then
+`apps/web/tests/storage-schema.test.ts` and `drizzle-schema.test.ts` against
+what that migrated, so a
+statement PGlite accepts and Postgres refuses, or migrations that do not end
+at the declared schema, fail there. Every one of those is Postgres 18, the
+major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
+18.3, and the CI image is `postgres:18`, so a local `check.sh` is a
+reproduction on 18 already. On either dialect an opening of the test
+database is a database of that opening's own: a fresh PGlite, or a clone of
+the database `LUKE_STORE_TEST_DATABASE_URL` names, made with
+`create database ... template ...` on the cluster's `postgres` maintenance
+database and dropped when the file closes it (`@luke/database/testing`, the
+one door that reads the variable). Nothing writes to the named database
+itself after `db:migrate`, so a statement a test forgets to scope by account
+or conversation reaches its own file's rows and no other file's. To run a
+store test against a real Postgres by hand, use an 18 of your own whose role
+may `create database`, migrated by `db:migrate` alone, because that is the
+runner which records what it applied and the tests copy what it recorded:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
-LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
+LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
 ## Hosted voice service
@@ -2296,16 +2302,30 @@ device untouched except `session.input_audio.append` and
 Luke's never transit the service; and from the device nothing forwarded at
 all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), the Mac's
 `session.hangup` or an older build's own `session.close`, is read as an ask
-for the close the exchange sends itself (below), and two frames in the
+for the close the exchange sends itself (below), and three frames in the
 service's own vocabulary (`SESSIONS_REPORT_FRAMES`) are read here and handed
 to the exchange rather than forwarded: `session.activity`, the peer's idle
-report, and `session.stop`, the stop key, which the exchange answers with the
+report; `session.typed`, a line the developer typed into the agent's
+composer while the call is up on that agent, which the host, never the
+voice window, hands the call; and `session.stop`, the stop key, which the exchange answers with the
 one instruction it appends itself (`STOP_SPEAKING_INSTRUCTION`, which stands
 on the service alone) and by blocking every exchange of the session: no reply
 delegated before the press is spoken, and each run still under way is
 cancelled through `stopAsk`, the voice told silently (`STOPPED_RUN_NOTE`)
-only once the cancel was taken. So no device appends anything to a session,
-and no sentence of a device's composing reaches one through this route. Any other device frame — an older build's own append, the
+only once the cancel was taken. A typed line is no append of the device's
+either: GPT-Live takes no user text item under client delegation, so the
+exchange (`LiveSessionService.typeLine`) writes the line once as the
+developer's typed row, under the id a steer of the same send would write
+(`sentLineId` of the composer's key, so a Retry is the same line by either
+path), naming the call and the instant it was typed at, takes the
+developer's words since the last ask as its context and its rows, as a
+delegation does,
+hands it to the agent as an ask of the session's next revision whose reply
+it speaks session-wide (`delegation_id: null`), and tells the voice of it in
+a `session.thinking.append` with its mentions as their labels, so the voice
+neither answers nor delegates it itself. So no device appends anything to a
+session, and no instruction of a device's composing reaches one through
+this route. Any other device frame — an older build's own append, the
 microphone switch that never crosses this socket, an unreadable frame —
 closes that device's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
 rather than dropping it, so a device still running an exchange of its own is
@@ -2574,7 +2594,7 @@ words no ask carried are handed to him as one last ask as the call ends.
 eve is reached as the deployment acting for the one account the session
 resolved at its handshake, since the function holds no bearer of the
 account's by the time a delegation arrives. It calls eve's session routes
-under the deployment's `CRON_SECRET` as its bearer with the account in
+under the deployment's `EVE_DEPLOYMENT_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
 account as its attribute — for a spoken message, which its table,
@@ -2610,6 +2630,12 @@ in production and the deployment's own host on any other deployment.
 Production names the custom domain rather than the generated `*.vercel.app`
 host because that host carries the project's Vercel Authentication, which
 answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
+Since a Preview's functions dial the Preview's own eve, both ends of a
+delegation read one environment's `EVE_DEPLOYMENT_SECRET`, so Production and
+Preview each hold a value of their own, and neither is `CRON_SECRET`'s.
+One set to the cron's value is read as unset (`environment.ts`), as a blank
+one is: the build logs that once, by the two names, and the admin
+dashboard's Reliability screen shows it as not configured.
 
 ### One connection is one invocation
 
@@ -2790,9 +2816,12 @@ the runs still queued from the last hour, at most twelve a sweep and four
 at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
-scheduled call once it is set in the project; the same secret is the one the
-voice function acts for an account under at eve's door ("The exchange on the
-sessions route"). Without it the route answers 503 and the schedule is
+scheduled call once it is set in the project. It guards the maintenance
+routes alone, this one and the provider-key rewrap asked by hand: the voice
+function, every other web function, and both eve services act for an account
+at eve's door under `EVE_DEPLOYMENT_SECRET` instead ("The exchange on the
+sessions route"), and neither door admits the cron's bearer, so the
+scheduler's secret opens no session. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 

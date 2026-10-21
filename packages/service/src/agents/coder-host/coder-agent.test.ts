@@ -10,7 +10,7 @@ import { serializeModelInputSchema } from "eve/tools";
 import { test } from "vitest";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
-import { DEPLOYMENT_PRESENCE, lukeAccount } from "../brain-host/auth.js";
+import { lukeAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_AUTHENTICATOR,
@@ -22,17 +22,22 @@ import {
 } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { CODER } from "./bounds.js";
-import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "./channel.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
 const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
 
-const SECRET = "cron-secret-1";
+const SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-a";
 const CONVERSATION = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 const OWN_SESSION = "wrun_01SESSIONOFACCOUNTA0000000";
@@ -81,11 +86,30 @@ function coderChannel() {
     {
       secret: Redacted.make(SECRET),
       admits: CODER_DEPLOYMENT_TURNS,
-      presents: DEPLOYMENT_PRESENCE.ACCOUNT,
+      presents: CODER_DEPLOYMENT_PRESENCE,
+      streams: CODER_DEPLOYMENT_STREAMS,
     },
     async () => undefined,
   );
 }
+
+/** The developer's own principal as the deployment carries it, as a spoken ask, a stream read, a cancel, or a retire is admitted under. */
+function asCarriedAccount(admitted: SessionAuthContext | undefined) {
+  assert.ok(admitted);
+  return [
+    admitted.authenticator,
+    admitted.principalType,
+    admitted.principalId,
+    admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
+  ];
+}
+
+const CARRIED_ACCOUNT = [
+  BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+  BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+  ACCOUNT,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+];
 
 /** The channel's door as a request meets it: the principal admitted, or the word refused with. */
 function doorOf(channel: ReturnType<typeof coderChannelInput>) {
@@ -98,7 +122,7 @@ function doorOf(channel: ReturnType<typeof coderChannelInput>) {
   };
 }
 
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, its typed opening of the account's own conversation, its spoken ask, opening or following up, and its read of the session's stream are all minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier, so a call's ask joins the agent's typed turn under way; another account's session is refused", async () => {
   const channel = coderChannel();
   assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
   const door = doorOf(channel);
@@ -134,19 +158,47 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
     [developer.authenticator, developer.principalType, developer.principalId, carried.attributes],
   );
 
-  assert.deepEqual(await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN)), {
-    refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
-  });
-  assert.deepEqual(await door(deploymentOpening(BRAIN_HOST_TURN.SPOKEN)), {
-    refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
-  });
-  assert.deepEqual(
-    await door(deploymentRequest(`${OWN_SESSION}/stream`, BRAIN_HOST_TURN.TYPED, "GET")),
-    { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
+  // A call speaking into the agent: the voice's asks, presented as the developer, so eve steers
+  // each into a typed turn under way rather than holding it behind that turn.
+  const spoken = await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN));
+  assert.deepEqual(asCarriedAccount(spoken.admitted), CARRIED_ACCOUNT);
+  assert.equal(spoken.admitted?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.SPOKEN);
+  const spokenOpening = await door(deploymentOpening(BRAIN_HOST_TURN.SPOKEN));
+  assert.deepEqual(asCarriedAccount(spokenOpening.admitted), CARRIED_ACCOUNT);
+  const stream = await door(
+    deploymentRequest(`${OWN_SESSION}/stream`, BRAIN_HOST_TURN.SPOKEN, "GET"),
   );
+  assert.deepEqual(asCarriedAccount(stream.admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
+  assert.deepEqual(
+    await door(deploymentRequest(`${OTHER_SESSION}/stream`, BRAIN_HOST_TURN.SPOKEN, "GET")),
+    { refused: BRAIN_HOST_REFUSAL.NOT_OWNER },
+  );
+});
+
+test("a call's spoken line carries ahead of it into the agent's history the note that its answer is heard, short, and never waits, since eve may steer it into a typed turn under way that keeps that turn's words; a typed line carries none", async () => {
+  const channel = coderChannel();
+  const { onMessage } = channel;
+  assert.ok(onMessage !== undefined);
+  const door = doorOf(channel);
+  const contextOf = async (turn: string) => {
+    const request = deploymentRequest(OWN_SESSION, turn);
+    const { admitted } = await door(request);
+    assert.ok(admitted);
+    const result = await onMessage({ eve: { caller: admitted, request } }, "words");
+    assert.equal(result.auth?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], turn);
+    return result.context;
+  };
+
+  const spoken = await contextOf(BRAIN_HOST_TURN.SPOKEN);
+  assert.equal(spoken?.length, 1);
+  const [note] = spoken ?? [];
+  assert.ok(note !== undefined);
+  assert.ok(note.includes("voice call") && note.includes("aloud"), note);
+  assert.ok(note.includes(`\`${CODER_TOOL.SLEEP}\``), note);
+  assert.equal(await contextOf(BRAIN_HOST_TURN.TYPED), undefined);
 });
 
 test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the developer's own principal, with no row of the table, and refused on a session the account does not reach", async () => {
@@ -158,12 +210,7 @@ test("the deployment's cancel of a turn, which a continue started through start_
     });
 
   const { admitted } = await door(cancel(OWN_SESSION));
-  assert.ok(admitted);
-  assert.deepEqual(
-    [admitted.authenticator, admitted.principalType, admitted.principalId],
-    [BRAIN_HOST_AUTHENTICATOR.ACCOUNT, BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT, ACCOUNT],
-  );
-  assert.equal(admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
 });
 
@@ -176,12 +223,7 @@ test("the deployment's retire of a session, which a delete a browser asked for e
     });
 
   const { admitted } = await door(control(OWN_SESSION, "reset"));
-  assert.ok(admitted);
-  assert.deepEqual(
-    [admitted.authenticator, admitted.principalType, admitted.principalId],
-    [BRAIN_HOST_AUTHENTICATOR.ACCOUNT, BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT, ACCOUNT],
-  );
-  assert.equal(admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(control(OTHER_SESSION, "reset")), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
@@ -195,6 +237,158 @@ test("the deployment's retire of a session, which a delete a browser asked for e
       { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
       `${method} ${route}`,
     );
+  }
+});
+
+test("a Claude Code agent is told of Claude Code's own tools and never of Luke's it is not offered, and an eve agent of Luke's as before", () => {
+  // The tools Claude Code owns in place of Luke's, as eve's instructions name Luke's.
+  const LUKES = [
+    "`bash`",
+    "`read_file`",
+    "`write_file`",
+    "`apply_patch`",
+    "`glob`",
+    "`grep`",
+    `\`${CODER_TOOL.SLEEP}\``,
+    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
+    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    "`write_todos`",
+    "`delegate`",
+    "task_wait",
+  ];
+  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool"];
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const memberToken of [false, true]) {
+        const args = [
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          memberToken,
+        ] as const;
+        const eve = coderInstructions(...args);
+        const claudeCode = coderInstructions(...args, CODER_HARNESS.CLAUDE_CODE);
+        const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
+        assert.deepEqual(
+          LUKES.filter((tool) => claudeCode.includes(tool)),
+          [],
+          label,
+        );
+        assert.ok(
+          LUKES.some((tool) => eve.includes(tool)),
+          label,
+        );
+        assert.deepEqual(
+          // An agent with no repository is offered no skills.
+          CLAUDE_CODES.filter(
+            (tool) => !claudeCode.includes(tool) && (repository !== null || tool !== "Skill tool"),
+          ),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CLAUDE_CODES.filter((tool) => eve.includes(tool)),
+          [],
+          label,
+        );
+        // The tools that touch Luke stay Luke's, under their own names.
+        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+          assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
+        }
+      }
+    }
+    const watching = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+    );
+    assert.ok(watching.includes("run_in_background") && watching.includes("Monitor"), brief);
+  }
+});
+
+test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
+  // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+  const LUKES = [
+    "`bash`",
+    "`read_file`",
+    "`write_file`",
+    "`glob`",
+    "`grep`",
+    `\`${CODER_TOOL.SLEEP}\``,
+    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
+    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    "`write_todos`",
+    "`delegate`",
+    "task_wait",
+  ];
+  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool", "Bash"];
+  const CODEXES = [
+    "`apply_patch`",
+    "`update_plan`",
+    "Codex's own web search",
+    "Codex's own subagents",
+  ];
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const repository of ["Acme/Relay", null]) {
+      for (const memberToken of [false, true]) {
+        const codex = coderInstructions(
+          repository,
+          brief,
+          true,
+          TASK_ADDRESS,
+          undefined,
+          true,
+          null,
+          memberToken,
+          CODER_HARNESS.CODEX,
+        );
+        const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
+        assert.deepEqual(
+          LUKES.filter((tool) => codex.includes(tool)),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CLAUDE_CODES.filter((tool) => codex.includes(tool)),
+          [],
+          label,
+        );
+        assert.deepEqual(
+          CODEXES.filter((tool) => !codex.includes(tool)),
+          [],
+          label,
+        );
+        // An agent with a repository is pointed at its skills where Codex keeps them.
+        assert.equal(codex.includes("`.agents/skills`"), repository !== null, label);
+        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+          assert.ok(codex.includes(`\`${kept}\``), `${label}: ${kept}`);
+        }
+      }
+    }
+    const watching = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.CODEX,
+    );
+    assert.ok(watching.includes("gh pr checks <number> --watch --fail-fast"), brief);
   }
 });
 
@@ -232,7 +426,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent on a task is offered edit_plan, show_page, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
+test("an agent on a task is offered edit_plan, show_page, the comment tools, and the whiteboard's, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -240,7 +434,8 @@ test("an agent on a task is offered edit_plan, show_page, and the comment tools,
     CODER_TOOL.REPLY_TO_COMMENT,
     CODER_TOOL.RESOLVE_THREAD,
   ];
-  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort();
+  const board = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD];
+  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments, ...board].sort();
   const handedItsTask = { taskId: "plan-1", prompt: null };
   const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
@@ -263,6 +458,29 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
   assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
   assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
   assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, false]);
+});
+
+test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task leaving it to the starter and one on a task of its own keeping that one's, and one on no task told of no status", () => {
+  const STATUS = "## Your task's status";
+  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+    const at = words.indexOf(STATUS);
+    if (at === -1) return [false, false, false, false, false];
+    const section = words.slice(at, words.indexOf("\n\n## ", at + STATUS.length));
+    return [
+      true,
+      section.includes(CODER_TOOL.UPDATE_TASK),
+      section.includes("Mark it done"),
+      section.includes(
+        "Where another agent started you on its task, leave the status to that agent",
+      ),
+      section.includes("one started on a task of its own keeps that status itself"),
+    ];
+  };
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    assert.deepEqual(told(brief, TASK_ADDRESS), [true, true, true, true, true], brief);
+    assert.deepEqual(told(brief, null), [false, false, false, false, false], brief);
+  }
 });
 
 test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, a page, or its final message", () => {
@@ -297,7 +515,7 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
-test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run", () => {
+test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
@@ -307,6 +525,13 @@ test("the session and the post tool send whatever is ready for the developer to 
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
+      // An agent another coding agent started sends that agent what it would post instead.
+      assert.ok(
+        inbox?.includes(
+          "Where another coding agent started you, as your first message says, the developer's inbox is that agent's to keep",
+        ),
+        brief,
+      );
     }
   }
   assert.ok(INBOX_TOOLS.POST.description.includes(READY));
@@ -332,6 +557,22 @@ test("an agent writing as its developer is told to end every commit on the trail
         brief,
       );
     }
+  }
+});
+
+test("an agent on its starter's own token reads its checks and its pull request over GitHub's REST API under its repository, never gh pr, and is told a draft cannot be marked ready from its sandbox", () => {
+  const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const words = (memberToken: boolean) =>
+      coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER, false, null, memberToken);
+    const onToken = words(true);
+    for (const cli of ["`gh pr checks", "`gh run view", "marking a draft ready"]) {
+      assert.ok(!onToken.includes(cli), `${brief}: ${cli}`);
+      assert.ok(words(false).includes(cli), `${brief}: ${cli}`);
+    }
+    assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/commits/<sha>/check-runs`"), brief);
+    assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/pulls/<number>/reviews`"), brief);
+    assert.ok(onToken.includes("A draft cannot be marked ready from here"), brief);
   }
 });
 
@@ -371,6 +612,26 @@ test("every agent is told that what happens on its pull request after its turn r
       const instructions = coderInstructions("Acme/Relay", brief, ciReadable, TASK_ADDRESS);
       assert.ok(instructions.includes("reaches you as a message from GitHub"), brief);
       assert.ok(instructions.includes("before you end a turn on an open pull request"), brief);
+    }
+  }
+});
+
+test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const onTask of [true, false]) {
+      const instructions = coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        onTask ? TASK_ADDRESS : null,
+      );
+      assert.ok(
+        instructions.includes(
+          `reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key`,
+        ),
+        brief,
+      );
+      assert.ok(instructions.includes("never answer them in your message alone"), brief);
     }
   }
 });
@@ -425,7 +686,28 @@ const BEFORE_CHAT = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
 )(JSON.parse(readFileSync(BEFORE_CHAT_PATH, "utf8")));
 
-test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
+/** What the instructions' opening adds with Chat on: that the agent is one of a team talking in its task's chat. */
+const TEAM_WORDS = / You are not working alone: [^\n]*?as its section below says\./u;
+
+/** How the instructions say an agent the agent starts reports back, with Chat on and with it off. */
+/** How an agent another started is told to send its starter what it would have posted in the inbox, with Chat on and with it off. */
+const STARTER_REACH_WORDS = {
+  on: "in your task's chat with that agent's mention link where you share a task, or with `message_agent` where you do not",
+  off: "with `message_agent`",
+} as const;
+
+const STARTED_REPORT_WORDS = {
+  on: "reports back in your task's chat, mentioning you, where it is on your task, and with a message where it is not",
+  off: "reports back with a message",
+} as const;
+
+/** What the instructions say of messaging another agent with Chat on, and with it off. */
+const MESSAGE_AGENT_WORDS = {
+  on: / Talk to the agents on your task in your task's chat, never with `message_agent`[^\n]*?keep each message short and complete\./u,
+  off: " Message another agent when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete.",
+} as const;
+
+test("with Chat off the instructions are main's own, byte for byte, and with it on they open on the team, add the chat section, and send the task's agents to it rather than message_agent", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const before = BEFORE_CHAT[brief];
     assert.ok(before, brief);
@@ -436,10 +718,23 @@ test("with Chat off the instructions are main's own, byte for byte, and with it 
     assert.equal(off.onTask, before.onTask, brief);
     assert.equal(off.taskless, before.taskless, brief);
     const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
-    assert.ok(on.includes("## Chat with other agents"), brief);
-    const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
+    assert.ok(on.includes("## Your team's chat"), brief);
+    // Chat's word on the inbox keeps the exception for an agent another coding agent started.
+    assert.ok(on.includes("or, where another coding agent started you, to that agent"), brief);
+    const section = on.slice(on.indexOf("\n\n## Your team's chat"));
     const end = section.indexOf("\n\n## ", 2);
-    assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);
+    assert.match(on, MESSAGE_AGENT_WORDS.on, brief);
+    assert.match(on.split("\n")[0] ?? "", TEAM_WORDS, brief);
+    assert.equal(
+      on
+        .replace(section.slice(0, end), "")
+        .replace(MESSAGE_AGENT_WORDS.on, MESSAGE_AGENT_WORDS.off)
+        .replace(TEAM_WORDS, "")
+        .replace(STARTED_REPORT_WORDS.on, STARTED_REPORT_WORDS.off)
+        .replace(STARTER_REACH_WORDS.on, STARTER_REACH_WORDS.off),
+      before.onTask,
+      brief,
+    );
     for (const tool of Object.values(CHAT_TOOLS)) {
       assert.ok(!off.onTask.includes(tool.name), `${brief} with Chat off names ${tool.name}`);
     }
@@ -450,7 +745,7 @@ test("with Chat on the session keeps the developer's inbox for what it needs of 
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const instructions = coderInstructions("Acme/Relay", brief, false, null, undefined, true);
     assert.ok(instructions.includes("## The developer's inbox"), brief);
-    assert.ok(instructions.includes("## Chat with other agents"), brief);
+    assert.ok(instructions.includes("## Your team's chat"), brief);
     for (const tool of [...Object.values(CHAT_TOOLS), ...Object.values(INBOX_TOOLS)]) {
       assert.ok(instructions.includes(tool.name), `${brief} names ${tool.name}`);
     }

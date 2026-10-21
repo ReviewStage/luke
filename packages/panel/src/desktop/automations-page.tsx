@@ -50,8 +50,10 @@ import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { FadingWords } from "../fading-words.js";
 import { FoldingButton } from "../folding-button.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { momentText, useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -159,7 +161,7 @@ function OwnerCell({
     <Tooltip label={name}>
       <span className="automation-owner" data-owner={owner}>
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
-        <span className="automation-owner-name">{name}</span>
+        <FadingWords className="automation-owner-name" words={name} />
       </span>
     </Tooltip>
   );
@@ -554,9 +556,10 @@ function EditorSkeleton(): React.JSX.Element {
  * One automation's page opened before the list is first read, from a link,
  * ⌘K, or a run's card: the editor's toolbar, its crumbs' way back to the list
  * and a block where the automation's name will stand, over its form and its
- * Runs panel as quiet blocks, until the list says what it holds.
+ * Runs panel as quiet blocks, until the list says what it holds. A narrow
+ * room stands the form alone, as the editor does.
  */
-function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
+function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
   return (
@@ -578,15 +581,17 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
         <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
           <EditorSkeleton />
         </DetailPage>
-        <AutomationRunsPanel
-          panel={runsPanel}
-          mine
-          created
-          automationId={undefined}
-          runs={undefined}
-          onRetry={() => undefined}
-          onOpenAgent={() => undefined}
-        />
+        {room === SHELL_ROOM.NARROW ? null : (
+          <AutomationRunsPanel
+            panel={runsPanel}
+            mine
+            created
+            automationId={undefined}
+            runs={undefined}
+            onRetry={() => undefined}
+            onOpenAgent={() => undefined}
+          />
+        )}
       </div>
     </div>
   );
@@ -598,17 +603,30 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.
  */
-export function AutomationsPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+export function AutomationsPage({
+  tasks,
+  room,
+}: {
+  tasks: TasksControl;
+  /** The room the panel's stage gives, narrow where an automation's runs are a screen of their own. */
+  room: ShellRoom;
+}): React.JSX.Element {
   // Every Copy link on these pages is written under the listed workspace, whose automations they are.
   return (
     <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
-      <AutomationsPages tasks={tasks} />
+      <AutomationsPages tasks={tasks} room={room} />
     </LinkWorkspaceProvider>
   );
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
-function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+function AutomationsPages({
+  tasks,
+  room,
+}: {
+  tasks: TasksControl;
+  room: ShellRoom;
+}): React.JSX.Element {
   const view = tasks.automationsView;
   const workspace = tasks.workspace;
   const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
@@ -649,7 +667,11 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
       ? listedAutomations.find((automation) => automation.id === place.automationId)
       : undefined;
   if (place.kind === AUTOMATIONS_PAGE.EDIT && opened === undefined) {
-    return read === undefined ? <ReadingPage onBack={back} /> : <GonePage onBack={back} />;
+    return read === undefined ? (
+      <ReadingPage onBack={back} room={room} />
+    ) : (
+      <GonePage onBack={back} />
+    );
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && tasks.workspaces[0]?.id !== workspace.id;
@@ -671,6 +693,9 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
         onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
         linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
         leaveGuard={tasks.leaveGuard}
+        room={room}
+        runsShown={view.runs}
+        onRuns={view.onRuns}
         onDeleted={(automationId) =>
           view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
         }

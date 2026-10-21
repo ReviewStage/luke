@@ -1,5 +1,6 @@
 import type { LiveServerEvent } from "@luke/live";
-import { holdSocket, type LiveSideband, sidebandOverSocket } from "@luke/voice/live-session";
+import { holdSocket } from "@luke/voice/live-session";
+import { type LiveSideband, sidebandOverSocket } from "@luke/voice/live-socket";
 import { Effect, type Scope, Stream } from "effect";
 import type { RawData, WebSocket } from "ws";
 import { SOCKET_CLOSE_CODE } from "./socket.js";

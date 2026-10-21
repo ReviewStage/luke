@@ -2,6 +2,9 @@ import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   APP_SHORTCUTS,
+  CHAPTERS_GROUP_TITLE,
+  CHAPTERS_KEYS,
+  CHAPTERS_SHORTCUTS,
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
@@ -33,7 +36,7 @@ import { Shortcut } from "../shortcut.js";
  *
  * Files changed's own keys follow under a group of their own, read from the
  * table the view's handler answers to (`changes-list.tsx`), the order its
- * `?` sheet lists them in.
+ * `?` sheet lists them in, and Chapters' after them (`agent-chapters-tab.tsx`).
  */
 export function WindowShortcutSections({
   experiments,
@@ -74,6 +77,17 @@ export function WindowShortcutSections({
                   chord={FILES_CHANGED_SHORTCUTS[key].chord}
                   spoken
                 />
+              )}
+            </SettingsRow>
+          </div>
+        ))}
+      </SettingsSection>
+      <SettingsSection title={CHAPTERS_GROUP_TITLE}>
+        {CHAPTERS_KEYS.map((key) => (
+          <div key={key} {...searchAnchorProps(key)}>
+            <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={CHAPTERS_SHORTCUTS[key].label}>
+              {() => (
+                <Shortcut className="shortcut-value" chord={CHAPTERS_SHORTCUTS[key].chord} spoken />
               )}
             </SettingsRow>
           </div>

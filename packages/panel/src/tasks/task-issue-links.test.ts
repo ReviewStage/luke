@@ -18,20 +18,23 @@ import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskIssueLinks } from "./task-issue-links.js";
 
 /**
- * A task's Linked issues box as its owner meets it under the task's name:
- * each link's live state, its keyword switch, and its unlink, read and
- * changed through the act port; Link issue opening New task's picker over
- * the task's repository, the issues the task links dimmed; what the service
- * refuses said under the rows; and nothing drawn where the workspace offers
- * no issue to link and the task links none. Synthetic task, workspace, and
+ * A task's linked issues as its owner meets them under its status and
+ * priority: one chip each, saying its key, its title, its live state, and
+ * its keyword, whose menu opens it, switches the keyword, and unlinks it,
+ * each read and changed through the act port; Link issue opening New task's
+ * picker over the task's repository, the issues the task links dimmed; what
+ * the service refuses said under the chips; and nothing drawn where the
+ * workspace offers no issue to link and the task links none. On a phone the
+ * chips wrap rather than run past the page. Synthetic task, workspace, and
  * issues.
  */
 
@@ -85,6 +88,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
 
@@ -183,46 +187,73 @@ async function mount(options: {
   return { container, sent, opened };
 }
 
-/** Each row as the box draws it: its key, title, and state, and the keyword chosen. */
+/** Each chip as the row draws it: its key, title, and what it says of its state and keyword. */
 function rows(container: HTMLElement) {
-  return [...container.querySelectorAll(".task-issue-link")].map((row) => ({
+  return [...container.querySelectorAll<HTMLElement>(".task-issue-link")].map((row) => ({
     key: row.querySelector(".task-issue-link-key")?.textContent,
-    title: row.querySelector(".task-issue-link-title")?.textContent,
-    state: row.querySelector(".task-issue-link-state")?.textContent ?? null,
-    keyword: row.querySelector('[aria-checked="true"]')?.textContent,
+    title: row.querySelector(".luke-chip-name")?.textContent,
+    says: row.querySelector("button")?.getAttribute("aria-label")?.split(": ")[1],
+    keyword: KEYWORDS.find((keyword) => row.dataset.relation === RELATION_OF[keyword]),
   }));
 }
+
+const KEYWORDS = ["Closes", "Part of"] as const;
+
+const RELATION_OF = {
+  Closes: TASK_ISSUE_RELATION.CLOSES,
+  "Part of": TASK_ISSUE_RELATION.PART_OF,
+} as const;
 
 function press(element: Element | null | undefined): void {
   assert.ok(element instanceof HTMLElement, "nothing to press");
   act(() => element.click());
 }
 
-test("each link is drawn with its key, title, live state, and keyword, and its title opens the issue", async () => {
+/** Opens the chip of the link at `at` and presses the item of its menu whose label is `label`. */
+function choose(container: HTMLElement, at: number, label: string): void {
+  press(container.querySelectorAll(".task-issue-link button")[at]);
+  const items = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+  press(items.find((item) => item.querySelector(".luke-menu-item-label")?.textContent === label));
+}
+
+/** The labels of the menu the chip of the link at `at` drops, which it closes again. */
+function menuOf(container: HTMLElement, at: number): string[] {
+  const chip = container.querySelectorAll(".task-issue-link button")[at];
+  press(chip);
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
+    (label) => label.textContent ?? "",
+  );
+  press(chip);
+  return labels;
+}
+
+test("each link is drawn with its key, title, live state, and keyword, and its menu opens the issue", async () => {
   const { container, opened } = await mount({ links: [SAFARI, ENG] });
 
   assert.deepEqual(rows(container), [
     {
       key: "acme/web#312",
       title: "Login fails on Safari 18",
-      state: "Not planned",
+      says: "Not planned · Closes",
       keyword: "Closes",
     },
-    { key: "ENG-455", title: "Session cookie dropped", state: "In Progress", keyword: "Part of" },
+    {
+      key: "ENG-455",
+      title: "Session cookie dropped",
+      says: "In Progress · Part of",
+      keyword: "Part of",
+    },
   ]);
-  press(container.querySelector(".task-issue-link-title button"));
+  choose(container, 0, "Open on GitHub");
   assert.deepEqual(opened, ["https://github.com/acme/web/issues/312"]);
 });
 
-test("a keyword switched and an issue unlinked reach the host for that link, and the row follows", async () => {
+test("a keyword switched and an issue unlinked from a chip's menu reach the host for that link, and the chips follow", async () => {
   const { container, sent } = await mount({ links: [SAFARI, ENG] });
 
-  const partOf = [...container.querySelectorAll(".task-issue-link")][0]?.querySelectorAll(
-    '[role="radio"]',
-  )[1];
-  press(partOf);
+  choose(container, 0, "Part of");
   await settle();
-  press(container.querySelectorAll(".task-issue-link-unlink button")[1]);
+  choose(container, 1, "Unlink");
   await settle();
 
   assert.deepEqual(sent.slice(1), [
@@ -267,7 +298,7 @@ test("Link issue opens the picker over the task's repository, the linked issue d
   );
 });
 
-test("a link refused, a keyword the service refused, and an archived task are said, and an archived task's box reads only", async () => {
+test("a link refused, a keyword the service refused, and an archived task are said, and an archived task's chips only open their issue", async () => {
   const full = await mount({
     links: [SAFARI],
     answers: {
@@ -288,7 +319,7 @@ test("a link refused, a keyword the service refused, and an archived task are sa
   );
   await settle();
   const fullNote = full.container.querySelector('[role="alert"]')?.textContent;
-  press(full.container.querySelectorAll('[role="radio"]')[1]);
+  choose(full.container, 0, "Part of");
   await settle();
 
   assert.equal(fullNote, "A task links at most 10 issues.");
@@ -312,10 +343,10 @@ test("a link refused, a keyword the service refused, and an archived task are sa
     ),
     false,
   );
-  assert.equal(archived.container.querySelectorAll(".task-issue-link-unlink").length, 0);
+  assert.deepEqual(menuOf(archived.container, 0), ["Open on GitHub"]);
 });
 
-test("a task that links nothing in a workspace offering no issue to link draws no box, and one offering some says it links none", async () => {
+test("a task that links nothing in a workspace offering no issue to link draws no row, and one offering some offers Link issue alone", async () => {
   const unoffered = await mount({ links: [], github: false });
   assert.equal(unoffered.container.querySelector(".task-issue-links"), null);
 
@@ -324,18 +355,19 @@ test("a task that links nothing in a workspace offering no issue to link draws n
   });
   document.body.innerHTML = "";
   const offered = await mount({ links: [] });
-  assert.equal(
-    offered.container.querySelector(".task-issue-links-none")?.textContent,
-    "No linked issues",
+  assert.deepEqual(rows(offered.container), []);
+  assert.deepEqual(
+    [...offered.container.querySelectorAll("button")].map((each) => each.textContent),
+    ["Link issue"],
   );
 });
 
-test("a first read that did not land says so in the box, and Try again reads the links", async () => {
+test("a first read that did not land says so in the row's place, and Try again reads the links", async () => {
   const { container } = await mount({
     links: [SAFARI],
     reads: [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { issues: [SAFARI] }],
   });
-  const said = container.querySelector('[role="alert"]')?.textContent;
+  const said = container.querySelector('[role="alert"]')?.firstChild?.textContent;
 
   press([...container.querySelectorAll("button")].find((each) => each.textContent === "Try again"));
   await settle();
@@ -348,7 +380,7 @@ test("a first read that did not land says so in the box, and Try again reads the
   assert.equal(container.querySelector('[role="alert"]'), null);
 });
 
-test("a keyword change a newer one overtook puts nothing back when it is refused, so the row says what was saved last", async () => {
+test("a keyword change a newer one overtook puts nothing back when it is refused, so the chip says what was saved last", async () => {
   const held: ((answer: WireBoundaryInput) => void)[] = [];
   const { container } = await mount({
     links: [SAFARI],
@@ -357,11 +389,9 @@ test("a keyword change a newer one overtook puts nothing back when it is refused
         held.push(resolve);
       }),
   });
-  const radios = () => container.querySelectorAll('[role="radio"]');
-
-  press(radios()[1]);
-  press(radios()[0]);
-  press(radios()[1]);
+  choose(container, 0, "Part of");
+  choose(container, 0, "Closes");
+  choose(container, 0, "Part of");
   await settle();
   held[2]?.({ issue: { ...SAFARI, relation: TASK_ISSUE_RELATION.PART_OF } });
   await settle();
@@ -374,4 +404,71 @@ test("a keyword change a newer one overtook puts nothing back when it is refused
     ["Part of"],
   );
   assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+test("on a phone the chips wrap rather than run past the page, each cutting its title short", async () => {
+  const laid = layContainersAt({}, { touch: true });
+  try {
+    const { container } = await mount({ links: [SAFARI, ENG] });
+    const shell = document.body.appendChild(document.createElement("div"));
+    shell.className = "desktop-shell";
+    shell.dataset.room = "narrow";
+    shell.append(container);
+    const list = container.querySelector(".task-issue-links-rows") ?? assert.fail("the row");
+    const chip = container.querySelector(".task-issue-link") ?? assert.fail("a chip");
+
+    assert.equal(getComputedStyle(list).flexWrap, "wrap");
+    assert.equal(getComputedStyle(chip).minWidth, "0px", "a chip may shrink below its words");
+    assert.match(getComputedStyle(chip).maxWidth, /100%/u, "a chip stands inside the page");
+  } finally {
+    laid.remove();
+  }
+});
+
+/**
+ * Where Link issue's menu hangs once the chip stands `left` pixels in from
+ * the left edge of a window `width` wide, 90px wide itself: the edge it
+ * hangs from, and the widest the menu may stand. jsdom lays nothing out, so
+ * the chip's place is answered as the window would lay it.
+ */
+async function linkMenuAt(left: number, width = 390) {
+  vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+  const { container } = await mount({ links: [SAFARI] });
+  const chip =
+    [...container.querySelectorAll<HTMLElement>("button")].find(
+      (each) => each.textContent === "Link issue",
+    ) ?? assert.fail("Link issue stands");
+  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(left, 100, 90, 28));
+  press(chip);
+  await settle();
+  const box = chip.closest<HTMLElement>(".issue-picker-chip") ?? assert.fail("the picker's box");
+  return {
+    align: box.dataset.align,
+    widest: Number.parseFloat(box.style.getPropertyValue("--settings-picker-width-max")),
+  };
+}
+
+test("Link issue near the window's right edge hangs its menu from its trailing edge, so the menu keeps its room", async () => {
+  const { align, widest } = await linkMenuAt(290);
+  assert.equal(align, "end");
+  assert.ok(widest >= 280, `the menu may stand ${widest}px wide`);
+});
+
+test("Link issue near the row's start hangs its menu from its leading edge", async () => {
+  const { align, widest } = await linkMenuAt(16);
+  assert.equal(align, "start");
+  assert.ok(widest >= 280, `the menu may stand ${widest}px wide`);
+});
+
+test("Link issue with some room after it but more before it hangs its menu from the edge with more", async () => {
+  const { align, widest } = await linkMenuAt(320, 600);
+  assert.equal(align, "end");
+  assert.equal(widest, 404);
+});
+
+test("Link issue with room for the whole menu after it hangs it from its leading edge, though there is more before it", async () => {
+  const { align, widest } = await linkMenuAt(560, 1000);
+  assert.equal(align, "start");
+  assert.equal(widest, 434);
 });

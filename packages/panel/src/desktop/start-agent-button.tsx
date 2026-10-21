@@ -1,6 +1,7 @@
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { ERROR_STATE_PLACEMENT, ErrorState, PlayIcon, SplitButton } from "@luke/ui";
+import { CallIcon, ERROR_STATE_PLACEMENT, ErrorState, PlayIcon, SplitButton } from "@luke/ui";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { choiceLabel } from "../tasks/coding-agent-model.js";
@@ -12,10 +13,12 @@ import { Tooltip } from "../tooltip.js";
 /**
  * start-agent-button.tsx -- the task toolbar's Start: a split button that starts a coding agent on the task.
  *
- * The main part starts one on the account's default model and effort, and
- * says which on hover: "Opus 5.5 High Fast". The chevron drops
- * the shared model menu (`../tasks/model-menu.tsx`), the default
- * checked; what the menu chooses is what the main part then starts on while
+ * The main part starts a new agent on the account's default model and
+ * effort, and says which on hover: "Opus 5.5 High Fast". The chevron drops
+ * the shared model menu (`../tasks/model-menu.tsx`), the default checked,
+ * with New voice chat pinned at its foot where the window has a voice, which
+ * starts an agent blank with a call into it; what the menu chooses is what
+ * the main part then starts on while
  * the plan's tab stays open (the button is drawn afresh for each task and
  * each return to its plan, so a pick never outlives the Start it was made
  * for by much), and is never kept as the account's default, which only
@@ -32,7 +35,17 @@ import { Tooltip } from "../tooltip.js";
  * `SplitButton`.
  */
 
-export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
+/** The menu's row that starts a new voice chat, which no model's id spells. */
+const NEW_VOICE_CHAT_ROW = "new-voice-chat";
+
+export function StartAgentButton({
+  control,
+  onNewVoiceChat,
+}: {
+  control: CodingAgentsControl;
+  /** Starts a new voice chat on the task, which the menu offers at its foot; none where the window has no voice. */
+  onNewVoiceChat?: (() => void) | undefined;
+}): React.JSX.Element {
   const { start } = control;
   const repositoryRemedy = useRepositoryRemedy();
   const [open, setOpen] = useState(false);
@@ -149,6 +162,21 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           chosen={chosen}
           onChoose={setPicked}
           onClose={close}
+          actions={
+            onNewVoiceChat === undefined
+              ? undefined
+              : [
+                  {
+                    id: NEW_VOICE_CHAT_ROW,
+                    label: TAB_WORDS.NEW_VOICE_CHAT,
+                    icon: <CallIcon />,
+                    onPress: () => {
+                      close();
+                      onNewVoiceChat();
+                    },
+                  },
+                ]
+          }
           onLeave={(left) => {
             // Focus moving within the menu, or to the chevron whose own press toggles it, keeps it open.
             const kept = [document.getElementById(menuId), chevron.current].some(

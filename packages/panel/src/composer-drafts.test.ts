@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_CURSOR_START,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -27,7 +27,7 @@ import {
   type MessageSender,
   useAgentComposer,
 } from "./tasks/use-agent-composer.js";
-import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
+import type { MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
@@ -43,6 +43,7 @@ import {
 } from "./testing/composer.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
+import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
@@ -50,8 +51,8 @@ import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/t
  * A draft as the developer meets it: words typed in one task's agent's box
  * wait there while another task is open and while the agent's tab is away,
  * which its task's sidebar row marks with the Draft pencil while another
- * task is open, and only then, no tab of the task open marking its own,
- * outlast a reload of the window, and go with the message that sends them;
+ * task is open, and only then, and its own tab while another of the open
+ * task's tabs is chosen, outlast a reload of the window, and go with the message that sends them;
  * and an inbox card's answer, kept the same way, until the agent changes
  * the item it answers.
  */
@@ -158,8 +159,8 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.CALL, agentTab],
-        tab: onTask ? MAIN_TAB.CALL : agentTab,
+        tabs: [agentTab],
+        tab: onTask ? undefined : agentTab,
         openAgents: [open.agent.id],
       },
       agents: codingAgentsControl({
@@ -244,7 +245,7 @@ test("words typed in one task's agent's box wait there while another task is ope
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
 });
 
-test("an agent's tab wears no Draft pencil, whichever of its task's tabs is chosen", async () => {
+test("an agent's tab wears the Draft pencil while another of its task's tabs is chosen, its open task's row none", async () => {
   const app = windowOn(AtomRegistry.make());
   await app.show(INVITES);
   typeInComposer(app.container, "Expire invites after a week");
@@ -252,8 +253,11 @@ test("an agent's tab wears no Draft pencil, whichever of its task's tabs is chos
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its box shows its words");
 
   await app.show(INVITES, { onTask: true });
-  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its task is still the one open");
-  assert.equal(app.rowDrafted(INVITES.plan.name), false);
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), true, "its words are a tab away");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "its task is still the one open");
+
+  await app.show(INVITES);
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
 test("a draft outlasts a reload of the window, words and mark alike", async () => {
@@ -427,7 +431,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, pin.tab],
+      tabs: [pin.tab],
       tab: pin.tab,
       openAgents: [open.agent.id],
     },
@@ -468,7 +472,7 @@ test("a task opened from a tab pinned to the sidebar is open still, so its row w
 /** The workspace New task starts its tasks in. */
 const WORKSPACE = "workspace-personal";
 
-/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one. */
+/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one, as a build from before Luke kept no issues kept them. */
 function newTaskEntry(workspaceId: string, issueId?: string) {
   return {
     accountId: null,
@@ -541,30 +545,32 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
   assert.equal(
     await newTaskDrafted(inWorkspace()),
     false,
-    "a card opened on an issue keeps its words for that issue alone",
+    "words an older build kept on one of the workspace's own issues are no draft of the workspace's",
   );
 });
 
 /** The key the Teammate invitations task's draft agent starts under. */
 const DRAFT_KEY = "draft-invites";
 
-/**
- * The window open on the Teammate invitations task with `tabs` beside its
- * plan's, `chosen` among them, its agent standing as `agent` says, the draft
- * agent's under `DRAFT_KEY`, and its sidebar row beside the column; the
- * drafts are what storage holds.
- */
 /** The side panel shown on `tab`, its Plan and Inbox standing. */
 function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
   const tabs = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX];
   return { ...tasksControl().sidePanel, open: true, tabs, strip: tabs, tab };
 }
 
+/**
+ * The window open on the Teammate invitations task with `tabs` beside its
+ * plan's, `chosen` among them, its agent standing as `agent` says, the draft
+ * agent's under `DRAFT_KEY` holding `opening`, its inbox holding one open
+ * item (`approval`), and its sidebar row beside the column; the drafts are
+ * what storage holds.
+ */
 async function columnOn(
   tabs: readonly MainTab[],
-  chosen: MainTab,
+  chosen: MainTab | undefined,
   agent = INVITES.agent,
   side: SidePanelTab | undefined = undefined,
+  opening = "",
 ) {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -573,7 +579,7 @@ async function columnOn(
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, ...tabs],
+      tabs,
       tab: chosen,
       openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
         ? [INVITES.agent.id]
@@ -584,11 +590,11 @@ async function columnOn(
       ...codingAgentsControl({
         agents: [agent],
         agentIds: [agent.id],
-        readInbox: () => new Promise(() => undefined),
+        inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
       }),
       draft: {
         id: DRAFT_KEY,
-        prompt: "",
+        prompt: opening,
         attachments: [],
         choice: undefined,
         disabledServers: [],
@@ -629,7 +635,8 @@ async function columnOn(
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".tab")].find(
-          (each) => each.querySelector(".tab-label")?.textContent === label,
+          // Note that the label's own words are read apart from what follows them, the Inbox's count.
+          (each) => each.querySelector(".tab-label")?.firstChild?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`)
       ).querySelector(`.tab-end-mark ${pencil}`) !== null,
     unmount: () => {
@@ -638,7 +645,7 @@ async function columnOn(
   };
 }
 
-test("an inbox card's answer and a draft agent's first message mark neither their tabs nor their open task's row", async () => {
+test("an inbox card's answer and a draft agent's first message mark their tabs while another is chosen, never their open task's row", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
@@ -661,17 +668,45 @@ test("an inbox card's answer and a draft agent's first message mark neither thei
     ]),
   );
   const tabs = [{ draft: DRAFT_KEY }];
-  for (const [chosen, side] of [
-    [MAIN_TAB.CALL, SIDE_PANEL_TAB.PLAN],
-    [MAIN_TAB.CALL, SIDE_PANEL_TAB.INBOX],
-    [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.INBOX],
+  for (const [chosen, side, inboxMarked, draftMarked] of [
+    [undefined, SIDE_PANEL_TAB.PLAN, true, true],
+    [undefined, SIDE_PANEL_TAB.INBOX, false, true],
+    [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.INBOX, false, false],
+    [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.PLAN, true, false],
   ] as const) {
-    const column = await columnOn(tabs, chosen, INVITES.agent, side);
-    assert.equal(column.tabDrafted(TAB_WORDS.INBOX), false);
-    assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
+    const column = await columnOn(tabs, chosen, INVITES.agent, side, "Write the expiry job");
+    assert.equal(column.tabDrafted(TAB_WORDS.INBOX), inboxMarked);
+    assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), draftMarked);
     assert.equal(column.rowDrafted(), false);
     column.unmount();
   }
+});
+
+test("a draft agent's tab holding no words, and an Inbox whose only draft answers an item since changed, wear no Draft pencil", async () => {
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([
+      {
+        accountId: null,
+        place: {
+          kind: "inbox",
+          planId: INVITES.plan.id,
+          agentId: INVITES.agent.id,
+          itemId: "a1b2c3d4-0000-4000-8000-000000000001",
+          revision: 0,
+        },
+        text: "Only for teammates",
+      },
+    ]),
+  );
+  const column = await columnOn(
+    [{ draft: DRAFT_KEY }],
+    undefined,
+    INVITES.agent,
+    SIDE_PANEL_TAB.PLAN,
+  );
+  assert.equal(column.tabDrafted(TAB_WORDS.INBOX), false);
+  assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
 });
 
 test("a draft behind no open tab of its task's, or behind a failed agent's, leaves the task's row unmarked while it is open", async () => {
@@ -681,12 +716,12 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
       { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
     ]),
   );
-  const closed = await columnOn([], MAIN_TAB.CALL);
+  const closed = await columnOn([], undefined);
   assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
 
   const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
-  const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.CALL, failed);
+  const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
 });
@@ -716,6 +751,7 @@ function approval(revision: number): InboxItem {
  */
 async function inboxOn(item: InboxItem) {
   answerMotion();
+  const main = followedInboxes(() => ({ items: [item] }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -728,10 +764,7 @@ async function inboxOn(item: InboxItem) {
     agents: codingAgentsControl({
       agents: [INVITES.agent],
       agentIds: [INVITES.agent.id],
-      readInbox: ({ after }) =>
-        after === INBOX_CURSOR_START
-          ? Promise.resolve({ items: [item], cursor: "1" })
-          : new Promise(() => undefined),
+      inboxFollower: main.follower,
     }),
   });
   await act(async () =>
@@ -798,23 +831,20 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
   return { ...approval(revision), id, agentId };
 }
 
-/** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
+/** An agent's own inbox with no task, followed as the Inbox page follows it, pushed as `items`. */
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
+  const main = followedInboxes(() => ({ items }));
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     control = useTaskInbox({
       taskId: agentId,
-      reader: (after) =>
-        after === INBOX_CURSOR_START
-          ? Promise.resolve({ items, cursor: "1" })
-          : new Promise(() => undefined),
+      kind: INBOX_SCOPE_KIND.AGENT,
       shown: true,
       waiting: true,
       agents: {
         heldIds: [agentId],
-        readInbox: () => new Promise(() => undefined),
+        inboxFollower: main.follower,
         answerInbox: () => new Promise(() => undefined),
-        closeInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),
         onRetryList: () => undefined,

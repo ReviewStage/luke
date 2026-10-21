@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -16,6 +16,7 @@ import {
 import type { Board, BoardElement } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
@@ -27,14 +28,22 @@ import type {
 } from "./github-repositories-wire.js";
 import {
   askHosted,
+  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
   hostedClient,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
+import {
+  LIVE_SIGNED_OUT,
+  LIVE_USER_QUERY,
+  type TaskBoardLiveAnswer,
+  type TaskHistoryLiveAnswer,
+  type TaskPagesLiveAnswer,
+  type TaskRecordLiveAnswer,
+} from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
-import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
@@ -50,7 +59,9 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
+import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSections,
   type TaskSectionWrite,
@@ -90,6 +101,7 @@ import {
   type TaskCallFailure,
   type TaskCodeAnswer,
   type TaskIssueCallFailure,
+  type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
   type TasksIssueLinkAnswer,
@@ -133,6 +145,9 @@ export interface HostedTaskClientOptions {
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
+/** The types a plan's attachment is served as: a picture's, or any a comment's file may be. */
+const attachmentTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
 /** A comment call that answered nothing to draw. */
 const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
 
@@ -170,8 +185,14 @@ const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
+/** The refusals a live read names: the task gone, or a session that is no longer the account's the read names (`live-wire.ts`). */
+const LIVE_REFUSALS = {
+  ...NOT_FOUND_REFUSAL,
+  [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
+} as const;
+
 /** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
-function hostedResult<Answer, Failure extends TaskCallFailure>(
+function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
 ): Effect.Effect<
@@ -308,6 +329,26 @@ export class HostedTaskClient {
     );
   }
 
+  /**
+   * The task list sealed for following over Neon Realtime, answered at
+   * once; unanswered for anything that went wrong, which the caller answers
+   * by asking again.
+   */
+  listLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.tasks, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
   /** One task with its saved document; opening it moves no row of the list. */
   open(
     taskId: string,
@@ -402,6 +443,96 @@ export class HostedTaskClient {
   readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
     return orNothing(
       Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
+    );
+  }
+
+  /**
+   * Where one task's whiteboard stands, sealed for following over Neon
+   * Realtime, or with `poll` its rows inline at the poll address, for a
+   * reader polling while Realtime fails it, for the account `userId`
+   * names: not found where the account reaches no such task, signed out
+   * where the session is no longer that account's, unanswered for anything
+   * else, which the caller answers by sealing it again.
+   */
+  boardLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /**
+   * Where one task's pages and calls stand, sealed for following over Neon
+   * Realtime, or with `poll` their rows inline, for a reader polling while
+   * Realtime fails them, for the account `userId` names: not found where the
+   * account reaches no such task, signed out where the session is another's,
+   * unanswered for anything else, which the caller answers by sealing again.
+   */
+  recordLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskRecordLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskRecord, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /**
+   * One task's pages, each at its newest version, sealed for following over
+   * Neon Realtime, or with `poll` their rows inline at the poll address, on
+   * the terms its record's is.
+   */
+  pagesLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskPagesLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskPages, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's newest page of plan history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
+  historyLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskHistoryLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskHistory,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      LIVE_REFUSALS,
     );
   }
 
@@ -544,6 +675,16 @@ export class HostedTaskClient {
     return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
   }
 
+  /** The Browser tabs open in one task's agents' browsers, the oldest first; or that the service did not answer. */
+  readBrowserTabs(
+    taskId: string,
+  ): Effect.Effect<TasksBrowserTabsAnswer, never, HttpClient.HttpClient> {
+    return Effect.match(askHosted(this.#hosted.agentBrowserTabs.list, { id: taskId }), {
+      onSuccess: (answer): TasksBrowserTabsAnswer => answer,
+      onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    });
+  }
+
   /** An issue linked to one task, which the service reads from its provider first; or why none was linked. */
   linkIssue(
     taskId: string,
@@ -617,11 +758,13 @@ export class HostedTaskClient {
   }
 
   /**
-   * One picture of one plan, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with a type a picture
-   * may be; not found where the plan is not one the account reaches or holds
-   * no such picture; unanswered for anything else, another media type
-   * included, so nothing a window draws is a type it did not expect.
+   * One attachment of one plan, a picture its text names or a file one of
+   * its comments carries, fetched under the account: its bytes in base64
+   * under its media type, where the service answered with a type a coding
+   * agent's file may be; not found where the plan is not one the account
+   * reaches or holds no such attachment; unanswered for anything else,
+   * another media type included, so nothing a window draws is a type it did
+   * not expect.
    */
   readPicture(
     taskId: string,
@@ -638,7 +781,7 @@ export class HostedTaskClient {
         const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
         return { failure: refused.ok ? TASK_CALL_FAILURE.UNANSWERED : refused.failure };
       }
-      const picture = yield* imageBodyOf(answer.response, pictureTypeSchema);
+      const picture = yield* imageBodyOf(answer.response, attachmentTypeSchema);
       return picture ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
   }
@@ -763,7 +906,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Sets where one task stands, how much it matters, or both, answering it as
+   * Sets where one task stands, how much it matters, who it is assigned to, or any of them, answering it as
    * changed with its document, or nothing where the service did not change
    * it; a change that names neither never travels.
    */
@@ -801,18 +944,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** The repositories the account pinned in the sidebar, newest pinned first; nothing where the service did not answer. */
-  repositoryPins(): Effect.Effect<
-    readonly RepositoryPin[] | undefined,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.map(
-      orNothing(askHosted(this.#hosted.repositoryPins.list, undefined)),
-      (answer) => answer?.pins,
-    );
-  }
-
   /**
    * Pins one repository or unpins it, answering the account's pins as they
    * then stand; nothing where the service refused or did not answer. A
@@ -832,9 +963,24 @@ export class HostedTaskClient {
     );
   }
 
-  /** The sections the account made in its sidebars and the tasks in them; nothing where the service did not answer. */
-  taskSections(): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskSections.list, undefined));
+  /**
+   * The account's sidebar sealed for following over Neon Realtime, for the
+   * account named, or with each part's rows inline where `poll` asks for
+   * them; signed out where the session is another account's.
+   */
+  sidebarLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
   }
 
   /**

@@ -1,5 +1,6 @@
 import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
 import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
+import { browserClient } from "@luke/features/contract/browser-client";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
@@ -14,6 +15,7 @@ import {
   ADMIN_ATTENTION_KIND,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
+  type AdminWindowedQuery,
 } from "@luke/service/admin/http";
 import {
   BADGE_TONE,
@@ -35,14 +37,14 @@ import { formatDate, formatNumber, formatShare } from "@luke/ui/admin-format";
 import { AccountCell } from "../accounts-table/accounts-table";
 import { BreakdownChart, type BreakdownSeries } from "../charts/breakdown-chart";
 import { FailureRatesChart } from "../charts/failure-rates-chart";
-import { MetricCard, SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminSection, CARD_GAP, MetricCard, StatCard, StatGroup } from "../charts/stat-card";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { RELIABILITY_PATH, reliabilityWindow, windowedReadPath } from "../routing";
+import { reliabilityWindow, windowedReadQuery } from "../routing";
 import { CHART_PAIR_EVEN, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 /**
  * reliability.tsx -- the admin Reliability screen: how often the service's
@@ -53,9 +55,12 @@ import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-r
 
 const RELIABILITY_ERROR = "The reliability endpoint did not answer.";
 
-// SAFETY: a 200 from the admin reliability endpoint is an AdminReliability body by its contract.
-const readReliability: AdminReader<AdminReliability> = async (response) =>
-  (await response.json()) as AdminReliability;
+/** The window's health, as the admin reliability procedure answers it. */
+const readReliability =
+  (query: AdminWindowedQuery): AdminReader<AdminReliability> =>
+  async (signal) =>
+    // SAFETY: the admin reliability procedure answers an AdminReliability (`@luke/service/admin/admin-reliability`), which the contract cannot name.
+    (await browserClient.admin.reliability(query, { signal })) as AdminReliability;
 
 /** How many providers the health list's bones stand for, about the list a deployment draws. */
 const HEALTH_BONE_ROWS = 12;
@@ -111,7 +116,7 @@ const AUTOMATION_REASON_LABEL = {
 const NO_REASON_LABEL = "No reason recorded";
 
 const AGENT_FAILURES_SERIES: readonly BreakdownSeries[] = [
-  { key: "count", label: "Failed runs", color: "var(--luke-color-identity-2)" },
+  { key: "count", label: "Failed runs", color: "var(--luke-color-chart-2)" },
 ];
 
 const AUTOMATION_REASONS_SERIES: readonly BreakdownSeries[] = [
@@ -130,6 +135,7 @@ const KEY_STATUS_LABEL = {
   [PROVIDER_KEY_STATUS.INVALID]: "invalid",
   [PROVIDER_KEY_STATUS.QUOTA_EXCEEDED]: "quota exceeded",
   [PROVIDER_KEY_STATUS.UNREADABLE]: "unreadable",
+  [PROVIDER_KEY_STATUS.UNVERIFIED]: "unverified",
 } as const;
 
 /** One broken thing, by its kind and status alone. */
@@ -227,44 +233,41 @@ function ReliabilityRecords({
 
   return (
     <>
-      <SectionHeading>Failures</SectionHeading>
-      <StatGroup>
-        <StatCard
-          label="Luke turns failed"
-          value={formatShare(share(headline.lukeTurns))}
-          hint={ofHint(headline.lukeTurns, "turns", windowDays)}
-          grouped
-        />
-        <StatCard
-          label="Coding-agent runs failed"
-          value={formatShare(share(headline.agentRuns))}
-          hint={ofHint(headline.agentRuns, "runs", windowDays)}
-          grouped
-        />
-        <StatCard
-          label="Abandoned by the sweep"
-          value={formatNumber(headline.abandonedTurns)}
-          hint="turns past their bound"
-          grouped
-        />
-        <StatCard
-          label="Calls dropped"
-          value={formatShare(share(headline.calls))}
-          hint={ofHint(headline.calls, "calls", windowDays)}
-          grouped
-        />
-        <StatCard
-          label="Automation runs failed"
-          value={formatShare(share(automations))}
-          hint={skippedShare ?? ofHint(automations, "runs", windowDays)}
-          title={ofHint(automations, "runs", windowDays)}
-          grouped
-        />
-      </StatGroup>
-      <div className="mt-3">
+      <AdminSection title="Failures">
+        <StatGroup>
+          <StatCard
+            label="Luke turns failed"
+            value={formatShare(share(headline.lukeTurns))}
+            hint={ofHint(headline.lukeTurns, "turns", windowDays)}
+            grouped
+          />
+          <StatCard
+            label="Coding-agent runs failed"
+            value={formatShare(share(headline.agentRuns))}
+            hint={ofHint(headline.agentRuns, "runs", windowDays)}
+            grouped
+          />
+          <StatCard
+            label="Abandoned by the sweep"
+            value={formatNumber(headline.abandonedTurns)}
+            hint="turns past their bound"
+            grouped
+          />
+          <StatCard
+            label="Calls dropped"
+            value={formatShare(share(headline.calls))}
+            hint={ofHint(headline.calls, "calls", windowDays)}
+            grouped
+          />
+          <StatCard
+            label="Automation runs failed"
+            value={formatShare(share(automations))}
+            hint={skippedShare ?? ofHint(automations, "runs", windowDays)}
+            title={ofHint(automations, "runs", windowDays)}
+            grouped
+          />
+        </StatGroup>
         <FailureRatesChart daily={reliability.daily} generatedAt={reliability.generatedAt} />
-      </div>
-      <div className="mt-3">
         <Text tone={TEXT_TONE.MUTED}>
           Per-request HTTP error rates live in{" "}
           {reliability.analyticsConsoleUrl ? (
@@ -281,41 +284,41 @@ function ReliabilityRecords({
           )}
           , not this database.
         </Text>
-      </div>
+      </AdminSection>
 
-      <SectionHeading>Why work failed</SectionHeading>
-      <div className={CHART_PAIR_EVEN}>
-        <BreakdownChart
-          title="Coding-agent failures by class"
-          series={AGENT_FAILURES_SERIES}
-          rows={reliability.agentFailures.map((row) => ({
-            label: AGENT_FAILURE_LABEL[row.failure],
-            counts: { count: row.count },
-          }))}
-          empty="No coding-agent run failed in this window."
-        />
-        <BreakdownChart
-          title="Automation skips and failures by reason"
-          series={AUTOMATION_REASONS_SERIES}
-          rows={reliability.automationReasons.map((row) => ({
-            label: row.reason === null ? NO_REASON_LABEL : AUTOMATION_REASON_LABEL[row.reason],
-            counts: { skipped: row.skipped, failed: row.failed },
-          }))}
-          empty="No automation run was skipped or failed in this window."
-        />
-      </div>
+      <AdminSection title="Why work failed">
+        <div className={CHART_PAIR_EVEN}>
+          <BreakdownChart
+            title="Coding-agent failures by class"
+            series={AGENT_FAILURES_SERIES}
+            rows={reliability.agentFailures.map((row) => ({
+              label: AGENT_FAILURE_LABEL[row.failure],
+              counts: { count: row.count },
+            }))}
+            empty="No coding-agent run failed in this window."
+          />
+          <BreakdownChart
+            title="Automation skips and failures by reason"
+            series={AUTOMATION_REASONS_SERIES}
+            rows={reliability.automationReasons.map((row) => ({
+              label: row.reason === null ? NO_REASON_LABEL : AUTOMATION_REASON_LABEL[row.reason],
+              counts: { skipped: row.skipped, failed: row.failed },
+            }))}
+            empty="No automation run was skipped or failed in this window."
+          />
+        </div>
+      </AdminSection>
 
-      <SectionHeading>Accounts that need attention</SectionHeading>
-      <DataTable
-        label="Accounts that need attention"
-        columns={attentionColumns(onOpenAccount)}
-        rows={reliability.attention.accounts}
-        rowKey={(row) => row.id}
-        empty="No account holds a broken key, integration, or GitHub installation."
-        minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
-        onRowPress={(row) => onOpenAccount(row.id)}
-      />
-      <div className="mt-3">
+      <AdminSection title="Accounts that need attention">
+        <DataTable
+          label="Accounts that need attention"
+          columns={attentionColumns(onOpenAccount)}
+          rows={reliability.attention.accounts}
+          rowKey={(row) => row.id}
+          empty="No account holds a broken key, integration, or GitHub installation."
+          minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+          onRowPress={(row) => onOpenAccount(row.id)}
+        />
         <Text tone={TEXT_TONE.MUTED}>
           A broken key, integration, or GitHub installation fails the account's agents quietly. Last
           changed is when the newest broken row last changed: a key's last answer from its provider,
@@ -326,7 +329,7 @@ function ReliabilityRecords({
             ? ` Only the ${formatNumber(reliability.attention.accounts.length)} newest of ${formatNumber(reliability.attention.total)} are listed.`
             : ""}
         </Text>
-      </div>
+      </AdminSection>
     </>
   );
 }
@@ -350,33 +353,33 @@ function ReliabilityBody({
       {db.reachable ? (
         <ReliabilityRecords reliability={reliability} onOpenAccount={onOpenAccount} />
       ) : (
-        <>
-          <SectionHeading>Failures</SectionHeading>
+        <AdminSection title="Failures">
           <Card>
             <Text tone={TEXT_TONE.MUTED}>
               The database did not answer its probe, so no failure count or account could be read.
             </Text>
           </Card>
-        </>
+        </AdminSection>
       )}
 
-      <SectionHeading>System health</SectionHeading>
-      <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
-        <MetricCard label="Database" hint={`probe round-trip ${formatNumber(db.latencyMs)} ms`}>
-          <div>
-            <Badge tone={db.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
-              {db.reachable ? "Reachable" : "Unreachable"}
-            </Badge>
-          </div>
-        </MetricCard>
-        <MetricCard label="Integrations">
-          <List label="Integrations">
-            {reliability.systemHealth.integrations.map((integration) => (
-              <IntegrationRow key={integration.key} integration={integration} />
-            ))}
-          </List>
-        </MetricCard>
-      </div>
+      <AdminSection title="System health">
+        <div className={`grid ${CARD_GAP} min-[720px]:grid-cols-[1fr_1.4fr]`}>
+          <MetricCard label="Database" hint={`probe round-trip ${formatNumber(db.latencyMs)} ms`}>
+            <div>
+              <Badge tone={db.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
+                {db.reachable ? "Reachable" : "Unreachable"}
+              </Badge>
+            </div>
+          </MetricCard>
+          <MetricCard label="Integrations">
+            <List label="Integrations">
+              {reliability.systemHealth.integrations.map((integration) => (
+                <IntegrationRow key={integration.key} integration={integration} />
+              ))}
+            </List>
+          </MetricCard>
+        </div>
+      </AdminSection>
     </>
   );
 }
@@ -402,9 +405,10 @@ export function ReliabilityScreen({
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const shownWindow = reliabilityWindow(windowDays);
+  const query = windowedReadQuery(hideAdmins, shownWindow);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    windowedReadPath(RELIABILITY_PATH, hideAdmins, shownWindow),
-    readReliability,
+    { procedure: ADMIN_READ.RELIABILITY, query: query },
+    readReliability(query),
     RELIABILITY_ERROR,
   );
   const signOut = () => void withdraw(onSignOut);
@@ -422,13 +426,7 @@ export function ReliabilityScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title="Reliability"
-          account={account}
-          onSignOut={signOut}
-          controls={controls}
-          shapes={RELIABILITY_SHAPES}
-        />,
+        <PageSkeleton title="Reliability" controls={controls} shapes={RELIABILITY_SHAPES} />,
       );
     case "signed-out":
       return <SignInCard />;
@@ -437,15 +435,17 @@ export function ReliabilityScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, RELIABILITY_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title="Reliability" controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, RELIABILITY_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready":
       return frame(
-        <AdminPage title="Reliability" account={account} onSignOut={signOut} controls={controls}>
+        <AdminPage title="Reliability" controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <ReliabilityBody reliability={state.value} onOpenAccount={onOpenAccount} />
           </Refreshing>

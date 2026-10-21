@@ -23,6 +23,7 @@ import {
   type SessionCreateFrame,
   type SessionHangUpFrame,
   type SessionStopFrame,
+  type SessionTypedFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
@@ -105,8 +106,10 @@ const UNAVAILABLE_STATUS = 503;
 export interface LiveSessionCreateInput {
   /** The renderer's SDP offer, as written. */
   sdpOffer: string;
-  /** The task the call is about. */
+  /** The task the call's agent is on. */
   taskId: string;
+  /** The agent the call speaks into, which the service reads and checks is on the task. */
+  agentId: string;
 }
 
 /**
@@ -148,6 +151,14 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * it or appends it. Optional on the same terms as `reportActivity`.
    */
   stopSpeaking?(): void;
+  /**
+   * Hands the service standing between this peer and the session a line the
+   * developer typed into the call, in the service's own vocabulary: the
+   * service writes it down, hands it to the agent, and speaks the reply, so
+   * nothing on this side appends it. Optional on the same terms as
+   * `reportActivity`.
+   */
+  typeLine?(text: string, clientKey: string): void;
   /**
    * Asks the service standing between this peer and the session for the
    * session's close, in the service's own vocabulary: the service owns the
@@ -292,6 +303,7 @@ const HOSTED_ERROR_OUTCOME: ReadonlyMap<HostedApiError, LiveSessionOutcome> = ne
   [HOSTED_API_ERROR.QUOTA_EXHAUSTED, LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED],
   [HOSTED_API_ERROR.UNAVAILABLE, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE],
   [HOSTED_API_ERROR.UPSTREAM_THROTTLED, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE],
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE, LIVE_SESSION_OUTCOME.NATIVE_AGENT_NOT_HERE],
 ]);
 
 /**
@@ -426,10 +438,11 @@ class ServiceLiveSessionSource {
         type: VOICE_SERVICE_FRAME.SESSION_CREATE,
         sdp: input.sdpOffer,
         voice: this.#voice,
-        // A task call is seeded with nothing from here: the service seeds
-        // it with the plan and what was said on the task's earlier calls.
+        // A call is seeded with nothing from here: the service seeds it with
+        // what the agent knows and what was said on its earlier calls.
         input: [],
         planId: input.taskId,
+        agentId: input.agentId,
         // The brain's turns on the call count the developer's days and spell their times in it.
         timeZone: this.#timeZone(),
       };
@@ -979,6 +992,16 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         // when the connection comes back.
         stopSpeaking: () => {
           const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
+          socket.send(JSON.stringify(frame));
+        },
+        // A typed line rides the same socket, held through a gap like the stop:
+        // the call it was typed into outlives the service's own recycle.
+        typeLine: (text, clientKey) => {
+          const frame: SessionTypedFrame = {
+            type: VOICE_SERVICE_FRAME.SESSION_TYPED,
+            text,
+            clientKey,
+          };
           socket.send(JSON.stringify(frame));
         },
         // The hang-up rides the same socket, held through a gap like any send,

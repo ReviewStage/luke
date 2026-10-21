@@ -4,16 +4,18 @@ import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
-import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
 import {
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
 } from "./provider-key-wire.js";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
+import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -180,11 +182,18 @@ it.effect(
         client().removeProviderKey({ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
         api.layer,
       );
+      yield* Effect.provide(
+        client().removeProviderKey({
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        }),
+        api.layer,
+      );
 
       assert.deepEqual(read, { keys: [kept] });
       assert.deepEqual(saved, { keys: [], rejected: PROVIDER_KEY_REJECTION.INVALID });
       assert.deepEqual(removed, { keys: [] });
-      const [, save, removal] = api.requests();
+      const [, save, removal, tokenRemoval] = api.requests();
       assert.deepEqual(JSON.parse(save?.body ?? "{}"), {
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key,
@@ -192,6 +201,10 @@ it.effect(
       assert.equal(
         removal?.url,
         `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
+      );
+      assert.equal(
+        tokenRemoval?.url,
+        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
       );
     }),
 );
@@ -222,22 +235,6 @@ it.effect(
 
       assert.deepEqual(read, { agent: page });
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-    }),
-);
-
-it.effect(
-  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        [`GET /api/agents/${AGENT_ID}/inbox`]: {
-          answer: () => ({ items: [], cursor: "3" }),
-        },
-      });
-
-      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
-
-      assert.deepEqual(read, { items: [], cursor: "3" });
     }),
 );
 
@@ -448,41 +445,6 @@ it.effect(
 );
 
 it.effect(
-  "reads a workspace's chat past the cursor it names, and a workspace the account is not in as not found",
-  () =>
-    Effect.gen(function* () {
-      const self = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
-      const chat = {
-        self,
-        readSeq: 0,
-        members: [
-          { id: self, kind: MEMBER_KIND.HUMAN, handle: "ada", userId: "user-1", left: false },
-        ],
-        channels: [],
-        messages: [],
-        cursor: "12",
-      };
-      const api = fakeCloudApi({ "GET /api/workspaces/chat": { answer: () => chat } });
-      const refusing = fakeCloudApi({
-        "GET /api/workspaces/chat": {
-          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-          status: HTTP_STATUS.NOT_FOUND,
-        },
-      });
-
-      const read = yield* Effect.provide(client().chat(WORKSPACE_ID, "7"), api.layer);
-      const refused = yield* Effect.provide(client().chat(WORKSPACE_ID, "0"), refusing.layer);
-
-      assert.deepEqual(read, chat);
-      assert.equal(
-        api.requests()[0]?.url,
-        `https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}&after=7`,
-      );
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-    }),
-);
-
-it.effect(
   "reads a chat message's picture by the workspace, the message, and the attachment, as base64 under the type it was kept as, a type no picture is as unanswered, and a refusal as its failure",
   () =>
     Effect.gen(function* () {
@@ -602,5 +564,113 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(unanswered), {
         failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
       });
+    }),
+);
+
+it.effect(
+  "a Start from an agent travels to that agent's own path with the body a task's Start carries, and one naming no agent travels nowhere",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1", from: { agentId: AGENT_ID } };
+      const api = fakeCloudApi({
+        [`POST /api/agents/${AGENT_ID}/agents`]: {
+          answer: () => ({ agent: AGENT }),
+          status: 201,
+        },
+      });
+
+      const started = yield* Effect.provide(client().startFrom(request), api.layer);
+      const nowhere = yield* Effect.provide(
+        client().startFrom({ idempotencyKey: "press-2", prompt: "Go." }),
+        api.layer,
+      );
+
+      assert.deepEqual(started, { agent: AGENT });
+      assert.deepEqual(nowhere, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
+        [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
+      );
+    }),
+);
+
+it.effect(
+  "reads what waits across the account past a cursor, held, listing the archived tasks for the Archived tab, and a refusal or a body that is no answer is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const inbox = { items: [], plans: [], cursor: "9", readAt: 1_800_000_060_000 };
+      const answering = (answer: JsonValue, status: number = HTTP_STATUS.OK) =>
+        fakeCloudApi({ "GET /api/inbox": { answer: () => answer, status } });
+
+      const api = answering(inbox);
+      const read = yield* Effect.provide(client().accountInbox("3"), api.layer);
+      const refused = yield* Effect.provide(
+        client().accountInbox("3"),
+        answering({ error: HOSTED_API_ERROR.UNAVAILABLE }, 503).layer,
+      );
+      const unread = yield* Effect.provide(
+        client().accountInbox("3"),
+        answering({ cursor: "9" }).layer,
+      );
+
+      assert.deepEqual(read, inbox);
+      const query = api.requests()[0]?.searchParams;
+      assert.equal(query?.get("after"), "3");
+      assert.equal(query?.get("archived"), "include");
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a pull request's chapters are read by the tab's number and generated with it in the query, each refusal the tab acts on read as its own failure",
+  () =>
+    Effect.gen(function* () {
+      const path = `/api/agents/${AGENT_ID}/chapters`;
+      const answer = {
+        pullRequest: {
+          number: 7,
+          headSha: "c0ffee1",
+          generatable: true,
+          chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET ${path}`]: { answer: () => answer },
+        [`POST ${path}`]: { answer: () => answer },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID, 7), api.layer), answer);
+      assert.deepEqual(
+        yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
+        answer,
+      );
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID), api.layer), answer);
+      assert.deepEqual(
+        api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
+        [`GET ${path}?number=7`, `POST ${path}?number=7`, `GET ${path}`],
+      );
+      assert.equal(api.requests()[1]?.body ?? "", "");
+
+      const refusals = [
+        [HOSTED_API_ERROR.NOT_FOUND, PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND],
+        [
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+          PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        ],
+        [HOSTED_API_ERROR.GITHUB_UNANSWERED, PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED],
+        [HOSTED_API_ERROR.UNAVAILABLE, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE],
+        [HOSTED_API_ERROR.INVALID_REQUEST, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          [`POST ${path}`]: { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
+        });
+        assert.deepEqual(
+          yield* Effect.provide(client().generateChapters(AGENT_ID), refusing.layer),
+          { failure },
+          error,
+        );
+      }
     }),
 );

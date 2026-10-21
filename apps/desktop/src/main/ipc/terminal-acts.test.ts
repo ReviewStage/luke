@@ -10,8 +10,8 @@ import {
   type TerminalPortTicket,
 } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import type { WireBoundaryInput } from "@luke/wire";

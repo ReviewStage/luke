@@ -2,10 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
@@ -17,12 +13,17 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import {
+  codingAgentsControl,
+  pushedTranscripts,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -81,12 +82,10 @@ afterEach(() => {
 /** The plan's page as `reader` sees it, `main` chosen in its column and `side` in its panel, every tab either is asked to show recorded. */
 async function mount(input: {
   reader: string;
-  main: MainTab;
+  main: MainTab | undefined;
   side?: SidePanelTab | undefined;
 }): Promise<{ container: HTMLElement; chosen: (MainTab | SidePanelTab)[] }> {
   const chosen: (MainTab | SidePanelTab)[] = [];
-  // Note that only the first read answers, because a read past the cursor waits on the service.
-  const read = new Set<string>();
   const control = tasksControl({
     me: input.reader,
     page: TASKS_PAGE.DOCUMENT,
@@ -94,7 +93,7 @@ async function mount(input: {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, { agent: AGENT.id }],
+      tabs: [{ agent: AGENT.id }],
       tab: input.main,
       openAgents: [AGENT.id],
       onChoose: (tab) => chosen.push(tab),
@@ -110,19 +109,14 @@ async function mount(input: {
       agents: [AGENT],
       agentIds: [AGENT.id],
       me: input.reader,
-      readTranscript: ({ callId }): Promise<CodingAgentMessagesAnswerView> => {
-        const key = callId ?? "agent";
-        if (read.has(key)) {
-          return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-        }
-        read.add(key);
-        return Promise.resolve({
-          messages: callId === undefined ? [BRIEF] : [],
+      transcripts: pushedTranscripts((transcript) => [
+        {
+          messages: transcript.callId === undefined ? [BRIEF] : [],
           cursor: "1:0",
           status: CODING_AGENT_STATUS.COMPLETED,
           title: null,
-        });
-      },
+        },
+      ]),
     }),
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -207,7 +201,7 @@ test("the line naming who sent the plan stands under its card, then when it was 
 test("a worker's tab opens on its task sent by the agent that delegated it, whose name opens that agent's tab", async () => {
   const { container, chosen } = await mount({
     reader: DEAN.userId,
-    main: MAIN_TAB.CALL,
+    main: undefined,
     side: { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } },
   });
 

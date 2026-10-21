@@ -37,8 +37,9 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
+import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { InlineRef } from "./inline-ref.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
@@ -320,6 +321,12 @@ export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
   return <span className="visually-hidden">{`(created by ${actorName(actor)}${left})`}</span>;
 }
 
+/** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
+export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
+  const left = leftWithFace(actor) ? ", who left" : "";
+  return <span className="visually-hidden">{`(assigned to ${actorName(actor)}${left})`}</span>;
+}
+
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
   return <span className="actor-you">You</span>;
@@ -384,6 +391,8 @@ export function PersonCard({
   /** Their latest activity in this plan, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
 }): React.JSX.Element {
+  // The card hanging is the pointer on their name, a press from their page, so its chunk is read now.
+  useEffect(PERSON_PAGE.prefetch, []);
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead

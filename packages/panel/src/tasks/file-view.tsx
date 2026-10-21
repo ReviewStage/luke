@@ -87,9 +87,9 @@ import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
  * the bar has no room for (`file-breadcrumbs.tsx`).
  *
  * The bar and the tree's slide are an agent's Changes tab's too
- * (`agent-changes-tab.tsx`), so a diff stands under the same bar, its file's
- * path as breadcrumbs, the pull request on GitHub, its ⋯, and the same
- * toggle of the same tree.
+ * (`agent-changes-tab.tsx`), so a diff stands under the same bar, led by
+ * how many of its files are viewed rather than a path, the pull request on
+ * GitHub, its ⋯, and the same toggle of the same tree.
  */
 
 /** What a pane's toggle says while the pane is open, and while it is not. */
@@ -107,7 +107,7 @@ type PanePlace = (typeof PANE_PLACE)[keyof typeof PANE_PLACE];
 
 /** What the toggle that floats a pane over the tab answers besides its press: the pointer resting on it peeks the pane, and its press is no press outside the pane. */
 interface FloatToggle {
-  readonly onPointerEnter: () => void;
+  readonly onPointerEnter: (event: React.PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerLeave: (event: React.PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerDown: () => void;
 }
@@ -209,7 +209,7 @@ export interface PaneRoom {
   readonly toggle: () => void;
   /** What a strip standing in the closed pane's place wears: the pointer resting on it peeks the pane over the tab. */
   readonly strip: {
-    readonly onPointerEnter: () => void;
+    readonly onPointerEnter: (event: React.PointerEvent<HTMLElement>) => void;
     readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
   };
   /** What the view's root wears: the marks the stylesheet places the pane by, and Escape anywhere in the view, its bar's toggle included, taking down the pane floating over the tab. */
@@ -295,7 +295,13 @@ export function usePaneRoom(shown: {
   });
   const closeOver = pane.close;
   const view = useRef<HTMLElement | null>(null);
-  const peek = () => setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
+  // Note that a finger's arrival peeks nothing, because iOS plays a tap's
+  // arrival as a hover and spends the tap on a pane that comes in with it:
+  // a finger opens the pane with its toggle's tap alone.
+  const peek = (event: React.PointerEvent) => {
+    if (event.pointerType === "touch") return;
+    setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
+  };
   const unpeek = () => setOver((was) => (was === PANE_FLOAT.PEEK ? PANE_FLOAT.CLOSED : was));
   const toggleOver = () => (over === PANE_FLOAT.OPEN ? closeOver() : pane.open());
   // A pane opened beside the tab floats over it no more.
@@ -357,7 +363,7 @@ export function usePaneRoom(shown: {
           (beside.pane.current?.contains(event.target) === true ||
             event.target.closest(PANE_STRIP) !== null);
         if (over === PANE_FLOAT.CLOSED && atEdge && event.buttons === 0) {
-          if (floats(event.currentTarget.parentElement)) peek();
+          if (floats(event.currentTarget.parentElement)) peek(event);
           return;
         }
         if (over === PANE_FLOAT.PEEK && !atEdge && !onPane) unpeek();
@@ -438,8 +444,8 @@ function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Elemen
   );
 }
 
-/** The path the bar names, and the repository it browses, whose folders its breadcrumbs list; none names the path plain. */
-export interface BarPath {
+/** The path a File tab's bar names, and the repository it browses, whose folders its breadcrumbs list; none names the path plain. */
+interface BarPath {
   readonly path: string;
   readonly browse:
     | {
@@ -451,25 +457,45 @@ export interface BarPath {
     | undefined;
 }
 
+/** A File tab's path in its bar: as breadcrumbs where the repository is browsed, else plain. */
+function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
+  const { browse } = path;
+  if (browse === undefined) {
+    return (
+      <Tooltip label={path.path}>
+        <span className="file-view-path">
+          <bdi>{path.path}</bdi>
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <FileBreadcrumbs
+      repository={browse.repository}
+      path={path.path}
+      listFolder={browse.listFolder}
+      onOpen={browse.onOpen}
+    />
+  );
+}
+
 /**
  * The bar across a File tab and its tree, or a Changes tab and its own:
- * Back and Forward where the tab keeps a history, the path as breadcrumbs,
- * or plain where nothing is browsed, what stands quietly beside it, then
- * the GitHub button, dimmed with no page to open yet, the ⋯, and the tree's
+ * Back and Forward where the tab keeps a history, what leads it (a File
+ * tab's path, or Files changed's count of the files viewed), then the
+ * GitHub button, dimmed with no page to open yet, the ⋯, and the tree's
  * toggle where there is a tree.
  */
 export function FileViewBar({
   history,
-  path,
-  beside,
+  lead,
   onGitHub,
   menu,
   tree,
 }: {
   history?: FileHistory | undefined;
-  path: BarPath;
-  /** What stands quietly after the path: the commit a file is read at, or what became of a changed file. */
-  beside?: ReactNode;
+  /** What leads the bar after Back and Forward: a File tab's path and the commit it is read at, or Files changed's count. */
+  lead: ReactNode;
   /** Opens the page on GitHub; none dims the button. */
   onGitHub: (() => void) | undefined;
   /** The bar's ⋯. */
@@ -477,26 +503,11 @@ export function FileViewBar({
   /** The tree's toggles, where there is a tree. */
   tree?: PaneToggles | undefined;
 }): React.JSX.Element {
-  const { browse } = path;
   return (
     <header className="file-view-bar">
       <BreadcrumbBar>
         {history === undefined ? null : <HistoryButtons history={history} />}
-        {browse === undefined ? (
-          <Tooltip label={path.path}>
-            <span className="file-view-path">
-              <bdi>{path.path}</bdi>
-            </span>
-          </Tooltip>
-        ) : (
-          <FileBreadcrumbs
-            repository={browse.repository}
-            path={path.path}
-            listFolder={browse.listFolder}
-            onOpen={browse.onOpen}
-          />
-        )}
-        {beside}
+        {lead}
         <div className="file-view-actions">
           <Tooltip label="Open on GitHub">
             <IconButton
@@ -525,7 +536,7 @@ interface TabRead {
 export function FileViewMenu(props: ComponentProps<typeof FileMenu>): React.JSX.Element {
   return (
     <>
-      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true }} />
       <FileMenu {...props} />
     </>
   );
@@ -550,7 +561,6 @@ export function FileView({
   onBrowse,
   history,
   onFoldNote,
-  onShowNote,
 }: {
   taskId: string;
   /** The task's repository, `owner/name`, which the tree browses; none draws the tab alone. */
@@ -575,8 +585,6 @@ export function FileView({
   history: FileHistory;
   /** Folds or opens the note of the call that showed lines of the file, on this tab. */
   onFoldNote: FileNotes["onFold"];
-  /** Shows the card the call's code stands on in the Code tab. */
-  onShowNote: FileNotes["onShow"];
 }): React.JSX.Element {
   // The view's store of listings, one per task and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
@@ -611,7 +619,7 @@ export function FileView({
     notes: notesOf(shownCode, file.path, repository, commit),
     folded: file.foldedNotes ?? [],
     onFold: onFoldNote,
-    onShow: onShowNote,
+    taskId,
   };
 
   const [told, setTold] = useState<TabRead | undefined>(undefined);
@@ -624,12 +632,15 @@ export function FileView({
   // Every read of the tab's file asks it at the tab's commit, where one pins it.
   const readAt: ReadFileWindow = (window) =>
     readFile(commit === undefined ? window : { ...window, ref: commit });
-  // The whole text, for a copy or a download, read raw through the tab's
-  // door in one read, the window it names standing for nothing.
+  // The whole text, for a copy or a download: the text the tab draws, so a
+  // copy holds the lines shown at the commit they were read at, or, before
+  // the tab holds it, read raw through the tab's door in one read.
   const readText = (): Promise<WholeText> =>
-    readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
-      kind: WHOLE_TEXT.UNREAD,
-    }));
+    read.kind === FILE_READ.READY
+      ? Promise.resolve({ kind: WHOLE_TEXT.READ, text: read.text })
+      : readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
+          kind: WHOLE_TEXT.UNREAD,
+        }));
 
   // The tree and the breadcrumbs hear each folder in the tree's own words.
   const readFolderListing: ReadFolder = useCallback(
@@ -648,18 +659,22 @@ export function FileView({
     <div className="file-view" {...tree.root}>
       <FileViewBar
         history={history}
-        path={{
-          path: file.path,
-          browse: browsing
-            ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
-            : undefined,
-        }}
-        beside={
-          commit === undefined ? null : (
-            <Tooltip label={`Read at commit ${commit}`}>
-              <span className="file-view-commit">{shortCommit(commit)}</span>
-            </Tooltip>
-          )
+        lead={
+          <>
+            <BarPathWords
+              path={{
+                path: file.path,
+                browse: browsing
+                  ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
+                  : undefined,
+              }}
+            />
+            {commit === undefined ? null : (
+              <Tooltip label={`Read at commit ${commit}`}>
+                <span className="file-view-commit">{shortCommit(commit)}</span>
+              </Tooltip>
+            )}
+          </>
         }
         onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
         menu={

@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { runModeFor } from "@luke/host";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppStateStore, initialAppState } from "@luke/host/client";
 import { PUSH, type PushEvent } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
-import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  type VoiceCallTranscriptChange,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import type { WireRecord } from "@luke/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
@@ -106,14 +111,9 @@ function fixture() {
           liveCalls.push("stop");
           return true;
         }),
-      tasksStopWork: (taskId: string) =>
-        Effect.sync(() => {
-          liveCalls.push(`stopWork:${taskId}`);
-        }),
     },
     liveDiagnostics: () => Effect.succeedNone,
     recordProductEvent: () => undefined,
-    setShortcutCapturing: () => undefined,
   };
   const reports = voiceRuntimeReports(dependencies);
   const actPort = testActPort(voiceRuntimeProcedures(dependencies));
@@ -142,8 +142,11 @@ function fixture() {
     act: Parameters<typeof actPort.perform>[0],
     options?: { readonly trusted?: boolean },
   ) => actPort.perform(act, senderOf(sender), options);
-  const report = (sender: WebContents, view: VoiceView) =>
-    reports.reportVoiceView({ sender }, view, undefined);
+  const report = (
+    sender: WebContents,
+    view: VoiceView,
+    transcript: VoiceCallTranscriptChange | undefined = undefined,
+  ) => reports.reportVoiceView({ sender }, view, undefined, transcript);
   return {
     command,
     perform,
@@ -167,7 +170,11 @@ it.effect("the five live session acts reach the host from the voice window alone
     assert.deepEqual(
       yield* f.perform(f.voiceSender, {
         kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-        payload: { sdp: offer, taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+        payload: {
+          sdp: offer,
+          taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+          agentId: CALL_AGENT,
+        },
       }),
       { answer: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
     );
@@ -198,7 +205,11 @@ it.effect("the five live session acts reach the host from the voice window alone
     assert.deepEqual(
       yield* f.perform(f.panelSender, {
         kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-        payload: { sdp: offer, taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+        payload: {
+          sdp: offer,
+          taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+          agentId: CALL_AGENT,
+        },
       }),
       { answer: undefined },
     );
@@ -217,38 +228,8 @@ it.effect("the five live session acts reach the host from the voice window alone
   }),
 );
 
-const OPEN_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const CALL_TASK = "0c4b6d1e-8a2f-4e3b-9c5d-6f7a8b9c0d1e";
-
-it.effect("stopping Luke with no call up stops his turn on the open task and tells no call", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    f.state.update({ tasks: { ...f.state.snapshot().tasks, activeTaskId: OPEN_TASK } });
-    yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} });
-    assert.deepEqual(f.liveCalls, [`stopWork:${OPEN_TASK}`]);
-    assert.deepEqual(yield* f.sentToVoice, []);
-  }),
-);
-
-it.effect(
-  "stopping Luke on a call tells the call to stop and stops his turn on the call's task",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      f.state.update({
-        tasks: { ...f.state.snapshot().tasks, activeTaskId: OPEN_TASK },
-        voice: {
-          ...f.state.snapshot().voice,
-          view: { ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.LISTENING, callTaskId: CALL_TASK },
-        },
-      });
-      yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} });
-      assert.deepEqual(f.liveCalls, [`stopWork:${CALL_TASK}`]);
-      assert.deepEqual(yield* f.sentToVoice, [
-        { push: PUSH.VOICE_COMMAND, payload: { command: VOICE_COMMAND.STOP_SPEAKING } },
-      ]);
-    }),
-);
+const CALL_AGENT = "6e2a9d4b-1c7f-4a8e-b3d5-2f9c8e1a7b60";
 
 it.effect(
   "a frame this build does not trust is refused every voice act in the kind's own words, and the host hears nothing",
@@ -259,10 +240,6 @@ it.effect(
       assert.deepEqual(
         yield* f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }, untrusted),
         { refused: "Could not tell Luke to stop speaking on this system." },
-      );
-      assert.deepEqual(
-        yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} }, untrusted),
-        { refused: "Could not stop Luke on this system." },
       );
       assert.deepEqual(
         yield* f.perform(
@@ -276,3 +253,43 @@ it.effect(
       assert.deepEqual(yield* f.sentToVoice, []);
     }),
 );
+
+it("the voice window's transcript changes are held whole in the document, and a report that moved none keeps it", () => {
+  const f = fixture();
+  const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
+  const view = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    call: { taskId: CALL_TASK, agentId: CALL_AGENT },
+  };
+  const line = (rowId: string, words: string) => ({
+    rowId,
+    speaker: "user" as const,
+    words,
+    startMs: 0,
+    endMs: 1_000,
+  });
+  f.report(f.voiceSender, view, {
+    voiceSessionId: session,
+    from: 0,
+    lines: [line("a", "One")],
+  });
+  f.report(f.voiceSender, view, { voiceSessionId: session, from: 1, lines: [line("b", "Tw")] });
+  f.report(f.voiceSender, view, {
+    voiceSessionId: session,
+    from: 1,
+    lines: [line("b", "Two")],
+  });
+  f.report(f.voiceSender, { ...view, lukeSpeaking: true });
+  // Another window's report is not the voice window's to write.
+  f.report(f.panelSender, view, { voiceSessionId: session, from: 0, lines: [] });
+  assert.deepEqual(f.state.snapshot().voice.callTranscript, {
+    voiceSessionId: session,
+    lines: [line("a", "One"), line("b", "Two")],
+  });
+  assert.equal(f.state.snapshot().voice.view?.lukeSpeaking, true);
+
+  // The call gone: no lines from the first on.
+  f.report(f.voiceSender, IDLE_VOICE_VIEW, { voiceSessionId: undefined, from: 0, lines: [] });
+  assert.equal(f.state.snapshot().voice.callTranscript, undefined);
+});

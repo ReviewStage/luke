@@ -1,6 +1,11 @@
-import { githubRepositoryIssuesAnswerSchema } from "@luke/features/github-repositories-wire";
+import {
+  githubRepositoryIssuesAnswerSchema,
+  workspaceTokenRepositorySchema,
+} from "@luke/features/github-repositories-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
+  type TasksWorkspaceInvitationsAnswer,
+  type TasksWorkspaceMembersAnswer,
   tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
@@ -15,7 +20,10 @@ import {
   tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
+  tasksWorkspaceTokenRepositoriesParamsSchema,
+  tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  workspacePeopleFollowSchema,
 } from "@luke/features/tasks-view";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import {
@@ -23,6 +31,7 @@ import {
   workspaceMemberSchema,
   workspaceSchema,
 } from "@luke/features/workspace-wire";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
@@ -38,6 +47,9 @@ import { WORKSPACE_ACT_KIND } from "./kinds.js";
 const answersWorkspace = EffectSchema.flip(workspaceSchema);
 const answersInvitations = EffectSchema.flip(EffectSchema.Array(workspaceInvitationSchema));
 const answersMembers = EffectSchema.flip(EffectSchema.Array(workspaceMemberSchema));
+const answersTokenRepositories = EffectSchema.flip(
+  EffectSchema.Array(workspaceTokenRepositorySchema),
+);
 
 export const workspaceActsContract = {
   [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actProcedure(
@@ -100,6 +112,16 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceMembersParamsSchema))
     .output(answersMembers),
+  [WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE]: actProcedure(
+    "Could not follow that workspace's members on this system.",
+  )
+    .input(exactInput(workspacePeopleFollowSchema))
+    .output(eventIterator(type<TasksWorkspaceMembersAnswer>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actProcedure(
+    "Could not follow that workspace's invitations on this system.",
+  )
+    .input(exactInput(workspacePeopleFollowSchema))
+    .output(eventIterator(type<TasksWorkspaceInvitationsAnswer>())),
   [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: actProcedure(
     "Could not read who left that workspace on this system.",
   )
@@ -135,4 +157,14 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspacePhotoSetParamsSchema))
     .output(answersWorkspace),
+  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actProcedure(
+    "Could not read that workspace's repositories on this system.",
+  )
+    .input(exactInput(tasksWorkspaceTokenRepositoriesParamsSchema))
+    .output(answersTokenRepositories),
+  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: actProcedure(
+    "Could not change that workspace's repositories on this system.",
+  )
+    .input(exactInput(tasksWorkspaceTokenRepositorySetParamsSchema))
+    .output(answersTokenRepositories),
 };

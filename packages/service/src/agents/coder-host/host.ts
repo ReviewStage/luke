@@ -1,8 +1,12 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import { chatEnabledFor } from "@luke/database/models/account-store";
+import { askRecord } from "@luke/database/models/asks";
+import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
+  codingAgentBriefOf,
+  hasRepository,
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
@@ -11,22 +15,29 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import {
+  listRecentMessages,
+  type StoredMessageRecord,
+  turnsBefore,
+} from "@luke/database/models/message-reads";
+import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
+import { listRevisions } from "@luke/database/models/plan-revisions";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
-import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import { readTask } from "@luke/database/models/task-store";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { EMPTY_BOARD } from "@luke/features/board-wire";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import type { UnparsedWireValue, WireRecord } from "../../core.js";
+import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
@@ -34,23 +45,19 @@ import {
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
-import {
-  COMMENT_TOOL_REFUSAL,
-  type CommentToolName,
-  commentToolRejected,
-  runCommentTool,
-} from "../../tasks/comment-tools.js";
-import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../tasks/page-tool.js";
-import {
-  PICTURE_LOOK_REFUSAL,
-  type PictureLookResult,
-  pictureNotLooked,
-  runLookAtPicture,
-} from "../../tasks/picture-look.js";
+import type { CommentToolName } from "../../tasks/comment-tools.js";
+import type { PictureLookResult } from "../../tasks/picture-look.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
+import { standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
-import { RELAY_TURN } from "../brain-host/bounds.js";
+import {
+  BRAIN_HOST,
+  BRAIN_HOST_TURN,
+  type BrainHostTurn,
+  RELAY_TURN,
+} from "../brain-host/bounds.js";
+import type { ChatSince } from "../brain-host/chat.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -59,36 +66,20 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 import {
-  EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
+  type EveSessionsComposer,
   eveSessionsComposer,
 } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import {
   foldedQuietly,
+  type RelayAskSeams,
   type RelayStanding,
   type RelayStateStore,
   StreamRelay,
 } from "../brain-host/relay.js";
-import {
-  AGENT_CALLER,
-  agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  runListAgents,
-  runListModels,
-  runListTasks,
-  runMessageAgent,
-  runReadAgent,
-  runReadPage,
-  runStartAgent,
-  runStopAgent,
-  runUpdateAgent,
-  runUpdateTask,
-} from "../coding-agent-tools.js";
-import { runCreateIssue, runListIssues, runReadIssue, runUpdateIssue } from "../issue-tools.js";
+import { rotationSeedText } from "../brain-host/seed.js";
+import { carryStop } from "../brain-host/stop-carrier.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -96,24 +87,27 @@ import {
   runSearchWeb,
   type SearchWebResult,
 } from "../public-research.js";
-import type { RepositorySandbox } from "../repository-shell.js";
-import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
-import { runCreateTask, runReadTask } from "../task-tools.js";
+import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
+import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
-import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
-  agentAway,
-  CHAT_TOOL_REFUSAL,
-  type ChatToolResult,
-  chatDigest,
-  chatRejected,
-  editAsAgent,
-  postAsAgent,
-  readAsAgent,
-  resolveAsAgent,
-} from "./chat.js";
-import { CHAT_DOORS } from "./chat-notify.js";
+  type AgentToolCall,
+  type BoardTool,
+  type ChatCall,
+  runAgentBoard,
+  runAgentChat,
+  runAgentComment,
+  runAgentEditPlan,
+  runAgentLookAtPicture,
+  runAgentOpenPullRequest,
+  runAgentShowCode,
+  runAgentShowImage,
+  runAgentShowPage,
+  runAgentTools,
+} from "./agent-doors.js";
+import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import { type ChatToolResult, chatDigest } from "./chat.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -122,38 +116,33 @@ import {
   type CheckoutServices,
   checkOutAgentRepository,
   checkoutBranch,
+  deepenAgentCheckout,
+  openWorkingFolder,
 } from "./checkout.js";
 import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
-import {
-  INBOX_REFUSAL,
-  type InboxToolResult,
-  inboxRejected,
-  postToInbox,
-  readOwnInbox,
-  withdrawAsk,
-} from "./inbox.js";
+import type { InboxToolResult } from "./inbox.js";
+import { type InboxCall, runAgentInbox } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
-import {
-  PLAN_EDIT_REFUSAL,
-  type PlanEditResult,
-  planEditRejected,
-  recordPlanEdit,
-} from "./plan-edit.js";
+import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
-import {
-  openPullRequest,
-  PULL_REQUEST_UNAVAILABLE,
-  type PullRequestToolResult,
-  pullRequestRejected,
-} from "./pull-request.js";
+import type { PullRequestToolResult } from "./pull-request.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
-import { CODER_TOOL } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import {
+  contentKey,
+  savedByAnotherSince,
+  type TurnHanded,
+  taskKey,
+  taskWithLead,
+  timeWithLead,
+  turnKindWords,
+} from "./turn-context.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -181,6 +170,12 @@ import { CODER_TOOL } from "./tool-set.js";
  * and the plan is read and written as the member whose turn it is; the
  * agent's row, its provider keys, its checkout, and its context stay its
  * starter's, the conversation's owner, whoever is speaking to it.
+ * An agent with no repository runs too: its sandbox opens with an empty
+ * working folder and no credential, it is told of no checkout, branch,
+ * commit, or pull request, and it is offered no repository skills and none
+ * of the repository's tools (`tool-set.ts`'s `repositoryToolsOf`). A session
+ * opened afresh over a conversation whose last session retired is seeded
+ * with what was said in it, as the brain's rotation is (`seed`).
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */
@@ -216,6 +211,18 @@ export interface CoderSessionPromptRecord extends SessionPromptRecord {
   readonly coAuthor?: string;
   readonly workspace?: string;
   readonly chatOn?: boolean;
+}
+
+/** The turn opening: its kind, as its request named it, and its store id. */
+interface CoderTurn {
+  readonly kind: BrainHostTurn | undefined;
+  readonly turnId: string | undefined;
+}
+
+/** A turn's own message, where there is one to hand, and what the session has handed once it is. */
+export interface CoderTurnMessage {
+  readonly text: string | undefined;
+  readonly handed: TurnHanded;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -268,25 +275,53 @@ export interface CoderHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | ModelCatalog
   >;
-  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are; the text itself is stored nowhere. */
+  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are, neither asked of GitHub for an agent with no repository; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
-  /** The skills the agent's repository keeps, offered to the session as it starts; none where they could not be read (`skills.ts`). */
+  /** The skills the agent's repository keeps, offered to the session as it starts; none for an agent with no repository, or where they could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
-  /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
+  /**
+   * The conversation so far, for a session opened over a conversation with
+   * words already said, as the brain's rotation seeds one (`brain-host/seed.ts`):
+   * a session opened afresh after its last one retired remembers what was
+   * said. A line awaiting its turn is left out, since it is the message the
+   * session opens with; nothing for a conversation with nothing else said.
+   */
+  seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
+  /**
+   * The agent's repository checked out shallow into the sandbox as it opens,
+   * with no credential standing (`checkout.ts`). An agent with no repository
+   * has an empty working folder made where the checkout would stand, so its
+   * shell and reads start there.
+   */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
-  /** A fresh write token for the agent's repository, for the firewall once the standing one is old. */
-  repositoryToken(
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /**
+   * The agent's shallow checkout deepened to its whole history, as its
+   * first write asks, with the write credential set at the sandbox's
+   * firewall (`checkout.ts`'s `deepenAgentCheckout`); nothing where a deepen
+   * already finished in the sandbox or the agent has no repository to deepen.
+   */
+  deepen(
     admitted: AdmittedConversation,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /** Whether a deepen finished in the sandbox, so its credential may stand and be renewed; none ever did for an agent with no repository. */
+  deepened(
+    admitted: AdmittedConversation,
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<boolean, CheckoutFailure, DatabaseServices>;
+  /** A fresh credential for the agent's repository, for the firewall once the standing one is old or was taken off; none for an agent with no repository, which mints nothing. */
+  repositoryCredential(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<RepositoryCredential | undefined, CheckoutFailure, CheckoutServices>;
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
@@ -370,10 +405,29 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     call: ChatCall,
   ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp>;
-  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where nothing waits, the conversation is no agent's, or the agent's starter has not turned Chat on. */
-  chatDigest(
+  /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
+  turnKind(auth: SessionAuth): BrainHostTurn | undefined;
+  /**
+   * What a turn opens with as a user-role message of its own, which eve
+   * appends to the history after what came before, so the system prompt,
+   * the tools, and the history stay the provider's cached prefix from one
+   * turn to the next, whatever kind of turn each is (`turn-context.ts`):
+   * the call's words on a spoken turn where the turn before was not one, and
+   * a line naming the turn's kind where it changed; the developer's time on
+   * every turn; the task as it stands where someone other than the agent saved
+   * the plan since its previous turn started, or the rest of it is not what
+   * the session last handed (`handed`); and what the agent has not read in
+   * its workspace's chat (`chat.ts`), where its starter turned Chat on and
+   * the digest is not the one last handed. Answers what the session has
+   * handed once this message is, for the session to keep; nothing to hand
+   * where the conversation is no agent's. A read that fails is logged and
+   * leaves its part out, so the turn still opens.
+   */
+  turnMessage(
     admitted: AdmittedConversation,
-  ): Effect.Effect<string | undefined, never, DatabaseServices>;
+    turn: CoderTurn,
+    handed: TurnHanded,
+  ): Effect.Effect<CoderTurnMessage, never, DatabaseServices>;
   /**
    * Runs one of the agent's public reads, the brain's own
    * (`../public-research.ts`): a search or a page read, under the turn's
@@ -399,6 +453,23 @@ export interface CoderHost extends HostAdmission {
   comment(
     admitted: AdmittedConversation,
     name: CommentToolName,
+    input: UnparsedWireValue,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /**
+   * Runs one `show_code` call (`../../tasks/show-code.ts`): lines of the
+   * checkout the session's sandbox opened with, read through the door given,
+   * and journaled with the call on the agent's own conversation, whatever
+   * kind of turn made it.
+   */
+  showCode(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: () => Promise<RepositorySandbox>,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /** Runs one call of the whiteboard's tools (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`) on the agent's task, as the member whose turn it is. */
+  board(
+    admitted: AdmittedConversation,
+    tool: BoardTool,
     input: UnparsedWireValue,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
@@ -447,107 +518,14 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
-export type InboxCall =
-  | {
-      readonly tool: typeof INBOX_TOOL.POST;
-      readonly input: UnparsedWireValue;
-      readonly sandbox: InboxSandboxDoor;
-    }
-  | {
-      readonly tool: typeof INBOX_TOOL.WITHDRAW | typeof INBOX_TOOL.READ;
-      readonly input: UnparsedWireValue;
-    };
+export type { AgentToolCall, BoardTool, ChatCall } from "./agent-doors.js";
+export type { InboxCall } from "./inbox-door.js";
 
-/** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input eve held to its schema, and eve's id for the call. */
-export interface AgentToolCall {
-  readonly tool:
-    | typeof CODER_TOOL.LIST_AGENTS
-    | typeof CODER_TOOL.READ_AGENT
-    | typeof CODER_TOOL.MESSAGE_AGENT
-    | typeof CODER_TOOL.START_AGENT
-    | typeof CODER_TOOL.STOP_AGENT
-    | typeof CODER_TOOL.UPDATE_AGENT
-    | typeof CODER_TOOL.READ_PAGE
-    | typeof CODER_TOOL.LIST_TASKS
-    | typeof CODER_TOOL.READ_TASK
-    | typeof CODER_TOOL.CREATE_TASK
-    | typeof CODER_TOOL.CREATE_SECTION
-    | typeof CODER_TOOL.DELETE_SECTION
-    | typeof CODER_TOOL.UPDATE_TASK
-    | typeof CODER_TOOL.LIST_ISSUES
-    | typeof CODER_TOOL.READ_ISSUE
-    | typeof CODER_TOOL.CREATE_ISSUE
-    | typeof CODER_TOOL.UPDATE_ISSUE
-    | typeof CODER_TOOL.LIST_MODELS;
-  readonly input: UnparsedWireValue;
-  readonly callId: string;
-}
+/** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
+const PREVIOUS_TURN_READ = 2;
 
-/** Each of the agent tools a coding agent is offered, run under the call it makes. */
-const AGENT_TOOL_RUN = {
-  [CODER_TOOL.LIST_AGENTS]: runListAgents,
-  [CODER_TOOL.READ_AGENT]: runReadAgent,
-  [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
-  [CODER_TOOL.START_AGENT]: runStartAgent,
-  [CODER_TOOL.STOP_AGENT]: runStopAgent,
-  [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
-  [CODER_TOOL.READ_PAGE]: runReadPage,
-  [CODER_TOOL.LIST_TASKS]: runListTasks,
-  [CODER_TOOL.READ_TASK]: runReadTask,
-  [CODER_TOOL.CREATE_TASK]: runCreateTask,
-  [CODER_TOOL.CREATE_SECTION]: runCreateSection,
-  [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
-  [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
-  [CODER_TOOL.LIST_ISSUES]: runListIssues,
-  [CODER_TOOL.READ_ISSUE]: runReadIssue,
-  [CODER_TOOL.CREATE_ISSUE]: runCreateIssue,
-  [CODER_TOOL.UPDATE_ISSUE]: runUpdateIssue,
-  [CODER_TOOL.LIST_MODELS]: runListModels,
-} as const;
-
-/** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
-export type ChatCall =
-  | {
-      readonly tool: typeof CHAT_TOOL.POST;
-      readonly input: UnparsedWireValue;
-      readonly clientKey: string;
-      readonly postsInTurn: number;
-      readonly sandbox: InboxSandboxDoor;
-    }
-  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.EDIT_CHANNEL; readonly input: UnparsedWireValue };
-
-/**
- * eve as a deployment that names no secret or no origin for it reaches it:
- * every call answered as failed, so a chat post still lands and a member it
- * addresses, whose notice could not be handed over, reads it when it next
- * reads, as one whose steer eve refused does (`chat-notify.ts`).
- */
-const EVE_UNREACHED: EveSessions = {
-  open: () =>
-    Effect.succeed({
-      outcome: EVE_SEND_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  send: () =>
-    Effect.succeed({
-      outcome: EVE_SEND_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  cancel: () =>
-    Effect.succeed({
-      outcome: EVE_CANCEL_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  reset: () =>
-    Effect.succeed({
-      outcome: EVE_RESET_OUTCOME.FAILED,
-      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
-  stream: () => Stream.empty,
-};
+/** No chat in the task as it stands: the agent's own digest of the chat follows it (`chatDigest`). */
+const NO_CHAT: ChatSince = { messages: [], more: false };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -561,6 +539,16 @@ function asksTitle(event: MessageStreamEvent): boolean {
     event.type === "turn.completed" ||
     event.type === "turn.failed"
   );
+}
+
+/** Whether a stored row is a line awaiting its turn: a user's words no turn has taken yet (`writer.ts`'s `takeAwaitingLine`). */
+function awaitsTurn(record: StoredMessageRecord): boolean {
+  return record.message.role === MESSAGE_ROLE.USER && record.turnId === undefined;
+}
+
+/** A stored row's message, as the seed renders it. */
+function messageOf(record: StoredMessageRecord) {
+  return record.message;
 }
 
 /** The host over the deployment's seams. */
@@ -623,7 +611,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     workspace: string,
     chatOn: boolean,
   ): CoderSessionPrompt => {
-    const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
+    const brief = codingAgentBriefOf(agent);
     const taskLink =
       agent.taskId === null
         ? null
@@ -639,6 +627,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       coAuthor,
       chatOn,
       agent.startBranch,
+      agent.githubAccess === GITHUB_ACCESS.TOKEN,
     );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
   };
@@ -684,12 +673,141 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     return written.pipe(Effect.catch(logStoreFailure));
   };
 
-  /** One event relayed through the shared relay, with no ask record beside it. */
+  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where its starter has not turned Chat on, or the read failed. */
+  const digestOf = (admitted: AdmittedConversation, agent: CodingAgent) =>
+    Effect.gen(function* () {
+      // A turn opens with the chat only where the agent's starter turned Chat on.
+      if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
+      return yield* chatDigest({
+        userId: admitted.target.userId,
+        taskId: agent.taskId,
+        self: { kind: MEMBER_KIND.AGENT, agentId: agent.id },
+      });
+    }).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+
+  /**
+   * When the agent's turn before the one opening started, or nothing for its
+   * first turn: the newest of the conversation's turns but the one named,
+   * which the relay may have queued already as this one opens.
+   */
+  const previousTurnStart = (target: ConversationTarget, turnId: string | undefined) =>
+    Effect.map(
+      turnsBefore(target.userId, target.conversationId, PREVIOUS_TURN_READ, undefined),
+      (page) => {
+        const previous = page.turns.findLast((turn) => turn.id !== turnId);
+        return previous === undefined
+          ? undefined
+          : (previous.startedAt ?? previous.queuedAt).getTime();
+      },
+    );
+
+  /**
+   * The agent's task as the turn's message hands it (`turn-context.ts`), read
+   * as the member whose turn this is, and what the session has handed of it
+   * once this turn is (`taskKey`), or nothing for an agent on no task or one
+   * whose task is gone. The task is handed where a revision of the plan
+   * another writer made was saved after the agent's previous turn started,
+   * so a save made while that turn ran, which none of its steps may have
+   * read, is handed too; or where the rest of it is not what the session
+   * last handed; never on a typed first turn, whose first message the plan,
+   * or the prompt beside it, already is. The chat is left out, since the
+   * agent's own digest of it follows (`digestOf`). A read that fails is
+   * logged and hands nothing.
+   */
+  const taskOf = (
+    admitted: AdmittedConversation,
+    agent: CodingAgent,
+    turn: CoderTurn,
+    handed: TurnHanded,
+  ) =>
+    Effect.gen(function* () {
+      const { taskId } = agent;
+      if (taskId === null) return undefined;
+      const [stored, board, comments, since] = yield* Effect.all(
+        [
+          readTask(admitted.caller, taskId),
+          readBoard(admitted.caller, taskId),
+          readPlanCommentThreads(admitted.caller, taskId),
+          previousTurnStart(admitted.target, turn.turnId),
+        ],
+        { concurrency: "unbounded" },
+      );
+      if (Option.isNone(stored)) return undefined;
+      const drawn = Option.getOrElse(board, () => EMPTY_BOARD);
+      const threads = Option.getOrElse(comments, () => []);
+      const key = taskKey(stored.value, drawn, threads);
+      const opening = since === undefined && turn.kind !== BRAIN_HOST_TURN.SPOKEN;
+      const saved =
+        since !== undefined &&
+        savedByAnotherSince(
+          (yield* listRevisions(admitted.caller, taskId)).revisions,
+          since,
+          agent.id,
+        );
+      if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
+      const clock = { now: seams.now(), timeZone: admitted.timeZone };
+      const text = taskWithLead(standingContext(stored.value, drawn, NO_CHAT, clock, threads));
+      return { key, text };
+    }).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+
+  /**
+   * The ask record every turn binds the voice's asks to, as the brain's
+   * relay does (`../brain-host/host.ts`): each ask eve delivered into the
+   * turn learns the turn it ran in, which is what ties the transcript's line
+   * to it and what the voice follows the answer by, and a Stop the ask took
+   * while it waited is carried the moment its turn starts, by the deployment
+   * acting for the agent's starter on the coder's mount, since the hook that
+   * sees the start holds no bearer; a deployment with no secret or no origin
+   * for eve reports the Stop it could not carry. A typed turn takes it too,
+   * since a call's ask joins one under way (`channel.ts`'s
+   * `CODER_DEPLOYMENT_PRESENCE`): at its start that costs a binding of its
+   * delivery and a read of the Stops on it, two statements.
+   */
+  const turnAsks = (writer: StoreWriter, compose: EveSessionsComposer): RelayAskSeams => ({
+    binding: askRecord(),
+    stopTurn: (target, sessionId, eveTurnId, turnId) =>
+      Effect.suspend(() => {
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        if (secret === undefined || origin === undefined) {
+          return Effect.logWarning(
+            `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+          );
+        }
+        return carryStop(
+          {
+            // Composed to send no message at all: the deployment here cancels a turn and does nothing else.
+            eve: compose<never>({
+              origin,
+              caller: { secret, account: target.userId },
+              mount: EVE_MOUNT.CODER,
+            }),
+            writer,
+            now: seams.now,
+            report: (message) => console.warn(message),
+          },
+          target,
+          sessionId,
+          eveTurnId,
+          turnId,
+        );
+      }),
+  });
+
+  /** One event relayed through the shared relay, with the ask record beside it on the agent's own turns, which a call may join, and none on a worker's. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
     Effect.gen(function* () {
       const writer = yield* seams.writer();
+      const compose = yield* eveSessionsComposer;
       const relay = new StreamRelay({
         writer,
+        ...(standing.turn === RELAY_TURN.CHILD ? undefined : { asks: turnAsks(writer, compose) }),
         now: seams.now,
         report: (message) => console.warn(message),
       });
@@ -770,8 +888,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     prompt: (admitted, agent) =>
       Effect.map(
         Effect.all([
-          agentCiReadable(admitted.target, agent),
-          agentCoAuthor(admitted.target, agent),
+          // An agent with no repository has no CI to read and makes no commits, so GitHub is asked neither.
+          hasRepository(agent) ? agentCiReadable(admitted.target, agent) : Effect.succeed(false),
+          hasRepository(agent) ? agentCoAuthor(admitted.target, agent) : Effect.succeed(undefined),
           // A slug that cannot be read is written as the workspace's id, which finds the same things.
           workspaceStepOf(admitted.target.userId, agent.organizationId).pipe(
             Effect.tapError(logStoreFailure),
@@ -787,21 +906,58 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           promptOf(agent, ciReadable, coAuthor, workspace, chatOn),
       ),
 
-    skills: (admitted, agent) => agentSkills(admitted.target, agent),
+    skills: (admitted, agent) =>
+      hasRepository(agent) ? agentSkills(admitted.target, agent) : Effect.succeed([]),
+
+    seed: (admitted) =>
+      Effect.map(
+        listRecentMessages(
+          admitted.target.userId,
+          admitted.target.conversationId,
+          CODER_TOOL_SET,
+          BRAIN_HOST.SEED_MESSAGES,
+        ),
+        (read) =>
+          rotationSeedText(
+            read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
+            seams.now(),
+          ),
+      ),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        checkOutAgentRepository(admitted.target, agent, sandbox),
+        hasRepository(agent)
+          ? checkOutAgentRepository(admitted.target, agent, sandbox)
+          : openWorkingFolder(sandbox),
       ),
 
-    repositoryToken: (admitted) =>
+    deepen: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
+        // An agent with no repository has a working folder and no history to fetch.
+        hasRepository(agent) ? deepenAgentCheckout(admitted.target, agent, sandbox) : Effect.void,
+      ),
+
+    deepened: (admitted, sandbox) =>
+      Effect.flatMap(agentOrRefused(admitted), (agent) =>
+        hasRepository(agent)
+          ? checkoutDeepened(sandbox).pipe(
+              Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })),
+            )
+          : Effect.succeed(false),
+      ),
+
+    repositoryCredential: (admitted) =>
+      Effect.flatMap(agentOrRefused(admitted), (agent) =>
+        hasRepository(agent)
+          ? agentRepositoryToken(admitted.target, agent)
+          : Effect.succeed(undefined),
       ),
 
     recordBranch: (admitted, sandbox) =>
       Effect.gen(function* () {
         const agent = yield* agentOrRefused(admitted);
+        // An agent with no repository has no checkout, so no branch to record.
+        if (!hasRepository(agent)) return;
         const branch = yield* checkoutBranch(sandbox);
         // Note that the branch the agent was started on is another's, such as a stacked pull
         // request's, so standing on it is recorded as no branch of its own: no pull request
@@ -860,78 +1016,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         });
       }),
     editPlan: (admitted, input, takenInTurn, sandbox) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return planEditRejected(found.failure);
-        const { id: agentId, taskId } = found.success;
-        if (taskId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
-        // The plan is written as the member whose turn this is, whoever started the agent.
-        const binding = { userId: admitted.caller, taskId };
-        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn, sandbox);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
-      ),
+      runAgentEditPlan(admitted, input, takenInTurn, sandbox),
 
-    inbox: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, taskId } = found.success;
-        const agent = { userId: admitted.target.userId, taskId, agentId };
-        switch (call.tool) {
-          case INBOX_TOOL.POST:
-            return yield* postToInbox(agent, call.input, call.sandbox);
-          case INBOX_TOOL.WITHDRAW:
-            return yield* withdrawAsk(agent, call.input);
-          case INBOX_TOOL.READ:
-            return yield* readOwnInbox(agent);
-        }
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
-      ),
+    inbox: (admitted, call) => runAgentInbox(admitted, call),
 
-    lookAtPicture: (admitted, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-        const { taskId } = found.success;
-        if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
-        // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
-      ),
+    lookAtPicture: (admitted, input) => runAgentLookAtPicture(admitted, input),
 
-    openPullRequest: (admitted, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return pullRequestRejected(found.failure);
-        return yield* openPullRequest(admitted.target, found.success, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
-      ),
+    openPullRequest: (admitted, input) => runAgentOpenPullRequest(admitted, input),
 
-    comment: (admitted, name, input) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return commentToolRejected(found.failure);
-        const { id: agentId, taskId } = found.success;
-        if (taskId === null) return commentToolRejected(COMMENT_TOOL_REFUSAL.TASKLESS);
-        // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
-        const writer = {
-          actor: PLAN_COMMENT_ACTOR.AGENT,
-          userId: admitted.caller,
-          agentId,
-        } as const;
-        return yield* runCommentTool(name, { taskId, writer }, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(commentToolRejected(COMMENT_TOOL_REFUSAL.UNAVAILABLE))),
-      ),
+    comment: (admitted, name, input) => runAgentComment(admitted, name, input),
     chatOffered: (admitted, prompt) =>
       (prompt.chatOn === true
         ? chatEnabledFor(admitted.target.userId)
@@ -941,84 +1034,47 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.orElseSucceed(() => false),
       ),
 
-    chat: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-        if (!(yield* chatEnabledFor(admitted.target.userId))) {
-          return chatRejected(CHAT_TOOL_REFUSAL.OFF);
-        }
-        const { id: agentId, taskId, repository } = found.success;
-        const self = { kind: MEMBER_KIND.AGENT, agentId };
-        const reader = { userId: admitted.target.userId, taskId, self };
-        if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
-        if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
-        // An archived agent, or one on an archived task, posts nothing until it is brought back.
-        if (yield* agentAway(admitted.target.userId, found.success)) {
-          return chatRejected(CHAT_TOOL_REFUSAL.LEFT);
-        }
-        if (call.tool === CHAT_TOOL.EDIT_CHANNEL) return yield* editAsAgent(reader, call.input);
-        // A notice reaches the receiving agent's session as the deployment acting for that agent's
-        // starter, whose principal its turn runs under, as the planning model's message to an
-        // agent does: no bearer stands here.
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        const compose = yield* eveSessionsComposer;
-        const eveFor = (starter: string) =>
-          secret === undefined || origin === undefined
-            ? EVE_UNREACHED
-            : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
-        const { clientKey, postsInTurn, sandbox } = call;
-        return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
-          clientKey,
-          postsInTurn,
-          sandbox,
-        });
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
-      ),
+    chat: (admitted, call) => runAgentChat(seams, admitted, call),
 
-    chatDigest: (admitted) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return undefined;
-        // A turn opens with the chat only where the agent's starter turned Chat on.
-        if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
-        const { id: agentId, taskId } = found.success;
-        return yield* chatDigest({
-          userId: admitted.target.userId,
-          taskId,
-          self: { kind: MEMBER_KIND.AGENT, agentId },
-        });
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(undefined)),
-      ),
+    turnKind: (auth) => turnKindOf(auth.current),
 
-    showPage: (admitted, input, sandbox) =>
+    turnMessage: (admitted, turn, handed) =>
       Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return showPageRejected(found.failure);
-        const { taskId } = found.success;
-        if (taskId === null) return showPageRejected(SHOW_PAGE_REFUSAL.TASKLESS);
-        const binding = {
-          userId: admitted.target.userId,
-          taskId,
-          sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
+        const found = yield* agentOf(admitted).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.orElseSucceed(() => Result.fail(CODER_REFUSAL.NO_AGENT)),
+        );
+        if (Result.isFailure(found)) return { text: undefined, handed };
+        const agent = found.success;
+        const [task, digest] = yield* Effect.all(
+          [taskOf(admitted, agent, turn, handed), digestOf(admitted, agent)],
+          { concurrency: "unbounded" },
+        );
+        const clock = { now: seams.now(), timeZone: admitted.timeZone };
+        const standing =
+          task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, NO_CHAT, clock));
+        // The digest is handed again only where it holds what the last one did not.
+        const chatKey = digest === undefined ? handed.chat : contentKey(digest);
+        const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
+        const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
+        const kind = turnKindWords(spoken, handed, agent.taskId !== null);
+        const taskHanded = task === undefined ? handed.task : task.key;
+        const next: TurnHanded = {
+          ...(taskHanded === undefined ? undefined : { task: taskHanded }),
+          ...(chatKey === undefined ? undefined : { chat: chatKey }),
+          ...(spoken ? { spoken: true, callWords: true } : undefined),
         };
-        return yield* runShowPage(binding, input, {
-          kind: PAGE_SHOWER.AGENT,
-          agentId: found.success.id,
-        });
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
-      ),
+        const parts = [...(kind === undefined ? [] : [kind]), standing, ...chat];
+        return { text: parts.join("\n\n"), handed: next };
+      }),
 
-    showImage: (admitted, input, sandbox) =>
-      runShowImage({ target: admitted.target, sandbox, checkout: CODER.CHECKOUT_PATH }, input),
+    showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),
+
+    showCode: (admitted, input, sandbox) => runAgentShowCode(admitted, input, sandbox),
+
+    board: (admitted, tool, input) => runAgentBoard(admitted, tool, input),
+
+    showImage: (admitted, input, sandbox) => runAgentShowImage(admitted, input, sandbox),
 
     showDelegatedImage: (session, input, sandbox) =>
       Effect.gen(function* () {
@@ -1031,36 +1087,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
       ),
 
-    agentTools: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return agentToolRejected(found.failure);
-        // The agent asking is the one the session was admitted to, and eve is reached as its starter.
-        const sender = found.success;
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        const compose = yield* eveSessionsComposer;
-        const eve =
-          secret === undefined || origin === undefined
-            ? undefined
-            : compose({
-                origin,
-                caller: { secret, account: sender.userId },
-                mount: EVE_MOUNT.CODER,
-              });
-        const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
-        const toolCall = {
-          caller,
-          eve,
-          writer: seams.writer(),
-          clientKey: call.callId,
-          summaryModel: seams.summaryModel,
-        };
-        return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
-      ),
+    agentTools: (admitted, call) => runAgentTools(seams, admitted, call),
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
@@ -1081,7 +1108,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     },
 
     relaysQuietly: (event, state) =>
-      event.type !== "compaction.completed" && foldedQuietly(event, state),
+      event.type !== "compaction.completed" && foldedQuietly(event, state, seams.now()),
 
     relay: (event, admitted, session, state, prompt) =>
       Effect.gen(function* () {
@@ -1090,10 +1117,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // id under the scripted model; a conversation that is no agent's records no model.
         const agent = Result.getOrUndefined(found);
         const model = seams.scriptedModel() ? CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID : agent?.model;
+        // Note that eve moves the session's current auth to a line's that joins a turn under way,
+        // so the kind the turn opened as is the relay's to keep and answer, past its start.
+        const opened = turnKindOf(session.auth.current);
         yield* relayEvent(event, {
           sessionId: session.id,
           target: admitted.target,
-          turn: turnKindOf(session.auth.current),
+          turn: opened,
           ...(model !== undefined ? { model } : undefined),
           ...(agent !== undefined ? { reasoningEffort: agent.effort } : undefined),
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),

@@ -1,0 +1,25 @@
+{
+  "name": "@luke/claude-code-probe",
+  "version": "0.19.0",
+  "private": true,
+  "type": "module",
+  "description": "Proves Claude Code on a Claude plan inside a Luke sandbox: the turn it runs there, and that its token stays with the CLI",
+  "scripts": {
+    "probe": "tsx src/cli.ts",
+    "test:vitest": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@luke/service": "workspace:*",
+    "@luke/wire": "workspace:*",
+    "@vercel/sandbox": "3.8.0",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

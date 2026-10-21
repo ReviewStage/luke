@@ -22,7 +22,6 @@ import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
@@ -32,14 +31,11 @@ import { USER_ROLE } from "./admin-access.js";
 import {
   type AdminWorkspaceListSource,
   buildAdminWorkspaceList,
-  handleAdminWorkspaces,
   INVITATION_STATUS,
 } from "./admin-workspaces.js";
 import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 import {
-  ADMIN_ERROR,
   ADMIN_METRICS_SCOPE,
-  ADMIN_USERS_SEARCH_MAX_LENGTH,
   ADMIN_WORKSPACES_KIND,
   type AdminMetricsScope,
   type AdminWorkspacesKind,
@@ -182,18 +178,6 @@ describe("the workspaces builder", () => {
     assert.equal(list.search, "north");
   });
 });
-
-it.effect("a search past the bound is refused before anything is read", () =>
-  Effect.gen(function* () {
-    const term = "w".repeat(ADMIN_USERS_SEARCH_MAX_LENGTH + 1);
-    const response = yield* handleAdminWorkspaces({
-      request: new Request(`https://luke.test/api/admin/workspaces?search=${term}`),
-      readWorkspaces: () => Effect.die(new Error("nothing should be read")),
-    }).pipe(Effect.provide(noDatabase));
-    assert.equal(response.status, 400);
-    assert.equal((yield* Effect.promise(() => response.json())).error, ADMIN_ERROR.INVALID_SEARCH);
-  }),
-);
 
 /* ----- The queries, over a real dialect ----- */
 

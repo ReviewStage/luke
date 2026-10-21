@@ -25,11 +25,21 @@
  * `workspaceId` query, or to the account's first workspace where none is
  * named, most recently updated first, to a member of it, and whether one is
  * connected at all; a workspace the account is not in is not found. A
- * workspace with nothing connected has no repositories. A member who saved
- * their own GitHub token is listed, beside them, the repositories it may
- * push to that no installation lists, each entry marked with which of the
- * two reaches it. A GitHub or a store the service could not
- * reach is unavailable.
+ * workspace with nothing connected has no repositories. Beside them are
+ * listed the repositories members added to the workspace on their own
+ * tokens that the member's own token may push to, each entry marked with
+ * which of the two reaches it; a member whose own token cannot push to one,
+ * or who saved none, is not offered it. A member who saved their
+ * own GitHub token is answered apart, as addable, the repositories it may
+ * push to that neither lists, which only Add repository offers. A GitHub or
+ * a store the service could not reach is unavailable.
+ *
+ * Those added repositories are their own resource,
+ * `/api/github/token-repositories`: a member of the workspace reads them
+ * (GET), less any the workspace's installation reaches, since the App
+ * wins; adds one (PUT) where their own token may push to it, as the reach
+ * reads it; and removes one, which its adder or a workspace's owner or
+ * admin may. A removal leaves the workspace's tasks as they stand.
  *
  * Beside it, one repository of the workspace's installation is read by the
  * workspace and its name, for a place no plan names, such as an agent an
@@ -49,6 +59,9 @@
  * title, page, and state and nothing more of it. A repository the
  * installation does not reach and a number the repository holds no pull
  * request under both answer none, since a link to either draws the same.
+ * The answer is kept on the instance a minute, and GitHub's refusal of it
+ * as long as GitHub asked (`pull-request-links.ts`), since a screen of
+ * links asks for the same pull request in bursts.
  * One issue is read the same way, `GET /api/github/repositories/issue`, on
  * a token minted for the one repository with issues read alone
  * (`issues.ts`); an installation that does not grant the App issues
@@ -76,15 +89,28 @@ import {
   githubConnection,
   openGitHubConnectIntent,
 } from "@luke/database/models/github-connection-store";
-import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import type { GitHubIssueSummary, GitHubPullRequestSummary } from "@luke/features";
+import {
+  isWorkspaceMember,
+  personalWorkspaceOf,
+  workspaceOf,
+} from "@luke/database/models/workspace-store";
+import {
+  addWorkspaceTokenRepository,
+  listWorkspaceTokenRepositories,
+  removeWorkspaceTokenRepository,
+  type WorkspaceTokenRepositoryRow,
+  workspaceTokenRepositoryAdder,
+} from "@luke/database/models/workspace-token-repository-store";
+import type { GitHubIssueSummary } from "@luke/features";
 import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
 import {
   GITHUB_ACCESS,
   type GitHubRepositoryIssuesAnswer,
   type RepositoryIssuesAsk,
+  type WorkspaceTokenRepositoriesAnswer,
 } from "@luke/features/github-repositories-wire";
-import { Effect, Option } from "effect";
+import { managesWorkspace } from "@luke/features/workspace-role";
+import { DateTime, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { GitHubRepository } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -92,17 +118,27 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  repositoryNotReachable,
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted, sessionMiddleware } from "../orpc/base.js";
+import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
-import { GitHubApp, type GitHubWorkspaceReadFailure, ISSUE_ACCESS } from "./github-app.js";
-import { githubReadOrRefusal } from "./github-refusal.js";
+import {
+  GitHubApp,
+  type GitHubWorkspaceReadFailure,
+  ISSUE_ACCESS,
+  markRefusedToken,
+} from "./github-app.js";
+import {
+  githubReachOrRefusal,
+  githubReadOrRefusal,
+  logWorkspaceReadFailure,
+} from "./github-refusal.js";
 import type { GitHubUnlink } from "./github-unlink.js";
 import { issueByNumber, issuePick, openIssues, searchIssues } from "./issues.js";
-import { pullRequestByNumber } from "./pull-requests.js";
+import { PullRequestLinkKey, PullRequestLinks } from "./pull-request-links.js";
 
 /**
  * Better Auth's codes for an unlink it refused that Luke reads: a session
@@ -113,9 +149,6 @@ const UNLINK_REFUSAL = {
   SESSION_NOT_FRESH: "SESSION_NOT_FRESH",
   LAST_ACCOUNT: "FAILED_TO_UNLINK_LAST_ACCOUNT",
 } as const;
-
-/** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
-const MAXIMUM_CLAIM_BODY_BYTES = 1_024;
 
 export interface GitHubProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -144,22 +177,138 @@ const memberPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { workspaceId: place.workspaceId, repository: place.repository, member: userId };
 });
 
+/** A repository's full name as two spellings of it compare: GitHub's names ignore case. */
+function nameKey(fullName: string): string {
+  return fullName.toLowerCase();
+}
+
+/** The picker's repositories, and those Add repository offers. */
+interface PickedRepositories {
+  readonly repositories: GitHubRepository[];
+  readonly addable: GitHubRepository[];
+}
+
 /**
  * The picker's repositories: the installation's, each marked the App's,
- * and the member's own token's that no installation lists, each marked the
- * token's, as one list most recently updated first.
+ * and those members added to the workspace on their tokens that it does not
+ * list and the member's own token may push to, marked the token's, so a
+ * member with no token, or whose token cannot push to one, or whose token's
+ * listing GitHub did not answer, is not offered it. One list, most recently
+ * updated first. Beside it, the member's own token's that neither lists,
+ * marked the token's, which Add repository offers and the picker does not,
+ * since a token reaches a repository for a task only once it is added.
  */
 function pickedRepositories(
   throughApp: readonly GitHubRepository[],
   onToken: readonly GitHubRepository[],
-): GitHubRepository[] {
-  const listed = new Set(throughApp.map((one) => one.fullName.toLowerCase()));
-  const tokenOnly = onToken.filter((one) => !listed.has(one.fullName.toLowerCase()));
-  return [
-    ...throughApp.map((one) => ({ ...one, access: GITHUB_ACCESS.APP })),
-    ...tokenOnly.map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN })),
-  ].sort((left, right) => right.updatedAt - left.updatedAt);
+  added: readonly WorkspaceTokenRepositoryRow[],
+): PickedRepositories {
+  const listed = new Set(throughApp.map((one) => nameKey(one.fullName)));
+  const ownByName = new Map(onToken.map((one) => [nameKey(one.fullName), one]));
+  // Note that an added repository is drawn as the member's own token lists it, because its row keeps only its name.
+  const addedOnly = added.flatMap((row) => {
+    const key = nameKey(row.repository);
+    const own = ownByName.get(key);
+    return listed.has(key) || own === undefined ? [] : [own];
+  });
+  for (const one of addedOnly) listed.add(nameKey(one.fullName));
+  const byRecent = (left: GitHubRepository, right: GitHubRepository) =>
+    right.updatedAt - left.updatedAt;
+  return {
+    repositories: [
+      ...throughApp.map((one) => ({ ...one, access: GITHUB_ACCESS.APP })),
+      ...addedOnly.map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN })),
+    ].sort(byRecent),
+    addable: onToken
+      .filter((one) => !listed.has(nameKey(one.fullName)))
+      .map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN }))
+      .sort(byRecent),
+  };
 }
+
+/**
+ * The repositories members added to the workspace on their tokens, as
+ * Settings › Workspace lists them to a member of it, each removable by its
+ * adder or a workspace's owner or admin; one the workspace's installation
+ * reaches is left out, its row kept, since the App wins, and a GitHub that
+ * does not answer leaves nothing out. A workspace the account is not in is
+ * not found.
+ */
+const tokenRepositoriesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+): Effect.fn.Return<WorkspaceTokenRepositoriesAnswer, HostedRefusal, GitHubRepositoriesServices> {
+  const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, workspaceId));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const rows = yield* hostedStoreOrUnavailable(listWorkspaceTokenRepositories(userId, workspaceId));
+  if (rows.length === 0) return { repositories: [] };
+  const app = yield* GitHubApp;
+  // Note that a GitHub that does not answer hides nothing, because the list and its writes are the store's and must not wait on GitHub;
+  // a store that cannot name the installations is the outage it is, so a row the App covers never shows on a guess.
+  const throughApp = yield* app.workspaceRepositories(workspaceId).pipe(
+    Effect.tapError(logWorkspaceReadFailure),
+    Effect.catch((failure) =>
+      failure._tag === "GitHubAppNotConfigured" || failure._tag === "GitHubUnavailable"
+        ? Effect.succeed(Option.none<readonly GitHubRepository[]>())
+        : Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
+    ),
+  );
+  const reached = new Set(
+    Option.getOrElse(throughApp, () => []).map((one) => nameKey(one.fullName)),
+  );
+  const manages = managesWorkspace(workspace.value);
+  return {
+    repositories: rows
+      .filter((row) => !reached.has(nameKey(row.repository)))
+      .map((row) => ({
+        fullName: row.repository,
+        addedBy: row.addedByUserId,
+        addedAt: row.addedAt,
+        removable: manages || row.addedByUserId === userId,
+      })),
+  };
+});
+
+/**
+ * A repository added to the workspace on the member's own token, where the
+ * reach finds their token may push to it (`github-app.ts`), and refused as
+ * not reachable, with why, where it does not; one the workspace's
+ * installation reaches is added nowhere, since the App wins.
+ */
+const addTokenRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+  repository: string,
+): Effect.fn.Return<void, HostedRefusal, GitHubRepositoriesServices> {
+  const app = yield* GitHubApp;
+  const reach = yield* githubReachOrRefusal(app.repositoryReach(workspaceId, repository, userId));
+  if (Result.isFailure(reach)) return yield* Effect.fail(repositoryNotReachable(reach.failure));
+  if (reach.success.access !== GITHUB_ACCESS.TOKEN) return;
+  const now = yield* DateTime.nowAsDate;
+  yield* hostedStoreOrUnavailable(
+    addWorkspaceTokenRepository(userId, workspaceId, reach.success.repository.fullName, now),
+  );
+});
+
+/** A token repository removed from the workspace by its adder or a workspace's owner or admin; anyone else is not permitted. */
+const removeTokenRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+  repository: string,
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
+  const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, workspaceId));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const adder = yield* hostedStoreOrUnavailable(
+    workspaceTokenRepositoryAdder(userId, workspaceId, repository),
+  );
+  if (Option.isNone(adder)) return;
+  if (adder.value !== userId && !managesWorkspace(workspace.value)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  yield* hostedStoreOrUnavailable(
+    removeWorkspaceTokenRepository(userId, workspaceId, repository, adder.value),
+  );
+});
 
 /**
  * The workspace the listing is for: the one named, where the account is a
@@ -176,54 +325,7 @@ const listedWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.some(named);
 });
 
-/**
- * The pull request of the number given, of a repository the workspace's
- * installation reaches, as much of it as a link draws; none where the
- * installation does not reach the repository or the repository holds none
- * of that number. Note that the token is minted for the one repository and
- * dropped with the answer, because a link is read again rather than held.
- */
-const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
-  place: RepositoryPlace,
-  number: number,
-): Effect.fn.Return<
-  GitHubPullRequestSummary | null,
-  GitHubWorkspaceReadFailure,
-  GitHubRepositoriesServices
-> {
-  const app = yield* GitHubApp;
-  const reached = yield* app.repositoryPullRequestToken(
-    place.workspaceId,
-    place.repository,
-    place.member,
-  );
-  if (Option.isNone(reached)) return null;
-  const found = yield* pullRequestByNumber(reached.value.token, place.repository, number);
-  if (Option.isNone(found)) return null;
-  const pull = found.value;
-  return {
-    number: pull.number,
-    title: pull.title,
-    url: pull.url,
-    state: pull.state,
-    additions: pull.additions,
-    deletions: pull.deletions,
-    changedFiles: pull.changedFiles,
-    headRef: pull.headRef,
-    ...(pull.author === undefined ? undefined : { author: pull.author }),
-    ...(pull.authorAvatarUrl === undefined ? undefined : { authorAvatarUrl: pull.authorAvatarUrl }),
-    ...(pull.authorBot === undefined ? undefined : { authorBot: pull.authorBot }),
-    ...(pull.openedAt === undefined ? undefined : { openedAt: pull.openedAt }),
-    ...(pull.mergedAt === undefined ? undefined : { mergedAt: pull.mergedAt }),
-    ...(pull.closedAt === undefined ? undefined : { closedAt: pull.closedAt }),
-    ...(pull.baseRef === undefined ? undefined : { baseRef: pull.baseRef }),
-    ...(pull.labels === undefined ? undefined : { labels: pull.labels }),
-    ...(pull.comments === undefined ? undefined : { comments: pull.comments }),
-    ...(pull.commits === undefined ? undefined : { commits: pull.commits }),
-  };
-});
-
-/** The issue of the number given, of a repository the workspace's installation reaches, as a link draws it; none where there is none to draw, as `pullRequestOfPlace` answers. */
+/** The issue of the number given, of a repository the workspace's installation reaches, as a link draws it; none where there is none to draw, as a pull request's link answers (`pull-request-links.ts`). */
 const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   place: RepositoryPlace,
   number: number,
@@ -239,7 +341,9 @@ const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
     place.member,
   );
   if (Option.isNone(reached)) return null;
-  const found = yield* issueByNumber(reached.value.token, place.repository, number);
+  const found = yield* issueByNumber(reached.value.token, place.repository, number).pipe(
+    markRefusedToken(reached.value.access),
+  );
   return Option.getOrNull(found);
 });
 
@@ -323,10 +427,7 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
       url.searchParams.set(GITHUB_CONNECT_PAGE.INTENT_PARAM, intent);
       return { url: url.toString() };
     }),
-    claim: inSession.use(bodyLimit(MAXIMUM_CLAIM_BODY_BYTES)).claim.effect(function* ({
-      context,
-      input,
-    }) {
+    claim: inSession.claim.effect(function* ({ context, input }) {
       const claim = yield* hostedStoreOrUnavailable(
         claimGitHubConnectIntent(input.intent, context.userId),
       );
@@ -352,14 +453,33 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
           app.memberRepositories(context.userId),
         ]),
       );
+      const added = Option.isNone(workspace)
+        ? []
+        : yield* hostedStoreOrUnavailable(
+            listWorkspaceTokenRepositories(context.userId, workspace.value),
+          );
       return {
         installed: Option.isSome(listed),
-        repositories: pickedRepositories(
+        ...pickedRepositories(
           Option.getOrElse(listed, () => []),
           Option.getOrElse(own, () => []),
+          added,
         ),
         installationUrl,
       };
+    }),
+    tokenRepositories: signedIn.tokenRepositories.effect(function* ({ context, input }) {
+      return yield* tokenRepositoriesOf(context.userId, input.workspaceId);
+    }),
+    setTokenRepository: signedIn.setTokenRepository.effect(function* ({ context, input }) {
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* input.added
+        ? addTokenRepository(context.userId, input.workspaceId, input.repository)
+        : removeTokenRepository(context.userId, input.workspaceId, input.repository);
+      return yield* tokenRepositoriesOf(context.userId, input.workspaceId);
     }),
     repositoryTree: signedIn.repositoryTree.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
@@ -374,7 +494,12 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
     }),
     repositoryPullRequest: signedIn.repositoryPullRequest.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
-      return { pullRequest: yield* githubReadOrRefusal(pullRequestOfPlace(place, input.number)) };
+      const links = yield* PullRequestLinks;
+      const pullRequest = yield* links
+        .read(new PullRequestLinkKey({ ...place, number: input.number }))
+        // Note that the failure is not logged here, because a refusal held from an earlier read was logged when it was read.
+        .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+      return { pullRequest };
     }),
     repositoryIssue: signedIn.repositoryIssue.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);

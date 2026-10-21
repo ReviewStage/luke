@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   CODE_PATH_MAX_CHARS,
   isSecretFile,
@@ -11,7 +11,7 @@ import {
 } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../github/github-app.js";
+import { type GitHubApp, markRefusedToken } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 import { reachTaskRepository, refused } from "./task-file.js";
@@ -68,12 +68,12 @@ export function readTaskTree(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     return Option.some(
-      yield* readRepositoryTree(stored.value.task.workspaceId, repository, userId, request),
+      yield* readRepositoryTree(stored.value.workspaceId, repository, userId, request),
     );
   });
 }
@@ -108,9 +108,11 @@ const readFolder = /* @__PURE__ */ Effect.fn("web/taskTreeFolder")(function* (
 ) {
   const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
-  const { token, repository: confirmed } = reach.reached;
+  const { token, repository: confirmed, access } = reach.reached;
   const recursive = request.recursive === true;
-  const folder = yield* readRepositoryFolder(token, confirmed, request.path, recursive);
+  const folder = yield* readRepositoryFolder(token, confirmed, request.path, recursive).pipe(
+    markRefusedToken(access),
+  );
   if (!folder.found) {
     return {
       refusal: TASK_FILE_REFUSAL.MISSING,

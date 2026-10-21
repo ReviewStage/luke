@@ -140,7 +140,7 @@ function drawnToggles(tab: HTMLElement): HTMLButtonElement[] {
     .flatMap((place) => [...place.querySelectorAll("button")]);
 }
 
-test("a Changes tab draws no tree beside the diff, its count under the diff, until the tree's toggle opens it over the diff for this tab alone", async () => {
+test("a Changes tab draws no tree beside the diff until the tree's toggle opens it over the diff for this tab alone", async () => {
   const tab = await drawChangesTab();
   // The tree, where it is drawn at all.
   const treeDrawn = () => {
@@ -148,11 +148,8 @@ test("a Changes tab draws no tree beside the diff, its count under the diff, unt
     return tree !== null && drawn(tree);
   };
   const toggles = () => drawnToggles(tab);
-  const count = () =>
-    [...tab.querySelectorAll(".file-tree-foot")].filter(drawn).map((foot) => foot.textContent);
 
   assert.ok(!treeDrawn(), "the tree the panel holds open stands nowhere");
-  assert.deepEqual(count(), ["1 file changed +2 −1"]);
   assert.deepEqual(
     toggles().map((button) => [
       button.getAttribute("aria-label"),
@@ -244,6 +241,19 @@ test("the pointer resting on the tree's toggle floats the tree over the diff, an
   assert.ok(treeDrawn(), "the way down into the tree keeps it");
   pointerCross(tree() ?? assert.fail("the tree is drawn"), diff);
   assert.ok(!treeDrawn(), "leaving the tree takes it down");
+});
+
+test("a finger's arrival on the tree's toggle floats nothing, so iOS spends no tap on it, and its tap opens the tree", async () => {
+  const { toggle, diff, treeDrawn } = changesParts(await drawChangesTab());
+  act(() => {
+    const touch = { bubbles: true, pointerType: "touch" };
+    diff.dispatchEvent(new PointerEvent("pointerout", { ...touch, relatedTarget: toggle }));
+    toggle.dispatchEvent(new PointerEvent("pointerover", { ...touch, relatedTarget: diff }));
+  });
+  assert.ok(!treeDrawn(), "the arrival floats nothing");
+
+  await act(async () => toggle.click());
+  assert.ok(treeDrawn(), "the tap opens the tree");
 });
 
 test("the pointer at the tab's right edge floats the tree, though not with a button held, as a drag on the scrollbar there holds one", async () => {

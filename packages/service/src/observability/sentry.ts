@@ -26,10 +26,14 @@
  * nothing.
  */
 
+import {
+  scrubbedAttributes,
+  scrubbedQueryParams,
+  scrubbedUrl,
+} from "@luke/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
 import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/server";
-import { Effect, ErrorReporter, Exit, Layer, type Logger, Predicate, Tracer } from "effect";
-import { redactCredentials } from "./credentials.js";
+import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
   /** The `luke-web` project's DSN; absent means nothing is sent. */
@@ -96,15 +100,6 @@ function isAnsweredToolError(event: ErrorEvent): boolean {
 /** How deep a refusal's causes are read; a deeper chain, or one that loops, is reported rather than taken for a refusal. */
 const REFUSAL_CAUSE_DEPTH = 5;
 
-/** What a redacted value, segment, or fragment reads as. */
-const REDACTED = "[redacted]";
-
-/** A UUID path segment, which names a row rather than proving who asks, so it is kept. */
-const UUID_SEGMENT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** An address's scheme and authority, user info included, ahead of its path. */
-const URL_AUTHORITY_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i;
-
 /**
  * Whether a failure is a refusal: a bare `Error`, carrying nothing but its
  * words and, where it explains another, a cause that is a refusal too. That is
@@ -156,82 +151,6 @@ function dropAnsweredToolRefusals(event: ErrorEvent, hint: EventHint): ErrorEven
     },
   });
   return null;
-}
-
-/** A path segment, kept unless it is shaped like a credential, which is replaced whole. */
-function scrubbedSegment(segment: string): string {
-  if (UUID_SEGMENT_PATTERN.test(segment)) return segment;
-  return redactCredentials(segment) === segment ? segment : REDACTED;
-}
-
-/** A query string with every value redacted and its names kept, but for one shaped like a credential, so the shape of a request still reads. */
-function scrubbedQuery(query: string): string {
-  return query
-    .split("&")
-    .map((pair) => {
-      const equals = pair.indexOf("=");
-      const name = scrubbedSegment(equals === -1 ? pair : pair.slice(0, equals));
-      return equals === -1 ? name : `${name}=${REDACTED}`;
-    })
-    .join("&");
-}
-
-/**
- * An address, whole or a path alone: its user info, its query's values, its
- * fragment, and every credential-shaped path segment redacted; its scheme,
- * host, and the rest of its path kept as written.
- */
-function scrubbedUrl(address: string): string {
-  const fragmentAt = address.indexOf("#");
-  const beforeFragment = fragmentAt === -1 ? address : address.slice(0, fragmentAt);
-  const queryAt = beforeFragment.indexOf("?");
-  const beforeQuery = queryAt === -1 ? beforeFragment : beforeFragment.slice(0, queryAt);
-  const authority = URL_AUTHORITY_PATTERN.exec(beforeQuery)?.[0] ?? "";
-  const userAt = authority.lastIndexOf("@");
-  const host =
-    userAt === -1
-      ? authority
-      : `${authority.slice(0, authority.indexOf("//") + 2)}${REDACTED}${authority.slice(userAt)}`;
-  const path = beforeQuery.slice(authority.length).split("/").map(scrubbedSegment).join("/");
-  const query = queryAt === -1 ? "" : `?${scrubbedQuery(beforeFragment.slice(queryAt + 1))}`;
-  const fragment = fragmentAt === -1 ? "" : `#${REDACTED}`;
-  return `${host}${path}${query}${fragment}`;
-}
-
-/**
- * The attributes that carry an address, a path, or a query, by the names
- * Effect's HTTP spans (`url.*`), Sentry's HTTP integrations (`http.*`), and a
- * breadcrumb (`url`) give them, each with how it is scrubbed.
- */
-const URL_ATTRIBUTES: ReadonlyMap<string, (value: string) => string> = new Map([
-  ["url.full", scrubbedUrl],
-  ["url.path", scrubbedUrl],
-  ["url.query", scrubbedQuery],
-  ["url.fragment", () => REDACTED],
-  ["http.url", scrubbedUrl],
-  ["http.target", scrubbedUrl],
-  ["http.query", scrubbedQuery],
-  ["http.fragment", () => REDACTED],
-  ["url", scrubbedUrl],
-]);
-
-/** Attributes with every address among them scrubbed and the rest as they were. */
-function scrubbedAttributes<Attributes extends object>(attributes: Attributes): Attributes {
-  const entries = Object.entries(attributes).map(([name, value]: [string, unknown]) => {
-    const scrub = URL_ATTRIBUTES.get(name);
-    return [name, scrub && Predicate.isString(value) ? scrub(value) : value];
-  });
-  // SAFETY: each entry keeps its name, and a string value is replaced only by a string.
-  return Object.fromEntries(entries) as Attributes;
-}
-
-type QueryParams = NonNullable<NonNullable<Sentry.ErrorEvent["request"]>["query_string"]>;
-
-/** A request's query as an event carries it, a string or its pairs, with every value redacted. */
-function scrubbedQueryParams(query: QueryParams): QueryParams {
-  if (Predicate.isString(query)) return scrubbedQuery(query);
-  if (Array.isArray(query)) return query.map(([name]) => [scrubbedSegment(name), REDACTED]);
-  return Object.fromEntries(Object.keys(query).map((name) => [scrubbedSegment(name), REDACTED]));
 }
 
 /** An event with the addresses its request, its trace, and its breadcrumbs carry scrubbed. */

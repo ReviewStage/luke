@@ -11,9 +11,8 @@ import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import type { Router } from "@orpc/server";
 import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { ACT_ERROR, type ActPortClient, type PortActKind } from "../contract/index.js";
-import type { ActPortContext } from "./base.js";
+import type { ActPortContext, ActSender } from "./base.js";
 import { actPortHandlerOf, type PlatformActProcedures } from "./index.js";
 
 /** What a call on the port came to: its answer, or the sentence it was refused with. */
@@ -47,7 +46,7 @@ export interface TestActPort<Sender> {
 /**
  * The act port's handler serving `procedures`, the ones a test calls, as
  * `createActPortHandler` serves them: a platform's own, or one host domain's
- * (`issueProcedures(dependencies)`), so a domain's test builds only its own
+ * (`factoryProcedures(dependencies)`), so a domain's test builds only its own
  * procedures over only its own dependencies.
  */
 export function testActPort<Sender>(

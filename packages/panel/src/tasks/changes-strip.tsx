@@ -6,7 +6,7 @@ import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
  * As stage-cli's collapsed picker does, the strip keeps the shape of the
  * change set in sight: each file's mark is coloured by what became of it,
  * as its letter is in the tree, dimmed once the member marked it viewed,
- * and the file the bar names stands out. The marks share the strip's
+ * and the file stood on, or at the top of the list, stands out. The marks share the strip's
  * height, each no taller than a line's mark, so a large pull request draws
  * them thinner rather than out of sight. The pointer resting on the strip
  * peeks the tree over the list's right edge, as the right edge itself does
@@ -19,7 +19,7 @@ import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 
 /** What the strip wears, from its view's room: the pointer resting on it peeks the tree. */
 export interface StripPeek {
-  readonly onPointerEnter: () => void;
+  readonly onPointerEnter: (event: React.PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
 }
 
@@ -31,7 +31,7 @@ export function ChangesStrip({
 }: {
   /** The changed files, in the tree's order. */
   files: readonly CodingAgentChangedFile[];
-  /** The file the bar names, which stands out. */
+  /** The file stood on, else the one at the top of the list, which stands out. */
   current: string | undefined;
   /** Whether a file is marked viewed; none while the marks are not read. */
   viewed: ((path: string) => boolean) | undefined;

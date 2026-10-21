@@ -1,11 +1,11 @@
-import { EmptyState, SearchIcon, UserIcon } from "@luke/ui";
+import { EMPTY_STATE_ACTION_LOOK, EmptyState, SearchIcon, UserIcon } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * empty-states.tsx -- an empty place with a heading and its way on, one
- * with its line alone, and long words in a pane narrower than the state's
- * measure, each in a room it fills.
+ * whose way on is the primary press, one with its line alone, and long
+ * words in a pane narrower than the state's measure, each in a room it fills.
  */
 
 /** A press the catalog has nowhere to take. */
@@ -22,6 +22,16 @@ function EmptyStates(): React.JSX.Element {
             action={{ label: "Back to Inbox", onClick: stay }}
           >
             This Inbox item doesn't exist, or you don't have access to it.
+          </EmptyState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="empty-state-primary" title="A primary way on">
+        <div className="catalog-frame catalog-empty-room">
+          <EmptyState
+            icon={<SearchIcon />}
+            action={{ label: "Generate", look: EMPTY_STATE_ACTION_LOOK.PRIMARY, onClick: stay }}
+          >
+            Nothing stands here until it is generated.
           </EmptyState>
         </div>
       </CatalogSection>

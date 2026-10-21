@@ -5,6 +5,12 @@
  * registered as one node on the host's registry. The runtime itself stands
  * behind the host; nothing here composes a store or a brain.
  */
+
+import {
+  type MacBrowserParams,
+  type MacCommandResult,
+  macBrowserParamsSchema,
+} from "@luke/features/mac-command-wire";
 import {
   type GatewayHost,
   NODE_CAPABILITY_STATUS,
@@ -13,7 +19,7 @@ import {
   type RemoteNodeInvoker,
 } from "@luke/gateway";
 import { isWireString } from "@luke/wire";
-import { Effect, type Scope } from "effect";
+import { Data, Effect, Result, Schema, type Scope } from "effect";
 import { createHostOperator, type HostOperator } from "../host-operator.js";
 import {
   HOST_NATIVE_NODE_ID,
@@ -32,8 +38,12 @@ export interface GatewayWiringDependencies {
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
     openExternal: (url: string) => Promise<void>;
+    /** Runs an agent's browser actions on this Mac's Browser tabs; none where this client holds no Browser tabs, as a browser tab's does not. */
+    browserAct?: ((params: MacBrowserParams) => Effect.Effect<MacCommandResult>) | undefined;
   };
 }
+
+const decodeBrowserParams = Schema.decodeUnknownResult(macBrowserParamsSchema);
 
 export interface GatewayWiring {
   readonly host: HostOperator;
@@ -58,7 +68,8 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("client/wireGateway")(funct
 
   /**
    * The capabilities this process performs at the host's ask. Each is
-   * validated here before anything native runs — the address a string — and
+   * validated here before anything native runs — the address a string, a
+   * browser act's task and actions read whole — and
    * each answers the host's own result vocabulary, so a refusal is typed and
    * never a throw.
    */
@@ -66,24 +77,41 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("client/wireGateway")(funct
     Effect.suspend(() => {
       const failed = (reason: string): Effect.Effect<NodeCapabilityResult> =>
         Effect.succeed({ status: NODE_CAPABILITY_STATUS.FAILED, capability, reason });
+      const unavailable = Effect.succeed<NodeCapabilityResult>({
+        status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+        capability,
+        reason: "this node offers no such capability",
+      });
       switch (capability) {
         case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
           const { url } = params;
           if (!isWireString(url)) return failed("open needs a url");
-          return Effect.as(
-            Effect.promise(() => dependencies.node.openExternal(url)),
-            {
+          return Effect.tryPromise({
+            try: () => dependencies.node.openExternal(url),
+            catch: (cause) => new OpenExternalFailed({ cause }),
+          }).pipe(
+            Effect.as<NodeCapabilityResult>({
               status: NODE_CAPABILITY_STATUS.OK,
               value: undefined,
-            },
+            }),
+            Effect.catch((error) => failed(error.message)),
+          );
+        }
+        case HOST_NODE_CAPABILITY.BROWSER_ACT: {
+          const act = dependencies.node.browserAct;
+          if (act === undefined) return unavailable;
+          const read = decodeBrowserParams(params);
+          if (Result.isFailure(read)) return failed("browser actions need a task and its actions");
+          return Effect.map(
+            act(read.success),
+            (result): NodeCapabilityResult => ({
+              status: NODE_CAPABILITY_STATUS.OK,
+              value: result,
+            }),
           );
         }
         default:
-          return Effect.succeed({
-            status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
-            capability,
-            reason: "this node offers no such capability",
-          });
+          return unavailable;
       }
     });
 
@@ -112,3 +140,13 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("client/wireGateway")(funct
 
   return { host };
 });
+
+/** The client's node could not open an address the host asked it to. */
+class OpenExternalFailed extends Data.TaggedError("OpenExternalFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    const { cause } = this;
+    return cause instanceof Error ? cause.message : String(cause);
+  }
+}

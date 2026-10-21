@@ -1,6 +1,7 @@
 // Better Auth owns its generated schema; Luke-owned tables can join this
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./account-provider-key.js";
+export * from "./agent-browser-tab.js";
 export * from "./agent-pin.js";
 export * from "./attachment.js";
 export * from "./auth.js";
@@ -12,6 +13,7 @@ export * from "./github-connect-intent.js";
 export * from "./github-install-intent.js";
 export * from "./github-installation.js";
 export * from "./github-personal-token.js";
+export * from "./github-repository-read.js";
 export * from "./inbox.js";
 export * from "./inbox-item-read.js";
 export * from "./inbox-message.js";
@@ -34,6 +36,8 @@ export * from "./task.js";
 export * from "./task-issue.js";
 export * from "./task-pin.js";
 export * from "./task-section.js";
+export * from "./token-pull-request-poll.js";
 export * from "./usage.js";
 export * from "./voice.js";
 export * from "./workspace-integration.js";
+export * from "./workspace-token-repository.js";

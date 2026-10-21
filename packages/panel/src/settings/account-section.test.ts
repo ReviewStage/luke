@@ -4,9 +4,10 @@ import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { test } from "vitest";
+import { afterEach, test } from "vitest";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { AccountSection } from "./account-section.js";
 
@@ -68,4 +69,33 @@ test("an account with a picture draws it on the same face", () => {
     "https://lh3.googleusercontent.com/a/photo-9",
   );
   assert.equal(face?.outerHTML, sharedFace(pictured)?.outerHTML);
+});
+
+afterEach(() => {
+  document.body.innerHTML = "";
+});
+
+test("a Sign out the host refused keeps its dialog up saying so", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(AccountSection, {
+        account: ADA,
+        onSignOut: () => Promise.reject(new Error("refused")),
+        onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      }),
+    ),
+  );
+  const button = (within: ParentNode, label: string) =>
+    [...within.querySelectorAll("button")].find((candidate) => candidate.textContent === label) ??
+    assert.fail(`a ${label} button stands`);
+
+  act(() => button(container, "Sign out").click());
+  const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+  await act(async () => button(dialog() ?? assert.fail("Sign out asks first"), "Sign out").click());
+
+  assert.match(dialog()?.querySelector('[role="alert"]')?.textContent ?? "", /could not sign out/u);
+  act(() => root.unmount());
 });

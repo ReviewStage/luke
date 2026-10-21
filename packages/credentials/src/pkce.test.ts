@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
+import { describe, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { afterEach, vi } from "vitest";
 import { codeChallenge, createCodeVerifier } from "./pkce.js";
 
 it.effect("S256 matches RFC 7636's published verifier and challenge", () =>
@@ -14,4 +15,24 @@ it.effect("S256 matches RFC 7636's published verifier and challenge", () =>
 
 it("a verifier is 43 unpadded URL-safe characters, RFC 7636's minimum length", () => {
   assert.match(createCodeVerifier(), /^[A-Za-z0-9_-]{43}$/);
+});
+
+describe("a digest Web Crypto refuses", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.effect("is a typed failure, never a defect", () =>
+    Effect.gen(function* () {
+      vi.spyOn(crypto.subtle, "digest").mockRejectedValue(
+        new DOMException("The operation is insecure.", "SecurityError"),
+      );
+
+      const failed = yield* Effect.flip(
+        codeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+      );
+
+      assert.equal(failed._tag, "CodeChallengeFailed");
+    }),
+  );
 });

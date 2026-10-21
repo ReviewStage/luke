@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACT_KIND, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message.js";
 import {
+  type AnyAct,
   fakeActPort,
   fakeAppBridge,
   type OpenedLink,
@@ -21,7 +22,7 @@ import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { notesBefore } from "./file-note.js";
+import { FileNoteAnnotation } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -88,7 +89,7 @@ const SECTION_LINKS = {
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
-let sent: (Act | OpenedLink)[] = [];
+let sent: (AnyAct | OpenedLink)[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -145,13 +146,12 @@ function Version(): ReactNode {
 
 /** Luke's note on a File tab's lines. */
 function Note(): ReactNode {
-  const notes = notesBefore({
-    notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS }],
-    folded: [],
-    onFold: () => undefined,
-    onShow: () => undefined,
+  const note = { callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS };
+  return createElement(FileNoteAnnotation, {
+    note,
+    notes: { notes: [note], folded: [], onFold: () => undefined, taskId: undefined },
+    minimized: undefined,
   });
-  return notes(3);
 }
 
 test("a transcript, the plan, a version, and a note draw a link they have no chip for as one plain link, a bare address cut short", () => {

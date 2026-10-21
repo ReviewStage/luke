@@ -12,11 +12,13 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
   PLACEMENT_END,
+  type PlacedWords,
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { PlanBody } from "./plan-body.js";
@@ -40,6 +42,12 @@ const mounted: {
   placed: PlanEditorPlacement[];
 }[] = [];
 
+/** Where the line of the words the stand-in opened on stands in the window, as a laid-out editor answers; none, as when the words were not found, unless a test lays it out. */
+let wordsLine: (() => number) | undefined;
+
+/** The words the stand-in's caret stands in as it closes, as a laid-out editor answers; none unless a test lays them out. */
+let caretOn: PlacedWords | undefined;
+
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: PlanEditorModule = {
   mount: (_host, props) => {
@@ -57,6 +65,8 @@ const STAND_IN: PlanEditorModule = {
       focusAt: (placement) => {
         placed.push(placement);
       },
+      wordsTop: () => wordsLine?.(),
+      caretWords: () => caretOn,
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -103,6 +113,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  wordsLine = undefined;
+  caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -313,6 +325,25 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
+test("a press on the label around a task's checkbox, which takes a finger's press beside the box, ticks it once and opens no editor", async () => {
+  const body = ["## Steps", "- [ ] Send the invite", ""].join("\n");
+  const { container, sent, render } = mount([{ saved: true }]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const label = block(container, "Steps").querySelector<HTMLLabelElement>(".task-list-box");
+  assert.ok(label, "the box stands in its label");
+
+  act(() => label.click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [{ base: body, value: body.replace("- [ ] Send", "- [x] Send") }],
+  );
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
 test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
   const first = Promise.withResolvers<TasksEditAnswer>();
@@ -505,4 +536,193 @@ test("words typed in one plan are saved to that plan when another opens", async 
 
   assert.deepEqual(doors, [DOCUMENT_TASK.id]);
   assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+/** A browser's answer to where a point stands in the page's words: `offset` into `words`, its line `top` down the window. */
+function pointLandsOn(words: Text, offset: number, top: number): void {
+  const range = document.createRange();
+  range.setStart(words, offset);
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [DOMRect.fromRect({ x: 0, y: top, width: 0, height: 20 })],
+  });
+  Object.defineProperty(document, "caretRangeFromPoint", {
+    configurable: true,
+    value: () => range,
+  });
+}
+
+/** The text node of `words` drawn in `within`, the `nth` (from 0) where several are. */
+function wordsNode(within: HTMLElement, words: string, nth = 0): Text {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (at instanceof Text && at.data === words) found.push(at);
+  }
+  return found[nth] ?? assert.fail(`the words ${words}`);
+}
+
+test("a click hands the editor the words it landed on, so the caret finds them however the editor draws what stands above", () => {
+  const body = "## Goal\n\nShip it.\n\nShip it.\n";
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  const goal = block(container, "Goal");
+  pointLandsOn(wordsNode(goal, "Ship it.", 1), 5, 300);
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+
+  assert.deepEqual(open().placement, {
+    x: 60,
+    y: 310,
+    words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 300 },
+  });
+});
+
+test("the words a click opened the editor on stay under the finger, as it opens and as what it draws later changes its height, until the developer scrolls", () => {
+  const { container } = mount();
+  const goal = block(container, "Goal");
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
+  // The words stand this far down the column in the editor: 59 lower than the text drew them, for a taller picture above.
+  let wordsDown = 859;
+  wordsLine = () => wordsDown - scroller.scrollTop;
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+  assert.equal(wordsLine(), 300, "the words stand where they were clicked as the editor opens");
+
+  // A diagram's preview above them lands later, 200 tall.
+  wordsDown += 200;
+  act(() => relayout());
+  assert.equal(wordsLine(), 300, "and again once the preview has drawn");
+
+  act(() => {
+    scroller.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+  });
+  wordsDown += 100;
+  act(() => relayout());
+  assert.equal(wordsLine(), 400, "a scroll of the developer's lets the words go");
+});
+
+test("a click whose words the editor did not find scrolls nothing", () => {
+  const { container } = mount();
+  const goal = block(container, "Goal");
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+
+  assert.ok(open().placement !== undefined, "the editor opened");
+  assert.equal(scroller.scrollTop, 500);
+});
+
+test("a press on the room after a click while the editor's bundle loads opens the editor where the room says, scrolling nothing for the click's words", async () => {
+  layTextOut();
+  const landed = bundles;
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  try {
+    const { container } = mount();
+    const scroller = scrollerOf(container);
+    scroller.scrollTop = 500;
+    pointLandsOn(wordsNode(block(container, "Goal"), "Invites land by email."), 3, 300);
+    try {
+      act(() => {
+        block(container, "Goal").dispatchEvent(
+          new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }),
+        );
+      });
+    } finally {
+      Reflect.deleteProperty(document, "caretRangeFromPoint");
+    }
+    pressAt(scroller, 300, 500);
+    wordsLine = () => 700;
+    await act(async () => {
+      gate.resolve(STAND_IN);
+      await gate.promise;
+    });
+    await settle();
+
+    assert.deepEqual(open().placement, PLACEMENT_END);
+    assert.equal(scroller.scrollTop, 500);
+  } finally {
+    bundles = landed;
+  }
+});
+
+test("the words the caret stood on stay where they stood as the editor closes, the column scrolled by as much as the drawn text moved them", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  // The caret's line stands 300 down the window in the editor; the drawn text, with a shorter diagram above, draws it 57 down.
+  caretOn = {
+    section: 1,
+    text: "Invites land by email.",
+    occurrence: 0,
+    offset: 3,
+    code: false,
+    top: 300,
+  };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
+  );
+
+  act(() => open().onFinish(1));
+  await settle();
+
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+  assert.equal(scroller.scrollTop, 500 + 57 - 300);
+});
+
+test("an editor closing with its caret on no words scrolls nothing", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+
+  act(() => open().onFinish(1));
+  await settle();
+
+  assert.equal(scroller.scrollTop, 500);
+});
+
+test("words left by an editor closed as another plan opens move nothing in it", async () => {
+  const { container, render } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  caretOn = {
+    section: 1,
+    text: "Invites land by email.",
+    occurrence: 0,
+    offset: 3,
+    code: false,
+    top: 300,
+  };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
+  );
+
+  // Another plan with the same words opens in its place.
+  render({ ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" });
+  await settle();
+
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+  assert.equal(scroller.scrollTop, 500);
 });

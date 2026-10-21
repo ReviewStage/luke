@@ -6,7 +6,7 @@
  * taking a kernel that holds all of them.
  */
 import type { OpenConsent } from "@luke/credentials";
-import type { OpenSocket } from "@luke/voice";
+import type { OpenSocket } from "@luke/voice/live-socket";
 import { type ConfigProvider, Context, Layer, Logger, type Stream } from "effect";
 import type { AccountSourceSeam } from "../account-source.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";

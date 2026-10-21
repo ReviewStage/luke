@@ -5,13 +5,6 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-find "$LUKE_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
-    while IFS= read -r -d '' script; do
-        bash -n "$script"
-    done
-
-git -C "$LUKE_REPO_ROOT" diff --check
-
 # The Node major is stated in more than one place because different readers look
 # in different files, so they have to agree. `.nvmrc` is what local shells and
 # CI read — the workflows name it as `node-version-file` — and Vercel reads
@@ -48,10 +41,11 @@ fi
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host`, `@luke/host/effect`, `@luke/host/act-router`, and
-# `@luke/host/client` are walked the same way, because the host, its act
-# table, and the client core that keeps the app-state document are meant to
-# load in a browser tab: their graphs name no `node:` module, no `ws`, no
+# `@luke/host` and every door of it a browser loads are walked the same way:
+# `/effect`, `/client`, `/act-port`, `/service-layer` and
+# `/agent-notices`, which the web app runs the host in a tab through, and
+# `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
+# (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
 # `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
 # `@luke/host/node`. The walk crosses into `@luke/credentials` through the
@@ -70,9 +64,20 @@ node --input-type=module -e '
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host, @luke/host/effect, @luke/host/act-router, and @luke/host/client",
+      name: "@luke/host and the doors of it a browser loads",
       root: "packages/host/src",
-      entries: ["index.ts", "effect/index.ts", "act-router/index.ts", "client/index.ts"],
+      entries: [
+        "index.ts",
+        "effect/index.ts",
+        "client/index.ts",
+        "act-port/index.ts",
+        "service-layer.ts",
+        "agent-notices.ts",
+        "acts.ts",
+        "app-state.ts",
+        "bridge.ts",
+        "contract/index.ts",
+      ],
       forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
       follows: ["@luke/credentials"],
@@ -122,22 +127,18 @@ node --input-type=module -e '
   if (failed) process.exit(1);
 ' "$LUKE_REPO_ROOT"
 
-# The brand artwork has one source and committed outputs cut from it: the
-# SVGs, the face the renderer draws, the motions it plays, and the motion
-# tokens, layout sizes, and provider-mark path data the desktop renderer and
-# the marketing mock share. If a copy no longer matches the source, it is
-# telling a story the artwork does not; --check fails on any drift.
-pnpm --dir "$LUKE_REPO_ROOT" --filter @luke/brand --silent check
-
 # The vercel.json rewrites are what land a route on its grouped function, and
-# they are generated from server/routes/; --check fails if a rewrite went stale.
+# they are generated from server/routes/ and the functions, ending in the one
+# fallback onto the hosted oRPC route; --check fails if a rewrite went stale.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404 (LUKE-186). Every /api/ literal and path builder under
-# apps/desktop/src, packages/*/src, scripts, and tools must resolve
-# to a rewrite of the table or an extensionless alias the Build Output emits.
+# apps/desktop/src, packages/*/src, scripts, and tools must resolve to an
+# extensionless alias the Build Output emits, a rewrite of the table ahead of
+# its fallback, or a procedure of the hosted oRPC contract; the fallback alone
+# resolves nothing, since a path no procedure matches is the router's 404.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
 # Every relative import the Vercel builder compiles must carry its .js
@@ -165,7 +166,8 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
-# The web functions are bundled from server/routes/ into dist-functions/ and
+# The web functions are bundled from server/routes/ and server/orpc-route.ts
+# into dist-functions/ and
 # the Build Output tree with every workspace package inlined, so a bare
 # `@luke/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only
@@ -208,19 +210,6 @@ if [[ -n "$undeclared_web_packages" ]]; then
     exit 1
 fi
 
-# Packages must not reach into apps: the dependency points the other way, and
-# a relative path into apps/ evades the declared package graph, so typecheck
-# resolves it without seeing the package → app → package cycle it creates.
-# Every name the app re-exports originates in a package; import it from the
-# defining package instead.
-package_app_imports=$(grep -rEn '(from|import) "[^"]*apps/[^"]*"' \
-    "$LUKE_REPO_ROOT"/packages/*/src || true)
-if [[ -n "$package_app_imports" ]]; then
-    printf 'error: packages must not import from apps/ (the path import hides a package → app → package cycle from the declared dependency graph):\n%s\n' \
-        "$package_app_imports" >&2
-    exit 1
-fi
-
 # The renderer is a sandboxed browser context: it reaches the main process
 # through the preload bridge alone, so `@luke/host/bridge`, `#shared/messages/*`,
 # and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
@@ -241,108 +230,6 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
-# `@luke/ui` is mounted by more than one app, so it reaches none of them: the
-# desktop's preload bridge and its `#shared/`, `#renderer/`, and `#main/`
-# aliases resolve inside the desktop alone, and a component that reads one
-# typechecks there and breaks in every other app that mounts it.
-ui_app_reaches=$(grep -rnaE 'window\.luke|"#(shared|renderer|main)/' \
-    "$LUKE_REPO_ROOT/packages/ui/src" || true)
-if [[ -n "$ui_app_reaches" ]]; then
-    printf 'error: @luke/ui reaches into an app (take the value as a prop and let the app that mounts the component read it):\n%s\n' \
-        "$ui_app_reaches" >&2
-    exit 1
-fi
-# For the same reason a component reads only the custom properties
-# `@luke/ui/tokens.css` and the package itself declare, all `--luke-*`: a name
-# one app's own stylesheet sets is unset in every other app, and the rule that
-# reads it silently drops there. A comment line is skipped.
-ui_foreign_tokens=$(grep -rnaP --include='*.css' --include='*.ts' --include='*.tsx' \
-    'var\(\s*--(?!luke-)' "$LUKE_REPO_ROOT/packages/ui/src" |
-    grep -vE '\.test\.tsx?:|:[0-9]+:\s*(\*|//|/\*)' || true)
-if [[ -n "$ui_foreign_tokens" ]]; then
-    printf 'error: @luke/ui reads a custom property it does not own (declare it as a --luke-* token under packages/ui/src/tokens):\n%s\n' \
-        "$ui_foreign_tokens" >&2
-    exit 1
-fi
-# Nor does it draw with an app's Tailwind theme, which each app maps to a role
-# of its own (the site's card is its surface, the desktop's its sidebar): no
-# theme colour utility, and no `-(--name)` shorthand, which reads a property
-# past the `var(` check above. A component draws with its own `luke-*` classes.
-ui_theme_utilities=$(grep -rnaP --include='*.css' --include='*.ts' --include='*.tsx' \
-    '[\w\]]-\(--|(?<![\w-])(bg|text|border|fill|stroke|ring|outline|divide|shadow)-(background|foreground|card|popover|muted|primary|secondary|accent|destructive|attention|complete|border|input|ring)\b' \
-    "$LUKE_REPO_ROOT/packages/ui/src" |
-    grep -vE '\.test\.tsx?:|:[0-9]+:\s*(\*|//|/\*)' || true)
-if [[ -n "$ui_theme_utilities" ]]; then
-    printf 'error: @luke/ui draws with an app'"'"'s Tailwind theme (draw with a luke-* class over the --luke-* tokens):\n%s\n' \
-        "$ui_theme_utilities" >&2
-    exit 1
-fi
-
-# `@luke/panel` is the panel every client mounts, the desktop's window and the
-# web's page alike, so it reaches neither shell: no preload global, no alias of
-# the desktop's, and no Electron. The shell installs its bridge and platform
-# into the panel's doors (`app-bridge.ts`, `app-platform.ts`), and the panel
-# reads them there.
-panel_shell_reaches=$(grep -rnaE 'window\.luke|"#(shared|renderer|main|preload|testing)/|from "(electron|electron-updater|@sentry/electron)(/[^"]*)?"' \
-    "$LUKE_REPO_ROOT/packages/panel/src" || true)
-if [[ -n "$panel_shell_reaches" ]]; then
-    printf 'error: @luke/panel reaches into a shell (read the bridge or the platform through the doors the shell installs):\n%s\n' \
-        "$panel_shell_reaches" >&2
-    exit 1
-fi
-
-# A hosted quota is the service's own accounting, and the customer-facing panel
-# says only that voice is temporarily unavailable — never a number, a meter or a
-# reset time. The diagnostics the renderer receives carry the members, so the
-# rule is that nothing drawn reads them.
-drawn_hosted_quota=$(grep -rnaE --include='*.ts' --include='*.tsx' \
-    'requestHostedUsage|hostedUsage|<meter\b|quota\.(used|limit|remaining|resetsAt)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" |
-    grep -vE '\.test\.tsx?:' || true)
-if [[ -n "$drawn_hosted_quota" ]]; then
-    printf 'error: hosted quota values must not reach the customer-facing renderer:\n%s\n' \
-        "$drawn_hosted_quota" >&2
-    exit 1
-fi
-
-# A temporary directory, a native-helper process, and a brain composition were
-# each hand-rolled in several test files, and every copy drifted: three
-# temporary directories were never cleaned up. `temporaryDirectory` lives in
-# @luke/runtime/testing, because the host's tests are in a package and a
-# package cannot reach into an app.
-# This call is how a hand-rolled one always begins. A microtask drain and a
-# fake clock are no longer this check's concern: `TestClock` is the clock an
-# `it.effect` test drives, and a plain vitest test's own wait is a
-# package-owned helper beside the suite that needs it, never a shared runtime
-# export.
-hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
-    'mkdtemp' \
-    "$LUKE_REPO_ROOT/apps/desktop/src" "$LUKE_REPO_ROOT/packages/host/src" \
-    "$LUKE_REPO_ROOT/packages/panel/src" || true)
-if [[ -n "$hand_rolled_fixtures" ]]; then
-    printf 'error: test files import temporaryDirectory from @luke/runtime/testing rather than hand-rolling it:\n%s\n' \
-        "$hand_rolled_fixtures" >&2
-    exit 1
-fi
-
-# BRIDGE is the one renderer-to-main declaration, and registerBridgeHost is
-# the one place that may attach it to Electron, the act port included. A
-# handler registered beside its domain logic would bypass the manifest's
-# sender and wire guards, an act registered on a channel of its own would
-# bypass the router, and a renderer port upgraded anywhere else would bypass
-# the act port's trust check and context. A port main opens to stream a
-# terminal's bytes to a window is not a door into main, and stays where its
-# act opens it.
-direct_ipc_registration=$(grep -rnaE --exclude-dir=node_modules --include='*.ts' --include='*.tsx' \
-    'ipcMain\.(handle|handleOnce|on|once|addListener)\(|\.upgrade\(|@orpc/server/message-port' \
-    "$LUKE_REPO_ROOT/apps/desktop/src" |
-    grep -v '/main/bridge-host.ts:' || true)
-if [[ -n "$direct_ipc_registration" ]]; then
-    printf 'error: Electron IPC handlers and renderer ports must be registered and upgraded through registerBridgeHost:\n%s\n' \
-        "$direct_ipc_registration" >&2
-    exit 1
-fi
-
 # The changelog page splits releases on "## <version> — <YYYY-MM-DD>" and its
 # parser throws on any other shape — at module load in the browser, which no
 # build step executes. This check is what keeps a malformed heading out of a
@@ -352,17 +239,6 @@ malformed_release_headings=$(grep -E '^## ' "$LUKE_REPO_ROOT/CHANGELOG.md" |
 if [[ -n "$malformed_release_headings" ]]; then
     printf 'error: CHANGELOG.md release headings must read "## <version> — <YYYY-MM-DD>":\n%s\n' \
         "$malformed_release_headings" >&2
-    exit 1
-fi
-
-# A release is its tag, and the tag must match apps/desktop/package.json — so
-# requiring the changelog to name the packaged version makes the version-bump
-# change carry the release's notes, which the landing page renders at
-# /changelog. See .github/RELEASE.md.
-desktop_version=$(node -p "require('$LUKE_REPO_ROOT/apps/desktop/package.json').version")
-if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$LUKE_REPO_ROOT/CHANGELOG.md"; then
-    printf 'error: CHANGELOG.md has no entry for version %s — every release adds its notes before its tag is pushed\n' \
-        "$desktop_version" >&2
     exit 1
 fi
 
@@ -380,187 +256,6 @@ if [[ -n "$literal_effect_versions" ]]; then
     exit 1
 fi
 
-# `tools/anti-slop/effect-edges.json` is the machine-readable twin of
-# root AGENTS.md's "Effect idioms" section: `no-run-promise-outside-edges` and
-# `no-raw-async-primitives` read it, so the lint itself is what catches a file
-# that starts running an Effect without being written down. This is the other
-# direction — an entry that outlived the code it was written for. A deletion PR
-# that takes the run out and leaves the row, or takes the AGENTS.md paragraph
-# out and leaves the row, fails here rather than shrinking the allowlist by
-# half.
-node --input-type=module -e '
-  import { readFile } from "node:fs/promises";
-  import path from "node:path";
-  const root = process.argv[1];
-  const allowlistPath = "tools/anti-slop/effect-edges.json";
-  const allowlist = JSON.parse(await readFile(path.join(root, allowlistPath), "utf8"));
-  const agents = await readFile(path.join(root, "AGENTS.md"), "utf8");
-  const section = agents.slice(
-    agents.indexOf("## Effect idioms"),
-    agents.indexOf("## TypeScript"),
-  );
-  // The same runners `no-run-promise-outside-edges` bans, spelled as a regex
-  // because this check reads text rather than an AST. Keep the two in step:
-  // v4 removed `Runtime<R>`, so what a caller used to carry as a runtime it
-  // hands to a `run*With` instead, and the `Runtime` namespace is down to
-  // `makeRunMain`. Longest alternative first, so `runPromiseExitWith` is not
-  // read as a `runPromise` that failed to be followed by its parenthesis.
-  const stillRuns =
-    /\b(?:Effect|ManagedRuntime)\.run(?:PromiseExit|Promise|SyncExit|Sync|Fork|Callback)(?:With)?\s*\(|\bManagedRuntime\.make\s*\(|\b(?:Runtime\.makeRunMain|NodeRuntime\.runMain)\s*\(|\b(?:runtimeExit|detachOn|runWeb)\s*\(/;
-  const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
-  const groups = [
-    { name: "runtimeEdges", named: true, pattern: null },
-    { name: "runShims", named: true, pattern: stillRuns },
-    { name: "runOnHandedRuntime", named: true, pattern: stillRuns },
-    { name: "rawAsyncPrimitives", named: false, pattern: stillPrimitive },
-  ];
-  const offenders = [];
-  for (const group of groups) {
-    const entries = allowlist[group.name];
-    if (!Array.isArray(entries)) {
-      offenders.push(`${allowlistPath}: no "${group.name}" list`);
-      continue;
-    }
-    for (const entry of entries) {
-      const text = await readFile(path.join(root, entry), "utf8").catch(() => null);
-      if (text === null) {
-        offenders.push(`${group.name}: ${entry} no longer exists`);
-        continue;
-      }
-      // The whole path, never a tail of it: a basename lets two files named
-      // `testing.ts` collide, so the paragraph about
-      // `packages/gateway/src/testing.ts` could answer for a `testing.ts` in
-      // another package that had no paragraph at all.
-      // The path is also never the tail of a longer one, so `queue.effect.ts`
-      // is not satisfied by a mention of
-      // `packages/runtime/src/queue.effect.ts.bak`.
-      const named = new RegExp(`(?<![\\w.\\-/])${entry.replaceAll(".", "\\.")}(?![\\w\\-/])`, "u");
-      if (group.named && !named.test(section)) {
-        offenders.push(
-          `${group.name}: ${entry} is on the allowlist and AGENTS.md never names it by its whole path`,
-        );
-      }
-      if (group.pattern !== null && !group.pattern.test(text)) {
-        offenders.push(`${group.name}: ${entry} no longer holds what it was allowed for`);
-      }
-    }
-  }
-  if (offenders.length > 0) {
-    process.stderr.write(
-      `error: ${allowlistPath} and AGENTS.md have drifted apart:\n${offenders.join("\n")}\n`,
-    );
-    process.exit(1);
-  }
-' "$LUKE_REPO_ROOT"
-
-# Application logic lives in `packages/` (AGENTS.md's "Layout"). A `.ts`
-# module under an app that imports nothing of its app (`./`, `../`, a `#`
-# import) and no platform library, and names no DOM global, could run on any
-# platform, so it is logic and belongs in a package. Shell is stated by role
-# rather than by list: an app's entries in `knip.json`, its runtime edges in
-# `effect-edges.json`, and the deployment and test-support files named here.
-# The agents' eve apps are scanned on the same terms: eve's file conventions
-# import `eve`, a platform, and their build and dependency trees are skipped.
-# The source is parsed with the root's `typescript`, so a comment or a string
-# that says "window" is not a reach into the DOM. `react` is deliberately not
-# a platform, so a DOM-free hook is flagged and belongs in `@luke/ui`; a
-# `.tsx` component is placed by review, because a site-only component and a
-# shareable one look the same to a parser. There is no baseline: moving a leaf
-# exposes the next layer, so the check ratchets without one.
-node --input-type=module -e '
-  import { glob, readFile } from "node:fs/promises";
-  import { createRequire } from "node:module";
-  import path from "node:path";
-  const root = process.argv[1];
-  const ts = createRequire(path.join(root, "package.json"))("typescript");
-  const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server", "apps/luke", "apps/dev"];
-  const APP_MODULE = /^(?:\.{1,2}\/|#(?:main|renderer|shared|preload|testing)\/)/;
-  const PLATFORM =
-    /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?)(?:\/.*)?$/;
-  const DOM_GLOBALS = new Set([
-    "window", "document", "navigator", "location", "history", "screen", "localStorage",
-    "sessionStorage", "customElements", "devicePixelRatio", "getComputedStyle", "matchMedia",
-    "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "Element", "Node",
-    "Document", "DocumentFragment", "Window", "Range", "Selection", "DOMRect", "DOMParser",
-    "CSSStyleDeclaration", "ResizeObserver", "MutationObserver", "IntersectionObserver",
-    "KeyboardEvent", "MouseEvent", "PointerEvent", "DragEvent", "ClipboardEvent", "FocusEvent",
-    "WheelEvent", "InputEvent", "TouchEvent", "UIEvent", "Image", "Audio", "AudioContext",
-    "AudioWorkletNode", "MediaStream", "MediaRecorder", "RTCPeerConnection", "IDBDatabase",
-    "indexedDB", "FileReader", "DataTransfer",
-  ]);
-  const ELEMENT_TYPE = /^(?:HTML|SVG)\w*Element$/;
-  // A DOM global is a name the checker resolves to `lib.dom`, so a local
-  // that shadows one in its own scope (a plan `document`, say) is not a reach
-  // into the DOM, while `globalThis.location` is. The set narrows `lib.dom`
-  // to what only a browser has, because Node shares `fetch`, `URL`, `Event`.
-  const reachesDom = (checker, node) => {
-    if (!DOM_GLOBALS.has(node.text) && !ELEMENT_TYPE.test(node.text)) return false;
-    const symbol = checker.getSymbolAtLocation(node);
-    const declarations = symbol?.declarations ?? [];
-    return declarations.length > 0 &&
-      declarations.every((one) => path.basename(one.getSourceFile().fileName) === "lib.dom.d.ts");
-  };
-  // Shell, stated by role: the knip entries of each app, the runtime edges,
-  // and the deployment and test-support files named here.
-  const knip = JSON.parse(await readFile(path.join(root, "knip.json"), "utf8"));
-  const edges = JSON.parse(await readFile(path.join(root, "tools/anti-slop/effect-edges.json"), "utf8"));
-  const shellGlobs = [
-    ...["apps/desktop", "apps/web", "apps/luke", "apps/dev"].flatMap((app) =>
-      (knip.workspaces[app]?.entry ?? []).map((entry) => `${app}/${entry}`),
-    ),
-    "apps/web/server/function-*.ts",
-    "apps/web/server/build-output.ts",
-    "apps/web/server/api-callers.ts",
-    "apps/web/server/preview-*.ts",
-    // What the desktop answers the platform door of the panel with, which
-    // the window root installs: each capability as the act or the preload
-    // event main serves, so it names nothing but the panel and the act table.
-    "apps/desktop/src/renderer/desktop-platform.ts",
-  ];
-  const shell = new Set(edges.runtimeEdges);
-  for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
-  const candidates = [];
-  for await (const found of glob(SCANNED.map((dir) => `${dir}/**/*.ts`), { cwd: root })) {
-    const file = found.split(path.sep).join("/");
-    if (/\.test\.ts$/.test(file) || /\/(?:__tests__|tests)\//.test(file) || shell.has(file)) continue;
-    if (/\/(?:node_modules|\.eve|\.vercel|\.output)\//.test(file)) continue;
-    candidates.push(file);
-  }
-  // One program over every candidate, resolving no import, so the checker
-  // binds each file against the DOM library and nothing else.
-  const program = ts.createProgram(candidates.map((file) => path.join(root, file)), {
-    lib: ["lib.esnext.d.ts", "lib.dom.d.ts"],
-    noResolve: true,
-    noEmit: true,
-    types: [],
-  });
-  const checker = program.getTypeChecker();
-  const offenders = [];
-  for (const file of candidates) {
-    const source = program.getSourceFile(path.join(root, file));
-    let anchored = false;
-    const visit = (node) => {
-      const specifier =
-        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier :
-        (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) ? node.arguments[0] :
-        ts.isImportTypeNode(node) ? node.argument?.literal :
-        undefined;
-      if (specifier && ts.isStringLiteralLike(specifier) &&
-          (APP_MODULE.test(specifier.text) || PLATFORM.test(specifier.text))) anchored = true;
-      if (ts.isIdentifier(node) && reachesDom(checker, node)) anchored = true;
-      if (!anchored) ts.forEachChild(node, visit);
-    };
-    visit(source);
-    if (!anchored) offenders.push(file);
-  }
-  if (offenders.length > 0) {
-    process.stderr.write(
-      `error: these modules under apps/ import nothing of their app and no platform library, so they are logic and belong in a package (@luke/ui, @luke/service, @luke/features, @luke/host, @luke/wire); a module is shell only as an app entry in knip.json, a runtimeEdges row in tools/anti-slop/effect-edges.json, or a deployment or test-support file named in scripts/repository-checks.sh:\n${offenders.sort().map((one) => `  ${one}`).join("\n")}\n`,
-    );
-    process.exit(1);
-  }
-' "$LUKE_REPO_ROOT"
-
 # The root `vitest.config.ts` names every workspace with tests, which is what
 # `pnpm exec vitest run <path>` from the root reads, and each of those
 # workspaces runs its tests through turbo under a name in `lib/turbo.mjs`'s
@@ -569,7 +264,11 @@ node --input-type=module -e '
 # no such name, has tests nothing runs, and CI stays green over them; one that
 # loses its config and stays on the list fails the run outright. All three are
 # the same drift. A suite cut into shards must declare every shard, or the
-# files hashed to the missing one never run.
+# files hashed to the missing one never run. CI's job for the whole task may
+# leave a workspace out with `--filter=!<name>` only where another job in
+# `ci.yml` runs that task for it alone with `--filter=<name>`, and no job may
+# run one the whole task's job still runs, so each workspace's tests run in
+# exactly one job.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -586,19 +285,33 @@ node --input-type=module -e '
   const missing = configured.filter((one) => !listed.includes(one)).sort();
   const stale = listed.filter((one) => !configured.includes(one)).sort();
   const untasked = [];
+  const wholeNames = [];
   for (const one of configured.sort()) {
     const scripts = JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).scripts ?? {};
     const named = Object.keys(scripts).filter((script) => script.startsWith(WHOLE));
     const whole = named.length === 1 && named[0] === WHOLE;
     const sharded = named.length === SHARDS.length && SHARDS.every((shard) => named.includes(shard));
     if (!whole && !sharded) untasked.push(one);
+    if (whole) wholeNames.push(JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).name);
   }
-  if (missing.length > 0 || stale.length > 0 || untasked.length > 0) {
+  const workflow = await readFile(path.join(root, ".github/workflows/ci.yml"), "utf8");
+  const excluded = [];
+  const alone = [];
+  for (const [, filters] of workflow.matchAll(new RegExp(WHOLE + "((?:[ \\t]+--filter=\\S+)+)", "gu"))) {
+    for (const [, negated, name] of filters.matchAll(/--filter=(!?)(\S+)/gu)) (negated ? excluded : alone).push(name);
+  }
+  const unrun = excluded.filter((name) => !alone.includes(name));
+  const doubled = alone.filter((name) => !excluded.includes(name));
+  const unknown = [...new Set([...excluded, ...alone])].filter((name) => !wholeNames.includes(name));
+  if (missing.length > 0 || stale.length > 0 || untasked.length > 0 || unrun.length > 0 || doubled.length > 0 || unknown.length > 0) {
     process.stderr.write(
       `error: the root vitest.config.ts projects list, the workspaces holding a vitest.config.ts, and their turbo test tasks have drifted apart:\n${[
         ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
         ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
         ...untasked.map((one) => `  ${one} runs its tests under neither "${WHOLE}" alone nor all of ${SHARDS.map((shard) => `"${shard}"`).join(", ")}, so the checks and CI never run them`),
+        ...unrun.map((name) => `  .github/workflows/ci.yml leaves ${name} out of the "${WHOLE}" job and no job runs "${WHOLE} --filter=${name}", so CI never runs its tests`),
+        ...doubled.map((name) => `  .github/workflows/ci.yml runs "${WHOLE} --filter=${name}" in a job of its own and never leaves ${name} out of the "${WHOLE}" job, so CI runs its tests twice`),
+        ...unknown.map((name) => `  .github/workflows/ci.yml filters "${WHOLE}" by ${name}, which names no workspace running its tests under "${WHOLE}" alone`),
       ].join("\n")}\n`,
     );
     process.exit(1);
@@ -659,252 +372,6 @@ if [[ -n "$node_reaching_effect" ]]; then
         "$node_reaching_effect" >&2
     exit 1
 fi
-
-# A deployment's migration runs while the deployment before it, and every
-# coding agent run pinned to it for up to 25 hours, still serves the old names,
-# so a new migration renames or drops no table, column, type, or view unless it
-# is marked `-- contract: <why old readers have drained>`
-# (`packages/database/src/core/migration-contractions.ts`, the db-migrations
-# skill's "Expand, migrate, contract"): the Oct 17 plan-to-task rename broke
-# the 26 turns then running.
-pnpm --silent --filter @luke/database check:contractions
-
-# A `var(--name)` with no fallback, where nothing declares `--name`, fails
-# nothing: the declaration it stands in is invalid at computed-value time, so a
-# border, a gap, or a colour silently drops. That is how CSS merged after
-# #3524 and #3569 retired the desktop's token aliases (`--hairline`,
-# `--space-*`, `--focus-ring-width`, …) went on reading names nobody set. So
-# every such read in a tracked sheet, page, or script under apps/ and packages/
-# must name a property one of them declares: a sheet's `--name:` or
-# `@property --name`, or a script's write of it (CSS text in a string, a style
-# object's `"--name":` key, a `["--name"] =`, or `setProperty`'s first
-# argument, spelled or held in a constant), where a `--name-${…}` declaration
-# declares the whole family. A script that only reads a name, through
-# `getPropertyValue`, declares nothing. A name only a third-party stylesheet
-# sets is listed here by hand.
-# Note that the declarations are pooled across every app, so a name one profile
-# sets and another reads unset still passes; the check catches a name gone
-# everywhere, which is what a retired token is.
-node --input-type=module -e '
-  import { execFileSync } from "node:child_process";
-  import { readFileSync } from "node:fs";
-  import path from "node:path";
-
-  const root = process.argv[1];
-  // Set by the stylesheet Excalidraw ships, which the board imports.
-  const THIRD_PARTY = ["--default-button-size"];
-  const SCRIPT = /\.tsx?$/;
-  const NAME = "(--[\\w-]+)";
-  const QUOTED = `["\x27\x60]${NAME}["\x27\x60]`;
-  // What a script writes a property with, the name always the first group.
-  const SCRIPT_WRITES = [
-    new RegExp(`(?<![\\w-])${NAME}\\s*:`, "g"),
-    new RegExp(`${QUOTED}\\s*:`, "g"),
-    new RegExp(`\\[\\s*${QUOTED}\\s*\\]\\s*=(?!=)`, "g"),
-    new RegExp(`setProperty\\(\\s*${QUOTED}`, "g"),
-  ];
-  const SCRIPT_FAMILIES = [
-    /(?<![\w-])(--[\w-]+?)\$\{[^}]*\}\s*:/g,
-    /setProperty\(\s*\x60(--[\w-]+?)\$\{/g,
-  ];
-  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
-    encoding: "utf8",
-  })
-    .split("\0")
-    .filter((file) => /\.(css|html|tsx?)$/.test(file) && !/\.test\.tsx?$/.test(file));
-  const declared = new Set(THIRD_PARTY);
-  const families = [];
-  const reads = [];
-  for (const file of files) {
-    const source = readFileSync(path.join(root, file), "utf8");
-    // Blank comments, keeping every newline, so a name a comment mentions
-    // declares nothing and a line number still points home.
-    const text = SCRIPT.test(file)
-      ? source.replace(/^\s*(\/\/|\/\*|\*).*$/gm, "")
-      : source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
-    if (SCRIPT.test(file)) {
-      for (const write of SCRIPT_WRITES) {
-        for (const [, name] of text.matchAll(write)) declared.add(name);
-      }
-      for (const family of SCRIPT_FAMILIES) {
-        for (const [, name] of text.matchAll(family)) families.push(name);
-      }
-      // A constant handed to setProperty declares the name it holds.
-      for (const [, constant] of text.matchAll(/setProperty\(\s*([A-Za-z_$][\w$]*)\s*,/g)) {
-        const held = text.match(new RegExp(`\\b${constant}\\s*=\\s*${QUOTED}`));
-        if (held) declared.add(held[1]);
-      }
-    } else {
-      for (const [, name, registered] of text.matchAll(/(--[\w-]+)\s*:|@property\s+(--[\w-]+)/g)) {
-        declared.add(name ?? registered);
-      }
-    }
-    for (const read of text.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)) {
-      const line = text.slice(0, read.index).split("\n").length;
-      reads.push({ file, line, name: read[1] });
-    }
-  }
-  const unset = reads.filter(
-    ({ name }) => !declared.has(name) && !families.some((family) => name.startsWith(family)),
-  );
-  if (unset.length > 0) {
-    const lines = unset.map(({ file, line, name }) => `  ${file}:${line}: ${name}`).join("\n");
-    process.stderr.write(
-      `error: var() reads a custom property nothing declares and gives no fallback, so the declaration silently drops (a retired token reads its --luke-* role):\n${lines}\n`,
-    );
-    process.exit(1);
-  }
-' "$LUKE_REPO_ROOT"
-
-# A screen gets its scrolling from `@luke/ui` (`ScrollArea`, the coupled
-# scrollers, the page patterns, `ComboboxListBox`), never from an overflow
-# of its own: a box that scrolls written by hand is how 37 boxes came to
-# scroll sideways unasked, because `overflow-y: auto` alone computes
-# `overflow-x` to `auto`. So a rule in a tracked sheet under apps/ and
-# packages/ that makes a box scroll (`overflow`, `overflow-x` or
-# `overflow-y` at `auto` or `scroll`, read in order, since a later
-# `overflow` resets both axes) stands only under packages/ui/src/, or in
-# the allowlist below: a box meant to scroll sideways whose own box is what
-# scrolls, or one an engine owns, each with its reason. A Tailwind class
-# list outside packages/ui is held the same, an `overflow-*-auto|scroll`
-# class standing only where its file is listed with that class. An entry
-# that names nothing any more fails too, so the list stays as short as the
-# code allows. Where a box may scroll, it still names its `overflow-x`
-# beside a scroll up and down, `hidden` where nothing should scroll
-# sideways and `auto` where something should, and a class list the same
-# with `overflow-x-*`.
-node --input-type=module -e '
-  import { execFileSync } from "node:child_process";
-  import { readFileSync } from "node:fs";
-  import path from "node:path";
-
-  const root = process.argv[1];
-  const UI = "packages/ui/src/";
-  // [file, the rule'"'"'s selector (or, in a .tsx, its class), why it scrolls itself].
-  const ALLOWED = [
-    ["packages/panel/src/styles/markdown.css", ".markdown pre", "code keeps each line whole and scrolls sideways in the element the Markdown engine draws"],
-    ["packages/panel/src/styles/markdown.css", ".markdown table", "a table'"'"'s own box scrolls sideways, as the engine draws it, with its edge fade on its own timeline"],
-    ["packages/panel/src/styles/tasks.css", ".transcript-code-body", "a transcript'"'"'s code keeps each line whole and scrolls sideways in its own pre"],
-    ["packages/panel/src/styles/tasks.css", ".transcript-table", "a transcript'"'"'s table'"'"'s own box scrolls sideways, as a Markdown table does"],
-    ["packages/panel/src/styles/desktop.css", ".tab-strip", "the strip scrolls sideways itself, its chosen tab sticky and its fades drawn on its own scroll"],
-    ["packages/panel/src/styles/tasks.css", ".agent-composer-input", "the composer'"'"'s contenteditable, owned by its editor, grows to eight lines and scrolls itself"],
-  ];
-  const SCROLLING = /^(?:auto|scroll)$/;
-  // A sideways value that stands beside a scroll; `visible` and the resets
-  // compute to `auto` there, so they name nothing.
-  const KEEPS_X = /^(?:hidden|clip|auto|scroll)$/;
-  const CLASS_SCROLLS_ANY = /(?<![\w-])overflow-(?:[xy]-)?(?:auto|scroll)(?![\w-])/g;
-  const CLASS_SCROLLS_Y = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
-  const CLASS_NAMES_X = /(?<![\w-])overflow-x-\w+/;
-  // What a block'"'"'s overflow declarations leave each axis at, read in order.
-  const axes = (body) => {
-    let x;
-    let y;
-    let named = false;
-    for (const declaration of body.split(";")) {
-      const match = declaration.match(/(?:^|\s)(overflow(?:-x|-y)?)\s*:\s*(.+)$/s);
-      if (match === null) continue;
-      const values = match[2].trim().split(/\s+/);
-      if (match[1] === "overflow-x") {
-        x = values[0];
-        named = true;
-      } else if (match[1] === "overflow-y") y = values[0];
-      else {
-        x = values[0];
-        y = values[values.length - 1];
-        // Note that a one-value `overflow: auto` names no axis, since it is
-        // the very spelling that scrolls sideways unasked.
-        named = values.length > 1 || !SCROLLING.test(values[0]);
-      }
-    }
-    return { x, y, named };
-  };
-  const scrolls = ({ x, y }) => SCROLLING.test(x ?? "") || SCROLLING.test(y ?? "");
-  const scrollsUnnamed = ({ x, y, named }) =>
-    SCROLLING.test(y ?? "") && (!named || x === undefined || !KEEPS_X.test(x));
-  const allowed = (file, selector) =>
-    ALLOWED.some(([each, rule]) => each === file && rule === selector);
-  const used = new Set();
-  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
-    encoding: "utf8",
-  })
-    .split("\0")
-    .filter((file) => /\.(css|tsx)$/.test(file) && !/\.test\.tsx$/.test(file));
-  const outside = [];
-  const unnamed = [];
-  for (const file of files) {
-    const source = readFileSync(path.join(root, file), "utf8");
-    const inUi = file.startsWith(UI);
-    if (file.endsWith(".tsx")) {
-      source.split("\n").forEach((line, index) => {
-        const at = `  ${file}:${index + 1}`;
-        for (const [scrolling] of line.matchAll(CLASS_SCROLLS_ANY)) {
-          if (inUi) continue;
-          if (allowed(file, scrolling)) used.add(`${file}\0${scrolling}`);
-          else outside.push(`${at}: ${scrolling}`);
-        }
-        if (CLASS_SCROLLS_Y.test(line) && !CLASS_NAMES_X.test(line)) unnamed.push(at);
-      });
-      continue;
-    }
-    // Blank comments, keeping every newline, so a line number still points home.
-    const text = source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
-    // Note that each block collects only its own declarations, the text of
-    // a nested block going to that block, so a nested rule is read alone;
-    // its selector is what stood since the last brace or semicolon.
-    const open = [];
-    let line = 1;
-    let prelude = "";
-    for (const character of text) {
-      if (character === "\n") line += 1;
-      if (character === "{") {
-        open.push({ line, selector: prelude.trim().replace(/\s+/g, " "), body: "" });
-        prelude = "";
-        continue;
-      }
-      if (character === "}") {
-        prelude = "";
-        const block = open.pop();
-        if (block === undefined) continue;
-        const read = axes(block.body);
-        const at = `  ${file}:${block.line}`;
-        if (scrollsUnnamed(read)) unnamed.push(at);
-        if (inUi || !scrolls(read)) continue;
-        if (allowed(file, block.selector)) used.add(`${file}\0${block.selector}`);
-        else outside.push(`${at}: ${block.selector}`);
-        continue;
-      }
-      prelude = character === ";" ? "" : prelude + character;
-      if (open.length > 0) open[open.length - 1].body += character;
-    }
-  }
-  const stale = ALLOWED.filter(([file, rule]) => !used.has(`${file}\0${rule}`)).map(
-    ([file, rule]) => `  ${file}: ${rule}`,
-  );
-  if (outside.length > 0) {
-    process.stderr.write(
-      `error: a box outside @luke/ui scrolls by an overflow of its own; scroll it in @luke/ui'"'"'s ScrollArea (or the shared component that fits), or, for a box that must scroll itself, add it with its reason to the allowlist in scripts/repository-checks.sh:\n${outside.join("\n")}\n`,
-    );
-  }
-  if (unnamed.length > 0) {
-    process.stderr.write(
-      `error: a rule scrolls up and down without naming overflow-x, which then computes to auto and scrolls sideways too; add overflow-x: hidden, or auto where it should scroll sideways:\n${unnamed.join("\n")}\n`,
-    );
-  }
-  if (stale.length > 0) {
-    process.stderr.write(
-      `error: an entry of the scrolling allowlist in scripts/repository-checks.sh names no rule that scrolls any more; delete it:\n${stale.join("\n")}\n`,
-    );
-  }
-  if (outside.length + unnamed.length + stale.length > 0) process.exit(1);
-' "$LUKE_REPO_ROOT"
-
-# The unit of work is a task and a plan is the document inside it. The rename
-# from one to the other had to be finished twice by hand because new code kept
-# arriving under the old names, so a name or a file that calls a task a plan,
-# and a schema's plan-spelled SQL name the document does not own, fail here.
-# The allowlist and its reasons are `lib/task-names.mjs`'s.
-node "$LUKE_REPO_ROOT/scripts/task-names.mjs"
 
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's

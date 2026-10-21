@@ -107,7 +107,11 @@ recordings"); those turns are never sent to Luke's voice window or his
 call window, which draw none of them. Your default model, effort, and
 context size for a coding agent are kept with your account preferences on our
 service, set in Settings › Coding agents or by the model you last started
-with.
+with. The Claude model your Generate chapters runs on is kept with them too,
+set in Settings › Coding agents. Where a Luke link you open in a browser goes, staying there or handed
+to Luke for Mac, is kept with them too, set in Settings › Account; Luke in a
+browser on a Mac reads it each time it loads a link that names something in
+Luke.
 
 A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
@@ -366,6 +370,50 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
+**Your ChatGPT plan.** Where Settings offers it, Continue with ChatGPT signs
+Luke in to your ChatGPT account through OpenAI's own page in your browser,
+which hands a one-time code back to Luke on your Mac over a connection that
+never leaves it (`127.0.0.1`). Your Mac trades that code with OpenAI for an
+access token, a renewable refresh token, and an ID token, checks the ID
+token's signature and that it was issued to Luke for this sign-in, and sends
+them, with the client id OpenAI issued Luke and your ChatGPT account's id
+(the ID token's subject), once, over HTTPS, to our service. It keeps nothing
+of them itself. The service stores them under your account encrypted exactly
+as your own API keys are, with the scopes OpenAI granted and when the access
+token expires, beside a host id it made for your account, which names Luke's
+hosted runtime to OpenAI and is kept after you disconnect. It renews the
+access token with OpenAI as it nears its expiry. You are shown that you are
+connected and when, never a token, and we never log one or send it to our
+analytics, crash reports, or screen recordings. Disconnecting in Settings
+asks OpenAI to end the sign-in and deletes it whether or not OpenAI confirms;
+where OpenAI did not confirm, Settings says so, and you can remove Luke in
+your ChatGPT settings to end it there. Deleting your account deletes it too.
+
+**Your own GitHub token.** If you save a GitHub personal access token (classic)
+in Settings › Profile, your Mac sends it once, over HTTPS, to our service,
+which asks GitHub whose it is with one request and keeps it only if GitHub
+accepts it, it carries the `repo` scope, and it belongs to the GitHub account
+linked to yours; a fine-grained token is refused without being sent to GitHub.
+It is stored under your account encrypted with AES-256-GCM, under the same
+keys as your own API keys, so a copy of our database alone cannot read it.
+Beside it we keep your GitHub login and account number, a hint (the `ghp_`
+prefix and the last four characters), its expiry where GitHub gives one, when
+you saved it, and whether GitHub has since refused it. You are shown the hint,
+the login, and the expiry, never the token. Our service uses it only to call
+GitHub for you: to list the repositories it can push to, and to read, check
+out, commit to, and open pull requests on the repository of a task or coding
+agent you start on it, where no GitHub App installation connected to the
+workspace reaches that repository. Once a minute it reads the reviews, comments, and
+checks on the open pull requests of your coding agents that run on it, to wake
+those agents. It also asks GitHub whether your token can read the repository
+of a teammate's task or coding agent that runs on their own token, to decide
+whether you see it, and keeps that answer for up to an hour. In a coding agent's sandbox it is set at
+the network firewall on that one repository's paths alone, and never enters
+the sandbox, a command, or its output. After you save it, neither your Mac nor
+any answer from our service holds the token again, and we never log it or send
+it to our analytics, crash reports, or screen recordings. Removing it in
+Settings, or deleting your account, deletes it.
+
 **A task's whiteboard.** You and Luke can both draw on a
 task's whiteboard. Our service stores it with the task, as drawn and readable
 by our own operators: every shape, arrow, line, stroke, and piece of text and
@@ -406,6 +454,30 @@ does the same for every session of yours, shortly after the deletion. A
 session a task's conversation was moved off earlier in its life is not
 tracked, and its snapshot stays until Vercel lets it expire. Nothing written
 in the sandbox reaches your repository.
+
+**A coding agent that runs on Claude Code.** For the accounts in the early
+test of Claude plans, a coding agent your Claude plan pays for runs on
+Anthropic's Claude Code, in that agent's own Vercel Sandbox, rather than on
+Luke's own agent. Its sandbox's disk holds the agent's checkout of the
+repository and Claude Code's own session files: its record of the session,
+which it picks up again from there when the agent is next messaged. Both stay
+on that disk between turns and in the snapshot Vercel keeps when the sandbox
+stops, and are deleted with the sandbox when the task is deleted, as above.
+Your plan's token is handed to Claude Code alone, in its process's
+environment: it is never written to that disk, a command Claude Code runs,
+or the conversation's record.
+
+**A coding agent that runs on Codex.** On the same terms, for the accounts in
+the early test of ChatGPT plans, a coding agent your ChatGPT plan pays for
+runs on OpenAI's Codex, in that agent's own Vercel Sandbox. Its sandbox's
+disk holds the agent's checkout and Codex's own thread files (under its
+`CODEX_HOME`): its record of the thread, which it resumes from there when the
+agent is next messaged. Both stay on that disk between turns and in the
+snapshot Vercel keeps when the sandbox stops, and are deleted with the
+sandbox when the task is deleted, as above. Only the plan's short-lived
+access token, never your sign-in's refresh token, is handed to Codex, in its
+process's environment and on its input: it is never written to that disk, a
+command Codex runs, or the conversation's record.
 
 **Code on screen during a call.** When Luke wants to
 show you code, it names a file and lines, and our service reads them from
@@ -465,7 +537,27 @@ GitHub's own image proxy, each up to 8 MB; other images are shown as links.
 Files changed reads each changed file's name and patch, for up to 300 files,
 leaving out a patch over 100,000 characters. It stores none of it, and Luke
 holds it in memory while the tab is open, never on disk, except that
-downloading a patch writes it where you save it. A button in the tab that
+downloading a patch writes it where you save it. Chapters splits the pull
+request into chapters only when a member presses Generate chapters, or
+Regenerate once its head has moved on; nothing makes them on its own. Our
+service then reads the pull request's title, description, the messages of up
+to its first 100 commits, and each changed file's patch as Files changed
+reads them, and sends all of it, except the patches of files a reader reads
+past (lockfiles, minified files, source maps, snapshots, images, fonts,
+videos, and documents) and of files with no patch to read, to the Claude model
+the member who pressed it chose in Settings › Coding agents (Haiku 5.5 unless
+they changed it), on our own key, never yours and never counted in your daily
+usage, as described under "Who we send it to".
+It stores the chapters that come back with the workspace, for that repository,
+pull request, and head commit, beside which member asked, when, the model
+that answered, and why a generation failed where one did: each chapter's
+title, summary, risk and reasons, the questions it puts to a reviewer, and the
+file paths and line numbers it covers, never a patch, the description, or a
+commit message. Every member of the workspace who can reach the repository
+sees them, and a Generate for the same head replaces them. They are deleted
+when the workspace is; nothing else deletes them, so they stay after the pull
+request closes, after a newer head's chapters are made, and after the member
+who asked deletes their account, which only clears who asked. A button in the tab that
 changes the pull request, such as Ready for review, Convert to draft, Merge,
 Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
@@ -910,8 +1002,9 @@ a task or a workspace made (with where it was started from and whether from an i
 it runs on, and whether an automation started it), a pull request an agent
 opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
 answered, a Chat message you posted, an issue filed, an automation made (with
-what triggers it), and an integration connected or disconnected (with which
-provider). These counts are event names and values from a fixed list too, and
+what triggers it), an integration connected or disconnected (with which
+provider), and a pull request's chapters generated (with how it came out, how
+many chapters and parts of the diff they hold, and how long it took). These counts are event names and values from a fixed list too, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
@@ -933,7 +1026,8 @@ their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
-the still of its page drawn while something covers it; code drawn in a
+the still of its page drawn while something covers it, and a cloud Browser
+tab with the live view of its page; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; and the cards
 that open over a row or a chip on hover, a page's preview among them. The
@@ -957,6 +1051,45 @@ Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
 launches. Every permission a page asks for, such as the camera, microphone, or
 location, is refused, and downloads are cancelled.
 
+With "Let agents run commands on this Mac" on, the same per-Mac switch that
+lets an agent run commands there, an agent on a task can open, read, click, and
+type in that task's Browser tabs on your Mac, and so **can act as you on any
+site you are signed in to in a Browser tab**, `localhost` included, with no
+approval for each action. Only the Mac running Luke's window answers, and only
+for the tab's own task. What an agent reads from a tab is its address, its
+title, a downscaled screenshot, and a text snapshot of the page. They reach that
+agent and its workers, our service, and the model that runs the agent. The
+text, address, and title are kept in the agent's transcript with the rest of
+the conversation; a screenshot goes to the model and is left out of the stored
+conversation, as a picture an agent looks at is. They still reach no trace, no
+counted event, and no voice call, and the screen recording still leaves them
+out. Turn the switch off, in Settings, and an agent can no longer reach a
+Browser tab; the tab then reaches only its panel, as before.
+
+A Browser tab can also be a cloud browser, which an agent drives and you
+watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
+your Mac, so it reaches that sandbox's own `localhost` and holds none of your
+Mac's cookies or signed-in sites. What the agent does with it reaches the model:
+each page's address and title, a screenshot, and a text snapshot of the page. A
+screenshot goes to the model alone and is left out of the agent's stored
+transcript, as a picture Luke looks at is; the rest is kept in the transcript,
+under its terms. Our service keeps the task's list of cloud tabs, each one's
+address and title, with the agent whose browser holds it, until the task's
+conversation is removed. The page, its live-view frames, and a tab's
+screenshots and text are not kept by us: the frames pass through our service
+to the panel of each member who opens the task, and every such member can
+watch the tab and take it over by clicking and typing in it, and the agent's
+actions on it wait while you do. Nothing of it reaches a trace, a counted event,
+a fixture, or the voice window, and the screen recording masks the live view.
+The browser's profile, with the cookies and logins you type into it, lives on
+the sandbox's disk, so it stays in that sandbox while it runs and in the
+snapshot Vercel keeps when the sandbox stops, until thirty days after the
+snapshot's last use, as the checkout does under "How Luke reads your
+repository"; the pages open at a stop are not kept, and the browser reopens
+each tab at its last address on resume. No other agent reaches that profile;
+an agent's workers share its sandbox, so they share it. Deleting the task, or
+your account, deletes the sandbox and its snapshot as described there.
+
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording
 that begins before you sign in is attached to your account if you sign in
@@ -979,9 +1112,16 @@ the addresses of requests it made),
 the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
-authorization header or a token parameter, before it is sent, and Luke drops
-any report that names a call's avatar access token. Luke does not attach your
-Luke account, and does not enable Sentry Replay, screenshots, or profiling.
+authorization header or a token parameter, before it is sent. Luke drops any
+error report or breadcrumb that names a call's avatar access token, and any
+traced step whose name or request address names that token as it starts; in
+the rest of a trace, a name or a value that names the token is replaced. In
+the address of a request or of the page that a trace carries, the value of
+each query parameter and the fragment are replaced, and so is any part of its
+path shaped like a credential, such as a long token; the scheme, the host, the
+rest of the path, and the parameters' names are sent as they were. Luke does
+not attach your Luke account, and does not enable Sentry Replay, screenshots,
+or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
@@ -1046,17 +1186,14 @@ only when you press Send.
 ## Who we send it to
 
 - OpenAI, for voice and for Luke's judgment. A voice session is one continuous
-  conversation. While your microphone is on — while you hold the talk key, or
-  from a press of a task's microphone button, the call card's, or the
-  microphone shortcut, or from starting a new task, until you press one of
-  those again or press and let go of the talk key — everything it hears
-  streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
+  conversation. While your microphone is on — from a press of an agent's Call
+  button, the call card's microphone, or the microphone shortcut, or from
+  starting a new voice chat, until you press one of those again — everything
+  it hears streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
   listening and closes the microphone when OpenAI confirms, within five
-  seconds; Luke can still speak while it is closed. Every ask is spoken; there
-  is no way to type to Luke. A call opens only when you press the talk key or
-  a task's microphone, or start a new task, which opens a call about it with
-  the microphone on where macOS already lets Luke use the microphone and no
-  other call is open. Every session goes through our own voice service on your
+  seconds; Luke can still speak while it is closed. A call opens only when you
+  press an agent's Call button or start a new voice chat; starting a task
+  never opens one, and Luke takes no key from the machine to open one. Every session goes through our own voice service on your
   account: nothing on your Mac holds or is handed an OpenAI credential, and it
   never reaches OpenAI on a key of your own. The service creates the session
   on our key; relays the control and transcript events between your Mac and
@@ -1066,7 +1203,13 @@ only when you press Send.
   described under "Your account"; logs status and close codes, event names,
   the kind of any failure, and counts, never what was said or an error's own
   words, apart from the reports to Sentry described under "Error, performance,
-  and agent reports from our service"; and counts each session's billed seconds once. Luke's judgment is a
+  and agent reports from our service"; and counts each session's billed seconds once. A line
+  you type into an agent's composer while a call is up on that agent goes to the
+  call rather than straight to the agent: your Mac hands it to our voice
+  service, which keeps it as a typed line in the agent's transcript, hands it to
+  the agent, and tells OpenAI's voice session the line, with each mention as its
+  name, so the voice speaks the agent's reply; files you attach to it are not
+  sent. Luke's judgment is a
   separate run of calls to OpenAI's Responses API, one for each step of a
   turn, made from our service on our key when you ask him something on a call,
   carrying the task conversation's working memory: the saved plan, the
@@ -1132,6 +1275,16 @@ only when you press Send.
 - Sentry, for the Mac app's and Luke in a browser's crash and performance
   reports, and our service's and Luke's agents' error, performance, log, and
   agent reports, described above.
+- Anthropic, for a pull request's chapters. Pressing Generate chapters in a
+  coding agent's Pull request tab sends the pull request's title, description,
+  commit messages, and patches, except those of files a reader reads past, to
+  the Claude model the member chose in Settings (Haiku 5.5 unless they changed
+  it) from our service, on our key and outside their usage, in at most two
+  calls (the second places the parts of the diff the first left out), as
+  described under "A coding agent's pull request". Our service logs only how a
+  generation failed, by its kind, and counts its outcome as described under
+  "Usage data"; Anthropic keeps the request and its reply under its own
+  retention policy.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
@@ -1264,8 +1417,11 @@ only when you press Send.
   and its workers also run as sessions on Vercel Workflow, which keeps each
   session's history (the messages, files, tool calls, and answers its model
   works from) so the session can pick up where it stopped. Deleting a task or
-  your account ends each of its sessions for good, a turn still running
-  included. When a session of Luke's ends, Vercel deletes that history at
+  your account asks Vercel Workflow to end each of its sessions for good, a
+  turn still running included; a session that could not be reached or did
+  not confirm in time is noted in our service's logs and left as it stood,
+  and the delete goes on without it, its history kept under Vercel's own
+  retention. When a session of Luke's ends, Vercel deletes that history at
   once, though the session's ids, status, and times may stay as long as
   Vercel's own retention. This holds for a session started on or after
   13 October 2026. For now, a coding agent's session keeps its history after
@@ -1273,6 +1429,11 @@ only when you press Send.
   find out why a session stopped partway, and Vercel deletes it after that.
   A session of Luke's started before then, and the session of a worker
   either one hands work to, keeps its history under Vercel's own retention.
+- Neon, asked directly by Luke on your Mac or in a browser, which sees its
+  network address: while you are signed in, Luke follows what waits on you
+  across your account, for the Inbox, over Neon's Realtime service, with a
+  short-lived query our service seals for your account, and Neon sends back
+  the rows of that inbox as they change.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke
   opens, every four hours, and when you ask from Luke's menu or Settings,
@@ -1317,11 +1478,15 @@ follows your account in that browser: signing out files what follows under
 nobody, and deleting your account in one tab stops the recording in every
 tab of that browser until you sign in again. It sends Sentry reports of the
 errors it did not handle and of a tab that could not draw, and performance
-traces for about one page load in ten, using Sentry's default data
+traces for about one page load in ten, and a warning for each kind of request
+the page's security policy refused, once in each tab, naming only the
+policy's directive and the refused address's origin, or the browser's own
+word for it, such as inline, all using Sentry's default data
 collection, as described under "Crash and performance reports from the Mac
 app", where the page's address, your browser's details, and the addresses of
 the requests it made take the place of the Mac's. Your browser contacts
-PostHog and Sentry directly, so each sees your network address.
+PostHog, Sentry, and Neon (see "Who we send it to") directly, so each sees
+your network address.
 
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the
@@ -1343,7 +1508,10 @@ signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
 anonymous id it records under, the account id it files under once you sign
 in, and whether it may send, under `luke_app_replay` and
-`luke_app_replay_consent`, apart from the site's own counting. Our service
+`luke_app_replay_consent`, apart from the site's own counting. A connect
+started there, such as connecting GitHub, keeps in its tab's session storage a
+random id naming the connect, or the address it left from, until the page it
+lands on, or the app opened again in that tab, lets go of it. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
@@ -1354,28 +1522,25 @@ and error, performance, and agent reports by Sentry.
 
 - Sign out of your Luke account to turn voice off.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
-  Luke and coding agents running commands on that Mac; it is set on each Mac
-  apart, and signing out stops it too.
+  Luke and coding agents running commands on that Mac and driving its Browser
+  tabs; it is set on each Mac apart, and signing out stops it too.
 - Switch an integration off for one coding agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.
-- What you say to Luke on a call goes to that task's conversation, fixed when
-  the call opens and never moved afterwards.
+- What you say on a call goes to the conversation of the agent you called,
+  fixed when the call opens and never moved afterwards.
 - Luke listens through your microphone only while a call's microphone is on,
   or while a dictation into a message box is recording, which the box shows as
-  a moving waveform with its time. The talk key opens it while held; a task's
-  microphone button, the call card's, or the microphone shortcut opens it
-  until you press one again or press and let go of the talk key, and so does
-  starting a new task, which opens a call about it. macOS's microphone
+  a moving waveform with its time. An agent's Call button, the call card's
+  microphone, or the microphone shortcut opens it until you press one again,
+  and so does starting a new voice chat, which opens a call into its agent.
+  macOS's microphone
   indicator is lit whenever the device is open: from the press, including
   while a new call connects, until OpenAI confirms it has stopped listening,
-  within five seconds of the microphone going off. The stop key closes it too,
-  and is the one key that also tells Luke to stop talking, while letting go of
-  the talk key lets him finish. If Luke's key helper cannot start, the talk
-  key reports presses alone, so one press opens the microphone and the next
-  closes it, and the Keyboard shortcuts page says so.
+  within five seconds of the microphone going off. Escape closes it too, and
+  also tells Luke to stop talking.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
@@ -1398,10 +1563,11 @@ and error, performance, and agent reports by Sentry.
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
-  Luke in that service's own settings. It ends every session of yours on
-  Vercel Workflow and, shortly after, deletes their sandboxes with the
-  snapshots no other sandbox uses; the session history Vercel Workflow keeps
-  goes as described under "Who we send it to", and anything stored only on
+  Luke in that service's own settings. It asks Vercel Workflow to end every
+  session of yours, noting in our logs any it could not, and, shortly after,
+  deletes their sandboxes with the snapshots no other sandbox uses; the
+  session history Vercel Workflow keeps goes as described under "Who we send
+  it to", and anything stored only on
   your Mac stays there until you remove it.
 
 ## Google user data

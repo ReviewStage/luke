@@ -21,6 +21,7 @@ import {
   type MentionNode,
   type MentionNodeDoors,
   PLACEMENT_END,
+  type PlacedWords,
   type PlanEditorHandle,
   type PlanEditorModule,
   type PlanEditorPlacement,
@@ -46,8 +47,7 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
  * the caret where the click landed, and so does a press on the empty room
- * around the text (`useTextRoom`), which an issue's description shares; the
- * editor is TipTap, from the editor
+ * around the text (`useTextRoom`); the editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
  * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
@@ -77,7 +77,10 @@ export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
 export const EDITOR_ROOM_CLASS = "plan-document-editor";
 
 /** What the text says while the editor's bundle could not be loaded. */
-export const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+
+/** What the developer does that ends the editor keeping the words it opened on where they stood: a scroll, a press, or a key. */
+const KEEPING_ENDS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
@@ -106,15 +109,113 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
   return true;
 }
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox, or the section's byline. */
-export function editsOnClick(target: EventTarget): boolean {
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox or the label around it, or the section's byline. */
+function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item; a comment's marked words open its thread and the editor at them alike.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, [data-mention-ref], .plan-unit-row") !== null
+    target.closest("a, button, input, label, [data-mention-ref], .plan-unit-row") !== null
   );
+}
+
+/** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
+function rangeAt(x: number, y: number): Range | null {
+  // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
+  const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
+  if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
+  const position = page.caretPositionFromPoint?.(x, y) ?? null;
+  if (position === null) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  return range;
+}
+
+/** Where the top of a range's line stands in the window, or its words' element's where the browser draws no box for it. */
+function lineTop(range: Range, words: Text): number {
+  // Note that a range's boxes are read as possibly missing, since a page with no layout, as a test's is, draws none.
+  const measured: Partial<Pick<Range, "getClientRects">> = range;
+  const box = measured.getClientRects?.()[0];
+  return box?.top ?? words.parentElement?.getBoundingClientRect().top ?? 0;
+}
+
+/** Whether a text node stands in a code block, as `PlacedWords` counts it. */
+function inCode(text: Node): boolean {
+  return text.parentElement?.closest("pre") != null;
+}
+
+/**
+ * The words a click at a point landed on in a section's drawn block, as the
+ * editor finds them again (`PlacedWords`); none where it landed on no words.
+ */
+function wordsUnder(
+  block: HTMLElement,
+  section: number,
+  x: number,
+  y: number,
+): PlacedWords | undefined {
+  const range = rangeAt(x, y);
+  const words = range?.startContainer;
+  if (range == null || !(words instanceof Text) || !block.contains(words)) return undefined;
+  const text = words.data;
+  const code = inCode(words);
+  let occurrence = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null && at !== words; at = walker.nextNode()) {
+    if (at.textContent === text && inCode(at) === code) occurrence += 1;
+  }
+  return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
+}
+
+/** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
+function drawnWordsTop(body: HTMLElement, words: PlacedWords): number | undefined {
+  const block = body.querySelectorAll(`[${TEXT_BLOCK_ATTRIBUTE}]`)[words.section];
+  if (block === undefined) return undefined;
+  let seen = 0;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (!(at instanceof Text) || at.data !== words.text || inCode(at) !== words.code) continue;
+    if (seen === words.occurrence) {
+      const range = document.createRange();
+      range.setStart(at, Math.min(words.offset, at.data.length));
+      return lineTop(range, at);
+    }
+    seen += 1;
+  }
+  return undefined;
+}
+
+/**
+ * The words the caret stood on kept where they stood as the editor closes,
+ * as `PlanDocumentEditor` keeps the words a click landed on as it opens:
+ * the drawn text may draw what stands above them at another height than the
+ * editor did, a picture, a table or a diagram's preview say, so the column
+ * is scrolled by as much as the drawn text moved them. Answers where the
+ * closing editor leaves its words (`PlanDocumentEditor`'s `closedOn`).
+ */
+export function useWordsKeptOnClose(
+  taskId: string,
+  open: boolean,
+  body: React.RefObject<HTMLElement | null>,
+  scroller: React.RefObject<HTMLElement | null>,
+): React.RefObject<PlacedWords | undefined> {
+  const closedOn = useRef<PlacedWords | undefined>(undefined);
+  // The task the editor opened on, so words left by one closed as another opens move nothing.
+  const openedOn = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (open) {
+      openedOn.current = taskId;
+      return;
+    }
+    const words = closedOn.current;
+    closedOn.current = undefined;
+    if (words === undefined || openedOn.current !== taskId) return;
+    const top = body.current === null ? undefined : drawnWordsTop(body.current, words);
+    if (top !== undefined && scroller.current !== null)
+      scroller.current.scrollTop += top - words.top;
+  }, [open]);
+  return closedOn;
 }
 
 /** Where a text's words stand in the window. */
@@ -150,7 +251,7 @@ function scrollRoomOf(element: HTMLElement): HTMLElement | undefined {
  * Where a press on a text's room puts the caret: at the end where it lands
  * under the text's last line, or no text is drawn; on the nearest line where
  * it lands beside the text; and nowhere where it lands above it, among the
- * lines over the text (a title, a byline, an issue's properties).
+ * lines over the text (a title, a byline).
  */
 function roomPlacement(
   event: MouseEvent,
@@ -299,7 +400,10 @@ export function DocumentBlock({
         // Note that a click on a menu or a card portaled out of the block still
         // bubbles here through React's tree, and opens no editor.
         if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) return;
-        if (editsOnClick(event.target)) editing.open({ x: event.clientX, y: event.clientY });
+        if (!editsOnClick(event.target)) return;
+        const { clientX: x, clientY: y } = event;
+        const words = wordsUnder(event.currentTarget, section, x, y);
+        editing.open(words === undefined ? { x, y } : { x, y, words });
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -577,7 +681,7 @@ function useDraftHandOver(
 }
 
 /** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
-export function MountedPlanEditor({
+function MountedPlanEditor({
   module,
   props,
   handle,
@@ -702,6 +806,7 @@ export function PlanDocumentEditor({
   mentions,
   scroller,
   handle,
+  closedOn,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -714,8 +819,17 @@ export function PlanDocumentEditor({
   scroller?: React.RefObject<HTMLElement | null> | undefined;
   /** Where the mounted editor's handle is kept, for the merged answers and for a comment started on its words. */
   handle: React.RefObject<PlanEditorHandle | undefined>;
+  /** Where the words the caret stood on are left as the editor closes, for the drawn text to keep them where they stood (`useWordsKeptOnClose`). */
+  closedOn?: React.RefObject<PlacedWords | undefined> | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
+  // Note that this runs before the editor itself is taken down, so its caret is still measured.
+  useLayoutEffect(
+    () => () => {
+      if (closedOn !== undefined) closedOn.current = handle.current?.caretWords();
+    },
+    [],
+  );
   // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
   const comments = usePlanCommentsControl();
   const commentAnchors =
@@ -744,6 +858,35 @@ export function PlanDocumentEditor({
       else handle.current.focusAt(placement);
     },
   });
+  // Note that the words a click opened the editor on are kept where they
+  // stood, since the editor may draw what stands above them at another
+  // height than the text did, a picture, a table or a diagram's preview say,
+  // and again each time the editor's height changes as what it draws later
+  // lands, a diagram's preview or a chip, until the developer scrolls,
+  // presses, or types.
+  const ready = AsyncResult.isSuccess(module);
+  useLayoutEffect(() => {
+    if (!ready) return;
+    // Note that a press on the room while the bundle loaded is where the editor opens, which keeps no words.
+    const place = pending ?? editing.placement;
+    const target = place !== undefined && "words" in place ? place.words?.top : undefined;
+    const column = scroller?.current;
+    const text = room.current;
+    if (target === undefined || column == null || text === null) return;
+    const keep = () => {
+      const top = handle.current?.wordsTop();
+      if (top !== undefined) column.scrollTop += top - target;
+    };
+    keep();
+    const observer = new ResizeObserver(keep);
+    observer.observe(text);
+    const release = () => {
+      observer.disconnect();
+      for (const kind of KEEPING_ENDS) column.removeEventListener(kind, release);
+    };
+    for (const kind of KEEPING_ENDS) column.addEventListener(kind, release, { passive: true });
+    return release;
+  }, [ready]);
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
   const once = (close: () => void) => {
@@ -758,7 +901,7 @@ export function PlanDocumentEditor({
   });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
-  // The plan's pages, agents, pull requests, and workspace's issues are offered as the page's agents' boxes offer them.
+  // The plan's pages, agents, and pull requests are offered as the page's agents' boxes offer them.
   const page = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
@@ -773,7 +916,6 @@ export function PlanDocumentEditor({
       agents: page?.agents,
       readAgents: page?.readAgents,
       pullRequests: page?.pullRequests,
-      readIssues: page?.readIssues,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,
@@ -879,7 +1021,7 @@ interface EditorDrawings<A> {
  * What the editor asks the panel to draw, a mention or a diagram, each drawn
  * into its own element while it stands, as the composer draws its chips.
  */
-export function useEditorDrawings<A>(): EditorDrawings<A> {
+function useEditorDrawings<A>(): EditorDrawings<A> {
   const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
   const counted = useRef(0);
   const draw = (element: HTMLElement, what: A) => {

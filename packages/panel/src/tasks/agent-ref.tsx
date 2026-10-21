@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { CodingAgentSummary, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
@@ -143,6 +143,43 @@ export function lineSubject(
     tile: agentActor(line, name),
   };
   return { name, tile: agentActor(line, name), read: () => reading };
+}
+
+/**
+ * An agent with no task as the sidebar's list carries it, as its row's card
+ * says it: its tab's card (`agentCardReading`), but that it last moved when
+ * the list says it did, the end of its newest run included, and that it
+ * shows the pull request the list carries for it, as a task's row's card
+ * shows its own, since no tab of it holds either; a read of what it
+ * published that the control holds since stands before the list's.
+ */
+export function tasklessRowSubject(
+  agent: TasklessAgent,
+  agents: Pick<CodingAgentsControl, "models" | "me" | "pullRequests"> &
+    Partial<Pick<CodingAgentsControl, "chatOn">>,
+): AgentSubject {
+  const { automationId, pullRequest, ...rest } = agent;
+  const summary: CodingAgentSummary = automationId === null ? rest : { ...rest, automationId };
+  const name = agentTabLabel(summary, agents.models);
+  const tile = agentActor(summary, name);
+  const base = agentCardReading(summary, name, NOTHING_HELD, false, agents);
+  const { archivedAt } = agent;
+  const writing = archivedAt === undefined && agentStillWriting(agent.status);
+  const read = (): CardReading => {
+    const reading = base();
+    return {
+      ...reading,
+      corner: cardCorner({
+        writing,
+        startedAt: agent.runStartedAt,
+        movedAt: archivedAt ?? agent.activityAt,
+        state: archivedAt === undefined ? agentStateWords(agent.status) : ARCHIVED_WORDS,
+      }),
+      // Note that a read of what it published since, held by the control, is newer than the list's.
+      pullRequest: reading.pullRequest ?? pullRequest,
+    };
+  };
+  return { name, tile, agent: summary, read };
 }
 
 /**
@@ -307,21 +344,17 @@ export function AgentActorRef({
   subject,
   models,
   onOpen,
-  nameOnly = false,
 }: {
   subject: AgentSubject;
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
   onOpen: () => void;
-  /** Whether the name stands without its tile, whose face the line already draws. */
-  nameOnly?: boolean;
 }): React.JSX.Element {
   return (
     <ActorRef
       actor={subject.tile}
       card={<AgentCard subject={subject} models={models} />}
       onOpen={onOpen}
-      nameOnly={nameOnly}
     />
   );
 }

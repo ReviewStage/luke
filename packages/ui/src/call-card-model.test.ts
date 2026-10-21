@@ -5,15 +5,18 @@ import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import { test } from "vitest";
 import {
-  callBarTaskId,
+  agentCallVideoStatus,
+  callBarAgentId,
   callCard,
   callCardShown,
   callCardVideoStatus,
-  callTabVideoStatus,
 } from "./call-card-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+/** The agent of the invites task the call speaks into, and another. */
+const CALLED = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
+const OTHER_AGENT = "6e2a9d4b-1c7f-4a8e-b3d5-2f9c8e1a7b60";
 
 const WORKSPACE = "workspace-personal";
 
@@ -37,7 +40,7 @@ const LISTENING: VoiceView = {
   ...IDLE_VOICE_VIEW,
   voiceStatus: LIVE_STATUS.LISTENING,
   listening: true,
-  callTaskId: INVITES,
+  call: { taskId: INVITES, agentId: CALLED },
 };
 
 test("the card names the call's plan, not the one open, and hands the call bar its own words for the call", () => {
@@ -96,64 +99,66 @@ test("a call's plan the list does not hold is named from the open document, or p
     },
   };
   assert.equal(
-    callCard({ view: { ...LISTENING, callTaskId: BILLING }, tasks: open }).taskName,
+    callCard({ view: { ...LISTENING, call: { taskId: BILLING, agentId: CALLED } }, tasks: open })
+      .taskName,
     "Billing export",
   );
   assert.equal(callCard({ view: LISTENING, tasks: IDLE_TASKS_VIEW }).taskName, "Call");
 });
 
-test("a Luke window draws the card only with the keyboard, a call in progress, and anything but the call's plan on screen", () => {
-  const shown = (view: VoiceView, focused: boolean, taskShown: string | undefined) =>
-    callCardShown({ view, focused, taskShown });
-  assert.equal(shown(LISTENING, true, BILLING), true);
+test("a Luke window draws the card only with the keyboard, a call in progress, and anything but the call's agent's tab on screen", () => {
+  const shown = (view: VoiceView, focused: boolean, agentShown: string | undefined) =>
+    callCardShown({ view, focused, agentShown });
+  assert.equal(shown(LISTENING, true, OTHER_AGENT), true);
   assert.equal(shown(LISTENING, true, undefined), true);
-  // The call's own task has its call bar; a window without the keyboard leaves the call to the floating window.
-  assert.equal(shown(LISTENING, true, INVITES), false);
-  assert.equal(shown(LISTENING, false, BILLING), false);
-  assert.equal(shown({ ...LISTENING, voiceStatus: LIVE_STATUS.CLOSING }, true, BILLING), false);
-  assert.equal(shown(IDLE_VOICE_VIEW, true, BILLING), false);
+  // The call's own agent's tab has its call bar; a window without the keyboard leaves the call to the floating window.
+  assert.equal(shown(LISTENING, true, CALLED), false);
+  assert.equal(shown(LISTENING, false, OTHER_AGENT), false);
+  assert.equal(shown({ ...LISTENING, voiceStatus: LIVE_STATUS.CLOSING }, true, OTHER_AGENT), false);
+  assert.equal(shown(IDLE_VOICE_VIEW, true, OTHER_AGENT), false);
 });
 
-test("the call bar is on screen only on a plan's document, and not under its version history, the window's Inbox, an agent's page, or a side panel filling the window", () => {
-  const onTask = {
+test("an agent's call bar is on screen only on its tab of a task's document, and not under its version history, the window's Inbox, an agent's page, or a side panel filling the window", () => {
+  const onTab = {
     tasksTab: true,
     documentPage: true,
     historyOpen: false,
     inboxOpen: false,
     agentPageOpen: false,
     sidePanelFullScreen: false,
-    activeTaskId: INVITES,
+    columnAgentId: CALLED,
   };
-  assert.equal(callBarTaskId(onTask), INVITES);
-  assert.equal(callBarTaskId({ ...onTask, historyOpen: true }), undefined);
-  assert.equal(callBarTaskId({ ...onTask, inboxOpen: true }), undefined);
-  assert.equal(callBarTaskId({ ...onTask, agentPageOpen: true }), undefined);
-  assert.equal(callBarTaskId({ ...onTask, sidePanelFullScreen: true }), undefined);
-  assert.equal(callBarTaskId({ ...onTask, documentPage: false }), undefined);
-  assert.equal(callBarTaskId({ ...onTask, tasksTab: false }), undefined);
+  assert.equal(callBarAgentId(onTab), CALLED);
+  assert.equal(callBarAgentId({ ...onTab, columnAgentId: undefined }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, historyOpen: true }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, inboxOpen: true }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, agentPageOpen: true }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, sidePanelFullScreen: true }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, documentPage: false }), undefined);
+  assert.equal(callBarAgentId({ ...onTab, tasksTab: false }), undefined);
 });
 
-test("the Call tab draws the video on the call's own plan alone, while the call is in progress and the experiment is on", () => {
+test("an agent's tab draws the video for a call into that agent alone, while the call is in progress and the experiment is on", () => {
   const live: AvatarState = { status: AVATAR_STATUS.LIVE };
-  const drawn = (view: VoiceView, avatar: AvatarState, taskId: string, videoCalls = true) =>
-    callTabVideoStatus({ view, avatar, taskId, videoCalls });
-  assert.equal(drawn(LISTENING, live, INVITES), AVATAR_STATUS.LIVE);
+  const drawn = (view: VoiceView, avatar: AvatarState, agentId: string, videoCalls = true) =>
+    agentCallVideoStatus({ view, avatar, agentId, videoCalls });
+  assert.equal(drawn(LISTENING, live, CALLED), AVATAR_STATUS.LIVE);
   assert.equal(
-    drawn(LISTENING, { status: AVATAR_STATUS.STARTING }, INVITES),
+    drawn(LISTENING, { status: AVATAR_STATUS.STARTING }, CALLED),
     AVATAR_STATUS.STARTING,
   );
   const restartable = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
-  assert.equal(drawn(LISTENING, restartable, INVITES), AVATAR_STATUS.ENDED);
-  // Another plan's Call tab, a call that is over, or no avatar standing with the experiment off draws nothing.
-  assert.equal(drawn(LISTENING, live, BILLING), undefined);
-  assert.equal(drawn(IDLE_VOICE_VIEW, live, INVITES), undefined);
-  assert.equal(drawn(LISTENING, AVATAR_OFF, INVITES, false), undefined);
-  assert.equal(drawn(LISTENING, restartable, INVITES, false), undefined);
+  assert.equal(drawn(LISTENING, restartable, CALLED), AVATAR_STATUS.ENDED);
+  // Another agent's tab, a call that is over, or no avatar standing with the experiment off draws nothing.
+  assert.equal(drawn(LISTENING, live, OTHER_AGENT), undefined);
+  assert.equal(drawn(IDLE_VOICE_VIEW, live, CALLED), undefined);
+  assert.equal(drawn(LISTENING, AVATAR_OFF, CALLED, false), undefined);
+  assert.equal(drawn(LISTENING, restartable, CALLED, false), undefined);
 });
 
 test("an avatar still standing when the experiment is turned off keeps its tile, and with it Video off", () => {
   const drawn = (avatar: AvatarState) =>
-    callTabVideoStatus({ view: LISTENING, avatar, taskId: INVITES, videoCalls: false });
+    agentCallVideoStatus({ view: LISTENING, avatar, agentId: CALLED, videoCalls: false });
   assert.equal(drawn({ status: AVATAR_STATUS.LIVE }), AVATAR_STATUS.LIVE);
   assert.equal(drawn({ status: AVATAR_STATUS.STARTING }), AVATAR_STATUS.STARTING);
   // Once it is down, nothing offers to put it up again.
@@ -166,7 +171,7 @@ test("an avatar still standing when the experiment is turned off keeps its tile,
 test("video the developer turned off stays offered to turn on again for as long as the call stands", () => {
   const turnedOff = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER };
   const drawn = (view: VoiceView, avatar: AvatarState) =>
-    callTabVideoStatus({ view, avatar, taskId: INVITES, videoCalls: true });
+    agentCallVideoStatus({ view, avatar, agentId: CALLED, videoCalls: true });
   assert.equal(drawn(LISTENING, turnedOff), AVATAR_STATUS.OFF);
   assert.equal(drawn(LISTENING, AVATAR_OFF), AVATAR_STATUS.OFF);
   assert.equal(drawn(IDLE_VOICE_VIEW, turnedOff), undefined);

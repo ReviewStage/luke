@@ -3,7 +3,6 @@ import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabular
 import type { Board, DrawingElement } from "@luke/features/board-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
-  type CodeToken,
   TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
@@ -19,8 +18,7 @@ import {
 } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
-import type { VoiceView } from "@luke/voice/voice-view";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import {
@@ -202,30 +200,10 @@ const FIXTURE_TASK_LIST: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** The fixture's colours as the host's highlighter gives them, in GitHub's dark and light themes. */
-const KEYWORD = { color: "#ff7b72", lightColor: "#cf222e" } as const;
-const FUNCTION = { color: "#d2a8ff", lightColor: "#8250df" } as const;
-const STRING = { color: "#a5d6ff", lightColor: "#0a3069" } as const;
-const COMMENT = { color: "#8b949e", lightColor: "#6e7781" } as const;
-const TYPE = { color: "#ffa657", lightColor: "#953800" } as const;
-
-/** One run of a fixture line in the colours it is drawn in. */
-function run(
-  text: string,
-  colours: { readonly color: string; readonly lightColor: string },
-): CodeToken {
-  return { text, ...colours };
-}
-
-/** One fixture line from its runs, a bare word drawn in the theme's own foreground. */
-function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
-  return runs.map((part) => (part instanceof Object ? part : { text: part }));
-}
-
 /**
  * The code on screen in the fixture's call: Luke pointing at the invite
- * check he is asking about, lines 6 to 9 of an invented file, coloured as
- * the host's highlighter colours TypeScript.
+ * check he is asking about, lines 6 to 9 of an invented file, which the
+ * Code tab colours as it draws it.
  */
 const FIXTURE_CODE: TaskCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
@@ -233,82 +211,20 @@ const FIXTURE_CODE: TaskCode = {
   firstLine: 1,
   lineCount: 14,
   lines: [
-    fixtureLine(
-      run("import", KEYWORD),
-      " { db } ",
-      run("from", KEYWORD),
-      " ",
-      run('"../db"', STRING),
-      ";",
-    ),
-    [],
-    fixtureLine(run("// An invite link is good once, and for seven days.", COMMENT)),
-    fixtureLine(
-      run("export", KEYWORD),
-      " ",
-      run("async", KEYWORD),
-      " ",
-      run("function", KEYWORD),
-      " ",
-      run("acceptInvite", FUNCTION),
-      "(token: ",
-      run("string", TYPE),
-      ") {",
-    ),
-    fixtureLine(
-      "  ",
-      run("const", KEYWORD),
-      " invite = ",
-      run("await", KEYWORD),
-      " db.invites.",
-      run("find", FUNCTION),
-      "(token);",
-    ),
-    fixtureLine("  ", run("if", KEYWORD), " (!invite || invite.acceptedAt) {"),
-    fixtureLine(
-      "    ",
-      run("throw", KEYWORD),
-      " ",
-      run("new", KEYWORD),
-      " ",
-      run("InviteError", FUNCTION),
-      "(",
-      run('"no-longer-valid"', STRING),
-      ");",
-    ),
-    fixtureLine("  }"),
-    fixtureLine(
-      "  ",
-      run("if", KEYWORD),
-      " (",
-      run("expired", FUNCTION),
-      "(invite)) ",
-      run("throw", KEYWORD),
-      " ",
-      run("new", KEYWORD),
-      " ",
-      run("InviteError", FUNCTION),
-      "(",
-      run('"expired"', STRING),
-      ");",
-    ),
-    fixtureLine(
-      "  ",
-      run("await", KEYWORD),
-      " db.members.",
-      run("add", FUNCTION),
-      "(invite.workspaceId, invite.email);",
-    ),
-    fixtureLine(
-      "  ",
-      run("await", KEYWORD),
-      " db.invites.",
-      run("accept", FUNCTION),
-      "(invite.id);",
-    ),
-    fixtureLine("}"),
-    [],
-    fixtureLine(run("export", KEYWORD), " { acceptInvite };"),
+    'import { db } from "../db.js";',
+    "",
+    "// An invite link is good once, and for seven days.",
+    "export async function acceptInvite(token: string) {",
+    "  const invite = await db.invites.find(token);",
+    "  if (!invite || invite.acceptedAt) {",
+    '    throw new InviteError("no-longer-valid");',
+    "  }",
+    '  if (expired(invite)) throw new InviteError("expired");',
+    "  await db.members.add(invite.workspaceId, invite.email);",
+    "  await db.invites.accept(invite.id);",
+    "}",
+    "",
+    "export { acceptInvite };",
   ],
 };
 
@@ -323,10 +239,14 @@ function fixtureExcerpt(startLine: number, endLine: number): TaskCode {
   };
 }
 
+/** The coding agent on the fixture's task whose typed turn showed the last of its code. */
+const FIXTURE_CODING_AGENT_ID = "7b3c5d7e-9f1a-4b2c-8d4e-6f8a0b2c4d6e";
+
 /**
- * Every code Luke showed in the fixture's call, a walkthrough of one file in
- * three steps, each with his note: where a link lands, the check he is asking
- * about, and the expiry after it.
+ * Every code shown on the fixture's task: Luke's in its call, a walkthrough
+ * of one file in three steps, each with his note (where a link lands, the
+ * check he is asking about, and the expiry after it), and after the call, one
+ * more from a typed turn of the task's coding agent.
  */
 const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
   {
@@ -354,6 +274,16 @@ const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
     code: {
       ...fixtureExcerpt(9, 9),
       note: "Expiry is checked after that, so a link that is both withdrawn and expired reads as no longer valid.",
+    },
+  },
+  {
+    callId: "fixture-show-4",
+    turnId: "fixture-turn-typed",
+    shownAt: Date.parse("2026-10-07T16:40:00Z"),
+    agentId: FIXTURE_CODING_AGENT_ID,
+    code: {
+      ...fixtureExcerpt(10, 11),
+      note: "The member is added before the invite is marked accepted, so a failure between the two leaves the link good for a second use.",
     },
   },
 ];
@@ -609,35 +539,6 @@ const FIXTURE_CODE_PANEL: SidePanelState = {
 const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
 const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
-
-/**
- * The call a fixture run's status row and transcript read: listening, about
- * the fixture's open task, with what was said on it so far.
- */
-export const FIXTURE_TASKS_CALL: Pick<VoiceView, "voiceStatus" | "callTaskId" | "callTranscript"> =
-  {
-    voiceStatus: LIVE_STATUS.LISTENING,
-    callTaskId: FIXTURE_TASK.id,
-    callTranscript: {
-      voiceSessionId: FIXTURE_LIVE_SESSION,
-      lines: [
-        {
-          rowId: "fixture-1",
-          speaker: USER,
-          words: "Picking up where we left off: who can withdraw an invite?",
-          startMs: 1_200,
-          endMs: 4_800,
-        },
-        {
-          rowId: "fixture-2",
-          speaker: ASSISTANT,
-          words: "Either the member who sent it or any admin. I'm checking how removal works now.",
-          startMs: 5_400,
-          endMs: 9_900,
-        },
-      ],
-    },
-  };
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the

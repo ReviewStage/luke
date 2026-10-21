@@ -134,7 +134,7 @@ function HoverCards(): React.JSX.Element {
               <HoverCard>
                 <HoverCardHead
                   name="Move every scheduled automation onto the workspace's own timezone, and say which ones ran late"
-                  corner="Working…"
+                  corner="4m 12s"
                 />
                 <HoverCardHead
                   oneLine
@@ -144,6 +144,11 @@ function HoverCards(): React.JSX.Element {
                 <HoverCardNote oneLine>
                   Reading packages/service/src/maintenance/maintenance-sweep.ts and its tests
                 </HoverCardNote>
+                <HoverCardRow
+                  look={HOVER_CARD_ROW_LOOK.DETAIL}
+                  glyph={<FolderIcon />}
+                  label="an-organisation-with-a-long-name/a-repository-named-at-length"
+                />
               </HoverCard>
             }
           />

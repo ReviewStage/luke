@@ -5,13 +5,18 @@ import {
 import { TEXT_TONE, Text } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 
-/** A note under the section it explains, in the muted body role. */
+/** A note under the cards of the section it explains, in the muted body role; the section stands it. */
 function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="mt-3">
-      <Text tone={TEXT_TONE.MUTED}>{children}</Text>
-    </div>
-  );
+  return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
+}
+
+/**
+ * What every figure on a page is, where its title cannot say it: a muted
+ * line at the top of its content, since the toolbar holds a title alone;
+ * the page stands it a section's gap above the first section.
+ */
+export function PageNote({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
 }
 
 /**

@@ -255,6 +255,8 @@ export type BrainRunEventBody =
       readonly callId: string;
       readonly name: string;
       readonly settlement: ToolCallSettlement;
+      /** The call's input as it stood when it answered, where the harness fills it in after the start (Codex's items); it replaces the input the start recorded. */
+      readonly input?: UnparsedWireValue;
     }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED;

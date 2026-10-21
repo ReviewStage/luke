@@ -8,7 +8,7 @@ import { ACCOUNT_ACT_KIND } from "./kinds.js";
  *
  * Each output is its schema flipped, so oRPC's output check encodes the
  * row's value into what crosses the port, the convention every act contract
- * keeps (`issues.ts`).
+ * keeps (`agents.ts`).
  */
 
 /** Which provider a sign-in goes through. */

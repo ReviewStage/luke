@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   isSecretFile,
   TASK_FILE_REFUSAL,
@@ -13,6 +13,7 @@ import {
   GitHubApp,
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
+  markRefusedToken,
 } from "../github/github-app.js";
 import { logGitHubReadFailure, logWorkspaceReadFailure } from "../github/github-refusal.js";
 import { readBranchHead, readRepositoryFile } from "../github/repository-file.js";
@@ -89,17 +90,12 @@ export function readTaskFile(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     if (isSecretFile(request.path)) return Option.some(refused(TASK_FILE_REFUSAL.SECRET));
-    const answer = yield* readWindow(
-      stored.value.task.workspaceId,
-      repository,
-      userId,
-      request,
-    ).pipe(
+    const answer = yield* readWindow(stored.value.workspaceId, repository, userId, request).pipe(
       Effect.catchTag("GitHubUnavailable", (failure) =>
         Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
       ),
@@ -164,7 +160,7 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
 ) {
   const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
-  const { token, repository: confirmed } = reach.reached;
+  const { token, repository: confirmed, access } = reach.reached;
   const branch = request.ref ?? confirmed.defaultBranch;
   // Note that a read of the default branch reads at the commit its head
   // stands at, and names it, so lines picked from the read are pinned to the
@@ -176,7 +172,9 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
       Effect.catch(() => Effect.succeed(undefined)),
     ));
   const at = commit ?? branch;
-  const file = yield* readRepositoryFile(token, confirmed, at, request.path);
+  const file = yield* readRepositoryFile(token, confirmed, at, request.path).pipe(
+    markRefusedToken(access),
+  );
   const content = file.regular ? file.content : undefined;
   const refusal = shownFileRefusal({
     path: request.path,

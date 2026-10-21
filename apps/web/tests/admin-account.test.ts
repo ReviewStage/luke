@@ -25,11 +25,9 @@ import { AccountScreen } from "../src/admin/screens/account";
  * admin in words, says when it joined, was last seen, and how it signs in,
  * states its daily use and its volume under their own headings, lays out
  * what a maintainer supports it from (its work, agents, workspaces, keys and
- * connections, defaults, and failures), and moves the way a
- * maintainer asks: a plain press on the way back moves in place, loading or
- * loaded, and a modified one is left to the browser's own gesture; an id no
- * account carries offers the way back too. The network, the HTTP boundary to
- * Luke, is a fake that answers the account's read.
+ * connections, defaults, and failures), and leads its toolbar with the way
+ * back to the users, which moves in place, loading or loaded. The network,
+ * the HTTP boundary to Luke, is a fake that answers the account's read.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -241,27 +239,23 @@ function rows(page: HTMLElement, label: string): string[] {
   );
 }
 
-function link(page: HTMLElement, words: string): HTMLAnchorElement {
-  const found = Array.from(page.querySelectorAll("a")).find((anchor) =>
-    anchor.textContent?.includes(words),
-  );
-  if (found === undefined) throw new Error(`no link reading ${words}`);
+/** The toolbar's way back, the button its path leads with. */
+function wayBack(page: HTMLElement): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>('header nav[aria-label="Path"] button');
+  if (found === null) throw new Error("no way back");
   return found;
 }
 
-/** A primary-button press on `target`, modified as asked; whether the page took it over. */
-function press(target: Element, init: MouseEventInit = {}): boolean {
-  const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init });
-  act(() => {
-    target.dispatchEvent(event);
-  });
-  return event.defaultPrevented;
+/** The page the path says the reader stands on. */
+function current(page: HTMLElement): string | undefined {
+  return page.querySelector('header [aria-current="page"]')?.textContent ?? undefined;
 }
 
 test("a loaded account names itself, marks an admin in words, and says how it signs in", async () => {
   const { page } = await openAccount(answer(detail()));
 
-  expect(headings(page, "h1")).toEqual(["Ada Lovelace"]);
+  expect(current(page)).toBe("Ada Lovelace");
+  expect(page.querySelector('section[aria-label="Ada Lovelace"]')).not.toBeNull();
   expect(page.textContent).toContain("ada@example.testAdmin");
   expect(page.textContent).toContain("ada@example.test");
   expect(page.textContent).toContain(
@@ -364,28 +358,16 @@ test("an account with nothing to support from says so in each section", async ()
   expect(page.textContent).toContain("Nothing failed in this window.");
 });
 
-test("the way back to the users moves in place on a plain press, loading or loaded", async () => {
+test("the toolbar leads with the way back to the users, which moves in place, loading or loaded", async () => {
   const loading = await openAccount(undefined);
-  expect(press(link(loading.page, "All users"))).toBe(true);
+  expect(wayBack(loading.page).textContent).toBe("Users");
+  expect(current(loading.page)).toBe("Account");
+  act(() => wayBack(loading.page).click());
   expect(loading.backs).toHaveLength(1);
   act(() => root?.unmount());
 
   const loaded = await openAccount(answer(detail()));
-  const back = link(loaded.page, "All users");
-  expect(back.getAttribute("href")).toContain("users");
-  expect(press(back, { metaKey: true })).toBe(false);
-  expect(press(back)).toBe(true);
+  expect(wayBack(loaded.page).textContent).toBe("Users");
+  act(() => wayBack(loaded.page).click());
   expect(loaded.backs).toHaveLength(1);
-});
-
-test("an id no account carries says so and offers the way back to the users", async () => {
-  const { page, backs } = await openAccount(new Response(null, { status: 404 }));
-
-  expect(headings(page, "h1")).toEqual(["No such account"]);
-  const back = Array.from(page.querySelectorAll("button")).find(
-    (button) => button.textContent === "Back to users",
-  );
-  if (back === undefined) throw new Error("no way back");
-  press(back);
-  expect(backs).toHaveLength(1);
 });

@@ -4,13 +4,14 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import {
   type MemberSeams,
   OrganizationRefused,
   type WorkspaceSeams,
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { member, organization, user } from "@luke/database/schemas/auth";
+import { invitation, member, organization, user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
@@ -27,6 +28,10 @@ import {
   workspaceInvitationsAnswerSchema,
 } from "@luke/features/workspace-invitation-wire";
 import {
+  workspaceInvitationsLiveRowsSchema,
+  workspaceInvitationsOfLiveRows,
+} from "@luke/features/workspace-live";
+import {
   WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_PHOTO_TYPE,
@@ -41,7 +46,7 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { and, eq } from "drizzle-orm";
-import { Cause, Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Cause, Clock, type Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -59,6 +64,7 @@ import {
 } from "../testing/github-app-fake.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { workspaceGithubProcedures } from "./workspace-github-procedures.js";
+import { workspaceInvitationsLiveStatement } from "./workspace-invitations.js";
 import { workspaceInvitationsProcedures } from "./workspace-invitations-procedures.js";
 import { workspacesApp } from "./workspaces-app.js";
 import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspaces-procedures.js";
@@ -1059,6 +1065,7 @@ const readPhoto = (seams: WorkspaceSeams, userId: string | undefined, workspaceI
       contentType: response.headers.get("content-type"),
       nosniff: response.headers.get("x-content-type-options"),
       cacheControl: response.headers.get("cache-control"),
+      resourcePolicy: response.headers.get("cross-origin-resource-policy"),
       policy: openedPagePolicy(response.headers),
       base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
     }),
@@ -1094,6 +1101,7 @@ it.effect(
           contentType: "image/png",
           nosniff: "nosniff",
           cacheControl: "private, no-store",
+          resourcePolicy: "same-origin",
           policy: SANDBOXED_PAGE,
           base64: png,
         });
@@ -1317,6 +1325,42 @@ it.effect("an owner cannot leave, and a member leaves", () =>
       assert.deepEqual(yield* membersOf(acme), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "a member removed, or one who leaves, lets go of the workspace's tasks assigned to them, and keeps those of every other workspace",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(api, ada, [
+          { userId: grace, role: "member" },
+          { userId: alan, role: "member" },
+        ]);
+        const initech = yield* openTeam(api, grace, [{ userId: ada, role: "member" }]);
+        const assigned = (organizationId: string, assigneeId: string) =>
+          createTask(ada, { organizationId, name: "Invites", assigneeId });
+        const gracesHere = yield* assigned(acme, grace);
+        const gracesThere = yield* assigned(initech, grace);
+        const alansHere = yield* assigned(acme, alan);
+        const assigneeOf = (taskId: string) =>
+          Effect.map(
+            readTask(ada, taskId),
+            (read) => Option.getOrUndefined(read)?.task.assignee?.userId,
+          );
+
+        yield* removing(plugin, ada, acme, grace);
+        yield* leaving(plugin, alan, acme);
+
+        assert.equal(yield* assigneeOf(gracesHere.id), undefined);
+        assert.equal(yield* assigneeOf(alansHere.id), undefined);
+        assert.equal(yield* assigneeOf(gracesThere.id), grace);
+      }).pipe(Effect.provide(database));
+    }),
 );
 
 /** The account giving a teammate a role, under its session. */
@@ -1993,6 +2037,75 @@ it.effect(
         assert.equal(link.searchParams.get("id"), made.id);
         assert.deepEqual(listed, [made]);
         assert.deepEqual(canceled, { status: HOSTED_HTTP_STATUS.OK, body: { invitations: [] } });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+/** A workspace's pending invitations as the desktop builds them from the live rows at `now`, run as Realtime runs them, for `readerId`. */
+const liveInvitationsOf = (readerId: string, workspaceId: string, now: number) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statement = Option.getOrThrow(workspaceInvitationsLiveStatement(readerId, workspaceId));
+    const rows = yield* Effect.all({
+      invitations: sql.unsafe(statement.sql, [...statement.params]),
+    });
+    return workspaceInvitationsOfLiveRows(
+      yield* Schema.decodeUnknownEffect(workspaceInvitationsLiveRowsSchema)(rows),
+      ORIGIN,
+      now,
+    );
+  });
+
+it.effect(
+  "the live statement delivers the pending invitations the held read lists, the expired left out by the desktop's clock, to an owner and an admin, and none to a member or an outsider",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const sam = yield* openGithubAccount("Sam Member");
+        const outsider = yield* openGithubAccount("Olive Outsider");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: sam, role: "member" },
+        ]);
+        const madeFor = (email: string, role = "member") =>
+          Effect.map(
+            inviting(plugin, ada, acme, email, role),
+            (made) =>
+              readAs(made, workspaceInvitationAnswerSchema, HOSTED_HTTP_STATUS.CREATED).invitation,
+          );
+        yield* madeFor("alan@example.com");
+        yield* madeFor("bea@example.com", "admin");
+        const canceled = yield* madeFor("carl@example.com");
+        const expired = yield* madeFor("dora@example.com");
+        yield* postedInSession(plugin, ada, HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL, {
+          workspaceId: acme,
+          invitationId: canceled.id,
+        });
+        const now = yield* Clock.currentTimeMillis;
+        yield* Database.use((db) =>
+          db
+            .update(invitation)
+            .set({ expiresAt: new Date(now) })
+            .where(eq(invitation.id, expired.id)),
+        );
+
+        const held = readAs(
+          yield* readInSession(plugin, ada, invitationsAt(acme)),
+          workspaceInvitationsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).invitations;
+        assert.deepEqual(held.map((one) => one.email).toSorted(), [
+          "alan@example.com",
+          "bea@example.com",
+        ]);
+        for (const reader of [ada, grace]) {
+          assert.deepEqual(yield* liveInvitationsOf(reader, acme, now), held);
+        }
+        assert.deepEqual(yield* liveInvitationsOf(sam, acme, now), []);
+        assert.deepEqual(yield* liveInvitationsOf(outsider, acme, now), []);
       }).pipe(Effect.provide(plugin.database));
     }),
 );

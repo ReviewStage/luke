@@ -9,7 +9,7 @@ import {
   INBOX_CLOSE_LEAD,
   INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
-  INBOX_MESSAGE_LEAD,
+  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_TOOL,
   type InboxAnswers,
@@ -96,15 +96,16 @@ export const INBOX_TOOLS = {
       "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
       "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
       `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
-      `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options, or boolean, each named by its label and required where it must be filled; ` +
+      `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
       "or no fields for an answer in their own words); never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
       "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread. " +
+      "It waits in their inbox until they acknowledge it, which never reaches you unless they write something; " +
+      `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
       "A thread holds one open ask, and a newer ask replaces it. " +
-      "waits is whether you need to hear the answer as a message: decide and answer wait unless you set it false, and do waits only where you set it true. " +
-      "An answer you do not wait for is kept for you to read, though one carrying their words or a file still reaches you as a message. " +
+      "An answer to decide or answer always reaches you as a message. " +
+      "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
+      "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
       `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
-      `Replying never answers: a member may write on a thread at any point, which reaches you as a developer's message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key; ` +
-      "answer it, or follow up after an answer, with a post under the key that asks nothing unless what you need changed. " +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your whole inbox as it stands.`,
     inputSchema: inboxThreadPostInputSchema,
   },
@@ -194,12 +195,15 @@ export const INBOX_REFUSAL = {
   NO_TITLE:
     "Not posted: you have no thread under that key, and the first post under a key names its title.",
   TOO_MANY: `Not posted: you hold ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks already. Withdraw one you no longer need first.`,
+  TOO_MANY_NOTICES: `Not posted: the developer has ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} notices of yours to acknowledge. Follow up on one under its key, or wait until they do.`,
   TOO_MANY_PICTURES: `Not posted: a message draws at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} pictures from your sandbox.`,
   NO_OPTIONS: "Not posted: a decide's options each stand under a label of their own.",
   UNKNOWN_RECOMMENDATION: "Not posted: recommended names no option's label.",
   FIELD_LABELS: "Not posted: an answer names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
+  SELECT_RECOMMENDATION:
+    "Not posted: a select field's recommended names one of its options, and no other field recommends one.",
   UNREADABLE_WITHDRAW: "Not withdrawn: name the thread's key and why you withdraw its ask.",
   NO_OPEN_ASK: "Not withdrawn: you have no thread under that key with an open ask.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
@@ -274,19 +278,28 @@ function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
 }
 
 /**
+ * Whether the item is a notice still open: a post that asked nothing,
+ * waiting on the developer's nod alone, which the agent never hears, so it
+ * reads as no ask of the agent's.
+ */
+function openNotice(item: InboxItem): boolean {
+  return item.status === INBOX_STATUS.OPEN && item.response.type === INBOX_RESPONSE.NONE;
+}
+
+/**
  * What an item from before threads carries on itself rather than on a
  * message: what it asks while open, how it was answered, and why it was
  * closed. Note that an item posted since carries each on its messages, so
- * none is repeated where a message asks or answers.
+ * none is repeated where a message asks or answers, and a notice's empty
+ * view is left out, since it asks nothing.
  */
 function legacyOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<AgentInboxLine> {
   if (messages.some((message) => message.ask !== undefined || message.answers !== undefined)) {
     return {};
   }
+  const asks = item.status === INBOX_STATUS.OPEN && !(openNotice(item) && item.blocks.length === 0);
   return {
-    ...(item.status === INBOX_STATUS.OPEN
-      ? { blocks: item.blocks, response: item.response }
-      : undefined),
+    ...(asks ? { blocks: item.blocks, response: item.response } : undefined),
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
     ...(item.answerFiles === undefined
       ? undefined
@@ -326,7 +339,7 @@ function lineOf(item: InboxItem): AgentInboxLine {
     key: item.key,
     title: item.title,
     status: item.status,
-    ...(open ? { waits: item.needsReply } : undefined),
+    ...(open && !openNotice(item) ? { waits: item.needsReply } : undefined),
     ...(earlier > 0 ? { earlier } : undefined),
     thread: told.map(threadLineOf),
     ...closerOf(item),
@@ -365,7 +378,7 @@ function distinct(labels: readonly string[]): boolean {
   return new Set(labels).size === labels.length;
 }
 
-/** An answer's fields' own refusal: a label used twice, a select with no options or one twice, or options on a field that takes none. */
+/** An answer's fields' own refusal: a label used twice, a select with no options or one twice, options on a field that takes none, or a recommendation naming none of a select's options. */
 function fieldsRefusal(fields: readonly InboxField[]): string | undefined {
   if (!distinct(fields.map((field) => field.label))) return INBOX_REFUSAL.FIELD_LABELS;
   for (const field of fields) {
@@ -373,6 +386,12 @@ function fieldsRefusal(fields: readonly InboxField[]): string | undefined {
     const select = field.type === INBOX_FIELD.SELECT;
     if (select ? options === undefined || !distinct(options) : options !== undefined) {
       return INBOX_REFUSAL.SELECT_OPTIONS;
+    }
+    if (
+      field.recommended !== undefined &&
+      !(select && options?.includes(field.recommended) === true)
+    ) {
+      return INBOX_REFUSAL.SELECT_RECOMMENDATION;
     }
   }
   return undefined;
@@ -401,6 +420,8 @@ function storeRefusal(refusal: InboxPostRefusal): string {
   switch (refusal) {
     case INBOX_POST_REFUSAL.TOO_MANY_OPEN:
       return INBOX_REFUSAL.TOO_MANY;
+    case INBOX_POST_REFUSAL.TOO_MANY_NOTICES:
+      return INBOX_REFUSAL.TOO_MANY_NOTICES;
     case INBOX_POST_REFUSAL.NO_TITLE:
       return INBOX_REFUSAL.NO_TITLE;
     case INBOX_POST_REFUSAL.NO_AGENT:
@@ -409,12 +430,14 @@ function storeRefusal(refusal: InboxPostRefusal): string {
 }
 
 /**
- * Whether the agent hears the answer to an ask as a message where it does
- * not say: a decision or an answer it asked for, yes; a to-do, which it
- * mostly needs only done, no.
+ * Whether the agent hears the answer to an ask as a message: a decision or
+ * an answer it asked for always, whatever the post says, since an agent
+ * whose turn has ended reads nothing kept for it until something wakes it,
+ * and the developer who answered would wait on it for ever; a to-do, which
+ * it mostly needs only done, only where the post says it waits.
  */
-function waitsByDefault(ask: InboxAsk): boolean {
-  return ask.type !== INBOX_ASK.DO;
+function heardAnswer(ask: InboxAsk, waits: boolean | undefined): boolean {
+  return ask.type !== INBOX_ASK.DO || waits === true;
 }
 
 /**
@@ -443,11 +466,11 @@ function bodyPictures(
   });
 }
 
-/** The post as the store writes it: its key, title, words, and ask, and whether the agent waits on the answer, by the ask's default where it did not say. */
+/** The post as the store writes it: its key, title, words, and ask, and whether the agent hears the answer (`heardAnswer`). */
 function threadPost(post: InboxThreadPostInput) {
   const { waits, ...written } = post;
   if (post.ask === undefined) return written;
-  return { ...written, needsReply: waits ?? waitsByDefault(post.ask) };
+  return { ...written, needsReply: heardAnswer(post.ask, waits) };
 }
 
 /** Runs one post: its pictures read from the sandbox, the message written on the thread under its key, and the agent's inbox answered, or why not. */

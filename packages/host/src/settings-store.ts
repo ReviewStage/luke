@@ -528,6 +528,16 @@ function defaultPersistedSettings(): PersistedSettings {
   return settledPersistedSettings(decodePersistedSettings({}));
 }
 
+/**
+ * Keeping an account was refused because no cipher can seal its tokens: the
+ * store was handed none, or the system's encrypted storage is unavailable.
+ */
+export class EncryptedStorageUnavailable extends Data.TaggedError("EncryptedStorageUnavailable") {
+  override get message(): string {
+    return "Encrypted credential storage is unavailable on this system.";
+  }
+}
+
 /** A stored file this build cannot read as settings; `reason` is the legacy message. */
 class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal")<{
   readonly reason: string;
@@ -853,11 +863,13 @@ export class SettingsStore {
   }
 
   /** Stores both OAuth tokens, and the session when there is one, under one Keychain-backed ciphertext. */
-  setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, PlatformError> {
+  setAccount(
+    account: StoredAccount,
+  ): Effect.Effect<AccountSnapshot, PlatformError | EncryptedStorageUnavailable> {
     return Effect.gen({ self: this }, function* () {
       const cipher = this.#cipher;
       if (!cipher || !this.#secretStorageUsable()) {
-        throw new Error("Encrypted credential storage is unavailable on this system.");
+        return yield* new EncryptedStorageUnavailable();
       }
       yield* this.#mutate((persisted) => {
         const tokenCipher = Base64.encode(
@@ -975,15 +987,22 @@ export class SettingsStore {
    * scopes are fixed by this build and none reaches a credential, an account,
    * or the agent pairing, whose own row already offers the provider's default.
    * A scope already at its defaults writes nothing, like any other setter
-   * asked for the value it holds.
+   * asked for the value it holds. The fields `kept` are left as the file
+   * holds them, inside the same write: the rows the asking page does not
+   * draw, so a reset never returns a choice its reader could not see, and
+   * never writes back an older reading over another window's newer one.
    */
-  resetSettings(scope: SettingsResetScope): Effect.Effect<SettingsUpdateResult, PlatformError> {
+  resetSettings(
+    scope: SettingsResetScope,
+    kept: readonly AppSettingField[] = [],
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) => {
         const next: PersistedSettings = { ...persisted };
         for (const field of APP_SETTING_FIELDS) {
           const definition = APP_SETTING_SCHEMA[field];
           if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+          if (kept.includes(field)) continue;
           if (definition.guard(undefined).valid) delete next[field];
           else Object.assign(next, { [field]: definition.default });
         }
@@ -1014,14 +1033,18 @@ export class SettingsStore {
    * the held copy would write that writer's fields back as they were. A
    * mutator answering nothing means the stored value is already the one
    * asked for, so nothing is written. It runs exactly once per call, so it
-   * may record what it decided for its caller to read afterwards.
+   * may record what it decided for its caller to read afterwards. A store
+   * that is its file's one writer (no `writer`, as the desktop's) writes over
+   * the copy it holds where that read fails, since nobody else can have
+   * written the file since it was held; one of several writers fails the
+   * write rather than write another's fields back as they were.
    */
   #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
   ): Effect.Effect<void, PlatformError> {
     return this.#writes.withPermits(1)(
       Effect.gen({ self: this }, function* () {
-        const persisted = yield* this.#reread();
+        const persisted = yield* this.#rereadForWrite();
         const mutated = mutate(persisted);
         if (!mutated) return;
         const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
@@ -1095,6 +1118,14 @@ export class SettingsStore {
    */
   reload(): Effect.Effect<void, PlatformError> {
     return Effect.asVoid(this.#reread());
+  }
+
+  #rereadForWrite(): Effect.Effect<PersistedSettings, PlatformError> {
+    if (this.#writer !== undefined) return this.#reread();
+    return Effect.catch(this.#reread(), (error) => {
+      const held = this.#held;
+      return held === undefined ? Effect.fail(error) : Effect.succeed(held);
+    });
   }
 
   #reread(): Effect.Effect<PersistedSettings, PlatformError> {

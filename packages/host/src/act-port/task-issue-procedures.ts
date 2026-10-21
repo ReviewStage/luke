@@ -9,8 +9,8 @@ import type {
   TasksIssueUnlinkParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { TASK_ISSUE_ACT_KIND } from "../contract/index.js";
+import type { ActSender } from "./base.js";
 import { actPort } from "./base.js";
 
 /**

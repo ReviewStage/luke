@@ -1,5 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import type { AskDeliveryBinding } from "@luke/database/models/asks";
+import type { AskDeliveryBinding, AskRow } from "@luke/database/models/asks";
 import {
   answerMessageId,
   hostTurnId,
@@ -8,14 +8,15 @@ import {
 } from "@luke/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { redactCredentials } from "@luke/features/credential-redaction";
 import { Effect, Option, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import {
   ACTION_RESULT_STATUS,
+  ASK_ORIGIN,
   AssistantMessageBuilder,
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   type BrainModelUsage,
@@ -39,10 +40,10 @@ import {
   userMetadataOf,
 } from "../../core.js";
 import { isRemoteToolName, storedRemoteCall } from "../../integrations/connection-tools.js";
-import { redactCredentials } from "../../observability/credentials.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../tasks/board-look.js";
 import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
+import { BROWSER_TOOL, storedBrowserOutput } from "../browser/browser-tool.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
@@ -57,12 +58,17 @@ import { keptPictures } from "./relay-pictures.js";
  * share: every event eve records for a session is read here, after eve has
  * written it, and told again as the `BrainRunEvent` the store writer
  * consumes, so the writer stays the sole consumer and the only thing that
- * writes a message row. The brain host composes it with the ask record,
- * whose deliveries a turn's start binds and whose Stop it carries; the
- * coding-agent host composes it without, since a message to a coding agent
- * is written ahead of its turn as a line awaiting one and taken into the
- * turn that receives it, and everything below from a turn's start to its
- * answer is the same for both. eve numbers a turn
+ * writes a message row. Both hosts compose it with the ask record, whose
+ * deliveries a turn's start binds and whose Stop it carries, on every turn,
+ * since a line of either kind may join a turn of the other under way: a
+ * call's spoken ask joins a coding agent's typed turn, and a line typed to
+ * the agent joins a call's spoken one. So each line a turn receives is told
+ * apart as it arrives, not by the kind of turn it lands in (`#received`): a
+ * line typed to a coding agent is written ahead of its turn as a row awaiting
+ * one and taken into the turn that receives it, a spoken ask's line is the
+ * transcript's row, which the voice wrote, and any other is written here.
+ * Everything below from a turn's start to its answer is the same for both
+ * hosts. eve numbers a turn
  * inside its session and names a call by id; the relay mints the store's
  * uuid for the turn and its messages as the same function of those
  * coordinates every time, so a step eve retries lands on the rows the first
@@ -155,6 +161,10 @@ interface RelayTurnState {
   readonly deliveries?: readonly string[];
   /** How many developer lines the turn has received, and eve's id for the last one read, so a line eve delivers again adds nothing; absent in state an earlier build kept. */
   readonly received?: { readonly count: number; readonly eventId: string };
+  /** The instant the writer last took a write that grew the turn's journal; absent before the first, and in state an earlier build kept. */
+  readonly journaledAt?: number;
+  /** The events that grow the journal told inside the interval since it was last written, in order, to land with its next write (`JOURNAL_WRITE_INTERVAL_MS`). */
+  readonly held?: readonly BrainRunEvent[];
 }
 
 /** What one session's relay keeps: the turns still under way, by eve's own turn id. */
@@ -205,8 +215,13 @@ export interface RelayStanding {
  */
 type RelayEffect<Value> = Effect.Effect<Value, QueryError | Schema.SchemaError, DatabaseServices>;
 
-/** The ask record a brain turn binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
-interface RelayAskSeams {
+/**
+ * The ask record a turn binds the asks delivered into it to, and the Stop a
+ * waiting ask took, carried the moment the turn starts. A spoken ask that
+ * joined a typed turn keeps its own Stop: the turn runs on, and only the
+ * voice's following of the ask ends (`voice/live-brain.ts`).
+ */
+export interface RelayAskSeams {
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
   readonly binding: AskDeliveryBinding;
   /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
@@ -219,12 +234,12 @@ interface RelayAskSeams {
 }
 
 interface StreamRelaySeams {
-  /** The four writes the relay makes. */
+  /** The writes the relay makes. */
   readonly writer: Pick<
     StoreWriter,
-    "consume" | "enqueueTurn" | "attachAskLines" | "takeAwaitingLine"
+    "consumeAll" | "enqueueTurn" | "attachAskLines" | "takeAwaitingLine"
   >;
-  /** The ask record, where the conversation takes asks; nothing for a coding agent, whose turns are opened by a Start alone. */
+  /** The ask record, where the conversation takes asks: every turn of either host; nothing for a relay of no conversation the voice speaks into, such as a test's. */
   readonly asks?: RelayAskSeams;
   readonly now: () => number;
   /** Where a write the writer refused is said; the relay never throws into eve's turn. */
@@ -353,6 +368,70 @@ function withTurn(
   return { ...state, turns: { ...state.turns, [eveTurnId]: next(turn) } };
 }
 
+/**
+ * How often a running turn's journal is written for what only grows it: a
+ * step's boundary, its reasoning, or a call's answer told less than this
+ * after the journal was last written is held in the turn's relay state,
+ * which eve keeps durably with the event, and lands in order with the
+ * journal's next write. Every write rewrites the journal's parts whole, so a
+ * turn that told each of these at once rewrote its parts once for each. A
+ * finished sentence is not held, because the voice says it from the journal
+ * as the turn runs; it lands at once with whatever was held.
+ *
+ * Nothing waits on a timer, which would end with eve's step and the function
+ * instance under it: what is held lands with the next event of the turn's
+ * stream past the interval, whatever its kind (`foldedQuietly` relays it),
+ * and at once with a finished sentence, ahead of a call's start, which is
+ * never held so the call stands in the record before it runs (the calls one
+ * request asks for land together), ahead of a developer's line taken
+ * into the turn, at a step's end, and with the turn's answer and its end. A
+ * held event lives in eve's state, so a step eve resumes lands it; only a
+ * session lost for good leaves it unwritten, and the turn's abandonment
+ * settles the journal as it last landed, never missing a call it made.
+ */
+export const JOURNAL_WRITE_INTERVAL_MS = 250;
+
+/** The events held while the journal was written within the interval: each only grows it. */
+const HELD_EVENTS: ReadonlySet<BrainRunEvent["kind"]> = new Set([
+  BRAIN_RUN_EVENT.STEP_STARTED,
+  BRAIN_RUN_EVENT.REASONING_COMPLETED,
+  BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+]);
+
+/** The events a write of the journal carries, which start the interval again. */
+const JOURNAL_EVENTS: ReadonlySet<BrainRunEvent["kind"]> = new Set([
+  ...HELD_EVENTS,
+  BRAIN_RUN_EVENT.TEXT_DRAFTED,
+  BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+]);
+
+/** Whether the turn's journal was written less than the interval ago. */
+function journaledWithin(turn: RelayTurnState, now: number): boolean {
+  return turn.journaledAt !== undefined && now - turn.journaledAt < JOURNAL_WRITE_INTERVAL_MS;
+}
+
+/** The steps whose finished words the writer has not yet taken, by the step's key, with those words. */
+function untoldDrafts(
+  turn: RelayTurnState,
+): readonly { readonly key: string; readonly draft: RelayDraft; readonly text: string }[] {
+  return Object.entries(turn.drafts ?? {}).flatMap(([key, draft]) => {
+    const text = finishedSentencesOf(joinedWords(draft.completed, draft.forming));
+    return text.length > draft.told ? [{ key, draft, text }] : [];
+  });
+}
+
+/** Whether the turn holds anything the journal was not yet told: a held event, or finished words. */
+function holdsUnwritten(turn: RelayTurnState): boolean {
+  return (turn.held?.length ?? 0) > 0 || untoldDrafts(turn).length > 0;
+}
+
+const readTurnOfEvent = Schema.decodeUnknownOption(Schema.Struct({ turnId: Schema.String }));
+
+/** The turn an event of eve's stream belongs to, where it names one. */
+function turnIdOf(event: MessageStreamEvent): string | undefined {
+  return Option.getOrUndefined(Option.map(readTurnOfEvent(event.data), (data) => data.turnId));
+}
+
 /** A step's draft as one of eve's text events grows it, and the step's finished words through it. */
 interface GrownDraft {
   readonly key: string;
@@ -392,6 +471,62 @@ function keepDraft(store: RelayStateStore, eveTurnId: string, key: string, draft
   );
 }
 
+/** The events that end a turn, whose own write carries whatever the turn held. */
+const TURN_END_EVENT = {
+  COMPLETED: "turn.completed",
+  FAILED: "turn.failed",
+  CANCELLED: "turn.cancelled",
+} as const;
+
+const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set(
+  Object.values(TURN_END_EVENT),
+);
+
+/** One call a request of eve's asks for, as the record names it. */
+interface RequestedCall {
+  readonly callId: string;
+  readonly name: string;
+  readonly input: UnparsedWireValue;
+}
+
+/**
+ * The turn's state with a held event the writer refused taken back out:
+ * a step's boundary that holds nothing yet, a reasoning part, or a call's
+ * answer, so the relay keeps only what the writer took.
+ */
+function withoutRefused(turn: RelayTurnState, event: BrainRunEvent): RelayTurnState {
+  switch (event.kind) {
+    case BRAIN_RUN_EVENT.STEP_STARTED: {
+      const key = String(event.step - 1);
+      if ((turn.steps[key]?.parts.length ?? 0) > 0) return turn;
+      const { [key]: _step, ...steps } = turn.steps;
+      return { ...turn, steps };
+    }
+    case BRAIN_RUN_EVENT.REASONING_COMPLETED:
+      return mapParts(turn, (part) =>
+        part.kind === "reasoning" && part.id === event.item.id ? [] : [part],
+      );
+    case BRAIN_RUN_EVENT.TOOL_CALL_SETTLED:
+      return mapParts(turn, (part) => {
+        if (part.kind !== "tool" || part.callId !== event.callId) return [part];
+        const { settlement: _settlement, ...unsettled } = part;
+        return [unsettled];
+      });
+    default:
+      return turn;
+  }
+}
+
+function mapParts(
+  turn: RelayTurnState,
+  map: (part: RelayPart) => readonly RelayPart[],
+): RelayTurnState {
+  const steps = Object.fromEntries(
+    Object.entries(turn.steps).map(([key, step]) => [key, { parts: step.parts.flatMap(map) }]),
+  );
+  return { ...turn, steps };
+}
+
 /** The kinds of event `StreamRelay.handle` reads; it passes over every other kind eve emits. */
 const RELAYED_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
   "turn.started",
@@ -417,12 +552,25 @@ const RELAYED_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
  * fragments outnumber every other event. A fragment of the step's words is
  * folded into its draft where it finishes no sentence the writer was not
  * already told; one that does is the relay's, which grows the draft as this
- * would and tells the writer. Note that folding needs no admission because
- * it touches only the session's own state: a turn is held there only once
- * an admitted relay opened it, and what is folded reaches the store only
- * through a later event the hook admits.
+ * would and tells the writer. Any event of a turn holding what the journal
+ * was not yet told (`JOURNAL_WRITE_INTERVAL_MS`) is relayed once the
+ * interval has passed, so what waits lands with the stream's next event
+ * rather than its next write. Note
+ * that folding needs no admission because it touches only the session's own
+ * state: a turn is held there only once an admitted relay opened it, and
+ * what is folded reaches the store only through a later event the hook
+ * admits. `now` is the host's clock; without it nothing waits on the
+ * interval.
  */
-export function foldedQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean {
+export function foldedQuietly(
+  event: MessageStreamEvent,
+  state: RelayStateStore,
+  now?: number,
+): boolean {
+  const eveTurnId = turnIdOf(event);
+  const turn = eveTurnId === undefined ? undefined : state.get().turns[eveTurnId];
+  const waiting = turn !== undefined && now !== undefined && journaledWithin(turn, now);
+  if (turn !== undefined && holdsUnwritten(turn) && !waiting) return false;
   if (!RELAYED_EVENTS.has(event.type)) return true;
   if (event.type !== "message.appended") return false;
   const { turnId, stepIndex, messageDelta } = event.data;
@@ -513,9 +661,11 @@ function heldCallName(state: RelayState, eveTurnId: string, callId: string): str
 
 /**
  * A look's result as the conversation keeps it, a look at the board or at
- * one of the plan's pictures without the image; nothing for any other call.
- * Note that a look's image went to the model once and is not kept, because
- * it is no record of the plan.
+ * one of the plan's pictures without the image, and a browser call's
+ * without its screenshots; nothing for any other call. Note that a look's
+ * image went to the model once and is not kept, because it is no record of
+ * the plan, and that a page's screenshot is kept nowhere (the cloud
+ * browser's line in `AGENTS.md`).
  */
 function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireValue | undefined {
   switch (toolName) {
@@ -523,6 +673,8 @@ function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireVa
       return storedLookOutput(output);
     case LOOK_AT_PICTURE_TOOL.name:
       return storedPictureLookOutput(output);
+    case BROWSER_TOOL.name:
+      return storedBrowserOutput(output);
     default:
       return undefined;
   }
@@ -559,21 +711,53 @@ export class StreamRelay {
     this.#seams = seams;
   }
 
-  /** Reads one event of the session's stream and tells the writer what it amounts to. */
+  /**
+   * Reads one event of the session's stream and tells the writer what it
+   * amounts to, first landing what the turn's journal holds where it is due:
+   * past the interval, at a step's end, or ahead of a developer's line the
+   * turn takes, whose place among the steps is read from the journal.
+   */
   handle(event: MessageStreamEvent, standing: RelayStanding): RelayEffect<void> {
+    const eveTurnId = turnIdOf(event);
+    const read = Effect.suspend(() => this.#read(event, standing));
+    if (eveTurnId === undefined) return read;
+    return Effect.andThen(this.#landDue(eveTurnId, event.type, standing), read);
+  }
+
+  #landDue(
+    eveTurnId: string,
+    type: MessageStreamEvent["type"],
+    standing: RelayStanding,
+  ): RelayEffect<void> {
+    return Effect.suspend(() => {
+      const turn = standing.state.get().turns[eveTurnId];
+      if (turn === undefined || !holdsUnwritten(turn)) return Effect.void;
+      // The turn's end lands what it holds in its own write (`#tell`), ahead of its answer or its end.
+      if (TURN_END_EVENTS.has(type)) return Effect.void;
+      const boundary = type === "step.completed" || type === "message.received";
+      if (!boundary && journaledWithin(turn, this.#seams.now())) return Effect.void;
+      return Effect.asVoid(this.#land(eveTurnId, standing, []));
+    });
+  }
+
+  #read(event: MessageStreamEvent, standing: RelayStanding): RelayEffect<void> {
     switch (event.type) {
       case "turn.started":
         return this.#turnStarted(event.data.turnId, event.meta.deliveryIds ?? [], standing);
       case "message.received":
-        return Effect.andThen(
-          this.#joined(event.data.turnId, event.meta.deliveryIds ?? [], standing),
-          this.#received(event.data.turnId, receivedMessage(event.data), event.meta.id, standing),
+        return this.#received(
+          event.data.turnId,
+          event.meta.deliveryIds ?? [],
+          receivedMessage(event.data),
+          event.meta.id,
+          standing,
         );
       case "step.started":
         return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
       case "actions.requested": {
         const { turnId, stepIndex, actions } = event.data;
-        return Effect.gen({ self: this }, function* () {
+        return Effect.suspend(() => {
+          const requested: RequestedCall[] = [];
           for (const action of actions) {
             const call = requestedCallOf(action);
             if (!call) continue;
@@ -582,17 +766,11 @@ export class StreamRelay {
             const stored =
               parentCallId === undefined
                 ? { name: call.name, input }
-                : this.#nestedCall(turnId, call.name, input, parentCallId, standing);
+                : this.#nestedCall(turnId, call.name, input, parentCallId, standing, requested);
             if (!stored) continue;
-            yield* this.#toolCall(
-              turnId,
-              stepIndex,
-              call.callId,
-              stored.name,
-              stored.input,
-              standing,
-            );
+            requested.push({ callId: call.callId, name: stored.name, input: stored.input });
           }
+          return this.#toolCalls(turnId, stepIndex, requested, standing);
         });
       }
       case "action.result": {
@@ -776,7 +954,14 @@ export class StreamRelay {
       // A failed stop drops the turn from relay state with the rest of this block, so the start
       // eve emits again reaches the stamp and carries it; a start that finds its turn under way
       // never comes this far and carries nothing twice.
-      yield* this.#bound(standing, deliveryIds, eveTurnId, turnId);
+      // A spoken ask eve folded into a typed turn as it started joined it before any step.
+      yield* this.#bound(
+        standing,
+        deliveryIds,
+        eveTurnId,
+        turnId,
+        kind === BRAIN_HOST_TURN.TYPED ? 0 : undefined,
+      );
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin,
@@ -795,21 +980,35 @@ export class StreamRelay {
     );
   }
 
-  /** Binds the deliveries to the turn and carries any Stop they took, where the conversation takes asks at all. */
+  /**
+   * Binds the deliveries to the turn and carries any Stop they took, where
+   * the conversation takes asks at all, and answers the asks bound. A spoken
+   * ask bound to a typed turn keeps the place it joined at
+   * (`joinedAfterStep`), and its Stop is its own: carrying it would cancel
+   * the turn it joined, an agent's coding turn of an hour, for a question
+   * asked on a call.
+   */
   #bound(
     standing: RelayStanding,
     deliveryIds: readonly string[],
     eveTurnId: string,
     turnId: string,
-  ): RelayEffect<void> {
+    joinedAfterStep: number | undefined,
+  ): RelayEffect<readonly AskRow[]> {
     const asks = this.#seams.asks;
-    if (asks === undefined) return Effect.void;
+    if (asks === undefined) return Effect.succeed([]);
     return Effect.gen(function* () {
-      yield* asks.binding.bindDeliveries(standing.target, deliveryIds, turnId);
+      const bound = yield* asks.binding.bindDeliveries(
+        standing.target,
+        deliveryIds,
+        turnId,
+        joinedAfterStep,
+      );
       const stopped = yield* asks.binding.stoppedOn(standing.target, turnId);
-      if (stopped.length > 0) {
+      if (stopped.some((ask) => ask.joinedAfterStep === undefined)) {
         yield* asks.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
       }
+      return bound;
     });
   }
 
@@ -821,34 +1020,67 @@ export class StreamRelay {
   /**
    * Binds to the turn each delivery that joined it under way and carries the
    * Stop an ask took while it waited, as the start does for the deliveries
-   * eve folded into the turn. A message that steers a turn (`channel.ts`)
-   * rides on every later event of the turn with its own delivery beside the
-   * start's, so the binding runs where a received line first names one, and
-   * a delivery the turn already holds binds nothing again.
+   * eve folded into the turn, and answers the asks bound. A message that
+   * steers a turn (`channel.ts`) rides on every later event of the turn with
+   * its own delivery beside the start's, so the binding runs where a received
+   * line first names one, and a delivery the turn already holds binds nothing
+   * again. A spoken ask joining a typed turn keeps how many of its steps had
+   * begun, which the step the line steers is not yet among, since eve tells a
+   * line ahead of the step that takes it. Where the line was taken as a
+   * typed one, `binds` is false and the deliveries are only kept, since no
+   * ask is among them.
    */
   #joined(
     eveTurnId: string,
     deliveryIds: readonly string[],
     standing: RelayStanding,
-  ): RelayEffect<void> {
+    binds: boolean,
+  ): RelayEffect<readonly AskRow[]> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
-      if (!turn) return;
-      const bound = new Set(turn.deliveries ?? []);
-      const joining = deliveryIds.filter((id) => !bound.has(id));
-      if (joining.length === 0) return;
-      yield* this.#bound(standing, joining, eveTurnId, hostTurnId(standing.sessionId, eveTurnId));
+      if (!turn) return [];
+      const held = new Set(turn.deliveries ?? []);
+      const joining = deliveryIds.filter((id) => !held.has(id));
+      if (joining.length === 0) return [];
+      const bound = binds
+        ? yield* this.#bound(
+            standing,
+            joining,
+            eveTurnId,
+            hostTurnId(standing.sessionId, eveTurnId),
+            turn.kind === BRAIN_HOST_TURN.TYPED ? Object.keys(turn.steps).length : undefined,
+          )
+        : [];
       standing.state.update((state) =>
-        withTurn(state, eveTurnId, (held) => ({
-          ...held,
-          deliveries: [...(held.deliveries ?? []), ...joining],
+        withTurn(state, eveTurnId, (current) => ({
+          ...current,
+          deliveries: [...(current.deliveries ?? []), ...joining],
         })),
       );
+      return bound;
     });
   }
 
+  /**
+   * One line the turn received, told apart as it arrives rather than by the
+   * turn's kind, since a line of either kind may join a turn of the other.
+   * The turn's opening line is its kind's (`BRAIN_HOST_TURN_KIND`'s
+   * `receivedLine`): a spoken turn's is the transcript's row. Any other is
+   * first taken as the developer's typed lines awaiting a turn
+   * (`takeAwaitingLine`), then bound as an ask that joined the turn under
+   * way; a spoken ask's line is the transcript's row, beside any typed line
+   * eve coalesced with it, which is taken as its awaiting row, and every
+   * other line, a typed ask's among them, is written here as the turn's user
+   * row. Note
+   * the order: the awaiting row is taken under the conversation's lock,
+   * which waits out an ask's dispatch still writing its delivery under that
+   * lock (`asks.ts`'s `dispatchOnce`), so the binding that follows reads a
+   * delivery eve steered in before its dispatch committed; bound first, such
+   * an ask would be missed and its line written twice.
+   */
   #received(
     eveTurnId: string,
+    deliveryIds: readonly string[],
     received: ReceivedMessage,
     eventId: string | undefined,
     standing: RelayStanding,
@@ -865,22 +1097,12 @@ export class StreamRelay {
           received: { count: read.count + 1, eventId: eventId ?? read.eventId },
         })),
       );
+      const turnId = hostTurnId(standing.sessionId, eveTurnId);
       const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
-      if (receivedLine === RECEIVED_LINE.TRANSCRIPT) {
-        // The developer's line is the transcript's, under the ask's own id; a row
-        // written before the ask learned this turn is taken into it here, moved to
-        // a fresh place ahead of the journal the first step is about to open, and
-        // one written after lands attached by the writer's own read of the ask.
-        const attached = yield* this.#seams.writer.attachAskLines(
-          standing.target,
-          hostTurnId(standing.sessionId, eveTurnId),
-        );
-        if (Result.isFailure(attached)) {
-          this.#seams.report(
-            `The store refused to tie turn ${eveTurnId}'s line to it: ${attached.failure.refusal}.`,
-          );
-        }
-        return;
+      const opening = read.count === 0;
+      if (opening && receivedLine === RECEIVED_LINE.TRANSCRIPT) {
+        yield* this.#joined(eveTurnId, deliveryIds, standing, true);
+        return yield* this.#attachedLine(eveTurnId, standing);
       }
       // The lines the developer sent to a running coding agent already stand in the conversation,
       // awaiting this turn, one or several eve coalesced into this one message: the receipt takes
@@ -888,17 +1110,26 @@ export class StreamRelay {
       // still moves, so a later line's row keeps its id.
       const taken = yield* this.#seams.writer.takeAwaitingLine(standing.target, {
         text: received.text,
-        turnId: hostTurnId(standing.sessionId, eveTurnId),
+        turnId,
       });
-      if (Result.isSuccess(taken) && taken.success.length > 0) return;
+      const typed = Result.isSuccess(taken) && taken.success.length > 0;
+      const joined = yield* this.#joined(eveTurnId, deliveryIds, standing, !typed);
+      if (typed) return;
+      if (joined.some((ask) => ask.origin === ASK_ORIGIN.SPOKEN)) {
+        // A typed line eve coalesced beside the ask into this one message is still the
+        // developer's awaiting row, taken where its words stand among those received.
+        yield* this.#seams.writer.takeAwaitingLine(standing.target, {
+          text: received.text,
+          turnId,
+          beside: true,
+        });
+        return yield* this.#attachedLine(eveTurnId, standing);
+      }
       // A message written here keeps its words as its first part and the files it carried after them.
       const message = userMessage(
         receivedMessageId(standing.sessionId, eveTurnId, read.count),
         received.words,
-        userMetadataOf(
-          trigger,
-          turn.kind === BRAIN_HOST_TURN.SPOKEN ? BRAIN_REQUEST_ORIGIN.SPOKEN : undefined,
-        ),
+        userMetadataOf(trigger, undefined),
       );
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
@@ -909,8 +1140,28 @@ export class StreamRelay {
       // turn ends failed for persistence rather than settling a reply to nothing.
       if (written) return;
       standing.state.update((state) =>
-        withTurn(state, eveTurnId, (turn) => ({ ...turn, askRefused: true })),
+        withTurn(state, eveTurnId, (current) => ({ ...current, askRefused: true })),
       );
+    });
+  }
+
+  /**
+   * The developer's spoken line as the turn's own: the transcript's row,
+   * under the ask's own id, which the voice wrote. A row written before the
+   * ask learned this turn is taken into it here (`attachAskLines`), and one
+   * written after lands attached by the writer's own read of the ask.
+   */
+  #attachedLine(eveTurnId: string, standing: RelayStanding): RelayEffect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const attached = yield* this.#seams.writer.attachAskLines(
+        standing.target,
+        hostTurnId(standing.sessionId, eveTurnId),
+      );
+      if (Result.isFailure(attached)) {
+        this.#seams.report(
+          `The store refused to tie turn ${eveTurnId}'s line to it: ${attached.failure.refusal}.`,
+        );
+      }
     });
   }
 
@@ -954,8 +1205,11 @@ export class StreamRelay {
     input: UnparsedWireValue,
     parentCallId: string,
     standing: RelayStanding,
+    requested: readonly RequestedCall[],
   ): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
-    const parent = heldCallName(standing.state.get(), eveTurnId, parentCallId);
+    const parent =
+      heldCallName(standing.state.get(), eveTurnId, parentCallId) ??
+      requested.find((call) => call.callId === parentCallId)?.name;
     const stored =
       parent === CONNECTION_TOOL.EXECUTE ? storedRemoteCall(name, input, parentCallId) : undefined;
     if (stored === undefined && standing.state.get().turns[eveTurnId] !== undefined) {
@@ -966,34 +1220,40 @@ export class StreamRelay {
     return stored;
   }
 
-  #toolCall(
+  /**
+   * The calls one request of eve's asks for, told together in one write and
+   * never held, so each stands in the record before any of them runs; a call
+   * the turn already holds, as in a request eve emits again, is told no
+   * more. What the relay keeps is what the writer took: a call it refused is
+   * left out here too, so the request eve emits again tells it again.
+   */
+  #toolCalls(
     eveTurnId: string,
     stepIndex: number,
-    callId: string,
-    name: string,
-    input: UnparsedWireValue,
+    requested: readonly RequestedCall[],
     standing: RelayStanding,
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
-      if (
-        Object.values(turn.steps).some((step) =>
-          step.parts.some((part) => part.kind === "tool" && part.callId === callId),
-        )
-      ) {
-        return;
-      }
-      const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
-        callId,
-        name,
-        input,
-      });
-      if (!written) return;
+      const calls = requested.filter(
+        (call, index) =>
+          heldCallName(standing.state.get(), eveTurnId, call.callId) === undefined &&
+          requested.findIndex((other) => other.callId === call.callId) === index,
+      );
+      if (calls.length === 0) return;
+      const taken = yield* this.#land(
+        eveTurnId,
+        standing,
+        calls.map((call) => ({ kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED, ...call })),
+      );
       standing.state.update((state) =>
-        withTurn(state, eveTurnId, (turn) =>
-          withPart(turn, stepIndex, { kind: "tool", callId, name, input }),
+        withTurn(state, eveTurnId, (held) =>
+          calls.reduce(
+            (next, call, index) =>
+              taken[index] === true ? withPart(next, stepIndex, { kind: "tool", ...call }) : next,
+            held,
+          ),
         ),
       );
     });
@@ -1055,12 +1315,9 @@ export class StreamRelay {
       const { key, draft, text } = grown;
       keepDraft(standing.state, eveTurnId, key, draft);
       if (text.length <= draft.told) return;
-      const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
-        step: stepOf(stepIndex),
-        text,
-      });
-      if (written) keepDraft(standing.state, eveTurnId, key, { ...draft, told: text.length });
+      // A finished sentence lands at once, because the voice says it from the journal, and
+      // carries with it whatever the turn held; the draft is what it tells (`untoldDrafts`).
+      yield* this.#land(eveTurnId, standing, []);
     });
   }
 
@@ -1164,29 +1421,107 @@ export class StreamRelay {
     });
   }
 
-  /** Stamps one event with the conversation, the turn's store id, and the next sequence number, and hands it to the writer; answers whether the writer took it. */
+  /** Stamps one event with the conversation, the turn's store id, and the next sequence number. */
+  #stamped(eveTurnId: string, standing: RelayStanding, body: BrainRunEventBody): BrainRunEvent {
+    let sequence = 0;
+    standing.state.update((state) =>
+      withTurn(state, eveTurnId, (turn) => {
+        sequence = turn.sequence + 1;
+        return { ...turn, sequence };
+      }),
+    );
+    return {
+      ...body,
+      conversationId: sessionKey(standing.target.conversationId),
+      turnId: hostTurnId(standing.sessionId, eveTurnId),
+      sequence,
+    };
+  }
+
+  /**
+   * Tells the writer one event and answers whether it took it: an event that
+   * only grows the journal, told inside the interval since the journal was
+   * last written, is held in the turn's state and answered as taken; any
+   * other lands now, with whatever the turn held ahead of it.
+   */
   #tell(eveTurnId: string, standing: RelayStanding, body: BrainRunEventBody): RelayEffect<boolean> {
     return Effect.gen({ self: this }, function* () {
-      let sequence = 0;
+      const turn = standing.state.get().turns[eveTurnId];
+      if (
+        turn !== undefined &&
+        HELD_EVENTS.has(body.kind) &&
+        journaledWithin(turn, this.#seams.now())
+      ) {
+        const event = this.#stamped(eveTurnId, standing, body);
+        standing.state.update((state) =>
+          withTurn(state, eveTurnId, (held) => ({ ...held, held: [...(held.held ?? []), event] })),
+        );
+        return true;
+      }
+      const [taken] = yield* this.#land(eveTurnId, standing, [body]);
+      return taken === true;
+    });
+  }
+
+  /**
+   * Hands the writer, as one write, what the turn held — its held events,
+   * then each step's finished words it was not yet told — and the events
+   * given after them, and answers whether it took each event given. A held
+   * event the writer refused is taken back out of the turn's state, as one
+   * told at once would never have been kept, so eve's next telling of it
+   * tells it again.
+   */
+  #land(
+    eveTurnId: string,
+    standing: RelayStanding,
+    bodies: readonly BrainRunEventBody[],
+  ): RelayEffect<readonly boolean[]> {
+    return Effect.gen({ self: this }, function* () {
+      const turn = standing.state.get().turns[eveTurnId];
+      const held = turn?.held ?? [];
+      const drafts = turn === undefined ? [] : untoldDrafts(turn);
+      const events = [
+        ...held,
+        ...drafts.map(({ key, text }) =>
+          this.#stamped(eveTurnId, standing, {
+            kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
+            step: stepOf(Number(key)),
+            text,
+          }),
+        ),
+        ...bodies.map((body) => this.#stamped(eveTurnId, standing, body)),
+      ];
+      if (events.length === 0) return [];
+      const results = yield* this.#seams.writer.consumeAll(standing.target, events);
+      const taken = events.map((event, index) => {
+        const result = results[index];
+        if (result !== undefined && Result.isFailure(result)) {
+          this.#seams.report(
+            `The store refused a ${event.kind} event of turn ${event.turnId}: ${result.failure.refusal}.`,
+          );
+        }
+        return result !== undefined && Result.isSuccess(result);
+      });
+      const journaled = events.some(
+        (event, index) => taken[index] === true && JOURNAL_EVENTS.has(event.kind),
+      );
+      const now = this.#seams.now();
       standing.state.update((state) =>
-        withTurn(state, eveTurnId, (turn) => {
-          sequence = turn.sequence + 1;
-          return { ...turn, sequence };
+        withTurn(state, eveTurnId, (current) => {
+          const { held: _landed, ...rest } = current;
+          let next: RelayTurnState = journaled ? { ...rest, journaledAt: now } : rest;
+          for (const [index, event] of held.entries()) {
+            if (taken[index] !== true) next = withoutRefused(next, event);
+          }
+          for (const [index, { key, draft, text }] of drafts.entries()) {
+            if (taken[held.length + index] !== true) continue;
+            const kept = next.drafts?.[key] ?? draft;
+            next = { ...next, drafts: { ...next.drafts, [key]: { ...kept, told: text.length } } };
+          }
+          return next;
         }),
       );
-      const event: BrainRunEvent = {
-        ...body,
-        conversationId: sessionKey(standing.target.conversationId),
-        turnId: hostTurnId(standing.sessionId, eveTurnId),
-        sequence,
-      };
-      const written = yield* this.#seams.writer.consume(standing.target, event);
-      if (Result.isFailure(written)) {
-        this.#seams.report(
-          `The store refused a ${event.kind} event of turn ${event.turnId}: ${written.failure.refusal}.`,
-        );
-      }
-      return Result.isSuccess(written);
+      return taken.slice(held.length + drafts.length);
     });
   }
 }

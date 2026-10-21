@@ -13,9 +13,17 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import type { WorkspaceTokenRepository } from "./github-repositories-wire.js";
+import {
+  askHosted,
+  askLive,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import type { LinearIssueSummary } from "./linear-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -34,6 +42,11 @@ import {
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
+import type {
+  WorkspaceInvitationsLiveAnswer,
+  WorkspaceMembersLiveAnswer,
+  WorkspacesLiveAnswer,
+} from "./workspace-live.js";
 import {
   type FormerMember,
   type LinearIssuesRequest,
@@ -42,7 +55,6 @@ import {
   type Workspace,
   type WorkspaceMember,
   type WorkspacePhotoType,
-  type WorkspacesAnswer,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -52,6 +64,7 @@ import {
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
+  workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
@@ -123,6 +136,32 @@ function hostedResult<Answer, Picked>(
   });
 }
 
+/**
+ * A live read's answer as a result, as `hostedResult` reads one, but signed
+ * out where the service refused the session, as it answers a live read
+ * started for another account (`LIVE_SIGNED_OUT`).
+ */
+function liveResult<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.match(asked, {
+    onSuccess: (answer): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => ({
+      ok: true,
+      answer,
+    }),
+    onFailure: (failed): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => {
+      if (failed._tag !== "HostedRefused") return UNANSWERED;
+      if (failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN) return LIVE_SIGNED_OUT;
+      const failure = REFUSALS.get(failed.refusal);
+      return failure === undefined ? UNANSWERED : { ok: false, failure };
+    },
+  });
+}
+
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
   /** The hosted contract's client under the account's credential. */
@@ -149,11 +188,75 @@ export class HostedWorkspaceClient {
     });
   }
 
-  /** Every workspace the account is a member of, its first one first; nothing where the service refused or did not answer. */
-  list(): Effect.Effect<WorkspacesAnswer | undefined, never, HttpClient.HttpClient> {
-    return Effect.orElseSucceed(
-      askHosted(this.#hosted.workspaces.list, undefined),
-      () => undefined,
+  /**
+   * The account's workspaces sealed for following over Neon Realtime, for
+   * the account named, or with their rows inline where `poll` asks for
+   * them, held by the service until they move past `after`; signed out
+   * where the session is another account's, or why not.
+   */
+  live(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<WorkspacesLiveAnswer> | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveResult(
+      askLive(this.#hosted.live.workspaces, { [LIVE_USER_QUERY]: userId }, poll, after),
+    );
+  }
+
+  /**
+   * A workspace's people sealed for following over Neon Realtime, to a member
+   * of it and for the account named, or with their rows inline where `poll`
+   * asks for them; signed out where the session is another account's, or
+   * why not.
+   */
+  peopleLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<WorkspaceMembersLiveAnswer> | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveResult(
+      askLive(
+        this.#hosted.live.workspaceMembers,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+    );
+  }
+
+  /**
+   * A workspace's pending invitations sealed for following over Neon
+   * Realtime, to an owner or an admin of it and for the account named, or
+   * with their rows inline where `poll` asks for them; signed out where the
+   * session is another account's, or why not.
+   */
+  invitationsLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<WorkspaceInvitationsLiveAnswer> | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveResult(
+      askLive(
+        this.#hosted.live.workspaceInvitations,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
     );
   }
 
@@ -317,6 +420,48 @@ export class HostedWorkspaceClient {
       const image = yield* imageBodyOf(answer.response, workspacePhotoTypeSchema);
       return image === undefined ? UNANSWERED : { ok: true, answer: image };
     });
+  }
+
+  /** The repositories members added to the workspace on their own GitHub tokens, newest added first. */
+  tokenRepositories(
+    workspaceId: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly WorkspaceTokenRepository[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceLeaveRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.github.tokenRepositories, admitted),
+      (answer) => answer.repositories,
+    );
+  }
+
+  /**
+   * A repository added to the workspace on the account's own GitHub token,
+   * or removed from it, answering the workspace's token repositories as they
+   * then stand; a request the service would refuse by shape never travels.
+   */
+  setTokenRepository(
+    workspaceId: string,
+    repository: string,
+    added: boolean,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly WorkspaceTokenRepository[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceTokenRepositoryRequestSchema)({ workspaceId, repository, added }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.github.setTokenRepository, admitted),
+      (answer) => answer.repositories,
+    );
   }
 
   /** One member removed by an owner or admin, answering the members who remain; an id the service would refuse by shape never travels. */

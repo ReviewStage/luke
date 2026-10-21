@@ -21,6 +21,8 @@ import {
   Badge,
   BUTTON_SIZE,
   CHIP_LOOK,
+  CHIP_SIZE,
+  CHIP_TONE,
   Chip,
   ChipName,
   ErrorState,
@@ -30,7 +32,9 @@ import {
   type InlineEditEnd,
   useMenu,
 } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
+  GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
@@ -89,6 +93,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.COMMENT]: "Comment",
   [PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT]: "Comment on lines",
   [PULL_REQUEST_ACTION.DISCARD_REVIEW]: "Discard review",
+  [PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT]: "Edit pending comment",
+  [PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT]: "Delete pending comment",
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",
@@ -236,8 +242,9 @@ type StateAction =
   | typeof PULL_REQUEST_ACTION.CLOSE
   | typeof PULL_REQUEST_ACTION.REOPEN;
 
-/** The changes the pill's menu offers from where the pull request stands. */
-function actionsFrom(state: PullRequestState): readonly StateAction[] {
+/** The changes the pill's menu offers from where the pull request stands; one in the merge queue may be closed but not turned back to a draft, as on GitHub. */
+function actionsFrom(state: PullRequestState, queued: boolean): readonly StateAction[] {
+  if (queued && state === PULL_REQUEST_STATE.OPEN) return [PULL_REQUEST_ACTION.CLOSE];
   switch (state) {
     case PULL_REQUEST_STATE.DRAFT:
       return [PULL_REQUEST_ACTION.READY_FOR_REVIEW, PULL_REQUEST_ACTION.CLOSE];
@@ -258,27 +265,47 @@ const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.REOPEN]: <GitPullRequestIcon aria-hidden="true" />,
 } as const satisfies Record<StateAction, React.JSX.Element>;
 
+/** How the pill says an open pull request GitHub holds in its merge queue: its place there, where GitHub said it. */
+function queuedWords(queued: { readonly position?: number | undefined }): string {
+  return queued.position === undefined ? "Queued" : `Queued #${queued.position}`;
+}
+
 /**
  * The pill saying where the pull request stands, in its tone; a press
- * opens the changes that may be made from there, and a pull request merged
- * or closed is a badge.
+ * opens the changes that may be made from there, and a merged pull request,
+ * which no change leaves, is a badge. An open one GitHub holds in its merge
+ * queue says so in the pill, as stage-cli's does: Queued and its place, in
+ * the attention tone with the merge's mark, its menu offering Close alone.
+ * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
+ * box, so every state stands at the one size the app's status badges do,
+ * the one with a menu adding its chevron.
  */
 export function PullRequestStateMenu({
   pullRequest,
+  queued,
   writes,
 }: {
   pullRequest: Pick<CodingAgentPullRequest, "number" | "state" | "checks">;
+  /** Where GitHub's merge queue holds it, as the merge control read it; none where it holds it nowhere. */
+  queued?: { readonly position?: number | undefined } | null | undefined;
   writes: PullRequestWrites;
 }): React.JSX.Element {
-  const actions = actionsFrom(pullRequest.state);
+  const inQueue =
+    queued !== null && queued !== undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
+  const actions = actionsFrom(pullRequest.state, inQueue);
   const menu = useMenu(actions.length > 0);
-  const label = `Pull request ${STATE_WORDS[pullRequest.state]}`;
-  const tone = PULL_REQUEST_TONE[pullRequest.state];
-  const mark = <PullRequestMark pullRequest={pullRequest} />;
+  const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
+  const label = `Pull request ${words}`;
+  const tone = inQueue ? CHIP_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
+  const mark = inQueue ? (
+    <GitMergeIcon aria-hidden="true" />
+  ) : (
+    <PullRequestMark pullRequest={pullRequest} />
+  );
   if (actions.length === 0) {
     return (
       <Badge tone={tone} icon={mark}>
-        {STATE_WORDS[pullRequest.state]}
+        {words}
       </Badge>
     );
   }
@@ -292,6 +319,7 @@ export function PullRequestStateMenu({
     <>
       <Chip
         look={CHIP_LOOK.PILL}
+        size={CHIP_SIZE.COMPACT}
         tone={tone}
         chevron
         aria-label={label}
@@ -301,9 +329,7 @@ export function PullRequestStateMenu({
       >
         {mark}
         <ChipName>
-          {writes.pending === undefined
-            ? STATE_WORDS[pullRequest.state]
-            : `${ACTION_WORDS[writes.pending]}…`}
+          {writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`}
         </ChipName>
       </Chip>
       {menu.drawn === undefined ? null : (
@@ -354,7 +380,8 @@ const TITLE_WORDS = {
 } as const;
 
 /**
- * The pull request's title and number, its pencil opening a field over the
+ * The pull request's title and number, the number wrapping with the
+ * title's last word, its pencil opening a field over the
  * title where its words may be changed: kept on Enter, or as the focus
  * leaves, where they changed and are not empty, and given up on Escape.
  * The title stands as it was until GitHub answers with the new one, its
@@ -374,6 +401,7 @@ export function PullRequestTitle({
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false);
+  const [titleBox, titleClipped] = useClipped(`${title} ${number}`);
   const busy = writes.pending !== undefined;
   const end = ({ value }: InlineEditEnd) => {
     setEditing(false);
@@ -404,10 +432,16 @@ export function PullRequestTitle({
   const numberWords = <span className="pull-request-number">{number}</span>;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the ⌘-click is a pointer's shortcut alone; the header's ⋯ offers Open on GitHub to the keyboard.
-    <h2 className="pull-request-title pull-request-title-editable" onClick={open}>
-      {title}{" "}
-      {/* Note that the number and the pencil wrap as one, because a pencil wrapped alone would spend a line of its own. */}
+    <h2
+      ref={titleBox}
+      className="pull-request-title pull-request-title-editable"
+      data-overflow={String(titleClipped)}
+      onClick={open}
+    >
+      {title}
+      {/* Note that the space before the number stands inside the end that never wraps, so the number and the pencil keep to the title's last word, and the number never stands alone on a line. */}
       <span className="pull-request-title-end">
+        {" "}
         {onOpen === undefined ? (
           numberWords
         ) : (

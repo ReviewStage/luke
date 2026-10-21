@@ -6,21 +6,21 @@
  * asks; the voice and call windows, and a frame this build does not trust,
  * are refused in each kind's own words before the host is asked or anything
  * noted; a panel's ask reaches the host with its payload as the panel sent
- * it, and what the host answers is noted on its way, as it was on `app:act`;
- * and a host that fails answers the kind's own sentence.
+ * it, and what the host answers is noted on its way; and a host that fails answers the kind's own sentence.
  */
 
 import assert from "node:assert/strict";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentMessagesAnswerView,
+  type CodingAgentTranscriptChanged,
+  type CodingAgentTranscriptKey,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -28,9 +28,9 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { AGENT_ACT_KIND, type PortActKind } from "../contract/index.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
+import type { ActSender } from "./base.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -58,22 +58,6 @@ const STARTED = {
 } satisfies CodingAgentAgentAnswer;
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
-
-/** What an agent published, as the service answers it: its branch and an open pull request. */
-const PUBLISHED = {
-  repository: "acme/relay",
-  branch: "luke/invites",
-  pullRequest: {
-    number: 41,
-    title: "Teammate invitations",
-    url: "https://github.com/acme/relay/pull/41",
-    state: PULL_REQUEST_STATE.OPEN,
-    checks: CHECK_SUMMARY.PASSING,
-    additions: 12,
-    deletions: 3,
-    changedFiles: 2,
-  },
-};
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -292,9 +276,6 @@ function windowPort(
     observeModels: (models) => {
       noted.push(`models:${models.length}`);
     },
-    observePublished: (agentId, pullRequest) => {
-      noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
-    },
     observeTaskGone: (taskId) => {
       noted.push(`gone:${taskId}`);
     },
@@ -354,6 +335,22 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
       act.ask === undefined ? [] : [act.payload === undefined ? [act.ask] : [act.ask, act.payload]],
     ),
   );
+});
+
+it("a panel's Start from an agent on its own page reaches the host with no task, only the agent it starts from, and the press's own key", async () => {
+  const { call, asked } = windowPort(PANEL, {
+    answers: { codingAgentStart: () => Effect.succeed(STARTED) },
+  });
+
+  const started = await call(AGENT_ACT_KIND.CODING_AGENTS_START, {
+    idempotencyKey: "press-1",
+    from: { agentId: AGENT_ID },
+  });
+
+  assert.deepEqual(started, { answer: STARTED });
+  assert.deepEqual(asked, [
+    ["codingAgentStart", { idempotencyKey: "press-1", from: { agentId: AGENT_ID } }],
+  ]);
 });
 
 it("a panel's Start reaches the host with the plan and the press's own key, hears the agent, and the agent is noted", async () => {
@@ -474,22 +471,6 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
   assert.deepEqual(asked, []);
 });
 
-it("a panel's read of an agent's own pull request is noted as what it published, and a read of another by its number is not", async () => {
-  const { call, noted } = windowPort(PANEL, {
-    answers: { codingAgentPullRequest: () => Effect.succeed(PUBLISHED) },
-  });
-
-  const own = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID });
-  const other = await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, {
-    agentId: AGENT_ID,
-    number: 52,
-  });
-
-  assert.deepEqual(own, { answer: PUBLISHED });
-  assert.deepEqual(other, { answer: PUBLISHED });
-  assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
-});
-
 it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and its read of which files it viewed hears each file's mark", async () => {
   const viewed = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
@@ -591,4 +572,63 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
   );
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
+});
+
+/** Turns the event loop until `ready` holds, as a page waits on its port. */
+async function until(ready: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
+}
+
+it("a panel's transcript stream follows the transcript at the host, hears each page told of it alone, and lets it go once its last stream closes", async () => {
+  const asked: string[] = [];
+  const listeners = new Set<(changed: CodingAgentTranscriptChanged) => void>();
+  const transcripts: Pick<
+    HostAsk,
+    "transcriptFollow" | "transcriptUnfollow" | "onTranscriptChanged"
+  > = {
+    transcriptFollow: () => Effect.sync(() => void asked.push("follow")),
+    transcriptUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    onTranscriptChanged: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  // SAFETY: the stream reaches the transcript asks alone.
+  const host = transcripts as HostAsk;
+  const noted: string[] = [];
+  // SAFETY: the stream notes an agent's title and status alone.
+  const notices = {
+    observeTitle: (_agentId: string, title: string | null) => noted.push(`title:${title}`),
+    observeStatus: (_agentId: string, status: string) => noted.push(`status:${status}`),
+  } as unknown as AgentProceduresDependencies["notices"];
+  const port = testActPort(agentProcedures({ host, notices }));
+  ports.push(port);
+  const client = port.as(PANEL);
+  const transcript: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
+  const page: CodingAgentMessagesAnswerView = {
+    messages: [],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.RUNNING,
+    title: "Invites",
+  };
+
+  const one = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);
+  const two = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);
+  const first = one.next();
+  const second = two.next();
+  await until(() => asked.length === 2);
+  for (const listener of [...listeners]) {
+    listener({ transcript: { ...transcript, callId: "call-7" }, page: { ...page, title: null } });
+    listener({ transcript, page });
+  }
+  assert.deepEqual((await first).value, page);
+  assert.deepEqual((await second).value, page);
+  assert.deepEqual(noted, ["title:Invites", "status:running", "title:Invites", "status:running"]);
+
+  await one.return(undefined);
+  await until(() => listeners.size === 1);
+  assert.deepEqual(asked, ["follow", "follow"]);
+  await two.return(undefined);
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, ["follow", "follow", "unfollow"]);
 });

@@ -8,6 +8,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_PAYER,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
@@ -16,6 +17,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   type CodingAgentSender,
@@ -59,6 +61,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type ChatNoticeMetadata,
@@ -74,6 +77,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
+import { drawnCall } from "./native-tool-calls.js";
 import {
   changesSidebar,
   remoteCallOf,
@@ -118,17 +122,28 @@ function dollars(costUsd: number): string {
   return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
 }
 
+/** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
+const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
+  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
+  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT plan",
+};
+
 /**
  * What the agent has cost, for the model menu's foot: "This agent: 1.2M
  * tokens · $0.42", the dollars left off where the service could not price
- * every step; nothing before a turn settled. Note that this is the one
- * place the window draws a price, and it is the whole run's, the agent's
+ * every step; nothing before a turn settled. An agent paid for by a plan
+ * says the plan in the dollars' place, "This agent: 1.2M tokens · Claude
+ * plan", since a subscription has no bill per token. Note that this is the
+ * one place the window draws a price, and it is the whole run's, the agent's
  * own turns and its workers', at the catalog's list prices.
  */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
   const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
-  return `This agent: ${usage.costUsd === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${dollars(usage.costUsd)}`}`;
+  const paid =
+    (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
+    (usage.costUsd === undefined ? undefined : dollars(usage.costUsd));
+  return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
 }
 
 /**
@@ -213,6 +228,20 @@ export function archivedByReading(
   return {
     words: archiver === undefined ? archived : `${archived} by ${archiver}`,
     reason: by.reason,
+  };
+}
+
+/**
+ * A subagent or a brain's worker as its card's tile draws it: the harness
+ * its model runs in, or the empty box where the model is not known, giving
+ * way to the working mark while it works, as an agent's tile does.
+ */
+export function subagentActor(model: string | undefined, state: GlyphState, name: string): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: model === undefined ? undefined : providerOf(model),
+    state: ACTOR_STATE_OF_GLYPH[state],
   };
 }
 
@@ -329,7 +358,7 @@ export function endLineReason(
     : FAILURE_REASON.OTHER;
 }
 
-/** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
+/** The statuses an agent may still write under, which is when it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
@@ -355,15 +384,6 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
 }
 
-/**
- * Whether an agent's transcript is read on the held long-poll now: only
- * while its tab is on screen and the agent may still write. A tab hidden,
- * a task left, and an agent that ended each stop the reads.
- */
-export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
-  return input.shown && agentStillWriting(input.status);
-}
-
 /** What the Start button says while it cannot start: the task names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
@@ -379,7 +399,19 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
+  // Said once the panel stopped asking again (`image-preparing.ts`).
+  [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
+    "The agent's image is taking too long to prepare. Try again in a few minutes.",
+  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent can't be reached from here yet.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
+    "The plan's provider didn't answer. Try again in a moment.",
 } as const;
+
+/** What a Start, or a message, says while the agent's image is still being prepared and the panel asks again. */
+export const PREPARING_IMAGE = "Preparing the agent's image…";
 
 /** What a Start from an agent whose session has ended says. */
 const START_RETIRED = "This agent has ended. Start a new one.";
@@ -484,6 +516,11 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -530,7 +567,7 @@ export interface RefusedCall {
 }
 
 /** What a Start that did not start says beside the button, and what mends it. */
-export function startFailureNote(refused: RefusedCall, taskId: string): Failure {
+export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
     ? unreachedFailure(refused.unreached, taskId)
     : callFailure(startFailureWords(refused.failure));
@@ -545,10 +582,12 @@ function callFailure(text: string): Failure {
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
  * Settings; the repository given to Luke on GitHub; another repository
- * chosen; or the task moved to the workspace whose GitHub reaches it. A
- * service that said nothing more says the bare sentence, which Retry
- * answers, and so does an agent with no task wherever the remedy is pressed
- * on the task: only giving the repository to Luke on GitHub is not.
+ * chosen; the task moved to the workspace whose GitHub reaches it; or the
+ * member's own token replaced in Settings › Profile, or authorized on
+ * GitHub for the organization's SAML SSO. A service that said nothing more
+ * says the bare sentence, which Retry answers, and so does an agent with no
+ * task wherever the remedy is pressed on the task: only giving the
+ * repository to Luke on GitHub, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -560,6 +599,19 @@ function unreachedFailure(
       text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
+    };
+  }
+  // A token's remedy is the member's own, in Settings or on GitHub, so it needs no task.
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_INVALID) {
+    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "Your GitHub token was refused." };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_SSO) {
+    const [organization = unreached.repository] = unreached.repository.split("/");
+    return {
+      reason: FAILURE_REASON.AUTHORIZE_TOKEN,
+      text: `Your GitHub token isn't authorized for ${organization}'s SAML SSO.`,
+      organization,
+      authorizeUrl: unreached.authorizeUrl,
     };
   }
   if (unreached === undefined || taskId === null) {
@@ -603,8 +655,6 @@ function unreachedFailure(
       };
     case REPOSITORY_UNREACHED.NO_TOKEN:
       return callFailure("No GitHub token saved.");
-    case REPOSITORY_UNREACHED.TOKEN_INVALID:
-      return callFailure("Your GitHub token was refused.");
     case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
       return callFailure(`Your GitHub token can't access ${repository}.`);
     case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
@@ -630,6 +680,11 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -663,6 +718,11 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -803,6 +863,11 @@ export interface OfferedModel {
 /** The id a fast version's id is the fast version of, or nothing for an id without the suffix. */
 function baseIdOf(id: string): string | undefined {
   return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
+}
+
+/** Whether a catalog id names a model's fast version. */
+export function isFastModelId(id: string): boolean {
+  return baseIdOf(id) !== undefined;
 }
 
 /**
@@ -1062,16 +1127,24 @@ export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
  * The agents with one agent's run read from its own transcript page or an
  * answer about it, where that knows better than the list: its status, and
  * the start a working line counts from, which moves with each turn and is
- * none while a message awaits one.
+ * none while a message awaits one. Where the agent already stands so, the
+ * agents are answered as they were, so a page that moved nothing redraws
+ * nothing that reads them.
  */
 export function withAgentRun(
   agents: readonly CodingAgentSummary[],
   agentId: string,
   run: AgentRun,
 ): readonly CodingAgentSummary[] {
+  const standing = agents.find((agent) => agent.id === agentId);
+  if (
+    standing === undefined ||
+    (standing.status === run.status && standing.runStartedAt === run.runStartedAt)
+  ) {
+    return agents;
+  }
   return agents.map((agent) => {
     if (agent.id !== agentId) return agent;
-    if (agent.status === run.status && agent.runStartedAt === run.runStartedAt) return agent;
     const { runStartedAt: _was, ...held } = agent;
     return run.runStartedAt === undefined
       ? { ...held, status: run.status }
@@ -1136,13 +1209,17 @@ function agentPart(part: WireValue): AgentPart {
   }
   if (part.type === AGENT_PART.STEP_START) return { kind: AGENT_PART.STEP_START };
   if (part.type.startsWith(TOOL_PART_TYPE_PREFIX)) {
-    return {
-      kind: AGENT_PART.TOOL,
+    // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
+    const call = drawnCall({
       tool: part.type.slice(TOOL_PART_TYPE_PREFIX.length),
-      callId: isWireString(part.toolCallId) ? part.toolCallId : "",
-      state: toolState(part.state),
       input: part.input,
       output: part.output,
+    });
+    return {
+      kind: AGENT_PART.TOOL,
+      ...call,
+      callId: isWireString(part.toolCallId) ? part.toolCallId : "",
+      state: toolState(part.state),
       errorText: isWireString(part.errorText) ? part.errorText : undefined,
     };
   }
@@ -1168,8 +1245,19 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
 
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
-  return message.parts.map(agentPart);
+  const read = partsRead.get(message);
+  if (read !== undefined) return read;
+  const parts = message.parts.map(agentPart);
+  partsRead.set(message, parts);
+  return parts;
 }
+
+/**
+ * Each message's parts as last read, by the message: a message is never
+ * changed in place (a page that rewrites one hands a new one), and a
+ * running agent's transcript reads every message's parts on every page.
+ */
+const partsRead = new WeakMap<CodingAgentMessage, readonly AgentPart[]>();
 
 /** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
 export function settledPlanEdits(messages: readonly CodingAgentMessage[]): number {
@@ -1311,8 +1399,8 @@ interface AgentTurnPlace {
   readonly newestTodos?: string | undefined;
   /** Where each call's subagent stands as its own session says, which its row draws over the call's own state, since a call may settle the moment its worker is under way. */
   readonly workers?: ReadonlyMap<string, ToolState>;
-  /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
-  readonly said?: boolean;
+  /** How much of the turn the voice read aloud on a call, which folds that much of a finished turn: all of it, its lines standing ahead of it, or the work after a call's ask joined it, its lines standing among `arrived`; none where nothing was. */
+  readonly said?: TurnRead | undefined;
   /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
   readonly arrived?: readonly CodingAgentMessage[];
 }
@@ -1432,9 +1520,9 @@ function drawnParts(
   return drawn;
 }
 
-/** The steps of its turn a line arrived after; none for a line no turn took in under way. */
+/** The steps of its turn a line arrived after, or a line the voice said answering a call's ask that joined it under way was read after; none for a line no turn took in under way. */
 function afterStepOf(line: CodingAgentMessage): number {
-  return line.arrivedIn?.afterStep ?? 0;
+  return line.arrivedIn?.afterStep ?? line.readFrom?.afterStep ?? 0;
 }
 
 /**
@@ -1454,9 +1542,13 @@ function afterStepOf(line: CodingAgentMessage): number {
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  { newestTodos, workers = NO_WORKERS, said = false, arrived = [] }: AgentTurnPlace = {},
+  { newestTodos, workers = NO_WORKERS, said, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
   const parts = drawnParts(message, arrived);
+  // Note that what the voice read from a join on starts after its first line among the parts, the work it answered.
+  const joined = parts.findIndex(
+    (part) => part.kind === AGENT_PART.ARRIVED && part.line.readFrom?.afterStep !== undefined,
+  );
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
@@ -1472,7 +1564,8 @@ export function agentRows(
     key: message.id,
     moving,
     done: !moving,
-    said,
+    ...(said === TURN_READ.WHOLE ? { said: true } : undefined),
+    ...(said === TURN_READ.FROM_JOIN && joined >= 0 ? { saidFrom: joined + 1 } : undefined),
   });
 }
 
@@ -1504,6 +1597,148 @@ export function placedMessages(messages: readonly CodingAgentMessage[]): readonl
     const journal = message.arrivedIn?.journalId;
     if (journal !== undefined && journals.has(journal)) return [];
     return [{ message, arrived: arrived.get(message.id) ?? [] }];
+  });
+}
+
+/** How much of a turn the voice read aloud on a call, which folds that much of it once it has finished. */
+export const TURN_READ = {
+  /** All of it, answering an ask that was the whole turn's: the voice's lines stand ahead of the turn. */
+  WHOLE: "whole",
+  /** The work after a call's ask joined the turn under way: the voice's lines stand where the ask arrived, the work before it as it was. */
+  FROM_JOIN: "from-join",
+} as const;
+
+export type TurnRead = (typeof TURN_READ)[keyof typeof TURN_READ];
+
+/**
+ * A line the voice said on a call into the agent, and what a service older
+ * than `readFrom` named of the turn it read aloud: the turn's journal, by
+ * its message id (`read_from`), written only on a reply said within moments
+ * of the turn settling.
+ */
+const SpokenLineSchema = Schema.Struct({
+  author: Schema.Literal(MESSAGE_AUTHOR.VOICE_MODEL),
+  channel: Schema.Literal(MESSAGE_CHANNEL.VOICE),
+  read_from: Schema.optionalKey(Schema.String),
+});
+
+const spokenLine = Schema.decodeUnknownOption(SpokenLineSchema);
+
+/** Whether a row is a line the voice said on a call, which reads a turn aloud rather than being one. */
+function isSpokenLine(message: CodingAgentMessage): boolean {
+  return message.role === MESSAGE_ROLE.ASSISTANT && Option.isSome(spokenLine(message.metadata));
+}
+
+/** Where among the rows a line the voice said names the turn it read aloud: the turn's journal, and where the call's ask joined that turn under way, the steps begun before it. */
+interface ReadAloudPlace {
+  readonly journalId: string;
+  readonly afterStep?: number | undefined;
+}
+
+/**
+ * The journal of the turn a line the voice said answers, among the rows by
+ * their turn: the turn the service names it read from (`readFrom`), or from
+ * a service older than that, the journal its metadata names (`read_from`);
+ * none for any other row.
+ */
+function readAloudPlaceOf(
+  message: CodingAgentMessage,
+  journals: ReadonlyMap<string, string>,
+): ReadAloudPlace | undefined {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  return Option.getOrUndefined(
+    Option.flatMap(spokenLine(message.metadata), (line) => {
+      if (message.readFrom === undefined) {
+        return Option.fromUndefinedOr(line.read_from).pipe(
+          Option.map((journalId) => ({ journalId })),
+        );
+      }
+      const { afterStep } = message.readFrom;
+      return Option.fromUndefinedOr(journals.get(message.readFrom.turnId)).pipe(
+        Option.map((journalId) => ({ journalId, afterStep })),
+      );
+    }),
+  );
+}
+
+/** A row the voice read nothing aloud of. */
+const NOTHING_SAID: readonly CodingAgentMessage[] = [];
+
+/** One of a transcript's rows as the tab draws it, with what the voice said of it on a call. */
+export interface SpokenMessage extends PlacedMessage {
+  /** The lines the voice said on a call reading this whole turn aloud, in the order the transcript holds them, which the tab draws ahead of the turn, its work folded behind them; none on any other row. */
+  readonly said: readonly CodingAgentMessage[];
+  /** How much of this turn the voice read aloud on a call, which folds that much of it once finished; none where it read nothing of it. */
+  readonly read?: TurnRead | undefined;
+}
+
+/**
+ * A transcript's rows with each line the voice said reading a turn aloud
+ * moved to that turn, so on a call the tab reads as a conversation: what
+ * was said, then the work behind it folded under it, rather than the
+ * turn's own answer and then the voice saying it again, however long after
+ * the turn ended the line was said. A line answering an ask that was the
+ * whole turn's stands ahead of the turn, which folds whole. The lines said
+ * or typed on the call that reached such a turn while it ran are drawn ahead
+ * of what the voice said, each a row of its own, since the voice answered
+ * them too, so no question stands under its answer; any other line that
+ * reached it, as GitHub's, stays where it arrived among the turn's work. A
+ * line answering a call's ask that joined a turn under way, as a call into
+ * a busy agent does, stands among the turn's work right after the ask,
+ * and only the work from there on folds under it, the turn's earlier work
+ * drawn as it was; the lines from that join on stay where they arrived. A
+ * line whose turn is not among the rows, and a line the service names no
+ * turn for, stand where the order puts them, so a transcript with no call
+ * reads as it did.
+ */
+export function spokenMessages(placed: readonly PlacedMessage[]): readonly SpokenMessage[] {
+  const journals = new Map(
+    placed.flatMap(({ message }) =>
+      message.role === MESSAGE_ROLE.ASSISTANT && !isSpokenLine(message)
+        ? [[message.turnId ?? message.id, message.id] as const]
+        : [],
+    ),
+  );
+  const turns = new Set(journals.values());
+  const said = new Map<string, CodingAgentMessage[]>();
+  const joined = new Map<string, CodingAgentMessage[]>();
+  const moved = new Set<string>();
+  for (const { message } of placed) {
+    const place = readAloudPlaceOf(message, journals);
+    if (place === undefined || !turns.has(place.journalId)) continue;
+    const lines = place.afterStep === undefined ? said : joined;
+    lines.set(place.journalId, [...(lines.get(place.journalId) ?? []), message]);
+    moved.add(message.id);
+  }
+  return placed.flatMap((row) => {
+    if (moved.has(row.message.id)) return [];
+    const lines = said.get(row.message.id);
+    const answers = joined.get(row.message.id) ?? NOTHING_SAID;
+    // Note that the answers are merged among the lines by when each began, because two asks may join at one step, each answered before the next was asked.
+    const arrived =
+      answers.length === 0
+        ? row.arrived
+        : [...row.arrived, ...answers].toSorted((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
+    if (lines === undefined) {
+      return [
+        {
+          message: row.message,
+          arrived,
+          said: NOTHING_SAID,
+          read: answers.length === 0 ? undefined : TURN_READ.FROM_JOIN,
+        },
+      ];
+    }
+    // Note that only a line said or typed on a call before any join is lifted, because a line from anywhere else, as GitHub's, is no ask the voice answered, and one from a join on has its answer beside it.
+    const join = Math.min(...answers.map(afterStepOf));
+    const asked = row.arrived.filter(
+      (line) => callOfLine(line) !== undefined && afterStepOf(line) < join,
+    );
+    const kept = arrived.filter((line) => !asked.includes(line));
+    return [
+      ...asked.map((line) => ({ message: line, arrived: NOTHING_SAID, said: NOTHING_SAID })),
+      { message: row.message, arrived: kept, said: lines, read: TURN_READ.WHOLE },
+    ];
   });
 }
 
@@ -1770,7 +2005,7 @@ export function githubPath(name: string): string {
 /** Where the chip opens on GitHub: the pull request, or the branch compared against the repository's default where there is no pull request yet. */
 export function publishedUrl(published: CodingAgentPullRequestAnswer): string | undefined {
   if (published.pullRequest !== null) return published.pullRequest.url;
-  if (published.branch === null) return undefined;
+  if (published.branch === null || published.repository === null) return undefined;
   return `https://github.com/${published.repository}/compare/${githubPath(published.branch)}?expand=1`;
 }
 

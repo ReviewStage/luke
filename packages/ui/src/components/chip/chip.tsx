@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { useClipped } from "../../use-clipped.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -12,18 +13,20 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  *   on (a plan toolbar's repository, an agent's model), is quiet until the
  *   pointer is on it or its menu is open, as the toolbar's own buttons are;
  * - a pill, a thing named rather than a setting (what an agent published, the
- *   repository a new plan is for), is a filled, hairlined capsule;
+ *   repository a new plan is for), is a capsule on the chip's own opaque
+ *   face inside a hairline;
  * - a field, a settings row's value, wears an outlined button's hairline,
  *   its words leading, so a picker and the buttons beside it read as one
  *   column.
  * - a filter, a pill that turns a mode or a kind on (New task's Planning,
- *   a pull request's reactions), is a quiet capsule until it stands pressed
- *   (`aria-pressed`), when it fills inside the selection's hairline; its
- *   caller holds which one is pressed.
+ *   a pull request's reactions), is a capsule on the chip's face until it
+ *   stands pressed (`aria-pressed`), when it is drawn in the ink, as the
+ *   Ink button is; its caller holds which one is pressed.
  *
  * Beside its look a chip may say where a thing stands in the state palette
- * (`tone`), tinted and hairlined in that state's ink, as a pull request's
- * state is; stand at a width its place shares (`width`); and draw its mark
+ * (`tone`), in its leading glyph's colour, or a dot of it before its words
+ * where it leads with none, its face staying the chip's own, as a pull
+ * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
  * still read as its name. A removable chip (`onRemove`) is no button of its
  * own: it names what stands, a filter applied, and ends in a × named for
@@ -31,14 +34,20 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  *
  * A chip comes at the control's size, or compact (`size`), a caption
  * line's pill, where it is one of a row of small counts (a pull request's
- * reactions); a compact filter stands inside a hairline at rest, so the row
- * reads as pills before one is pressed, and pressed is lit in the accent. A busy chip
+ * reactions), a compact filter on the chip's face at rest and in the ink
+ * pressed, as any filter;
+ * a compact pill, where it says where a thing stands among a header's words
+ * (a pull request's state), is drawn in a `Badge`'s box, so it stands at
+ * the size of the badges beside it, its chevron saying it opens. A busy chip
  * (`busy`), whose change is out, pulses until it is answered.
  *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
- * cuts them short rather than letting them push past the row around it, in
- * the code face where they name code (`mono`, a branch). A leading mark, a
+ * cuts them short rather than letting them push past the row around it,
+ * fading out at their end while it does, as a browser's tab does, or, where
+ * their end is what tells one from another, in their middle at an ellipsis
+ * (`cut`, a branch's last words, as GitHub cuts one), in the code face where
+ * they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
  */
@@ -53,7 +62,7 @@ export const CHIP_LOOK = {
 
 export type ChipLook = (typeof CHIP_LOOK)[keyof typeof CHIP_LOOK];
 
-/** How big a chip is: the control's own, or a caption line's pill. */
+/** How big a chip is: the control's own, or a caption line's pill, a compact pill a badge's size. */
 export const CHIP_SIZE = {
   CONTROL: "control",
   COMPACT: "compact",
@@ -86,6 +95,34 @@ export const CHIP_WIDTH = {
 } as const;
 
 export type ChipWidth = (typeof CHIP_WIDTH)[keyof typeof CHIP_WIDTH];
+
+/** Where a chip's words are cut short when they do not fit: at their end, or in their middle, keeping their last few. */
+export const CHIP_CUT = {
+  END: "end",
+  MIDDLE: "middle",
+} as const;
+
+export type ChipCut = (typeof CHIP_CUT)[keyof typeof CHIP_CUT];
+
+/** How many of its last characters a name cut in its middle keeps whole, at most. */
+const MIDDLE_KEPT = 12;
+
+/** Characters a name is read in parts by, which a name cut in its middle starts its kept end at. */
+const NAME_JOINS = /[/\-_.:]/u;
+
+/**
+ * The end a name cut in its middle keeps whole: its last few characters,
+ * after the first join among them where one stands, so it starts on a word
+ * (“and-pill” rather than “u-and-pill”), the ellipsis standing for
+ * the join; none for a name too short to cut in two.
+ */
+function keptEnd(name: string): string {
+  if (name.length <= MIDDLE_KEPT + MIDDLE_KEPT / 3) return "";
+  const last = name.slice(-MIDDLE_KEPT);
+  const join = last.search(NAME_JOINS);
+  const word = join === -1 ? "" : last.slice(join + 1);
+  return word === "" ? last : word;
+}
 
 /** What every chip takes, a button or a removable one: its look and the options beside it. */
 interface ChipFace {
@@ -179,18 +216,44 @@ export function Chip(props: ChipProps): React.JSX.Element {
   );
 }
 
-/** A chip's words, cut short at its end rather than pushing past the row it stands in; in the code face where they name code. */
-export function ChipName({
-  mono = false,
-  children,
-}: {
+/** A chip's words: in the code face where they name code, and cut at their end, or, words alone, in their middle. */
+type ChipNameProps = {
   /** Whether the words name code, a branch, and read in the code face. */
   mono?: boolean;
-  children: ReactNode;
-}): React.JSX.Element {
+} & (
+  | { cut?: typeof CHIP_CUT.END | undefined; children: ReactNode }
+  | {
+      /** Cut in the middle, keeping their end; a name too short to cut in two is cut at its end. */
+      cut: typeof CHIP_CUT.MIDDLE;
+      children: string;
+    }
+);
+
+/**
+ * A chip's words, cut short rather than pushing past the row it stands in:
+ * fading out at their end, or cut in their middle at an ellipsis, which says
+ * a cut stands there where a fade with words after it would not; in the code
+ * face where they name code.
+ */
+export function ChipName(props: ChipNameProps): React.JSX.Element {
+  const [measured, clipped] = useClipped();
+  const kept = props.cut === CHIP_CUT.MIDDLE ? keptEnd(props.children) : "";
   return (
-    <span className="luke-chip-name" data-mono={mono ? "true" : undefined}>
-      {children}
+    <span
+      ref={measured}
+      className="luke-chip-name"
+      data-mono={props.mono === true ? "true" : undefined}
+      data-cut={kept === "" ? undefined : CHIP_CUT.MIDDLE}
+      data-overflow={String(clipped)}
+    >
+      {props.cut !== CHIP_CUT.MIDDLE || kept === "" ? (
+        props.children
+      ) : (
+        <>
+          <span className="luke-chip-name-start">{props.children.slice(0, -kept.length)}</span>
+          <span className="luke-chip-name-end">{kept}</span>
+        </>
+      )}
     </span>
   );
 }

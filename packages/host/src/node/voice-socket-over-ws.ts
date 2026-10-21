@@ -1,4 +1,5 @@
-import { holdSocket, type OpenSocket, SOCKET_OPEN_FAULT, type SocketOpening } from "@luke/voice";
+import { holdSocket } from "@luke/voice";
+import { type OpenSocket, SOCKET_OPEN_FAULT, type SocketOpening } from "@luke/voice/live-socket";
 import { Effect } from "effect";
 import { type RawData, WebSocket } from "ws";
 

@@ -43,21 +43,46 @@ export type ContinueDoor = (words: string, attachments: readonly CodingAgentAtta
 
 const ForkContext = createContext<ForkDoors | undefined>(undefined);
 
+/**
+ * Whether the tab offers to fork, apart from the doors themselves, which
+ * the window hands anew on every draw: every message reads it, and a
+ * message kept as it was is not drawn again for a new set of doors.
+ */
+const ForkOfferedContext = createContext(false);
+
 /** Hands an agent's messages what forking takes. */
-export const ForkProvider = ForkContext.Provider;
+export function ForkProvider({
+  value,
+  children,
+}: {
+  value: ForkDoors | undefined;
+  children?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <ForkContext.Provider value={value}>
+      <ForkOfferedContext.Provider value={value?.onFork !== undefined}>
+        {children}
+      </ForkOfferedContext.Provider>
+    </ForkContext.Provider>
+  );
+}
 
 /** The press that opens the agent's continue as the task's draft, where its tab hands one. */
 export function useContinueDoor(): ContinueDoor | undefined {
   return useContext(ForkContext)?.onContinue;
 }
 
-/** An agent as its chip wears it where the place hands no cards: by its tab's name where the task lists it, and else as a coding agent. */
-function bareActor(agentId: string, known: CodingAgentSummary | undefined): Actor {
+/** An agent as its chip wears it where the place hands no cards: by its tab's name where the task lists it, else by the title its source's summary names, and else as a coding agent. */
+function bareActor(
+  agentId: string,
+  known: CodingAgentSummary | undefined,
+  title: string | null = null,
+): Actor {
   if (known !== undefined) return agentActor(known, agentTabLabel(known, undefined));
   return {
     kind: ACTOR_KIND.AGENT,
     agentId,
-    name: TAB_WORDS.CODING_AGENT,
+    name: title ?? TAB_WORDS.CODING_AGENT,
     provider: undefined,
     state: ACTOR_STATE.REST,
   };
@@ -69,9 +94,10 @@ function agentChip(
   known: CodingAgentSummary | undefined,
   cards: TranscriptCards | undefined,
   open: ((agentId: string) => void) | undefined,
+  title: string | null = null,
 ): ReactNode {
   const target: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: agentId };
-  const actor = cards?.agent?.(agentId) ?? bareActor(agentId, known);
+  const actor = cards?.agent?.(agentId) ?? bareActor(agentId, known, title);
   return (
     <ActorRef
       actor={actor}
@@ -82,15 +108,16 @@ function agentChip(
 }
 
 /**
- * What an agent's tab hands its messages for forking: the press, where the
- * agent works on a task that is not archived and the place opens a draft,
- * and the agents of the task started from each of its messages as chips.
+ * What an agent's tab hands its messages for forking: the press, where
+ * what the agent stands under, its task or, with none, the agent itself, is
+ * not archived and the place opens a draft, and the agents started from
+ * each of its messages as chips.
  */
 export function agentForkDoors(input: {
   agent: CodingAgentSummary;
   control: Pick<CodingAgentsControl, "agents" | "archived" | "onUnarchive">;
   onFork: ((fork: AgentFork) => void) | undefined;
-  /** Opens the task's draft as a continue of an agent, by its id, with the words and files given; none where no draft opens. */
+  /** Opens the draft, the task's or the agent page's, as a continue of an agent, by its id, with the words and files given; none where no draft opens. */
   onContinue?:
     | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
     | undefined;
@@ -100,8 +127,17 @@ export function agentForkDoors(input: {
   const { agent, control, onFork, onContinue, cards, onOpenTarget } = input;
   const standing = new Set(control.agents?.map((each) => each.id));
   const listed = [...(control.agents ?? []), ...(control.archived ?? [])];
-  const forks = forksOf(listed, agent.id);
-  const drafts = agent.planId !== null && control.onUnarchive === undefined;
+  const forks = new Map(forksOf(listed, agent.id));
+  // An agent's page lists that agent alone, so the forks its own summary names stand beside the list's.
+  const named = agent.continuedBy ?? [];
+  for (const each of named) {
+    if (each.messageId === undefined || listed.some((one) => one.id === each.agentId)) continue;
+    forks.set(each.messageId, [...(forks.get(each.messageId) ?? []), each.agentId]);
+  }
+  // An agent with no task opens on its own page, listed or not; on a task, an unlisted one is archived.
+  const opens = (agentId: string) => standing.has(agentId) || agent.planId === null;
+  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
+  const drafts = control.onUnarchive === undefined;
   const forkable = onFork !== undefined && drafts;
   const open =
     onOpenTarget === undefined
@@ -123,8 +159,9 @@ export function agentForkDoors(input: {
             agentId,
             listed.find((each) => each.id === agentId),
             cards,
-            // An archived agent is named alone, since no tab of the task draws it.
-            standing.has(agentId) ? open : undefined,
+            // An archived agent of a task is named alone, since no tab of the task draws it.
+            opens(agentId) ? open : undefined,
+            named.find((each) => each.agentId === agentId)?.title ?? null,
           )}
         </Fragment>
       )),
@@ -133,7 +170,7 @@ export function agentForkDoors(input: {
 
 /** Whether the tab a message is drawn in offers to fork it. */
 export function useForkOffered(): boolean {
-  return useContext(ForkContext)?.onFork !== undefined;
+  return useContext(ForkOfferedContext);
 }
 
 /** A message's Fork to new agent, after its Copy and Copy link; nothing where its tab offers no fork. */
@@ -202,14 +239,16 @@ export function ForkChip({
   const openPlace = useOpenPlace();
   const taskId = source?.planId ?? null;
   const { agentId, messageId } = fork;
+  // A source with no task, or none the list holds, is opened on its own page.
+  const task = taskId === null ? undefined : { planId: taskId };
   const open =
-    openPlace === undefined || taskId === null
+    openPlace === undefined
       ? undefined
       : () =>
           openPlace(
             messageId === undefined
-              ? { kind: LINK_PLACE.AGENT, planId: taskId, agentId }
-              : { kind: LINK_PLACE.MESSAGE, planId: taskId, agentId, messageId },
+              ? { kind: LINK_PLACE.AGENT, ...task, agentId }
+              : { kind: LINK_PLACE.MESSAGE, ...task, agentId, messageId },
           );
   const quote = `“${fork.opening}”`;
   const drop = messageId === undefined ? FORK_WORDS.DROP_CONTINUE : FORK_WORDS.DROP;
@@ -225,7 +264,9 @@ export function ForkChip({
         ) : (
           <SplitIcon className="draft-fork-glyph" aria-hidden="true" />
         )}
-        <span>{messageId === undefined ? FORK_WORDS.CONTINUE_OF : FORK_WORDS.OF}</span>
+        <span className="draft-fork-lead">
+          {messageId === undefined ? FORK_WORDS.CONTINUE_OF : FORK_WORDS.OF}
+        </span>
         {agentChip(agentId, source, cards, open === undefined ? undefined : () => open())}
         {messageId === undefined ? null : (
           <>

@@ -3,7 +3,6 @@ import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
   CopyIcon,
-  DocumentIcon,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -24,15 +23,15 @@ import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
+import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { PullRequestReader } from "../tasks/use-agent-pull-request.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import type { PinnedTab } from "../tasks/use-side-panel.js";
+import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { agentTranscriptRead } from "./main-tabs.js";
+import { agentTranscriptRead } from "./agent-actions.js";
+import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
 import { PullRequestLine, RepositoryDetail } from "./task-card.js";
 
@@ -87,19 +86,29 @@ function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
 
 /**
  * What a pin's glyph is drawn from, as its tab's look (`tab-look.tsx`): its
- * kind, a file's path, or an agent's as its tab wears it, where it stands
- * included, wherever the window last read the agent (`agent`), and
- * otherwise at rest in the harness it ran in when it was pinned.
+ * kind, the Plan's its task's status, a file's path, or an agent's as its
+ * tab wears it, where it stands included, wherever the window last read the
+ * agent (`agent`), and otherwise at rest in the harness it ran in when it
+ * was pinned.
  */
-function pinSubject(pin: PinnedTab, agent: TaskAgentLine | undefined): TabSubject {
+function pinSubject(
+  pin: PinnedTab,
+  task: TaskSummary,
+  agent: TaskAgentLine | undefined,
+): TabSubject {
   const { tab } = pin;
   if (isAgentTab(tab)) {
     const pinned = pin.model === undefined ? undefined : { model: pin.model };
     return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
   }
-  if (tab === MAIN_TAB.CALL) return { kind: TAB_KIND.CALL };
   if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES };
-  return isFileTab(tab) ? { kind: TAB_KIND.FILE, path: tab.file } : { kind: TAB_KIND.PANEL, tab };
+  if (isFileTab(tab)) return { kind: TAB_KIND.FILE, path: tab.file };
+  return { kind: TAB_KIND.PANEL, tab, plan: { name: task.name, status: task.status } };
+}
+
+/** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name as it stands now, as the tab itself is named. */
+function namedPin(pin: PinnedTab, task: TaskSummary): PinnedTab {
+  return pin.tab === SIDE_PANEL_TAB.PLAN ? { ...pin, label: task.name } : pin;
 }
 
 /** The agent a pin of an agent's tab or of its Changes is of; none for any other pin. */
@@ -228,10 +237,10 @@ function PinnedTabCard({
   const { openGitHub, pictures } = tasks.repositories;
   return (
     <HoverCard data-pinned-tab-card="">
-      <HoverCardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
+      <HoverCardHead glyph={tabLook(pinSubject(pin, task, agent)).icon} name={pin.label} />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
-        glyph={<DocumentIcon />}
+        glyph={<PlanGlyph status={task.status} />}
         label={task.name}
         onPress={onOpenTask}
       />
@@ -259,7 +268,7 @@ function PinnedTabCard({
  */
 export function SidebarPinnedTab({
   tasks,
-  pin,
+  pin: kept,
   task,
   current,
   inSight,
@@ -278,8 +287,10 @@ export function SidebarPinnedTab({
   /** Opens the task the tab is of, as its own row does. */
   onOpenTask: () => void;
 }): React.JSX.Element {
+  const pin = namedPin(kept, task);
   const copied = useTranscriptCopier();
   const menu = useMenu(tasks.shown && inSight);
+  const place = useRowPlace();
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control.
@@ -313,7 +324,9 @@ export function SidebarPinnedTab({
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
-            <span className="sidebar-pinned-tab-glyph">{tabLook(pinSubject(pin, agent)).icon}</span>
+            <span className="sidebar-pinned-tab-glyph">
+              {tabLook(pinSubject(pin, task, agent)).icon}
+            </span>
           }
           title={
             gone ? (
@@ -350,7 +363,7 @@ export function SidebarPinnedTab({
         <ActionMenu
           label={`${pin.label} actions`}
           menu={menu.drawn}
-          groups={pinActionGroups(pin, tasks, copied)}
+          groups={withRowMoves(pinActionGroups(pin, tasks, copied), place)}
           onClose={menu.close}
         />
       )}

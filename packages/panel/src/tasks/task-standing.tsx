@@ -7,8 +7,10 @@ import {
   type TaskPriority,
   type TaskStanding,
   type TaskStatus,
+  type TaskSummary,
 } from "@luke/features/task-wire";
 import { taskKey } from "@luke/features/workspace-key";
+import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   CHIP_WIDTH,
   GAP,
@@ -21,6 +23,10 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { memberActor } from "@luke/ui/actor-model";
+import { UserRoundIcon } from "lucide-react";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useMemberDirectory, usePerson } from "../member-directory.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
 
@@ -29,9 +35,10 @@ import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
  *
  * The key is the task's workspace prefix and its number (`ACME-42`), drawn
  * small in monospace above the title, as the task's own page names it. Under
- * the title stand two chips, each dropping the window's own menu
- * (`picker-row.tsx`): the status, each of the five with its mark, and the
- * priority, each with its bars. A pick is handed back for the page to send;
+ * the title stand three chips, each dropping the window's own menu
+ * (`picker-row.tsx`): the status, each of the five with its mark, the
+ * priority, each with its bars, and the assignee, each member of the
+ * workspace by face and name, the reader first, and No assignee. A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
  * A task from a service before statuses has no key and no chips.
  */
@@ -45,8 +52,8 @@ export const TASK_STATUS_WORDS = {
   [TASK_STATUS.CANCELED]: "Canceled",
 } as const satisfies Record<TaskStatus, string>;
 
-/** Each priority as its chip and its menu's row say it. */
-const TASK_PRIORITY_WORDS = {
+/** Each priority as its chip, its menu's row, and a Board card's say it. */
+export const TASK_PRIORITY_WORDS = {
   [TASK_PRIORITY.NONE]: "No priority",
   [TASK_PRIORITY.URGENT]: "Urgent",
   [TASK_PRIORITY.HIGH]: "High",
@@ -74,6 +81,80 @@ function statusOf(id: string): TaskStatus | undefined {
 /** The priority a picked row names; none for a row that names no priority. */
 function priorityOf(id: string): TaskPriority | undefined {
   return TASK_PRIORITY_ORDER.find((priority) => priority === id);
+}
+
+/** The row of the assignee's menu that assigns the task to no one, apart from every account's id. */
+const NO_ASSIGNEE = "no-assignee";
+
+/** What the assignee's chip and its first row say of a task no one is assigned to. */
+const NO_ASSIGNEE_WORDS = "No assignee";
+
+/**
+ * The assignee's menu: No assignee, then the workspace's members, the reader
+ * first and the rest by name, each by face and name with their email as
+ * detail, which a search matches too; only No assignee while the members are
+ * unread.
+ */
+function assigneeRows(
+  members: readonly WorkspaceMember[] | undefined,
+  readerId: string | undefined,
+): readonly MenuRow[] {
+  const ordered = [...(members ?? [])].sort(
+    (one, other) =>
+      Number(other.userId === readerId) - Number(one.userId === readerId) ||
+      one.name.localeCompare(other.name),
+  );
+  return [
+    { id: NO_ASSIGNEE, label: NO_ASSIGNEE_WORDS, icon: <UserRoundIcon aria-hidden /> },
+    ...ordered.map((member) => ({
+      id: member.userId,
+      label: member.name,
+      icon: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.INLINE} />,
+      detail: member.userId === readerId ? "You" : member.email,
+      terms: [member.email],
+    })),
+  ];
+}
+
+/**
+ * The assignee chip: the member the task is assigned to by face and name, or
+ * No assignee, dropping the workspace's members (`assigneeRows`); a pick of
+ * anyone else is handed to `onPick` by their id, and No assignee as null.
+ */
+function TaskAssigneePicker({
+  assignee,
+  onPick,
+}: {
+  assignee: TaskSummary["assignee"];
+  /** Where a pick is sent; without one the chip only says. */
+  onPick: ((assigneeId: string | null) => void) | undefined;
+}): React.JSX.Element {
+  const { members, readerId } = useMemberDirectory();
+  const person = usePerson(assignee);
+  return (
+    <Picker
+      label="Assignee"
+      value={assignee?.userId ?? NO_ASSIGNEE}
+      valueLabel={assignee?.name ?? NO_ASSIGNEE_WORDS}
+      valueIcon={
+        assignee === undefined ? (
+          <UserRoundIcon aria-hidden />
+        ) : (
+          <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />
+        )
+      }
+      rows={assigneeRows(members, readerId)}
+      placeholder="Assign to…"
+      noMatch="No such member"
+      align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
+      disabled={onPick === undefined}
+      onPick={(id) => {
+        const picked = id === NO_ASSIGNEE ? null : id;
+        if (picked !== (assignee?.userId ?? null)) onPick?.(picked);
+      }}
+    />
+  );
 }
 
 /** What the page hands the task's head: its workspace's name, which the key is drawn from, and the door a pick is sent through, none where the task takes no change. */
@@ -105,7 +186,41 @@ export function TaskKeyLine({
   );
 }
 
-/** The task's status and priority chips, under its title; nothing for a task from a service before them. */
+/**
+ * A status chip dropping the five statuses, each with its mark, the one
+ * `status` names checked; a pick other than it is handed to `onPick`.
+ */
+function TaskStatusPicker({
+  label = "Status",
+  status,
+  onPick,
+}: {
+  /** The chip's name for a reader; the task page's own where none is named. */
+  label?: string | undefined;
+  status: TaskStatus;
+  /** Where a pick is sent; without one the chip only says. */
+  onPick: ((status: TaskStatus) => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <Picker
+      label={label}
+      value={status}
+      valueLabel={TASK_STATUS_WORDS[status]}
+      valueIcon={<TaskStatusMark status={status} />}
+      rows={STATUS_ROWS}
+      noMatch="No such status"
+      align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
+      disabled={onPick === undefined}
+      onPick={(id) => {
+        const picked = statusOf(id);
+        if (picked !== undefined && picked !== status) onPick?.(picked);
+      }}
+    />
+  );
+}
+
+/** The task's status, priority, and assignee chips, under its title; nothing for a task from a service before them. */
 export function TaskStandingChips({
   task,
   onSet,
@@ -118,20 +233,9 @@ export function TaskStandingChips({
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
-        <Picker
-          label="Status"
-          value={status}
-          valueLabel={TASK_STATUS_WORDS[status]}
-          valueIcon={<TaskStatusMark status={status} />}
-          rows={STATUS_ROWS}
-          noMatch="No such status"
-          align={PICKER_ALIGN.START}
-          width={CHIP_WIDTH.AUTO}
-          disabled={onSet === undefined}
-          onPick={(id) => {
-            const picked = statusOf(id);
-            if (picked !== undefined && picked !== status) onSet?.({ status: picked });
-          }}
+        <TaskStatusPicker
+          status={status}
+          onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
         />
         <Picker
           label="Priority"
@@ -147,6 +251,10 @@ export function TaskStandingChips({
             const picked = priorityOf(id);
             if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
           }}
+        />
+        <TaskAssigneePicker
+          assignee={task.assignee}
+          onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
         />
       </Inline>
     </div>

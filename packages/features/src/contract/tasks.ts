@@ -12,7 +12,8 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { boardAnswerSchema, boardSaveRequestSchema } from "../board-wire.js";
+import { BOARD_BOUNDS, boardAnswerSchema, boardSaveRequestSchema } from "../board-wire.js";
+import { MAXIMUM_START_BODY_BYTES } from "../coding-agent-wire.js";
 import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { wireUuidSchema } from "../service-wire.js";
@@ -28,6 +29,7 @@ import {
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
+  TASK_BOUNDS,
   TASK_LIST_QUERY,
   taskAnswerSchema,
   taskCreateRequestSchema,
@@ -38,7 +40,25 @@ import {
 } from "../task-wire.js";
 import { taskWorkAnswerSchema } from "../tasks-view.js";
 import { taskTranscriptAnswerSchema } from "../transcript-wire.js";
-import { exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+
+/** A change is a name and a repository's name at most, so a body past this is none. */
+const NAME_BODY_BYTES = 8_192;
+
+/** A brief at its bound with every character escaped. */
+const BRIEF_BYTES = TASK_BOUNDS.MAX_BRIEF_CHARS * 6;
+
+/** A link names one issue by a few short fields, and a relation one word. */
+const ISSUE_BODY_BYTES = 1_024;
+
+/** A start is a change's few fields, a brief where it names one, and an agent's Start beside them where it names one. */
+const START_BODY_BYTES = NAME_BODY_BYTES + BRIEF_BYTES + MAXIMUM_START_BODY_BYTES;
+
+/** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
+const EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
+
+/** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
+const BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 const PLAN = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
 const REVISIONS = `${PLAN}/revisions` as const;
@@ -84,6 +104,7 @@ export const tasksContract = {
     .output(EffectSchema.flip(taskListAnswerSchema)),
   /** A plan started, and the agent it names started on it where it names one. */
   create: hostedProcedure
+    .meta(bodyCap(START_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -100,6 +121,7 @@ export const tasksContract = {
     .output(EffectSchema.flip(taskAnswerSchema)),
   /** Its name, repository, pin, archive, or workspace changed. */
   update: hostedProcedure
+    .meta(bodyCap(NAME_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: PLAN, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskUpdateRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
@@ -113,11 +135,13 @@ export const tasksContract = {
     .output(EffectSchema.flip(boardAnswerSchema)),
   /** The board's scene written whole. */
   saveBoard: hostedProcedure
+    .meta(bodyCap(BOARD_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: `${PLAN}/board`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), boardSaveRequestSchema))
     .output(EffectSchema.flip(boardAnswerSchema)),
   /** The developer's edit of the document. */
   edit: hostedProcedure
+    .meta(bodyCap(EDIT_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/edit`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), planEditRequestSchema))
     .output(EffectSchema.flip(planEditAnswerSchema)),
@@ -153,11 +177,13 @@ export const tasksContract = {
     .output(EffectSchema.flip(taskIssueLinksAnswerSchema)),
   /** An issue linked to the plan, read from its provider first, or why none was. */
   linkIssue: hostedProcedure
+    .meta(bodyCap(ISSUE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: ISSUES, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskIssueChoiceSchema))
     .output(EffectSchema.flip(taskIssueLinkAnswerSchema)),
   /** Which keyword the plan's pull requests write of a link. */
   relateIssue: hostedProcedure
+    .meta(bodyCap(ISSUE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: ISSUE, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(linkParams), taskIssueRelateRequestSchema))
     .output(EffectSchema.flip(taskIssueLinkChangedAnswerSchema)),

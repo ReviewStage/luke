@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type ChatReadBlock,
   knownBlock,
+  MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
@@ -42,9 +43,11 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
+import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
+import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
@@ -206,7 +209,8 @@ interface MessageContext {
   readonly chat: ChatAnswer;
   readonly names: ChatNames;
   readonly now: number;
-  readonly targets: readonly ChatTarget[];
+  /** What a composer posting in the channel offers to name: the members a post there reaches, and the channels. */
+  readonly targetsIn: (channelId: string) => readonly ChatTarget[];
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
@@ -218,6 +222,27 @@ interface MessageContext {
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
+/**
+ * A message's blocks in the order they are drawn, each with its place in
+ * the message: a person's pictures first, over their words, as the box held
+ * them and as every message's files stand; an agent's and Luke's in the
+ * order they wrote them, since a picture of theirs may stand between words
+ * that speak of it.
+ */
+function drawnBlocks(
+  message: ChatMessage,
+  chat: ChatAnswer,
+): readonly { readonly block: ChatReadBlock; readonly index: number }[] {
+  const placed = message.blocks.map((block, index) => ({ block, index }));
+  const author = chat.members.find((member) => member.id === message.authorId);
+  if (author?.kind !== MEMBER_KIND.HUMAN) return placed;
+  const picture = (block: ChatReadBlock) => knownBlock(block) && block.type === CHAT_BLOCK.IMAGE;
+  return [
+    ...placed.filter(({ block }) => picture(block)),
+    ...placed.filter(({ block }) => !picture(block)),
+  ];
+}
+
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */
 function Body({
   message,
@@ -226,8 +251,8 @@ function Body({
   message: ChatMessage;
   context: MessageContext;
 }): React.JSX.Element {
-  const blocks = message.blocks.map((block, index) => (
-    // Blocks have no key of their own and are never reordered.
+  const blocks = drawnBlocks(message, context.chat).map(({ block, index }) => (
+    // Blocks have no key of their own, so each keeps its place in the message as its key.
     <Block key={index} messageId={message.id} block={block} context={context} />
   ));
   const { ask } = message;
@@ -270,7 +295,7 @@ function Byline({
           <ActorRef actor={actor} nameOnly />
         )}
       </span>
-      {where === undefined ? null : <span className="chat-byline-where">{where}</span>}
+      {where === undefined ? null : <FadingWords className="chat-byline-where" words={where} />}
       <RelativeTime at={at} now={now} />
       {action}
     </div>
@@ -366,7 +391,7 @@ function ThreadRow({
             {open && canReply ? (
               <ChatComposer
                 label="Reply in thread"
-                targets={context.targets}
+                targets={context.targetsIn(message.channelId)}
                 keywords={context.keywords}
                 compact
                 onSend={(text, attachments) =>
@@ -409,11 +434,15 @@ function PlaceHead({
   /** The place's own presses at the head's end, a topic's menu. */
   actions?: React.ReactNode;
 }): React.JSX.Element {
+  const [titleBox, titleClipped] = useClipped(title);
   return (
     <header className="desktop-toolbar chat-head">
       {lead}
+      {/* Note that the title's words are cut by a box of their own inside the heading, which fades them rather than ending them in the heading's ellipsis. */}
       <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
-        {title}
+        <span ref={titleBox} className="chat-head-title" data-overflow={String(titleClipped)}>
+          {title}
+        </span>
       </Text>
       {meta === undefined ? null : (
         <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
@@ -495,7 +524,14 @@ export function ChatPane({
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
 }): React.JSX.Element {
-  const targets = chatTargets(chat, names, mentionPlace);
+  // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
+  const targetsIn = (channelId: string) =>
+    chatTargets(
+      chat,
+      names,
+      mentionPlace,
+      chat.channels.find((each) => each.id === channelId),
+    );
   const keywords = chatKeywords(chat, names);
   const actorOf = useChatActor(chat, names);
   const context: MessageContext = {
@@ -503,7 +539,7 @@ export function ChatPane({
     chat,
     names,
     now,
-    targets,
+    targetsIn,
     keywords,
     openLink,
     onPost,
@@ -572,7 +608,7 @@ export function ChatPane({
         <ChatComposer
           key={channel.id}
           label={composerLabel(chat, names, channel)}
-          targets={targets}
+          targets={targetsIn(channel.id)}
           keywords={keywords}
           onSend={(text, attachments) =>
             onPost({ ...postOf(text, attachments), channelId: channel.id })

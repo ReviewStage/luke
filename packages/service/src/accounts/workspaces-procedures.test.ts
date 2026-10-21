@@ -26,7 +26,8 @@ import { workspacesProcedures } from "./workspaces-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const USER_ID = "user-1";
-const SESSION_HEADER = "x-test-session";
+/** A browser's session cookie, which the fake session read below names the account by. */
+const SESSION_COOKIE = "better-auth.session_token=session";
 
 /** The bound on every workspace write's body but the photo's: a name's, or an id's. */
 const BODY_BYTES = 1_024;
@@ -47,7 +48,9 @@ const handle = hostedFetch({
     resolveUserId: (request) =>
       Effect.succeed(Option.fromNullishOr(request.headers.has("authorization") ? USER_ID : null)),
     resolveSessionUserId: (request) =>
-      Effect.succeed(Option.fromNullishOr(request.headers.has(SESSION_HEADER) ? USER_ID : null)),
+      Effect.succeed(
+        Option.fromNullishOr(request.headers.get("cookie") === SESSION_COOKIE ? USER_ID : null),
+      ),
     workspaces,
     members,
   }),
@@ -65,7 +68,7 @@ const answer = ({ path, method = HTTP_METHOD.POST, body, caller }: Asked) =>
   Effect.gen(function* () {
     const headers = new Headers();
     if (caller === "account") headers.set("authorization", "Bearer token");
-    if (caller === "session") headers.set(SESSION_HEADER, "session");
+    if (caller === "session") headers.set("cookie", SESSION_COOKIE);
     if (body !== undefined) {
       headers.set("content-type", "application/json");
       headers.set("content-length", String(new TextEncoder().encode(body).byteLength));

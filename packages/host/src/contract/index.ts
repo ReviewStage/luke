@@ -11,9 +11,10 @@ import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
 import { browserActsContract } from "./browser.js";
+import { browserLiveActsContract } from "./browser-live.js";
+import { chaptersActsContract } from "./chapters.js";
 import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
-import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
@@ -46,9 +47,10 @@ export {
   AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
   BROWSER_ACT_KIND,
+  BROWSER_LIVE_ACT_KIND,
+  CHAPTERS_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
-  ISSUE_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
@@ -73,6 +75,7 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
+export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
@@ -83,9 +86,10 @@ export const actContract = {
   ...automationActsContract,
   ...avatarActsContract,
   ...browserActsContract,
+  ...browserLiveActsContract,
+  ...chaptersActsContract,
   ...factoryActsContract,
   ...integrationActsContract,
-  ...issueActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
@@ -119,8 +123,3 @@ export type PortActPayload<Kind extends PortActKind> = InferContractRouterInputs
 export type PortActResult<Kind extends PortActKind> = InferContractRouterOutputs<
   typeof actContract
 >[Kind];
-
-/** Whether a kind rides the act port rather than `app:act`. */
-export function isPortActKind(kind: string): kind is PortActKind {
-  return Object.hasOwn(actContract, kind);
-}

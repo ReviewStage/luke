@@ -10,8 +10,8 @@ import {
   type FactoryWorldView,
 } from "@luke/features/factory-world-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { type ActPortClient, FACTORY_ACT_KIND } from "../contract/index.js";
+import type { ActSender } from "./base.js";
 import { factoryProcedures } from "./factory-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 

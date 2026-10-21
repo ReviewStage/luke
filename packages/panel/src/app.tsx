@@ -10,27 +10,24 @@ import {
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
   RUN_PROFILE,
-  sessionReplayBootstrap,
 } from "@luke/host/app-state";
-import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
+import {
+  APP_SETTING_SCHEMA,
+  EXPERIMENT,
+  type Experiment,
+  type HostCapability,
+} from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { fixtureUpdate } from "@luke/settings/update-row";
-import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
-import { callBarTaskId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { callBarAgentId, callCard, callCardShown } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
+import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import {
-  type MicrophoneControl,
-  NOTIFICATIONS_GRANTOR,
-  type ShortcutControl,
-  type UpdateControl,
-} from "@luke/voice/settings-controls";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import {
   outputSilent,
@@ -38,13 +35,14 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "@luke/voice/volume-hint";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import * as Atom from "effect/reactivity/Atom";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { appBridge } from "./app-bridge.js";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
-import { usePrefetchEditorBundle } from "./bundle-loader.js";
+import { type SettingsDoors, useSettingsPanel, useShownUpdate } from "./app-settings.js";
 import { type CallCardInput, callControls } from "./call/call-card.js";
 import { useCallCardVideo } from "./call/panel-avatar.js";
 import { useWindowFocused } from "./call/use-window-focused.js";
@@ -58,34 +56,48 @@ import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
 import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
+import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
-import { prefetchMarkdownHtmlParser } from "./markdown-html-parser.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
-import { shownSettingsView } from "./settings/pages.js";
-import { settingsRowsInput } from "./settings/settings-panel.js";
+import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
-import { useShellRoom } from "./shell-room.js";
-import { useStageWidth } from "./stage-width.js";
+import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
+import { useChatOn } from "./tasks/chat-gate.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
+import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
+import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
-import { useAppState, useExperiment } from "./use-app-state.js";
+import {
+  APP_SETTINGS_VIEW,
+  APP_SLICE,
+  appStateDerivedAtom,
+  SETTINGS_HELD,
+  useAppSlice,
+  useExperiment,
+  VOICE_AVAILABLE,
+} from "./use-app-state.js";
 import { useCaptionPresentation } from "./use-caption-presentation.js";
 import { useSignIn } from "./use-sign-in.js";
+import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
-import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view.js";
+import {
+  FIXTURE_SPEAKING_CAPTIONS,
+  fixtureVoice,
+  useCallTranscript,
+  useVoiceView,
+} from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
 
@@ -102,13 +114,143 @@ const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
+/** No platform capability, as the document reads before main has answered. */
+const NO_CAPABILITIES: readonly HostCapability[] = [];
+
+/** The run the Tasks tab reads before main has answered: a plain one, no fixture staged. */
+const IDLE_RUN = { fixtureMode: false, profile: RUN_PROFILE.IDLE } as const;
+
+/** Whether this is a fixture run, which the window waits on its synthetic tasks for. */
+const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.RUN,
+  (run) => run?.fixtureMode === true,
+);
+
+/** The agents main says ended unseen. */
+const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
+  APP_SLICE.CODING_AGENTS,
+  (codingAgents) => codingAgents?.unseen ?? NO_UNSEEN_AGENTS,
+);
+
+/** The Mac's output as last read, which the volume hint answers. */
+const OUTPUT_AUDIO = Atom.map(APP_SLICE.AUDIO, (audio) => audio?.outputAudio);
+
+/** The microphone's grant, which the Tasks tab's microphone answers. */
+const MICROPHONE_GRANT: Atom.Atom<MicrophoneStatus> = Atom.map(
+  APP_SLICE.AUDIO,
+  (audio) => audio?.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
+);
+
+/** Whether this window stands in full screen. */
+const FULL_SCREEN = Atom.map(APP_SLICE.WINDOW, (facts) => facts?.fullScreen);
+
+/** The stored zoom, which the zoom keys step from. */
+const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
+
+/** What waits on the developer across the account's tasks. */
+const INBOX_WAITING: Atom.Atom<readonly AppInboxTask[]> = Atom.map(
+  APP_SLICE.INBOX,
+  (inbox) => inbox?.waiting ?? NOTHING_WAITING,
+);
+
+/** The version of main's document the window holds, which moves with every delivery. */
+const APP_STATE_VERSION: Atom.Atom<number> = appStateDerivedAtom((state) => state?.version ?? 0);
+
+/** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
+const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
+  appPlatform().unsavedWork?.(ask);
+};
+
+/**
+ * The shell, handed Settings as the document holds it. It is read here
+ * rather than by the window, so a setting that moves draws the shell again
+ * over the same tasks, whose columns hold (`DesktopSidebar`, `DesktopTasks`),
+ * and leaves the window as it was.
+ */
+function SettingsShell({
+  doors,
+  ...shell
+}: Omit<ComponentProps<typeof DesktopShell>, "settings"> & {
+  doors: SettingsDoors;
+}): React.JSX.Element | null {
+  const settings = useSettingsPanel(doors);
+  // Note that there is none only before the first read, which the window draws nothing over.
+  if (settings === undefined) return null;
+  return <DesktopShell {...shell} settings={settings} />;
+}
+
+/** ⌘K, handed the rows its search finds on the shell's terms. */
+function SettingsPalette({
+  doors,
+  ...palette
+}: Omit<ComponentProps<typeof CommandPalette>, "settings"> & {
+  doors: SettingsDoors;
+}): React.JSX.Element {
+  const settings = useSettingsPanel(doors);
+  return (
+    <CommandPalette
+      {...palette}
+      settings={{
+        rows: settings === undefined ? undefined : settingsRowsInput(settings),
+        capabilities: settings?.capabilities ?? NO_CAPABILITIES,
+        onViewChange: doors.onViewChange,
+      }}
+    />
+  );
+}
+
+/**
+ * The toast an update arrived with. Note that it reads the update where
+ * nothing else is drawn for it, because the update moves with each step of
+ * its download.
+ */
+function UpdatedToast(): null {
+  useUpdatedToast(useShownUpdate());
+  return null;
+}
+
+/**
+ * The toasts of what waits on the developer, withdrawn as it stops waiting.
+ * Note that it reads the document's version where nothing else is drawn for
+ * it, because the version moves with every delivery.
+ */
+function InboxToasts({
+  onView,
+  shownInbox,
+}: {
+  onView: (taskId: string) => void;
+  shownInbox: string | null;
+}): null {
+  useInboxToasts(onView, useAppSlice(INBOX_WAITING), useAppSlice(APP_STATE_VERSION), shownInbox);
+  return null;
+}
+
+/**
+ * The window, drawn once a fixture run's synthetic tasks have landed. They are
+ * imported apart from the bundle every launch parses, and drawn from the first
+ * frame so that a capture, and the history entry the window's first place
+ * writes, never see the tasks arrive after the rest.
+ */
 export function App(): React.JSX.Element {
+  const fixtureMode = useAppSlice(FIXTURE_MODE);
+  const landed = useTasksFixtureLanded(fixtureMode);
+  return landed ? <AppWindow /> : <></>;
+}
+
+function AppWindow(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
-  // Everything main holds, on the one channel it holds it on, and this
-  // window's own facts beside it. There is no second reading to reconcile
-  // against: what arrives is the whole document at a version that only rises.
-  const state = useAppState();
-  const account = state?.account;
+  // What main holds, each slice read on its own, so the window is drawn again
+  // for a slice it draws from and for no other: a setting that moves draws
+  // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
+  // window, and the tasks it holds, as they were.
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const run = useAppSlice(APP_SLICE.RUN);
+  const planning = useAppSlice(APP_SLICE.TASKS);
+  const inbox = useAppSlice(APP_SLICE.INBOX);
+  const unseenAgents = useAppSlice(UNSEEN_AGENTS);
+  const settingsHeld = useAppSlice(SETTINGS_HELD);
+  const voiceAvailable = useAppSlice(VOICE_AVAILABLE);
+  const microphoneStatus = useAppSlice(MICROPHONE_GRANT);
   // A picture is read as the account signed in, so the window lets go of every one it read once that account changes.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
@@ -118,15 +260,10 @@ export function App(): React.JSX.Element {
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  const outputAudio = state?.audio.outputAudio;
+  const outputAudio = useAppSlice(OUTPUT_AUDIO);
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
   const settingsPlace = useSettingsPlace();
   const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
-  /** The settings the panel is drawing: the document's own. */
-  const settings = useMemo(
-    () => (state?.settings ? appSettingsView(state.settings) : undefined),
-    [state?.settings],
-  );
   /** The note being written to the people who make Luke, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /** The experiment that note is about, where an experiment's row opened it. */
@@ -135,7 +272,6 @@ export function App(): React.JSX.Element {
     setFeedbackAbout(about);
     setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
   }, []);
-  useUpdatedToast(state ? fixtureUpdate(state.run, state.update) : undefined);
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -145,26 +281,12 @@ export function App(): React.JSX.Element {
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
 
-  /**
-   * Recording follows the account: a sign-out ends it rather than leaving it
-   * filed under the person who just left, and a sign-in can start one without
-   * waiting for a relaunch. The document is the whole of what decides it, so
-   * a halt raised before the account was cleared can never be undone by an
-   * older reading arriving behind it.
-   */
-  const sessionReplay = state?.sessionReplay;
-  const run = state?.run;
-  useEffect(() => {
-    if (!sessionReplay || !run) return;
-    appPlatform().applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
-  }, [run, sessionReplay]);
-  // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
-  const prefetchEditorBundle = usePrefetchEditorBundle();
-  useEffect(prefetchEditorBundle, [prefetchEditorBundle]);
-  // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
-  useEffect(prefetchMarkdownHtmlParser, []);
+  // Session replay and the editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions.
+  useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
+  usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  const leaveGuard = useLeaveGuard();
+  // The shell hears the ask too, so its own ways out of the page ask first.
+  const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>
@@ -206,10 +328,10 @@ export function App(): React.JSX.Element {
 
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
   const accountGated =
-    state?.run.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
+    run?.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
 
   const signIn = useSignIn();
-  const lastSignIn = useLastSignIn(account, state?.run.fixtureMode === true);
+  const lastSignIn = useLastSignIn(account, run?.fixtureMode === true);
 
   // The menu bar's Help items open the same dialog Settings' buttons do.
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => {
@@ -221,47 +343,32 @@ export function App(): React.JSX.Element {
     setFeedbackKind(FEEDBACK_KIND.PROMPT);
   });
 
-  /**
-   * Moves the talk key, or resets it when no chord is named. The key the row
-   * shows is not taken from this reply — the main process announces the one
-   * that actually registered, the same way it always has — so the reply
-   * carries only the stored choice and any refusal.
-   */
-  const changeVoiceHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
-    [],
-  );
-
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(settings?.zoom, (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
+  useWindowZoom(useAppSlice(ZOOM), (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
-  useWindowFullScreen(state?.window.fullScreen);
+  useWindowFullScreen(useAppSlice(FULL_SCREEN));
 
-  // The stop key, under the same rule: the key the row shows follows the main
-  // process's own announcement of what actually registered.
-  const changeStopHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
-    [],
-  );
-
-  // True while a settings row is recording a chord. Both Luke keys stay
-  // registered through a recording — the recording is how one gets replaced —
-  // so a press of a current chord landing then is held here rather than
-  // opening the microphone under the field being typed into.
-  const shortcutCapture = useRef(false);
-  const changeShortcutCapture = useCallback((capturing: boolean) => {
-    shortcutCapture.current = capturing;
-    // The talk and stop keys are routed by the main process to a window that
-    // is not this one, so the recording is reported there to be honored.
-    appPlatform().setShortcutCapturing(capturing);
-  }, []);
+  const signOut = useCallback(async () => {
+    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+  }, [act]);
+  // The delete happens at the service before anything local moves,
+  // so a failure resolves to why and the account is still standing.
+  const deleteAccount = useCallback(async (): Promise<ActionResult> => {
+    try {
+      await act(ACT_KIND.ACCOUNT_DELETE);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    } catch {
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "Luke could not delete the account. Try again in a moment.",
+      };
+    }
+  }, [act]);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
   // drawn over Luke's words, which a capture has no system output to read.
-  const fixture = fixtureVoice(state?.run.profile ?? RUN_PROFILE.IDLE);
+  const fixture = fixtureVoice(run?.profile ?? RUN_PROFILE.IDLE);
   const fixtureSpeaking = fixture !== undefined;
   const fixtureMuted = fixture?.muted ?? false;
   const {
@@ -271,6 +378,7 @@ export function App(): React.JSX.Element {
     stopSpeaking,
     requestMicrophoneAccess,
   } = useVoiceView();
+  const callTranscript = useCallTranscript();
   const { voiceError, voiceNotice } = voiceView;
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
@@ -286,28 +394,29 @@ export function App(): React.JSX.Element {
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // The stage's width, on the desktop the window's, which the sidebar folds
-  // by and which says whether the panel stands as one pane (`shell-room.ts`).
-  const stage = useStageWidth();
-  const room = useShellRoom(stage.width);
+  // The room the stage's width gives, on the desktop the window's: whether
+  // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
+  // folds. Only crossing a line draws the shell again, never a pixel's drag.
+  const stage = useStageRoom();
+  const room = stage.room;
   // The Tasks tab, drawn from the same voice report the strip reads, so a
   // task call's words and levels are the shape's as any call's are.
   const tasks = useTasksTab({
     acts: { act, tell },
-    tasks: state?.tasks ?? IDLE_TASKS_VIEW,
-    run: state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE },
+    tasks: planning ?? IDLE_TASKS_VIEW,
+    run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     account: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined,
     accountId: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined,
-    voiceAvailable: state?.settings?.status.voiceAvailable === true,
-    microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
+    voiceAvailable,
+    microphoneStatus,
     shown: tab === PANEL_TAB.TASKS,
-    unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
-    inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
-    inboxTasks: state?.inbox.tasks ?? NO_TASKS_HOLDING,
-    inboxTaskless: state?.inbox.taskless ?? NOTHING_TASKLESS,
-    failedRuns: state?.inbox.failedRuns ?? NO_FAILED_RUNS,
-    voice: { view: voiceView, listening, requestMicrophoneAccess },
+    unseenAgents,
+    inboxWaiting: inbox?.waiting ?? NOTHING_WAITING,
+    inboxTasks: inbox?.tasks ?? NO_TASKS_HOLDING,
+    inboxTaskless: inbox?.taskless ?? NOTHING_TASKLESS,
+    failedRuns: inbox?.failedRuns ?? NO_FAILED_RUNS,
+    voice: { view: voiceView, callTranscript, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
@@ -329,7 +438,7 @@ export function App(): React.JSX.Element {
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const shownView = shownSettingsView(settingsPlace.view, state?.run.capabilities ?? []);
+  const shownView = shownSettingsView(settingsPlace.view, run?.capabilities ?? NO_CAPABILITIES);
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
@@ -365,7 +474,7 @@ export function App(): React.JSX.Element {
   useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const chatOn = useChatOn();
   const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = useMemo(
@@ -376,7 +485,7 @@ export function App(): React.JSX.Element {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
-      issuesOn,
+      chatOn,
     });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
@@ -407,38 +516,26 @@ export function App(): React.JSX.Element {
     [],
   );
   useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
-  // The call card's way back: the Tasks tab, on the call's task's document,
-  // opening it where another task, or none, is open.
-  const showTask = useRef(tasks.onShowTask);
-  showTask.current = tasks.onShowTask;
-  useEffect(
-    () =>
-      appBridge().onShowTask(({ taskId }) =>
-        guardLeave(() => {
-          changeTab(PANEL_TAB.TASKS);
-          showTask.current(taskId);
-        })(),
-      ),
-    [changeTab, guardLeave],
-  );
   // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another task, the home page, Settings, or the task itself
-  // under its version history, the Inbox, an agent's page, or a side panel filling the window.
+  // on screen: another agent's tab or none, the home page, Settings, or the
+  // agent's own task under its version history, the Inbox, an agent's page,
+  // or a side panel filling the window.
   const focused = useWindowFocused();
-  const taskShown = callBarTaskId({
+  const columnTab = tasks.mainTabs.tab;
+  const agentShown = callBarAgentId({
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
     historyOpen: tasks.history.open,
     inboxOpen: tasks.inboxView.open || tasks.chatView.open,
     agentPageOpen: tasks.agentView.agentId !== undefined,
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
-    activeTaskId: state?.tasks.activeTaskId,
+    columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
   });
   const callVideo = useCallCardVideo();
   const call: CallCardInput | undefined =
-    !accountGated && callCardShown({ view: voiceView, focused, taskShown: taskShown })
+    !accountGated && callCardShown({ view: voiceView, focused, agentShown })
       ? {
-          card: callCard({ view: voiceView, tasks: state?.tasks ?? IDLE_TASKS_VIEW }),
+          card: callCard({ view: voiceView, tasks: planning ?? IDLE_TASKS_VIEW }),
           speakerMuted: voiceView.speakerMuted,
           controls: callControls(tell, voiceView.speakerMuted),
           video: callVideo,
@@ -447,7 +544,7 @@ export function App(): React.JSX.Element {
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
-  useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
+  useAgentEndToasts(openAgent, unseenAgents);
   // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
   useFailedRunToasts(openFailedRun);
   // An inbox notification clicked, or an item's toast's View: the Tasks tab, on that task's Inbox.
@@ -481,12 +578,6 @@ export function App(): React.JSX.Element {
       ),
     [changeTab, guardLeave],
   );
-  useInboxToasts(
-    openInbox,
-    state?.inbox.waiting ?? NOTHING_WAITING,
-    state?.version ?? 0,
-    tasks.inboxShown,
-  );
   // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
   // the workspace the message waits in, listing that workspace first where another is listed.
   const openChat = useCallback(
@@ -504,7 +595,7 @@ export function App(): React.JSX.Element {
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
-    known: state !== undefined && !accountGated,
+    known: run !== undefined && !accountGated,
     link: copyLink.standing,
     tab,
     onTabChange: changeTab,
@@ -517,10 +608,13 @@ export function App(): React.JSX.Element {
   });
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = throughHistory(tasks, history.lists);
+  // Escape reads the latest of them as it lands, so its listener stays the same across renders.
+  const shellDoors = useRef(shellTasks);
+  shellDoors.current = shellTasks;
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
-  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.width);
+  const sidebar = useSidebarCollapse(run?.fixtureMode === true, stage.compact);
 
   const caption = useCaptionPresentation({
     lukeCaptions,
@@ -543,10 +637,10 @@ export function App(): React.JSX.Element {
    */
   const opened = useRef(false);
   useEffect(() => {
-    if (opened.current || !state?.settings) return;
+    if (opened.current || !settingsHeld) return;
     opened.current = true;
     appBridge().notifyReady();
-  }, [state]);
+  }, [settingsHeld]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the
@@ -595,7 +689,7 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Issues page, back to wherever it was
+      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // task, then an open task back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
@@ -613,11 +707,12 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
-      if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       // An open task unwinds to the home page, which leaves it and ends
-      // its call. That page is home, so a press there does nothing.
-      tasks.back();
+      // its call. That page is home, so a press there does nothing. A side
+      // panel standing only full screen shuts through the history, as its
+      // Close does.
+      shellDoors.current.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -625,7 +720,6 @@ export function App(): React.JSX.Element {
     signIn.cancelSignIn,
     signIn.signInWait,
     listening,
-    tasks.back,
     tasks.inboxView.open,
     tasks.chatView.open,
     speaking,
@@ -639,44 +733,8 @@ export function App(): React.JSX.Element {
 
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
-  if (!state || !settings) return <div />;
+  if (run === undefined || !settingsHeld) return <div />;
 
-  const shownStopHotkey = state.hotkeys.stop;
-
-  const microphone: MicrophoneControl = {
-    status: state.audio.microphoneStatus,
-    voiceAvailable: settings.voiceAvailable,
-    onRequest: requestMicrophoneAccess,
-    onOpenSettings: () => tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
-  };
-  const updates: UpdateControl = {
-    update: fixtureUpdate(state.run, state.update),
-    build: {
-      packaged: state.run.packaged,
-      ...(state.run.commit ? { commit: state.run.commit } : undefined),
-    },
-    // Answered rather than fire-and-forget so the row that asked redraws from
-    // the same snapshot the broadcast carries to every other window.
-    onCheck: async () => {
-      await act(ACT_KIND.UPDATE_CHECK);
-    },
-    onInstall: () => tell(ACT_KIND.UPDATE_INSTALL),
-    onOpenLatest: () => tell(ACT_KIND.UPDATE_OPEN_RELEASE),
-  };
-  const shortcuts: ShortcutControl = {
-    ...(state.hotkeys.talk ? { voiceHotkey: state.hotkeys.talk } : undefined),
-    voiceHotkeyHeld: state.hotkeys.talkHeld,
-    voiceChosen: settings?.voiceHotkey !== undefined,
-    voiceOff: settings?.voiceHotkey === VOICE_HOTKEY_NONE,
-    onVoiceHotkeyChange: changeVoiceHotkey,
-    // Both rows take the accelerator: they draw the keys apart and
-    // label the chord whole for the buttons beside them.
-    ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : undefined),
-    stopChosen: settings?.stopHotkey !== undefined,
-    stopOff: settings?.stopHotkey === VOICE_HOTKEY_NONE,
-    onStopHotkeyChange: changeStopHotkey,
-    onCapture: changeShortcutCapture,
-  };
   // The Workspace page shows the workspace the sidebar lists, or one a link named.
   const workspace = {
     workspaces: tasks.workspaces,
@@ -688,6 +746,15 @@ export function App(): React.JSX.Element {
     },
     listFailed: tasks.listFailed,
     onRetryList: tasks.onRetryList,
+  };
+  // What Settings and ⌘K answer through; the settings themselves they read where they draw them.
+  const settingsDoors: SettingsDoors = {
+    view: shownView,
+    onViewChange: chooseSettingsView,
+    onSignOut: signOut,
+    onDeleteAccount: deleteAccount,
+    onRequestMicrophone: requestMicrophoneAccess,
+    workspace,
   };
 
   // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.
@@ -723,7 +790,7 @@ export function App(): React.JSX.Element {
                       <div
                         ref={stage.ref}
                         className="app-stage"
-                        data-capture={String(state.run.captureMode)}
+                        data-capture={String(run.captureMode)}
                         // The panel is drawn as an ordinary app window's content; desktop.css
                         // lays it out.
                         data-surface="desktop"
@@ -745,9 +812,9 @@ export function App(): React.JSX.Element {
                                 onRevealed: tasks.onThreadRevealed,
                               }}
                             >
-                              <DesktopShell
+                              <SettingsShell
                                 gates={{
-                                  accountRequired: state.run.accountRequired,
+                                  accountRequired: run.accountRequired,
                                   signInWait: signIn.signInWait,
                                   signInFailure: signIn.signInFailure,
                                   lastSignIn,
@@ -773,44 +840,7 @@ export function App(): React.JSX.Element {
                                     onDismiss: dismissVolumeHint,
                                   },
                                 }}
-                                settings={{
-                                  account: state.account,
-                                  onSignOut: async () => {
-                                    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-                                  },
-                                  // The delete happens at the service before anything local moves,
-                                  // so a failure resolves to why and the account is still standing.
-                                  onDeleteAccount: async () => {
-                                    try {
-                                      await act(ACT_KIND.ACCOUNT_DELETE);
-                                      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                                    } catch {
-                                      return {
-                                        status: ACTION_RESULT_STATUS.REJECTED,
-                                        reason:
-                                          "Luke could not delete the account. Try again in a moment.",
-                                      };
-                                    }
-                                  },
-                                  view: shownView,
-                                  onViewChange: chooseSettingsView,
-                                  microphone,
-                                  notifications: {
-                                    status: state.notifications.status,
-                                    grantor:
-                                      appPlatform().notificationsGrantor?.() ??
-                                      NOTIFICATIONS_GRANTOR.MACOS,
-                                    packaged: state.run.packaged,
-                                    onOpenSettings: () =>
-                                      tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                                    onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
-                                  },
-                                  updates,
-                                  settings,
-                                  shortcuts,
-                                  workspace,
-                                  capabilities: state.run.capabilities,
-                                }}
+                                doors={settingsDoors}
                               />
                             </ThreadRevealProvider>
                           </MessageRevealProvider>
@@ -826,26 +856,20 @@ export function App(): React.JSX.Element {
                         {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
                         <ToastHost />
+                        {/* The menu a right-click on any link in the window hangs. */}
+                        <LinkMenu />
+                        <UpdatedToast />
+                        <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
                         {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-                        <CommandPalette
+                        <SettingsPalette
                           available={!accountGated}
                           tab={tab}
                           onTabChange={changeTab}
                           tasks={tasks}
                           links={copyLink}
-                          settings={{
-                            rows: settingsRowsInput({
-                              settings,
-                              microphone,
-                              account: state.account,
-                              capabilities: state.run.capabilities,
-                              workspace,
-                            }),
-                            capabilities: state.run.capabilities,
-                            onViewChange: chooseSettingsView,
-                          }}
+                          doors={settingsDoors}
                           readFiles={(taskId) =>
                             act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
                           }

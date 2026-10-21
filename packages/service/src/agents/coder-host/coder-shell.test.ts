@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -21,7 +21,11 @@ import { bashStartingIn } from "./shell.js";
  * search path holds nothing, so only the shell's builtins run, and that
  * with no `bash` on it eve's launcher evaluates the command in place
  * rather than backgrounding it under `/tmp/.eve`, which keeps the test
- * inside its own directory. A command's description is for the developer's
+ * inside its own directory. Every command runs in a bash of its own under
+ * `setpriv` with each capability set emptied: the sandbox's `setpriv` here
+ * is a stand-in that refuses any other flags and runs the rest, since only
+ * a process holding the capabilities, as the sandbox's commands do, may
+ * empty the bounding set. A command's description is for the developer's
  * transcript, so it reaches the shell as nothing, and what the model is
  * offered is recorded the way the wire's schemas are. A command whose
  * outcome Vercel Sandbox's API lost, as `@vercel/sandbox` and undici throw
@@ -37,11 +41,30 @@ interface Completed {
   readonly stderr: string;
 }
 
-/** A sandbox root with a checkout standing one directory below it, as the coding agent's does. */
+/** How the stand-in `setpriv` exits where it is asked to keep a capability set. */
+const CAPABILITIES_KEPT_EXIT = 97;
+
+/**
+ * A stand-in for `setpriv` on the sandbox's search path: the command after
+ * `--` is run only where every capability set is emptied, with a mark in its
+ * environment that it was, and refused otherwise.
+ */
+const SETPRIV_STAND_IN = [
+  "#!/bin/sh",
+  'if [ "$1 $2 $3 $4" != "--inh-caps=-all --ambient-caps=-all --bounding-set=-all --" ]; then',
+  "  echo 'setpriv: a capability set was kept' >&2",
+  `  exit ${CAPABILITIES_KEPT_EXIT}`,
+  "fi",
+  "shift 4",
+  'LUKE_CAPABILITIES=dropped exec "$@"',
+].join("\n");
+
+/** A sandbox root with a checkout standing one directory below it, as the coding agent's does, and `setpriv` on its search path. */
 function sandboxRoot() {
   const root = mkdtempSync(join(tmpdir(), "coder-shell-"));
   const checkout = join(root, "repository");
   mkdirSync(checkout);
+  writeFileSync(join(root, "setpriv"), `${SETPRIV_STAND_IN}\n`, { mode: 0o755 });
   return { root, checkout };
 }
 
@@ -125,6 +148,24 @@ test("a command starts in the checkout, and a `cd` lasts only for the call it is
   assert.equal((await run(root, checkout, "pwd")).stdout.trim(), checkout);
   assert.equal((await run(root, checkout, "cd .. && pwd")).stdout.trim(), root);
   assert.equal((await run(root, checkout, "pwd")).stdout.trim(), checkout);
+});
+
+test("a command runs whole, in a bash with every capability dropped, and answers its own exit", async () => {
+  const { root, checkout } = sandboxRoot();
+  const quoted = await run(
+    root,
+    checkout,
+    `printf '%s|' "it's" 'a "word"' '$HOME' "\${BASH_VERSION:+bash}" "$LUKE_CAPABILITIES"`,
+  );
+  assert.equal(quoted.stdout, `it's|a "word"|$HOME|bash|dropped|`);
+  assert.equal(quoted.exitCode, 0);
+  const script = await run(
+    root,
+    checkout,
+    ["read -r line <<'EOF'", "kept $as written", "EOF", 'printf "%s" "$line"', "exit 7"].join("\n"),
+  );
+  assert.equal(script.stdout, "kept $as written");
+  assert.equal(script.exitCode, 7);
 });
 
 /**

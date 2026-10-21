@@ -10,10 +10,14 @@ import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import { liveExchangeActive } from "@luke/live";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
 import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
-import { isVoiceView, type VoiceView } from "@luke/voice/voice-view";
-import { isWireBoolean, type UnparsedWireValue } from "@luke/wire";
+import {
+  isVoiceCallTranscriptChange,
+  isVoiceView,
+  type VoiceCallTranscriptChange,
+  type VoiceView,
+} from "@luke/voice/voice-view";
+import type { UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
-import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./acts.js";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 import type { PUSH_METHOD, PushMethod, PushPayload } from "./contract/pushes.js";
 
@@ -56,7 +60,6 @@ function args<Arguments extends BridgeArguments>(
 }
 
 const noArgs = args<[]>((values) => values.length === 0);
-const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
 
 /**
  * The instant a surface event's guard reads it at. Note that the guard asks
@@ -71,20 +74,6 @@ type SurfaceEventArguments = {
 }[ProductSurfaceEventName];
 
 export const BRIDGE = {
-  /**
-   * Every effect a window asks for, on one channel. The argument is one
-   * `{kind, payload}` from `ACT_KIND`, parsed here by that kind's own schema
-   * before it leaves the window and again by the router that carries it, and
-   * the answer is that act's outcome — done with its kind's value, refused
-   * with a sentence, or a kind this build does not know. There is no second
-   * way to cause anything: an effect with no kind reaches nothing.
-   */
-  act: entry({
-    kind: "invoke",
-    channel: "app:act",
-    args: args<[Act]>((v) => v.length === 1 && parsedAct(v[0]) !== undefined),
-    result: result<ActOutcome>(isActOutcome),
-  }),
   /**
    * The document as this window stands: every slice, and this window's own
    * facts beside them. Read once at mount, before the subscription below has
@@ -106,27 +95,21 @@ export const BRIDGE = {
    * and the exchange level the media duck follows is derived from it. The
    * count of exchanges rides beside it: a kind travels only on the edge that
    * opened an exchange, named by the one window that knows who opened it, so
-   * a turn walking from connecting to responding is counted once.
+   * a turn walking from connecting to responding is counted once. What
+   * moved in the standing call's transcript rides beside them too, never the
+   * whole of it, which grows for the call's length: main splices it into the
+   * document's `voice.callTranscript`.
    */
   reportVoiceView: entry({
     kind: "send",
     channel: "app:report-voice-view",
-    args: args<[VoiceView, ProductExchangeKind | undefined]>(
+    args: args<[VoiceView, ProductExchangeKind | undefined, VoiceCallTranscriptChange | undefined]>(
       (v) =>
-        v.length === 2 &&
+        v.length === 3 &&
         isVoiceView(v[0]) &&
-        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))),
+        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))) &&
+        (v[2] === undefined || isVoiceCallTranscriptChange(v[2])),
     ),
-  }),
-  /**
-   * Whether a panel is recording a new shortcut, during which the talk key it
-   * is capturing must not open a turn. Panel state gating a global key the
-   * main process routes, so the main process is told rather than the window.
-   */
-  setShortcutCapturing: entry({
-    kind: "send",
-    channel: "app:set-shortcut-capturing",
-    args: oneBoolean,
   }),
   /**
    * One tapped live event for the development trace. Fire-and-forget on

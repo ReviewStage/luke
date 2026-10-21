@@ -32,6 +32,8 @@ import {
   max,
   notExists,
   or,
+  type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
@@ -927,6 +929,43 @@ export function noReceiptOfLine() {
 }
 
 /**
+ * The condition that a line no turn took is one of the developer's lines to
+ * the agent, rather than one a call said or typed, whose ask a call answers
+ * without a turn of the agent's: what both the held read and the live
+ * statement count as awaiting a turn.
+ */
+function lineOfTheAgents(): SQL {
+  return sql`(${messages.metadata} ->> 'channel' is distinct from ${MESSAGE_CHANNEL.VOICE} and ${messages.metadata} ->> 'voice_session_id' is null)`;
+}
+
+/**
+ * When the newest of the developer's lines standing with no turn yet was
+ * written in the coding-agent conversation `conversationId` names, by the
+ * same rule `awaitingLinesOfReached` reads, or null where none stands: what
+ * a live statement selects so its reader judges the line's grace
+ * (`@luke/features/coding-agent-status`) without the statement reading the
+ * clock.
+ */
+export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | null> {
+  // Note that the newest instant is selected bare, because Drizzle's `max` casts it to text
+  // and a cast through text is no immutable function, which a live statement must hold to.
+  return sql<Date | null>`(${queryBuilder
+    .select({ newestAt: sql<Date | null>`max(${messages.createdAt})` })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+        eq(messages.role, MESSAGE_ROLE.USER),
+        isNull(messages.turnId),
+        lineOfTheAgents(),
+        noReceiptOfLine(),
+      ),
+    )})`;
+}
+
+/**
  * When the newest of the developer's lines standing with no turn yet was
  * written, in each coding-agent conversation named that holds one: each is
  * a message the session took and the next turn will receive, which is what
@@ -935,7 +974,11 @@ export function noReceiptOfLine() {
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
  * turn of eve's. A line a turn already received under another row
- * (`noReceiptOfLine`) is not counted.
+ * (`noReceiptOfLine`) is not counted, and neither is a line said or typed
+ * on a call into the agent: the voice answers many spoken ones itself, and
+ * one it hands on, as every typed one is, opens its spoken turn through the
+ * asks (`asks.ts`), whose turn row is what reads the agent as running, so no
+ * line of a call waits on a turn here.
  */
 const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
@@ -956,6 +999,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
+            lineOfTheAgents(),
             noReceiptOfLine(),
           ),
         )
@@ -1260,6 +1304,8 @@ const findSpokenRows = SqlSchema.findAll({
             eq(messages.userId, userId),
             eq(messages.conversationId, conversationId),
             inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
+            // A line typed into the call names it too, but nothing of it was said.
+            sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
             sql`${messages.metadata}->>'from_ms' is not null`,
           ),
         )

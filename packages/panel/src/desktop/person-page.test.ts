@@ -9,7 +9,7 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -19,7 +19,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -31,6 +31,7 @@ import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -216,21 +217,17 @@ beforeEach(() => {
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  fakeAppBridge({});
+  // The host pushes each task's inbox, and the sweep agent's, as it is followed, unless the test holds or refuses them.
+  const host = followedInboxes(({ kind, id }) => {
+    if (inboxHeld) return undefined;
+    if (kind === INBOX_SCOPE_KIND.AGENT) return { items: [SWEEP_ITEM] };
+    return inboxRefused
+      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+      : { items: INBOXES.get(id) ?? [] };
   });
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: () => {
-      if (inboxHeld) return new Promise(() => undefined);
-      const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
-      return Promise.resolve(value);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      if (inboxHeld) return new Promise(() => undefined);
-      if (inboxRefused) return Promise.reject(refusedOnPort("Not here."));
-      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
-      return Promise.resolve(value);
-    },
+    ...host.procedures,
     [ACT_KIND.AUTOMATIONS_LIST]: () => {
       if (automationsHeld) return new Promise(() => undefined);
       if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));
@@ -290,10 +287,10 @@ function mountWith(
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      onOpenItem: () => undefined,
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     ...overrides,
@@ -458,7 +455,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
 });
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
-function keptViews(): Record<string, { createdBy?: string }> {
+function keptViews(): Record<string, { createdBy?: string; assignedTo?: string }> {
   return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
 }
 
@@ -468,6 +465,21 @@ test("Their tasks in sidebar lists the sidebar's tasks by them", async () => {
 
   button(page, "Their tasks in sidebar").click();
   assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
+});
+
+test("Their tasks in sidebar lists every task they created, letting go of a filter by assignee", async () => {
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({
+      [ACME.id]: { grouping: "repository", order: "updated", assignedTo: DEAN.userId },
+    }),
+  );
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  button(page, "Their tasks in sidebar").click();
+  const kept = keptViews()[ACME.id];
+  assert.deepEqual([kept?.createdBy, kept?.assignedTo], [CHARLES.userId, undefined]);
 });
 
 test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {

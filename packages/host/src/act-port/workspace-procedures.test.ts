@@ -2,16 +2,15 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { GITHUB_AUTHOR_ASSOCIATION, ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import {
   TASK_CALL_FAILURE,
   type TasksWorkspaceGitHubConnectAnswer,
+  type WorkspaceInvitationsFollowed,
+  type WorkspacePeopleFollowed,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   LINEAR_UNAVAILABLE_REFUSAL,
@@ -25,16 +24,12 @@ import {
   type PortActResult,
   WORKSPACE_ACT_KIND,
 } from "../contract/index.js";
+import type { ActSender } from "./base.js";
+import { type TestActPort, testActPort } from "./testing.js";
 import {
-  type AccountAskProceduresDependencies,
-  type ActPortDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type PlatformActProcedures,
-  type TasksProceduresDependencies,
-  WindowPushes,
   type WorkspaceProceduresDependencies,
-} from "./index.js";
+  workspaceProcedures,
+} from "./workspace-procedures.js";
 
 /**
  * The workspace acts, through the act port as a window calls them: only a
@@ -189,23 +184,15 @@ interface Script {
   connectUrl: string;
   /** The address a Linear connection answers to open. */
   linearConnectUrl: string;
+  /** What a people unfollow waits on once the host has heard it, so a test can open a stream while it is on its way. */
+  peopleUnfollowed: Promise<void>;
 }
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
-
-/** The issue procedures' host, never asked here. */
-const NO_ISSUES: IssueProceduresDependencies = {
-  host: {
-    issueList: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueRead: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueCreate: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueChange: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-  },
-};
 
 /**
  * A window's act port, opened as the bridge opens one, over a fake host
@@ -215,11 +202,15 @@ const NO_ISSUES: IssueProceduresDependencies = {
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const asked: string[] = [];
   const browsed: string[] = [];
+  /** Whoever hears the host tell a workspace's people, as the gateway's event reaches them. */
+  const peopleListeners = new Set<(changed: WorkspacePeopleFollowed) => void>();
+  const invitationListeners = new Set<(changed: WorkspaceInvitationsFollowed) => void>();
   const script: Script = {
     notPermitted: false,
     alreadyInvited: false,
     connectUrl: INSTALL_URL,
     linearConnectUrl: LINEAR_SIGN_IN_URL,
+    peopleUnfollowed: Promise.resolve(),
   };
   const refusal = () =>
     script.notPermitted
@@ -231,6 +222,14 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       return answer();
     });
   const host: WorkspaceProceduresDependencies["host"] = {
+    workspaceTokenRepositories: (params) =>
+      ask(`tokenRepositories:${params.workspaceId}`, () =>
+        script.notPermitted ? refusal() : { repositories: [] },
+      ),
+    workspaceTokenRepositorySet: (params) =>
+      ask(`tokenRepositorySet:${params.workspaceId}:${params.repository}:${params.added}`, () =>
+        script.notPermitted ? refusal() : { repositories: [] },
+      ),
     workspaceCreate: (params) =>
       ask(`create:${params.name}`, () =>
         script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },
@@ -317,61 +316,45 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ),
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
-  };
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  // SAFETY: no platform act is called here, so no platform procedure is reached.
-  const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
-  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
-  const tasks = { host: {} } as TasksProceduresDependencies;
-  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
-  const unreached = { account: {}, settings: {} } as unknown as Pick<
-    ActPortDependencies,
-    "account" | "settings"
-  >;
-  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
-  const elsewhere = {
-    agentInbox: { host: {} },
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-    taskIssues: { host: {} },
-  } as Pick<
-    ActPortDependencies,
-    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
-  >;
-  const handler = createActPortHandler(
-    {
-      ...unreached,
-      ...elsewhere,
-      accountAsks,
-      issues: NO_ISSUES,
-      pushes: new WindowPushes(),
-      tasks,
-      workspaces: {
-        host,
-        openExternal: (url) => {
-          browsed.push(url);
-          return Promise.resolve();
-        },
-      },
+    workspacePeopleFollow: (scope) => ask(`peopleFollow:${scope.workspaceId}`, () => undefined),
+    workspacePeopleUnfollow: (scope) =>
+      Effect.andThen(
+        ask(`peopleUnfollow:${scope.workspaceId}`, () => undefined),
+        Effect.promise(() => script.peopleUnfollowed),
+      ),
+    onWorkspacePeopleChanged: (listener) => {
+      peopleListeners.add(listener);
+      return () => peopleListeners.delete(listener);
     },
-    NO_PLATFORM,
-  );
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
+    workspaceInvitationsFollow: (scope) =>
+      ask(`invitationsFollow:${scope.workspaceId}`, () => undefined),
+    workspaceInvitationsUnfollow: (scope) =>
+      ask(`invitationsUnfollow:${scope.workspaceId}`, () => undefined),
+    onWorkspaceInvitationsChanged: (listener) => {
+      invitationListeners.add(listener);
+      return () => invitationListeners.delete(listener);
+    },
+  };
+  const port = testActPort(
+    workspaceProcedures({
+      host,
+      openExternal: (url) => {
+        browsed.push(url);
+        return Promise.resolve();
+      },
     }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
-  return { client, asked, browsed, script };
+  );
+  ports.push(port);
+  const client = port.as(actor, { trusted: options.trusted ?? true });
+  /** The host telling a workspace's people, as the gateway's event does. */
+  const tellPeople = (changed: WorkspacePeopleFollowed) => {
+    for (const listener of [...peopleListeners]) listener(changed);
+  };
+  /** The host telling a workspace's invitations. */
+  const tellInvitations = (changed: WorkspaceInvitationsFollowed) => {
+    for (const listener of [...invitationListeners]) listener(changed);
+  };
+  return { client, asked, browsed, script, tellPeople, peopleListeners, tellInvitations };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -630,7 +613,7 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
   assert.deepEqual(asked, []);
 });
 
-it("a payload carrying a key its kind's schema does not name is refused, as app:act refused it, and the host is not asked", async () => {
+it("a payload carrying a key its kind's schema does not name is refused, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(
@@ -642,4 +625,86 @@ it("a payload carrying a key its kind's schema does not name is refused, as app:
     { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_LEAVE] },
   );
   assert.deepEqual(asked, []);
+});
+
+/** The event loop turned until `ready` holds, or two hundred turns pass. */
+async function until(ready: () => boolean) {
+  for (let turn = 0; turn < 200 && !ready(); turn += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
+it("a workspace's people stream to every window following them, each workspace's to its own, and the host lets them go only with the last stream", async () => {
+  const { client, asked, tellPeople, peopleListeners } = windowPort(PANEL);
+  const one = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  const two = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  const first = one.next();
+  const second = two.next();
+  await until(() => asked.length === 2);
+
+  const people = { members: [GRACE] };
+  tellPeople({ workspaceId: "workspace-other", view: { members: [] } });
+  tellPeople({ ...WORKSPACE, view: people });
+
+  assert.deepEqual((await first).value, people);
+  assert.deepEqual((await second).value, people);
+  await one.return(undefined);
+  await until(() => peopleListeners.size === 1);
+  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleFollow:${ACME.id}`]);
+  await two.return(undefined);
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked.at(-1), `peopleUnfollow:${ACME.id}`);
+});
+
+it("a people stream opened while the last one's unfollow is on its way asks the host to follow only once that unfollow is done, so the new follow stands", async () => {
+  const { client, asked, script } = windowPort(PANEL);
+  const unfollowed = Promise.withResolvers<void>();
+  script.peopleUnfollowed = unfollowed.promise;
+
+  const first = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  void first.next();
+  await until(() => asked.length === 1);
+  const closed = first.return(undefined);
+  await until(() => asked.length === 2);
+  const second = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+  void second.next();
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleUnfollow:${ACME.id}`]);
+
+  unfollowed.resolve();
+  await closed;
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [
+    `peopleFollow:${ACME.id}`,
+    `peopleUnfollow:${ACME.id}`,
+    `peopleFollow:${ACME.id}`,
+  ]);
+  await second.return(undefined);
+});
+
+it("the voice window is refused a workspace's people, and the host is not asked", async () => {
+  const { client, asked } = windowPort(VOICE);
+  try {
+    await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
+    assert.fail("the voice window's stream was opened");
+  } catch (error) {
+    assert.ok(error instanceof ORPCError);
+    assert.equal(error.code, ACT_ERROR.REFUSED);
+  }
+  assert.deepEqual(asked, []);
+});
+
+it("a workspace's invitations stream apart from its people, and the host lets them go with the last stream", async () => {
+  const { client, asked, tellInvitations, tellPeople } = windowPort(PANEL);
+  const stream = await client[WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS](WORKSPACE);
+  const next = stream.next();
+  await until(() => asked.length === 1);
+
+  tellPeople({ ...WORKSPACE, view: { members: [GRACE] } });
+  tellInvitations({ ...WORKSPACE, view: { invitations: [INVITATION] } });
+
+  assert.deepEqual((await next).value, { invitations: [INVITATION] });
+  await stream.return(undefined);
+  await until(() => asked.length === 2);
+  assert.deepEqual(asked, [`invitationsFollow:${ACME.id}`, `invitationsUnfollow:${ACME.id}`]);
 });

@@ -6,10 +6,11 @@ export {
   initialAppState,
   publishAppStateChanges,
   voiceWindowGone,
-  voiceWindowState,
+  WindowAppStates,
   windowAppState,
 } from "./app-state-store.js";
 export { linkClientNotices } from "./client-notices.js";
 export { createInProcessBridge } from "./in-process-bridge.js";
 export { linkNetworkWatch } from "./network-watch.js";
 export { createOperatorClient, type OperatorClient } from "./operator-client.js";
+export { linkSessionReload } from "./session-reload.js";

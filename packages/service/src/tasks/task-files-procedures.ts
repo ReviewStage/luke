@@ -33,7 +33,7 @@
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { pageVersionNumberSchema } from "@luke/features/page-wire";
-import { PICTURE_BOUNDS, pictureOfDataUrl } from "@luke/features/picture-wire";
+import { pictureOfDataUrl } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_REFUSAL,
   PLAN_ATTACHMENT_STATUS,
@@ -54,14 +54,11 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { readTaskFile } from "./task-file.js";
 import { readTaskSkills } from "./task-skills.js";
 import { readTaskTree } from "./task-tree.js";
 import { readTaskCode } from "./task-work-store.js";
-
-/** An upload is one picture as a `data:` URL at its byte bound, base64 being four characters for every three bytes, with room for its type and key. */
-const MAXIMUM_ATTACHMENT_BODY_BYTES = Math.ceil(PICTURE_BOUNDS.MAX_BYTES / 3) * 4 + 1_024;
 
 export interface TaskFilesProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -132,7 +129,6 @@ function pageVersionOf(version: string): Effect.Effect<number, HostedRefusal> {
 /** The plan files resource: each read and the picture kept, to a signed-in caller resolved before its input is read. */
 export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
   const taskFiles = hosted.taskFiles.use(accountMiddleware(seams.resolveUserId));
-  const taskFilesBody = taskFiles.use(bodyLimit(MAXIMUM_ATTACHMENT_BODY_BYTES));
   return {
     code: taskFiles.code.effect(function* ({ input, context }) {
       const taskId = yield* namedRow(input.id);
@@ -156,7 +152,7 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       const taskId = yield* namedRow(input.id);
       return yield* found(yield* hostedStoreOrUnavailable(readTaskSkills(context.userId, taskId)));
     }),
-    keepPicture: taskFilesBody.keepPicture.effect(function* ({ input, context }) {
+    keepPicture: taskFiles.keepPicture.effect(function* ({ input, context }) {
       const taskId = yield* namedRow(input.params.id);
       const picture = pictureOfDataUrl(input.body.picture);
       if (picture === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);

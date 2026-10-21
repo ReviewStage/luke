@@ -38,7 +38,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { accountIntegrationConnect, WorkspaceLinearConnect } from "./integration-connect.js";
 import {
   linearIssueByIdentifier,
@@ -50,9 +50,6 @@ import {
   beginWorkspaceIntegrationSignIn,
   deleteWorkspaceIntegration,
 } from "./workspace-integration-store.js";
-
-/** The most a request body may hold: a workspace id and a search. */
-const MAXIMUM_BODY_BYTES = 2_048;
 
 /** The query Connect returns the browser with, which is the one Luke put on the callback. */
 const STATE_QUERY = "state";
@@ -94,9 +91,7 @@ function callbackUrl(requestUrl: string, state: string): string {
 
 /** The workspace Linear resource: connect and disconnect to an owner or admin, and the issues to any member. */
 export function workspaceLinearProcedures(seams: WorkspaceLinearProcedureSeams) {
-  const resource = hosted.workspaceLinear
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const resource = hosted.workspaceLinear.use(accountMiddleware(seams.resolveUserId));
   return {
     /**
      * Begins the workspace's Linear sign-in, on the workspace Linear

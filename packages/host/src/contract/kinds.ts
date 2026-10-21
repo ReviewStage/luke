@@ -29,6 +29,27 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
+  /**
+   * Settings › Coding agents › Codex: Sign in with ChatGPT for Luke's hosted
+   * runtime, run by the host through the developer's browser, and the one
+   * waiting withdrawn. Nothing crosses from the renderer but the press, and
+   * the answer is the keys as the service then holds them: the sign-in's
+   * tokens go from the host to the service and never reach a window.
+   */
+  CHATGPT_SIGN_IN: "chatGpt.signIn",
+  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /**
+   * Settings › Integrations › GitHub: the member's own classic GitHub
+   * personal access token read as its login, hint, and status, saved, and
+   * removed. The save's payload carries the token from the renderer once,
+   * on its way to the service; no answer carries one back, and nothing on
+   * the way keeps it.
+   */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * Settings › Plan template: the Markdown the account's new tasks start
    * from, read as the page opens, and kept as the developer pauses or reset
@@ -59,6 +80,8 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
 /**
@@ -86,6 +109,12 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   CODING_AGENTS_START: "codingAgents.start",
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, a worker's, or a task's planning worker's,
+   * followed while the window holds the stream open: its pages, the first
+   * from the start and each later one what moved past the last.
+   */
+  CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
@@ -100,6 +129,8 @@ export const AGENT_ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PAGE: "codingAgents.page",
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
+  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -131,8 +162,12 @@ export const AGENT_ACT_KIND = {
  * window holds what it draws; nothing here does.
  */
 export const AGENT_INBOX_ACT_KIND = {
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * A task's inbox, or one agent's, followed while the window holds the
+   * stream open: what it holds, whole, each time it changes, or why there
+   * is none.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
@@ -145,9 +180,13 @@ export const AGENT_INBOX_ACT_KIND = {
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
-  CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
+  /**
+   * A workspace's chat followed while the window holds the stream open: the
+   * chat whole each time it changes, or why there is none.
+   */
+  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
 } as const;
 
 /**
@@ -167,7 +206,8 @@ export const AVATAR_ACT_KIND = {
  * (`browser-views.ts`): opened on an address and answered how its page
  * stands, sent to another, stepped back, forward, reloaded or stopped,
  * placed over the tab's body or put out of sight, caught as a still while
- * something covers it, and closed with its tab. How the page goes on to
+ * something covers it, closed with its tab, and kept from an agent by the
+ * bar's Stop until the developer clicks into the page. How the page goes on to
  * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
  * and only while the account has the Browser tab experiment on.
  */
@@ -178,6 +218,21 @@ export const BROWSER_ACT_KIND = {
   BROWSER_PLACE: "browser.place",
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
+  BROWSER_STOP: "browser.stop",
+} as const;
+
+/**
+ * A coding agent's Pull request tab's Chapters: a pull request's chapters
+ * read as its workspace keeps them, and generated for its head on Luke's own
+ * model key when the developer presses Generate, the generation answered
+ * once it lands, which may take minutes; and Settings' choice of the Claude
+ * model the member's Generate runs on, read and written.
+ */
+export const CHAPTERS_ACT_KIND = {
+  CHAPTERS_READ: "chapters.read",
+  CHAPTERS_GENERATE: "chapters.generate",
+  CHAPTERS_MODEL_READ: "chapters.modelRead",
+  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
 /** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */
@@ -200,14 +255,6 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_TOOLS: "integrations.tools",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
-} as const;
-
-/** The Issues page's asks: a workspace's issues listed, one read, one filed, and one changed. */
-export const ISSUE_ACT_KIND = {
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
 } as const;
 
 /** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
@@ -260,9 +307,11 @@ export const TASKS_ACT_KIND = {
   WEB_OPEN: "web.open",
   /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
   GITHUB_CONNECT: "github.connect",
+  /** The admin dashboard, opened in the default browser on the service's own origin, an address the host names and never one a window hands in. The service's gate decides who reads it. */
+  ADMIN_OPEN: "admin.open",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
+  /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
   /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
@@ -284,6 +333,8 @@ export const TASKS_ACT_KIND = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
+  /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
+  TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -296,6 +347,18 @@ export const TASKS_ACT_KIND = {
   TASKS_PAGE_SOURCE: "tasks.pageSource",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
   TASKS_PAGES: "tasks.pages",
+  /**
+   * One plan's pages, followed while the window holds the stream open for
+   * the Inbox's panel beside an item of that plan: each time they move, over
+   * Neon Realtime, never on the document.
+   */
+  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /**
+   * One plan's newest page of history, followed while the window holds the
+   * stream open for its version history: each time a save lands, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
@@ -308,6 +371,17 @@ export const TASKS_ACT_KIND = {
   TASKS_COMMENTS: "tasks.comments",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
+} as const;
+
+/**
+ * A cloud Browser tab's live view (`@luke/features/browser-live-acts`): one
+ * view attached for the asking panel, its socket opened by the host under
+ * the account's bearer, and detached. What the page shows travels on the
+ * port an attach posts to that panel, never on an act.
+ */
+export const BROWSER_LIVE_ACT_KIND = {
+  BROWSER_LIVE_ATTACH: "browserLive.attach",
+  BROWSER_LIVE_DETACH: "browserLive.detach",
 } as const;
 
 /**
@@ -357,22 +431,20 @@ export const UPDATE_ACT_KIND = {
 /**
  * The voice window's runtime: a command to it from a panel or the call
  * window; the call card's way back, Luke's window brought forward on the
- * call's own task; the voice window as a GPT Live peer, its SDP offer handed
+ * call's own agent; the voice window as a GPT Live peer, its SDP offer handed
  * to the host, which creates the one session and answers the SDP, the
  * hang-up it asks the host to decide, and the two reports the host reads its
- * transport and its idle from, none carrying a credential; the stop key;
- * Stop Luke, on the task named, else the call's, else the open one; the
- * voice diagnostics; and the microphone's privacy settings opened.
+ * transport and its idle from, none carrying a credential; Escape's stop;
+ * the voice diagnostics; and the microphone's privacy settings opened.
  */
 export const VOICE_RUNTIME_ACT_KIND = {
   VOICE_COMMAND: "voice.command",
-  CALL_SHOW_TASK: "call.showTask",
+  CALL_SHOW_AGENT: "call.showAgent",
   VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
   VOICE_END_LIVE_SESSION: "voice.endLiveSession",
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  LUKE_STOP: "luke.stop",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
 } as const;
@@ -409,12 +481,26 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
+  /**
+   * A workspace's people, followed while the window holds the stream open:
+   * its members and who its work names but left as they first stand, then
+   * each time they move, or why there are none.
+   */
+  WORKSPACE_PEOPLE: "workspace.people",
+  /**
+   * A workspace's pending invitations, followed for an owner or an admin
+   * while the window holds the stream open: as they first stand, then each
+   * time they move, or why there are none.
+   */
+  WORKSPACE_INVITATIONS: "workspace.invitations",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_LEAVE: "workspace.leave",
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
+  WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
+  WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
 } as const;
 
 /**
@@ -439,6 +525,8 @@ export const WINDOW_SURFACE_ACT_KIND = {
   CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
+  /** A picture put on the clipboard as a PNG, as a copy from Preview puts one. */
+  WINDOW_COPY_IMAGE: "window.copyImage",
   WINDOW_SAVE_FILE: "window.saveFile",
   FEEDBACK_SEND: "feedback.send",
 } as const;
@@ -465,9 +553,10 @@ export const PORT_ACT_KIND = {
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
   ...BROWSER_ACT_KIND,
+  ...BROWSER_LIVE_ACT_KIND,
+  ...CHAPTERS_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
-  ...ISSUE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
@@ -489,6 +578,7 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
 export const PLATFORM_PORT_ACT_KIND = {
   ...AVATAR_ACT_KIND,
   ...BROWSER_ACT_KIND,
+  ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,

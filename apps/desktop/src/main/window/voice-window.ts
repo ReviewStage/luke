@@ -68,6 +68,8 @@ export class VoiceWindow {
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#options.preloadPath,
         runMode: this.#options.runMode,
+        // The live call's audio plays here, hidden, and must not be throttled.
+        backgroundThrottling: false,
       }),
     });
     this.#window = window;

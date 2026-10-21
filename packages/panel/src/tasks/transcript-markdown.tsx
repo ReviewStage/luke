@@ -1,9 +1,10 @@
-import type { CodeLines } from "@luke/features/tasks-view";
+import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
-import { IconButton } from "@luke/ui";
+import { cssCustomProperties, IconButton } from "@luke/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
 import {
   type ComponentProps,
+  type CSSProperties,
   createContext,
   Fragment,
   type ReactNode,
@@ -15,7 +16,6 @@ import type { Components, ExtraProps } from "streamdown";
 import { type ActHandle, useAct } from "../act.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
-import { runColours } from "./code-lines.js";
 
 /**
  * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn as the Code tab draws code, a table as a quiet grid, and an inline span on a subtle fill.
@@ -30,7 +30,7 @@ import { runColours } from "./code-lines.js";
  * theirs is drawn and no stylesheet fights their classes. A fenced block
  * is coloured by main, by the highlighter the Code and File tabs' lines
  * are coloured with (`ACT_KIND.TASKS_COLOUR_CODE`), so the colours and
- * the type are theirs; the window's content policy and its bundle budget
+ * the type are theirs; the window's content policy and its bundle size
  * keep that highlighter out of the window. Only a block that is whole is
  * asked for: one whose closing fence has not arrived is still streaming,
  * and is drawn plain until it does, so a long answer is coloured once
@@ -102,6 +102,19 @@ let colouringCount = 0;
  * the block's place in it but not the words.
  */
 const MarkdownSource = createContext("");
+
+/**
+ * A run's colour in each appearance, as the properties `tasks.css` picks
+ * between, so the code follows the appearance without being drawn again;
+ * nothing for a run in the theme's own foreground.
+ */
+function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined {
+  if (color === undefined && lightColor === undefined) return undefined;
+  const colours: Record<string, string> = {};
+  if (color !== undefined) colours["--run-dark"] = color;
+  if (lightColor !== undefined) colours["--run-light"] = lightColor;
+  return cssCustomProperties(colours);
+}
 
 /** Forgets the oldest colouring, so a long session's window holds a bounded number. */
 function forgetOldest(): void {

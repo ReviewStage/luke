@@ -35,6 +35,7 @@ export {
   productEventBatchFromWire,
   productEventBuildFromWire,
   productEventFromWire,
+  productEventsAnswerSchema,
   productSessionCountBucket,
   type RecordProductEvent,
 } from "./product-events.js";

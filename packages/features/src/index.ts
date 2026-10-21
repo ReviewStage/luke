@@ -64,7 +64,6 @@ export {
   HostedIntegrationsClient,
   type HostedIntegrationsClientOptions,
 } from "./integration-client.js";
-export { HostedIssueClient, type HostedIssueClientOptions } from "./issue-client.js";
 export {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,
@@ -97,6 +96,7 @@ export {
   type SessionHangUpFrame,
   type SessionReportFrame,
   type SessionStopFrame,
+  type SessionTypedFrame,
   sessionActivityFrameFromWire,
   sessionActivityFrameSchema,
   sessionAttachedFrameFromWire,
@@ -111,6 +111,7 @@ export {
   sessionReportFrameFromWire,
   sessionReportFrameSchema,
   sessionStopFrameSchema,
+  sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
@@ -126,16 +127,13 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_NOT_CLAIMED,
 } from "./mac-command-client.js";
 export {
   automationPath,
-  automationRunPath,
-  automationRunsPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
-  taskPath,
   VOICE_SERVICE_PATH,
-  workspacePhotoPath,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,

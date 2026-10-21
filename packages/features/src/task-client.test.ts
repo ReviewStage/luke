@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
   fakeCloudApi,
+  HTTP_STATUS,
   type JsonValue,
   recordedRoutes,
   recordingHttpClient,
@@ -11,6 +12,7 @@ import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
@@ -408,5 +410,56 @@ it.effect(
         silent.requests[0]?.url,
         `https://tryluke.dev/api/plans/${TASK_ID}/comments?after=0`,
       );
+    }),
+);
+
+it.effect(
+  "a board's live read polling while Realtime fails asks for its rows inline, and reads them decoded",
+  () =>
+    Effect.gen(function* () {
+      const row = { taskId: TASK_ID, drawingNumber: 2, appliedDrawing: 1, imaged: true };
+      const api = fakeCloudApi({
+        "GET /api/live/task-board": {
+          answer: () => ({
+            url: LIVE_POLL_URL,
+            queries: {
+              board: {
+                capability: LIVE_POLL_URL,
+                queryFingerprint: LIVE_POLL_URL,
+                expiresAt: 0,
+                rows: JSON.stringify([row]),
+              },
+            },
+          }),
+        },
+      });
+      const polled = yield* Effect.provide(
+        client().boardLive(TASK_ID, "user-dana", true),
+        api.layer,
+      );
+      assert.ok(polled.ok);
+      assert.deepEqual(polled.answer.queries.board.rows, [row]);
+      assert.equal(api.requests()[0]?.searchParams.get(LIVE_POLL.QUERY), LIVE_POLL.ON);
+      yield* Effect.provide(client().boardLive(TASK_ID, "user-dana"), api.layer);
+      assert.equal(api.requests()[1]?.searchParams.get(LIVE_POLL.QUERY), null, "a seal asks none");
+    }),
+);
+
+it.effect(
+  "a board's live read names the account it is for, and a session the service refuses for it is signed out",
+  () =>
+    Effect.gen(function* () {
+      const refusing = fakeCloudApi({
+        "GET /api/live/task-board": {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
+          status: HTTP_STATUS.UNAUTHORIZED,
+        },
+      });
+      const refused = yield* Effect.provide(
+        client().boardLive(TASK_ID, "user-dana", true, "digest"),
+        refusing.layer,
+      );
+      assert.deepEqual(refused, { ok: false, failure: LIVE_SIGNED_OUT.failure });
+      assert.equal(refusing.requests()[0]?.searchParams.get(LIVE_USER_QUERY), "user-dana");
     }),
 );

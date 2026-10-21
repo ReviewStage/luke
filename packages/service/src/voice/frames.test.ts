@@ -4,10 +4,11 @@ import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
 import { test } from "vitest";
 import { deviceFrameDecision, FRAME_DECISION, SESSIONS_REPORT_FRAMES } from "./frames.js";
 
-test("a signed-in device forwards nothing, is read for its hang-up, its idle report, and its stop, and is refused on anything else", () => {
+test("a signed-in device forwards nothing, is read for its hang-up, its idle report, its stop, and a line typed into the call, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
     VOICE_SERVICE_FRAME.SESSION_STOP,
+    VOICE_SERVICE_FRAME.SESSION_TYPED,
   ]);
   // The close is the service's to send: the Mac's hang-up and an older build's own close are both an ask for it.
   for (const type of [VOICE_SERVICE_FRAME.SESSION_HANG_UP, LIVE_CLIENT_EVENT.CLOSE]) {

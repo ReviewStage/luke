@@ -24,16 +24,17 @@
 
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
- * it is named (the desktop's `tasks/tab-look.tsx`): the task's Call, Inbox, and Chat, a
- * draft agent's tab and the "+" row that opens one, an agent the window holds
+ * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox and Chat, a
+ * draft agent's tab and the "+" row that opens one, the "+" row that starts a
+ * voice chat, an agent the window holds
  * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
-  CALL: "Call",
   INBOX: "Inbox",
   CHAT: "Chat",
-  NEW_AGENT: "New coding agent",
+  NEW_AGENT: "New agent",
+  NEW_VOICE_CHAT: "New voice chat",
   CODING_AGENT: "Coding agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
@@ -117,6 +118,11 @@ export interface BrowserStripTab {
   readonly browser: string;
 }
 
+/** One Browser tab in an agent's cloud browser, named by the id the service keeps it under. */
+export interface CloudBrowserStripTab {
+  readonly cloudBrowser: string;
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
@@ -128,7 +134,8 @@ export type StripTab =
   | TerminalStripTab
   | PageStripTab
   | MacTerminalStripTab
-  | BrowserStripTab;
+  | BrowserStripTab
+  | CloudBrowserStripTab;
 
 /**
  * Whether a tab is one agent's. Note that each kind is told by the field
@@ -173,6 +180,11 @@ export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
 }
 
+/** Whether a tab is one of an agent's cloud Browser tabs. */
+export function isCloudBrowserTab(tab: StripTab): tab is CloudBrowserStripTab {
+  return tab instanceof Object && "cloudBrowser" in tab;
+}
+
 /** Whether a tab is a Browser tab. */
 export function isBrowserTab(tab: StripTab): tab is BrowserStripTab {
   return tab instanceof Object && "browser" in tab;
@@ -186,10 +198,12 @@ export function isBrowserTab(tab: StripTab): tab is BrowserStripTab {
  * agent's latest step.
  */
 export function followedAgent(
-  tab: StripTab,
+  tab: StripTab | undefined,
   column: { readonly shown: boolean; readonly covered: boolean },
 ): string | undefined {
-  return column.shown && !column.covered && isAgentTab(tab) ? tab.agent : undefined;
+  return column.shown && !column.covered && tab !== undefined && isAgentTab(tab)
+    ? tab.agent
+    : undefined;
 }
 
 /**
@@ -197,14 +211,20 @@ export function followedAgent(
  * tab, or its Terminal tab, which is where a terminal command means that
  * agent (`terminal-entry.ts`); none for any other tab.
  */
-export function agentOfTab(tab: StripTab): string | undefined {
+export function agentOfTab(tab: StripTab | undefined): string | undefined {
+  if (tab === undefined) return undefined;
   if (isAgentTab(tab)) return tab.agent;
   if (isChangesTab(tab)) return tab.changes;
   return isTerminalTab(tab) ? tab.terminal : undefined;
 }
 
-/** Whether two tabs are the same tab. A delegated worker's call names it within its agent, as the service names its conversation, so its tab is the pair. */
-export function sameTab(a: StripTab, b: StripTab): boolean {
+/**
+ * Whether two tabs are the same tab. A delegated worker's call names it
+ * within its agent, as the service names its conversation, so its tab is the
+ * pair. No tab, as a column showing its plan has, is the same as none.
+ */
+export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boolean {
+  if (a === undefined || b === undefined) return false;
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
   if (isSubagentTab(a)) {
     return (
@@ -218,6 +238,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   if (isMacTerminalTab(a)) return isMacTerminalTab(b) && a.macTerminal === b.macTerminal;
   if (isBrowserTab(a)) return isBrowserTab(b) && a.browser === b.browser;
+  if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
   return a === b;
 }
 
@@ -261,7 +282,8 @@ function numberedKey(agentId: string, number: number): string {
  * of the side panel, the one strip it stands in, is keyed by, one naming a
  * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
  * by a key made for its agent (`terminalKey`), a page's by the page's
- * own id, and a Browser tab's by the id it was opened under.
+ * own id, a Browser tab's by the id it was opened under, and a cloud Browser
+ * tab's by the id the service keeps it under.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
@@ -274,6 +296,7 @@ export function tabKey(tab: StripTab): string {
   }
   if (isPageTab(tab)) return tab.page;
   if (isBrowserTab(tab)) return tab.browser;
+  if (isCloudBrowserTab(tab)) return tab.cloudBrowser;
   return isSubagentTab(tab) ? tab.subagent : tab;
 }
 

@@ -12,7 +12,12 @@
  * A Start (`POST /api/plans/{id}/agents`) takes the one path a start takes
  * (`coder-host/start.ts`), reaching eve as the request's own caller
  * (`coder-host/stop.ts`'s `eveFor`), and answers 201 for the agent it made
- * or 200 for the one a retry under the same key made before. A change
+ * or 200 for the one a retry under the same key made before; a blank one
+ * hands the agent nothing and reaches no eve. A Start from an agent
+ * (`POST /api/agents/{id}/agents`) takes the same path in the place that
+ * agent stands in, its task or, with none, its workspace and repository,
+ * and answers alike. The calls into an agent
+ * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
  * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
  * MCP servers switched off, or a model and effort, and answers the agent as
  * it then stands.
@@ -30,17 +35,22 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
-  listCodingAgents,
-  listWorkspaceCodingAgents,
+  type CodingAgentLine,
+  hasRepository,
+  listCodingAgentLines,
+  listWorkspaceCodingAgentLines,
+  nativeRuntimesOfReached,
   pinCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskWorkspace } from "@luke/database/models/task-store";
+import { readAgentTranscript } from "@luke/database/models/transcript-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { runtimeChoiceRefusal } from "@luke/features/agent-runtime-models";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_LIST_ARCHIVED,
@@ -64,19 +74,23 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
-import { pathUuid, reachedAgentById } from "./agent-reach.js";
+import { controlsAgent, pathUuid, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
+import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import {
   agentPullRequestReach,
   instancePublishedCache,
   type PublishedReach,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
+import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   acceptedAgentChoice,
-  MAXIMUM_START_BODY_BYTES,
+  placeOfAgent,
+  requestedChoice,
+  startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
 import {
@@ -109,12 +123,6 @@ export interface AgentsProcedureSeams extends EveReach, PublishedReach {
 /** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
 const WORKSPACE_AGENTS_LIMIT = 50;
 
-/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
-const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
-
-/** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
-const MAXIMUM_TERMINAL_BODY_BYTES = 1_024;
-
 /** A choice the catalog refused is an invalid request, on the wire. */
 const choiceOrInvalid = <A, E, R>(
   effect: Effect.Effect<A, E | ModelChoiceRefused, R>,
@@ -126,10 +134,10 @@ function listsArchived(archived: string | undefined): boolean {
   return archived === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
-/** The agents listed, each with its status, who it names, and what continued it, as the lists answer them. */
+/** The agents listed, each read as its line, with its status, who it names, and what continued it, as the lists answer them. */
 const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agents: readonly Parameters<typeof codingAgentSummary>[0][],
+  agents: readonly CodingAgentLine[],
 ): Effect.fn.Return<{ agents: CodingAgentSummary[] }, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
@@ -157,13 +165,15 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The agent the path names, still standing, and the eve session its sandbox
  * is tagged with, or none where the agent has not run yet. An archived agent
- * is gone, as its tab is.
+ * is gone, as its tab is, and one on its starter's own GitHub token gives its
+ * sandbox to its starter alone.
  */
 const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
 ): Effect.fn.Return<string | undefined, HostedRefusal, DatabaseServices> {
   const { agent } = yield* reachedAgentById(userId, id);
+  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   const [session] = yield* hostedStoreOrUnavailable(
     standingSessionsOf(agent.userId, [agent.conversationId]),
@@ -212,6 +222,23 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
   const signedIn = hosted.agents.use(accountMiddleware(seams.resolveUserId));
   const inSandbox = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.provide(effect, seams.sandbox);
+  const summaryModelOf = Effect.map(
+    HostedEnvironment,
+    (environment): SummaryModelOf =>
+      seams.summaryModel ??
+      ((owner, chosen, effort) =>
+        productionSummaryModel(owner, chosen, effort).pipe(
+          Effect.provideService(HostedEnvironment, environment),
+        )),
+  );
+  // A Start answers 201 for the agent it made, 200 for the one a retry under its key made before.
+  const startAnswer = (started: {
+    readonly agent: CodingAgentSummary;
+    readonly created: boolean;
+  }) => ({
+    status: started.created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
+    body: { agent: started.agent },
+  });
   return {
     /**
      * A workspace's agents, on a task or with none, newest started first,
@@ -238,7 +265,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listWorkspaceCodingAgents(context.userId, workspaceId, {
+        listWorkspaceCodingAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
@@ -250,10 +277,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /** The task's agents with their status. */
     listOfTask: signedIn.listOfTask.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
+      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listCodingAgents(context.userId, taskId, {
+        listCodingAgentLines(context.userId, taskId, {
           includeArchived: listsArchived(input.archived),
         }),
       );
@@ -264,29 +291,57 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * already started, on the one start path (`coder-host/start.ts`),
      * reaching eve as the developer.
      */
-    start: signedIn.use(bodyLimit(MAXIMUM_START_BODY_BYTES)).start.effect(function* ({
-      input,
-      context,
-    }) {
+    start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
-      const environment = yield* HostedEnvironment;
-      const summaryModel: SummaryModelOf =
-        seams.summaryModel ??
-        ((owner, chosen, effort) =>
-          productionSummaryModel(owner, chosen, effort).pipe(
-            Effect.provideService(HostedEnvironment, environment),
-          ));
-      const { agent, created } = yield* startRequestedAgent(
-        eveFor(seams, context.request, context.userId),
+      const started = yield* startRequestedAgent(
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
         context.userId,
-        taskId,
+        { taskId },
         input.body,
-        summaryModel,
+        yield* summaryModelOf,
       );
-      return {
-        status: created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
-        body: { agent },
-      };
+      return startAnswer(started);
+    }),
+    /**
+     * An agent started from the one the path names, which the body's `from`
+     * must name too, in that agent's own place: its task, or its workspace
+     * and repository where it has none, on the one start path, so the reach,
+     * the key, and the replay are a task's Start's. A source the account does
+     * not reach is not found, as one of another task is.
+     */
+    startFrom: signedIn.startFrom.effect(function* ({ input, context }) {
+      const sourceId = yield* pathUuid(input.params.id);
+      if (input.body.from?.agentId !== sourceId) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      // A choice is read first, so a request refused for it is refused on a retry too.
+      yield* requestedChoice(input.body);
+      // A retry is answered with the agent its key made before the source is read, which may be gone since.
+      const made = yield* startedFromBefore(
+        context.userId,
+        input.body.idempotencyKey,
+        {
+          agentId: sourceId,
+          ...(input.body.from.messageId === undefined
+            ? undefined
+            : { messageId: input.body.from.messageId }),
+        },
+        undefined,
+      );
+      if (Option.isSome(made)) {
+        return startAnswer({ agent: yield* summaryOf(context.userId, made.value), created: false });
+      }
+      const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
+      const place = placeOfAgent(source);
+      if (place === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+      const started = yield* startRequestedAgent(
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        context.userId,
+        place,
+        input.body,
+        yield* summaryModelOf,
+      );
+      return startAnswer(started);
     }),
     /** The agent as its own page, an agent with no task as much as one on a task. */
     read: signedIn.read.effect(function* ({ input, context }) {
@@ -306,6 +361,20 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       };
     }),
     /**
+     * What was said on every member's calls into the agent, oldest call
+     * first, with each call's record (`readAgentTranscript`): read under
+     * the caller's membership of the agent's workspace, so an agent of any
+     * other is not found, as one that is no agent is.
+     */
+    calls: signedIn.calls.effect(function* ({ input, context }) {
+      const agentId = yield* pathUuid(input.id);
+      const transcript = yield* hostedStoreOrUnavailable(
+        readAgentTranscript(context.userId, agentId),
+      );
+      if (Option.isNone(transcript)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { transcript: transcript.value };
+    }),
+    /**
      * The agent changed for what follows, answered as it then stands. A
      * title renames it, written whole, or cleared where it is empty, so the
      * tab falls back to the model's name. `archived` archives the agent,
@@ -316,12 +385,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * standard context window where it is chosen, change what its next step
      * runs on, checked against the catalog as a Start checks its own; a body
      * naming no window puts it back on the model's whole one, and the
-     * account's default is untouched.
+     * account's default is untouched. An agent on a provider's own harness
+     * takes only what its runtime runs (`agent-runtime-models.ts`), refused
+     * as invalid otherwise, and a runner of it that runs is handed the change
+     * as a `model` line at once (`runnerChoiceApplied`).
      */
-    change: signedIn.use(bodyLimit(MAXIMUM_CHOICE_BODY_BYTES)).change.effect(function* ({
-      input,
-      context,
-    }) {
+    change: signedIn.change.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
       const { body } = input;
       if ("title" in body) {
@@ -359,11 +428,18 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           ),
         );
       }
-      const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
-      return yield* changedAgent(
-        userId,
-        yield* hostedStoreOrUnavailable(updateCodingAgentChoice(userId, agent.id, choice)),
+      const runtimes = yield* hostedStoreOrUnavailable(
+        nativeRuntimesOfReached([agent.conversationId]),
       );
+      if (runtimeChoiceRefusal(runtimes.get(agent.conversationId), body) !== undefined) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
+      const changed = yield* hostedStoreOrUnavailable(
+        updateCodingAgentChoice(userId, agent.id, choice),
+      );
+      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value);
+      return yield* changedAgent(userId, changed);
     }),
     /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {
@@ -383,7 +459,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
       const number = yield* pullRequestNumberOf(input.number === undefined ? [] : [input.number]);
       const pullRequest = yield* askedPullRequest(yield* published, userId, agent, number);
-      if (pullRequest === null) return { pullRequest };
+      if (pullRequest === null || !hasRepository(agent)) return { pullRequest: null };
       const listed = yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);
@@ -419,6 +495,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      */
     reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
+      // An agent with no repository has none to offer reviewers or labels of.
+      if (!hasRepository(agent)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
       return yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);
@@ -446,38 +524,34 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       return yield* inSandbox(listedShells(sessionId));
     }),
     /** A shell started in the agent's running sandbox, under an id the service mints. */
-    openTerminal: signedIn
-      .use(bodyLimit(MAXIMUM_TERMINAL_BODY_BYTES))
-      .openTerminal.effect(function* ({ input, context }) {
-        const sessionId = yield* reachedSession(context.userId, input.params.id);
-        if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-        const { title } = input.body;
-        return yield* inSandbox(
-          Effect.gen(function* () {
-            const sandbox = yield* AgentSandbox;
-            const started = yield* sandboxOrUpstream(sandbox.start(sessionId, randomUUID(), title));
-            if (Result.isFailure(started)) return yield* Effect.fail(shellRefusal(started.failure));
-            return { terminal: started.success };
-          }),
-        );
-      }),
+    openTerminal: signedIn.openTerminal.effect(function* ({ input, context }) {
+      const sessionId = yield* reachedSession(context.userId, input.params.id);
+      if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+      const { title } = input.body;
+      return yield* inSandbox(
+        Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          const started = yield* sandboxOrUpstream(sandbox.start(sessionId, randomUUID(), title));
+          if (Result.isFailure(started)) return yield* Effect.fail(shellRefusal(started.failure));
+          return { terminal: started.success };
+        }),
+      );
+    }),
     /** One shell named anew, answering the shells as they stand after. */
-    renameTerminal: signedIn
-      .use(bodyLimit(MAXIMUM_TERMINAL_BODY_BYTES))
-      .renameTerminal.effect(function* ({ input, context }) {
-        const terminalId = yield* pathUuid(input.params.terminal);
-        const sessionId = yield* reachedSession(context.userId, input.params.id);
-        if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        const { title } = input.body;
-        return yield* inSandbox(
-          Effect.gen(function* () {
-            const sandbox = yield* AgentSandbox;
-            const renamed = yield* sandboxOrUpstream(sandbox.rename(sessionId, terminalId, title));
-            if (Result.isFailure(renamed)) return yield* Effect.fail(shellRefusal(renamed.failure));
-            return yield* listedShells(sessionId);
-          }),
-        );
-      }),
+    renameTerminal: signedIn.renameTerminal.effect(function* ({ input, context }) {
+      const terminalId = yield* pathUuid(input.params.terminal);
+      const sessionId = yield* reachedSession(context.userId, input.params.id);
+      if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const { title } = input.body;
+      return yield* inSandbox(
+        Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          const renamed = yield* sandboxOrUpstream(sandbox.rename(sessionId, terminalId, title));
+          if (Result.isFailure(renamed)) return yield* Effect.fail(shellRefusal(renamed.failure));
+          return yield* listedShells(sessionId);
+        }),
+      );
+    }),
     /** One shell ended, answering the shells as they stand after. */
     endTerminal: signedIn.endTerminal.effect(function* ({ input, context }) {
       const terminalId = yield* pathUuid(input.terminal);

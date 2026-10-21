@@ -1,16 +1,18 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
-import { TERMINAL_ASK } from "@luke/features/terminal-entry";
+import type { TaskStanding } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BUTTON_VARIANT,
   Button,
+  CallIcon,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  PlusIcon,
   SKELETON_SHAPE,
   Skeleton,
 } from "@luke/ui";
@@ -20,31 +22,38 @@ import { agentOfTab, followedAgent, sameTab, TAB_WORDS } from "@luke/ui/tab-stri
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
-import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
-import { CallTabVideo } from "../call/panel-avatar.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import type { ShellRoom } from "../shell-room.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
+import { useSteadyDoor } from "../steady-door.js";
+import { CallCaptions } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
+import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
+import {
+  INBOX_SCOPES,
+  InboxList,
+  InboxListSkeleton,
+  ItemMark,
+  ShowEmpty,
+} from "../tasks/inbox-list.js";
 import {
   firstChoice,
   INBOX_GROUPING,
   INBOX_SHOW,
   type InboxListed,
   inboxCounts,
-  inboxList,
   listedItems,
   NEEDS_YOU,
   taskHolder,
@@ -55,29 +64,29 @@ import { PlanBody, type SectionLinks } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
-import { TaskCall } from "../tasks/task-call.js";
 import { TaskIssueLinks } from "../tasks/task-issue-links.js";
 import {
   mentionablePullRequests,
   TaskMentions,
   type TaskMentionsValue,
   useMentionAgentsReader,
-  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
-import { CallBar } from "../tasks/tasks-parts.js";
-import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands.js";
+import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
+import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
+import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { workRowsOf } from "../tasks/work-model.js";
-import { useCapability } from "../use-app-state.js";
+import { useCallingAgent } from "../use-voice-view.js";
+import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopHome } from "./desktop-home.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -175,6 +184,35 @@ function Toolbar({
 }
 
 /**
+ * The column with no tab to show: the plan stands in the side panel beside
+ * it, and the column offers the two ways to put an agent to work on the
+ * task, a new voice chat, where the window has a voice, and a new agent.
+ * An archived task offers neither.
+ */
+function NoAgentPane({
+  onNewVoiceChat,
+  onNewAgent,
+}: {
+  onNewVoiceChat: (() => void) | undefined;
+  onNewAgent: (() => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <section className="desktop-no-agent">
+      {onNewVoiceChat === undefined ? null : (
+        <Button variant={BUTTON_VARIANT.PRIMARY} icon={<CallIcon />} onClick={onNewVoiceChat}>
+          {TAB_WORDS.NEW_VOICE_CHAT}
+        </Button>
+      )}
+      {onNewAgent === undefined ? null : (
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />} onClick={onNewAgent}>
+          {TAB_WORDS.NEW_AGENT}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+/**
  * Copy plan's chord, the toolbar's while a task is drawn: the press itself
  * stands in the ⋯ menu, and what came of it is said in the window's toast.
  */
@@ -194,13 +232,13 @@ const NO_FOLDS = () => false;
 
 /**
  * The plan's own Inbox tab, in the side panel: its items newest first in the window's Inbox's
- * list, under the window's head with its tabs alone, which keep a
- * choice of their own (`folded-groups.ts`), and no groups since they are one
+ * list, under the window's head, whose view's menu offers To do and All
+ * alone, kept as a choice of their own (`folded-groups.ts`), and no groups since they are one
  * plan's, and the chosen item read beside them in the same pane, on the
  * plan's own held read. With nothing chosen, the first item listed that
- * waits stands chosen, else the newest; a plan whose read holds nothing
- * says so under the Inbox's glyph, and one whose items its tab leaves out
- * says so in its list and offers the tab beside it, the item chosen still shown
+ * the reader is not done with stands chosen, else the newest; a plan whose read holds nothing
+ * says so under the Inbox's glyph, and one whose items its scope leaves out
+ * says so in its list and offers All, the item chosen still shown
  * beside it. The pane's plan crumb chooses the plan's tab and its agent crumb
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
@@ -233,8 +271,8 @@ function TaskInboxTab({
     act,
     workspaceId: task.workspaceId,
     // Note that a task's own Inbox offers no Mark all as read.
-    onMarkedAll: () => undefined,
   });
+  const closeItem = useInboxCloser({ act, onHeard: tasks.agents.onRetryList });
   // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
@@ -246,31 +284,34 @@ function TaskInboxTab({
     show: show.show,
     readerId: tasks.me,
   };
-  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
-  const list = inboxList(groups, { ...filter, chosen: undefined });
-  const steps = inboxList(groups, { ...filter, chosen: asked });
+  // Note that the tab stands in the side panel, so it is on screen while the panel is.
+  const shown = tasks.shown && tasks.sidePanel.open;
+  // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its
+  // place, both held still while the tab is shown (`use-held-inbox-list.ts`).
+  const { list, steps } = useHeldInboxList(groups, filter, asked, shown);
   const listed = listedItems(list);
   const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
   // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
   if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
   const filteredOut = show.show !== INBOX_SHOW.ALL && listed.length === 0 && items.length > 0;
-  // Note that the way back counts every item, filtered out or not, since the list holds the tabs.
+  // Note that the way back counts every item, filtered out or not, since the list holds the view's menu.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
-  // Note that the tab stands in the side panel, so it is on screen while the panel is.
-  const shown = tasks.shown && tasks.sidePanel.open;
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  const opened = shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen : undefined;
   useReadOnOpen({
-    shown: shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen?.item : undefined,
+    shown: opened?.item,
     chosen: chosen?.item,
     active: shown,
     onMark: marks.onMark,
   });
-  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // A notice of the reader's own is acknowledged as it opens, as the window's Inbox acknowledges it.
+  useNodOnOpen({ shown: opened, readerId: tasks.me, control: inbox });
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown,
     folded: NO_FOLDS,
   });
@@ -287,6 +328,7 @@ function TaskInboxTab({
     ),
     open,
     NO_FOLDS,
+    direction,
   );
   return (
     <section
@@ -304,7 +346,7 @@ function TaskInboxTab({
         head={{
           shown,
           show,
-          counts,
+          scopes: INBOX_SCOPES.TASK,
           view: undefined,
         }}
         models={tasks.agents.models}
@@ -325,6 +367,7 @@ function TaskInboxTab({
         }
         onChoose={open}
         onMark={(listed, unread) => marks.onMark(listed.item, unread)}
+        onClose={closeItem}
       />
       {chosen === undefined ? (
         <section
@@ -355,6 +398,8 @@ function TaskInboxTab({
             onOpenAgent,
             openLink,
             code,
+            onMark: marks.onMark,
+            onClose: closeItem,
             // An archived plan's items are read but not answered, the box giving way to Unarchive.
             onUnarchive:
               task.archivedAt === undefined
@@ -433,9 +478,8 @@ function PlanDocument({
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
-  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
-  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
-  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
+  // The agent of this task a call is in progress into, whose tab wears the live mark.
+  const calling = useCallingAgent();
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -456,17 +500,18 @@ function PlanDocument({
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  const openTerminal = useOpenTerminal(tasks.sidePanel, showSide);
+  // Open terminal and Run open an agent's terminals as on every surface that draws it (`agent-actions.tsx`).
+  const terminalDoors = useAgentTerminalDoors(
+    tasks.sidePanel,
+    region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
+    showSide,
+  );
   // A refusal is said beside the chip, under the task it was about and no
   // other. Note that it is held above the states with no document, because
   // a task opened from the list is drawn reading before its read lands, and
   // a hook that only the ready page reached would be one more hook than
   // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ taskId: string; note: string } | undefined>(undefined);
-  // The one slot the toolbar keeps for a ⋯: the task's on its tab, and on
-  // another the chosen tab's own, drawn there from the tab (`strip-tabs.tsx`).
-  // Held above the states with no document for the same reason.
-  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // The task as the list names it, its owner, agents, and pull requests
   // among it, which its card and its banner read. Held above the states
   // with no document for the same reason.
@@ -486,10 +531,6 @@ function PlanDocument({
     mentionTasks,
     tasks.agents.models,
   );
-  // The task's workspace's issues an `@` offers, while Issues is on.
-  const readMentionIssues = useMentionIssuesReader(
-    tasks.workspaces.find((each) => each.id === opened?.workspaceId),
-  );
   const openMention = tasks.onShowMention;
   const revealed = tasks.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -500,14 +541,250 @@ function PlanDocument({
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
         );
-  const sectionLinksOf = (shown: string, workspace: string): SectionLinks => ({
-    workspace,
-    onOpen: openMention,
-    onOpenFile: openMentionedFile,
-    reveal: revealed?.taskId === shown ? revealed.reveal : undefined,
-    onRevealed: tasks.onSectionRevealed,
+  const { mainTabs, sidePanel, agents } = tasks;
+  const { tab } = mainTabs;
+  const archived = opened?.archivedAt !== undefined;
+  const home =
+    opened === undefined
+      ? undefined
+      : tasks.workspaces.find((each) => each.id === opened.workspaceId);
+  // The slug the task's links are written under, as its ⋯ menu's Copy link to task writes it.
+  const workspace =
+    opened === undefined ? undefined : taskLinkPlace(tasks.workspaces, opened).workspace;
+  // A row that opens a tab of this column, as a coding agent's start on the
+  // Call tab opens the agent's, first has a panel filling the window over it
+  // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
+  const openColumnTab = (opened: MainTab) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    mainTabs.onChoose(opened);
+    setFocus(COLUMN.MAIN);
+  };
+  // A row that opens the plan or the Inbox, which stand in the side panel,
+  // shows the panel on it and hands it the keys, as a terminal shown does.
+  const openPanelTab = (opened: SidePanelTab) => {
+    sidePanel.onChoose(opened);
+    showSide();
+  };
+  // A call's row in a transcript opens what the call is about where the
+  // window already draws it: an agent in this column, the plan and the
+  // Inbox in the side panel, another task as the sidebar opens it, the
+  // rest in the side panel.
+  const openTarget = (target: ToolTarget) => {
+    switch (target.kind) {
+      case TOOL_TARGET.AGENT:
+        return openColumnTab({ agent: target.agent });
+      case TOOL_TARGET.PLAN:
+        return openPanelTab(SIDE_PANEL_TAB.PLAN);
+      case TOOL_TARGET.INBOX:
+        return openPanelTab(SIDE_PANEL_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return chatOn ? openPanelTab(SIDE_PANEL_TAB.CHAT) : undefined;
+      case TOOL_TARGET.BOARD:
+        return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
+      case TOOL_TARGET.PAGE:
+        return sidePanel.onChoose({ page: target.page });
+      case TOOL_TARGET.TASK:
+        return tasks.onShowTask(target.task);
+      case TOOL_TARGET.SHOWN_CODE: {
+        // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
+        const showing = tasks.shownCode?.find((each) => each.callId === target.call);
+        return sidePanel.onOpenFile(target.ref, showing?.code.commit);
+      }
+    }
+  };
+  // A delegation's row in an agent's transcript opens its worker in the side
+  // panel, where every subagent stands; where the worker stands seeds its glyph.
+  const openDelegation = (
+    agent: string,
+    callId: string,
+    task: string,
+    status: CodingAgentStatus,
+  ) => {
+    views.onWorkerStatus(callId, status);
+    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+  };
+  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
+  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
+  const openPullRequest = (agentId: string, number?: number) =>
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
+  // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
+  const agentLook = (agentId: string) => {
+    const subject = agentSubject(agents, agentId, views.held, false);
+    return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
+  };
+  // Note that what the transcripts and the plan are handed, and what they
+  // read from around them, is held across this page's draws over the same
+  // task, because each holds while that does (`AgentPane`, `PlanBody`), and
+  // the page is drawn again as its column's focus, its side
+  // panel's width, and the minute's clock move; only the cards a
+  // transcript's rows hang move with the minute. Each door stands across
+  // draws and calls the newest closure (`useSteadyDoor`).
+  const openTargetDoor = useSteadyDoor(openTarget);
+  const openDelegationDoor = useSteadyDoor(openDelegation);
+  const openPullRequestDoor = useSteadyDoor(openPullRequest);
+  const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
+  const agentLookDoor = useSteadyDoor(agentLook);
+  const openMentionedFileDoor = useSteadyDoor(openMentionedFile);
+  const { onFork: forkDoor, onContinue: continueDoor } = useAgentDraftDoors(
+    agents,
+    archived,
+    (draft) => openColumnTab({ draft }),
+  );
+  const showHistory = useSteadyDoor((save: number | undefined) => {
+    if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
-  if (region.kind !== DOCUMENT_REGION.READY) {
+  const edit: PlanEditDoor | undefined =
+    archived || opened === undefined ? undefined : (request) => tasks.edit(opened.id, request);
+  const editDoor = useSteadyDoor(edit);
+  const renameDoor = useSteadyDoor(archived ? undefined : (name: string) => rename.end(name));
+  const draftNameDoor = useSteadyDoor(
+    archived || opened === undefined
+      ? undefined
+      : (name: string | undefined) => tasks.onDraftName(opened.id, name),
+  );
+  const markRead = useSteadyDoor((unread: boolean) => {
+    if (opened !== undefined) reads.mark(opened, unread);
+  });
+  const setStanding = useSteadyDoor(
+    archived || opened === undefined
+      ? undefined
+      : (standing: TaskStanding) => {
+          void tasks.onSetTaskStanding(opened.id, standing);
+        },
+  );
+  const openedId = opened?.id;
+  const openedRepository = opened?.repository ?? null;
+  const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
+  const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
+  const unread = openedId === undefined ? false : reads.markedUnread(openedId);
+  const readMark = useMemo(() => ({ unread, onMark: markRead }), [unread, markRead]);
+  const workspaceName = home?.name ?? "";
+  const standing = useMemo(
+    () => ({ workspaceName, onSet: setStanding }),
+    [workspaceName, setStanding],
+  );
+  const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
+  const { onSectionRevealed } = tasks;
+  const sectionLinks = useMemo<SectionLinks | undefined>(
+    () =>
+      workspace === undefined
+        ? undefined
+        : {
+            workspace,
+            onOpen: openMention,
+            onOpenFile: openMentionedFileDoor,
+            reveal,
+            onRevealed: onSectionRevealed,
+          },
+    [workspace, openMention, openMentionedFileDoor, reveal, onSectionRevealed],
+  );
+  const { linearIssuesIn, githubIssuesIn } = tasks.newTask;
+  const underTitle = useMemo(
+    () =>
+      opened === undefined ? undefined : (
+        <TaskIssueLinks
+          taskId={opened.id}
+          workspaceId={opened.workspaceId}
+          repository={opened.repository}
+          archived={archived}
+          linearIn={linearIssuesIn}
+          githubIn={githubIssuesIn}
+        />
+      ),
+    [opened, archived, linearIssuesIn, githubIssuesIn],
+  );
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = tasks.chatView.chat;
+  const { onShow: showChat } = tasks.chatView;
+  const chat = useMemo(
+    () =>
+      chatRead === undefined
+        ? undefined
+        : {
+            chat: chatRead.answer,
+            names: chatNames(tasks.tasks, chatRead.agents, undefined),
+            onOpen: showChat,
+          },
+    [chatRead, tasks.tasks, showChat],
+  );
+  // A row in a transcript that opens a tab hangs that tab's card, read as
+  // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
+  const listedCard = listedOpen ?? opened;
+  const conversation = tasks.work.conversation;
+  const sideTab = sidePanel.tab;
+  const { shownCode } = tasks;
+  const cards = useMemo(
+    () =>
+      listedCard === undefined
+        ? undefined
+        : taskCards({
+            agents,
+            workRows: workRowsOf(conversation),
+            held: views.held,
+            chosen: (chosen) =>
+              sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
+            shownCode: shownCode ?? [],
+            task: {
+              name: listedCard.name,
+              status: listedCard.status,
+              card: taskCardOf(tasks, listedCard, now),
+            },
+          }),
+    [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
+  );
+  // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
+  // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
+  // pull request of the task's repository opens in a Pull request tab by its number.
+  const openHere = useMemo(
+    () => openPullRequestsHere(agents, openPullRequestDoor, openedRepository),
+    [agents, openPullRequestDoor, openedRepository],
+  );
+  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
+  const { pages } = tasks;
+  const mentions = useMemo<TaskMentionsValue | undefined>(() => {
+    if (opened === undefined || workspace === undefined) return undefined;
+    return {
+      taskId: opened.id,
+      taskName: opened.name,
+      workspace,
+      repository: opened.repository,
+      text: () => opened.document.body,
+      pages,
+      agents: (agents.agents ?? []).map((agent) => {
+        const name = agentTabLabel(agent, agents.models);
+        return { id: agent.id, name, actor: agentActor(agent, name) };
+      }),
+      readAgents: readMentionAgents,
+      pullRequests: mentionablePullRequests(agents),
+      doors: {
+        taskId: opened.id,
+        place: { workspace, repository: opened.repository },
+        anchors: new Set(
+          sectionAnchors(planSections(opened.document.body).map((section) => section.heading)),
+        ),
+        onOpenTask: openMention,
+        onOpenFile: openMentionedFileDoor,
+        agentOf: agentLookDoor,
+      },
+    };
+  }, [
+    opened,
+    workspace,
+    pages,
+    agents,
+    readMentionAgents,
+    openMention,
+    openMentionedFileDoor,
+    agentLookDoor,
+  ]);
+  if (
+    region.kind !== DOCUMENT_REGION.READY ||
+    workspace === undefined ||
+    cards === undefined ||
+    mentions === undefined ||
+    sectionLinks === undefined
+  ) {
     const line =
       region.kind === DOCUMENT_REGION.FAILED
         ? "The task could not be read."
@@ -548,11 +825,6 @@ function PlanDocument({
     );
   }
   const { task } = region;
-  const { mainTabs, sidePanel, agents } = tasks;
-  const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-  // The slug the task's links are written under, as its ⋯ menu's Copy link to task writes it.
-  const { workspace } = taskLinkPlace(tasks.workspaces, task);
-  const archived = task.archivedAt !== undefined;
   const listed = listedOpen ?? task;
   const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
   const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
@@ -574,138 +846,8 @@ function PlanDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  const { tab } = mainTabs;
-  // Start and the task's ⋯ are the task's, not an agent's, so only the
-  // Call's tab, which anchors the column, draws them; the task's chords
-  // stand on every tab.
-  const onTaskTab = tab === MAIN_TAB.CALL;
-  // A delegation's row in an agent's transcript opens its worker in the side
-  // panel, where every subagent stands; where the worker stands seeds its glyph.
-  const openDelegation = (
-    agent: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => {
-    views.onWorkerStatus(callId, status);
-    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
-  };
-  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
-  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
-  const openPullRequest = (agentId: string, number?: number) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
-  // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
-  // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
-  // pull request of the task's repository opens in a Pull request tab by its number.
-  const openHere = openPullRequestsHere(agents, openPullRequest, task.repository);
   const openTaskLink = (href: string) => {
     if (!openHere(href)) openLink(href);
-  };
-  // Run opens the agent's run on this Mac in the side panel at once;
-  // the tab reads the agent's pushed branch and starts it (`mac-terminal-tab.tsx`).
-  const { repository } = task;
-  const openOnMac =
-    repository === null || !macTerminalOffered
-      ? undefined
-      : (agentId: string) => {
-          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
-          showSide();
-        };
-  // A row that opens a tab of this column, as a coding agent's start on the
-  // Call tab opens the agent's, first has a panel filling the window over it
-  // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
-  const openColumnTab = (opened: MainTab) => {
-    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    mainTabs.onChoose(opened);
-    setFocus(COLUMN.MAIN);
-  };
-  // A row that opens the plan or the Inbox, which stand in the side panel,
-  // shows the panel on it and hands it the keys, as a terminal shown does.
-  const openPanelTab = (opened: SidePanelTab) => {
-    sidePanel.onChoose(opened);
-    showSide();
-  };
-  // A call's row in a transcript opens what the call is about where the
-  // window already draws it: an agent in this column, the plan and the
-  // Inbox in the side panel, another task as the sidebar opens it, the
-  // rest in the side panel.
-  const openTarget = (target: ToolTarget) => {
-    switch (target.kind) {
-      case TOOL_TARGET.AGENT:
-        return openColumnTab({ agent: target.agent });
-      case TOOL_TARGET.PLAN:
-        return openPanelTab(SIDE_PANEL_TAB.PLAN);
-      case TOOL_TARGET.INBOX:
-        return openPanelTab(SIDE_PANEL_TAB.INBOX);
-      case TOOL_TARGET.CHAT:
-        return chatOn ? openColumnTab(MAIN_TAB.CHAT) : undefined;
-      case TOOL_TARGET.BOARD:
-        return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
-      case TOOL_TARGET.PAGE:
-        return sidePanel.onChoose({ page: target.page });
-      case TOOL_TARGET.TASK:
-        return tasks.onShowTask(target.task);
-      case TOOL_TARGET.SHOWN_CODE: {
-        // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
-        const showing = tasks.shownCode?.find((each) => each.callId === target.call);
-        return sidePanel.onOpenFile(target.ref, showing?.code.commit);
-      }
-    }
-  };
-  // A chat notice in an agent's transcript reads its message from the chat
-  // the window holds, and opens the window's Chat on its channel.
-  const chatRead = tasks.chatView.chat;
-  const chat =
-    chatRead === undefined
-      ? undefined
-      : {
-          chat: chatRead.answer,
-          names: chatNames(tasks.tasks, chatRead.agents, undefined),
-          onOpen: tasks.chatView.onShow,
-        };
-  // A row in a transcript that opens a tab hangs that tab's card, read as
-  // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
-  const cards = taskCards({
-    agents,
-    workRows: workRowsOf(tasks.work.conversation),
-    held: views.held,
-    chosen: (opened) =>
-      sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
-    shownCode: tasks.shownCode ?? [],
-    task: { name: task.name, card: taskCardOf(tasks, listed, now) },
-  });
-  // The panel's toggle is the window's (desktop-shell.tsx); while no panel
-  // stands beside the toolbar, the toolbar is the one that leaves it room.
-  // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
-  const agentLook = (agentId: string) => {
-    const subject = agentSubject(agents, agentId, views.held, false);
-    return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
-  };
-  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
-  const mentions: TaskMentionsValue = {
-    taskId: task.id,
-    taskName: task.name,
-    workspace,
-    repository: task.repository,
-    text: () => task.document.body,
-    pages: tasks.pages,
-    agents: (agents.agents ?? []).map((agent) => {
-      const name = agentTabLabel(agent, agents.models);
-      return { id: agent.id, name, actor: agentActor(agent, name) };
-    }),
-    readAgents: readMentionAgents,
-    pullRequests: mentionablePullRequests(agents),
-    readIssues: readMentionIssues,
-    doors: {
-      taskId: task.id,
-      place: { workspace, repository: task.repository },
-      anchors: new Set(
-        sectionAnchors(planSections(task.document.body).map((section) => section.heading)),
-      ),
-      onOpenTask: openMention,
-      onOpenFile: openMentionedFile,
-      agentOf: agentLook,
-    },
   };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
@@ -730,44 +872,19 @@ function PlanDocument({
         key={String(archived)}
         task={task}
         live={tasks.live}
-        reader={{ readerId: tasks.me }}
-        agents={{
-          control: agents,
-          onOpen: (agent) => openColumnTab({ agent }),
-        }}
-        onShowHistory={(save) => tasks.history.onOpen(task.id, save)}
-        {...(archived
-          ? {}
-          : {
-              onEdit: (request) => tasks.edit(task.id, request),
-              // The title renames as the chip's field does, so a refusal is said beside it.
-              onRename: (name) => rename.end(name),
-              onDraftName: (name) => tasks.onDraftName(task.id, name),
-            })}
+        reader={reader}
+        agents={editAgents}
+        onShowHistory={showHistory}
+        // None of the three stands on an archived plan, which is drawn read-only.
+        onEdit={editDoor}
+        // The title renames as the chip's field does, so a refusal is said beside it.
+        onRename={renameDoor}
+        onDraftName={draftNameDoor}
         looks={looks}
-        readMark={{
-          unread: reads.markedUnread(task.id),
-          onMark: (unread) => reads.mark(task, unread),
-        }}
-        sectionLinks={sectionLinksOf(task.id, workspace)}
-        standing={{
-          workspaceName: home?.name ?? "",
-          onSet: archived
-            ? undefined
-            : (standing) => {
-                void tasks.onSetTaskStanding(task.id, standing);
-              },
-        }}
-        underTitle={
-          <TaskIssueLinks
-            taskId={task.id}
-            workspaceId={task.workspaceId}
-            repository={task.repository}
-            archived={archived}
-            linearIn={tasks.newTask.linearIssuesIn}
-            githubIn={tasks.newTask.githubIssuesIn}
-          />
-        }
+        readMark={readMark}
+        sectionLinks={sectionLinks}
+        standing={standing}
+        underTitle={underTitle}
       />
     </section>
   );
@@ -820,7 +937,6 @@ function PlanDocument({
                         heading={
                           <MainTabStrip
                             task={task}
-                            taskCard={taskCardOf(tasks, listed, now)}
                             main={mainTabs}
                             agents={agents}
                             unread={tasks.unreadTabs}
@@ -832,14 +948,10 @@ function PlanDocument({
                             }}
                             keys={tasks.shown && !sideFocused}
                             shown={tasks.shown}
-                            chat={chatOn && tasks.chatView.available}
-                            actionsSlot={actionsSlot}
-                            onOpenTerminal={
-                              terminalsOffered
-                                ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
-                                : undefined
-                            }
-                            onOpenOnMac={openOnMac}
+                            onOpenTerminal={terminalDoors.onOpenTerminal}
+                            onOpenOnMac={terminalDoors.onOpenOnMac}
+                            onNewVoiceChat={tasks.onNewVoiceChat}
+                            calling={calling}
                           />
                         }
                       >
@@ -854,7 +966,7 @@ function PlanDocument({
                           </p>
                         ) : null}
                         <CopyChord copy={tasks.copy} />
-                        {terminalsOffered ? (
+                        {terminalDoors.terminals ? (
                           <TerminalCommands
                             here={terminalHere}
                             agents={agents}
@@ -880,17 +992,14 @@ function PlanDocument({
                                 onChoose={chooseRepository}
                                 openRequest={menuRequest}
                               />
-                              {onTaskTab ? <StartAgentButton control={agents} /> : null}
+                              <StartAgentButton
+                                control={agents}
+                                onNewVoiceChat={tasks.onNewVoiceChat}
+                              />
                             </>
                           )}
-                          <span ref={setActionsSlot} className="toolbar-tab-actions">
-                            <TaskActions
-                              tasks={tasks}
-                              task={task}
-                              button={onTaskTab}
-                              onRename={rename.begin}
-                            />
-                          </span>
+                          {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. */}
+                          <TaskActions tasks={tasks} task={task} button onRename={rename.begin} />
                         </Fragment>
                         <SummaryButton layout={summaryLayout} cardId={summaryCard} />
                       </Toolbar>
@@ -903,67 +1012,38 @@ function PlanDocument({
                         <FindScope
                           className="desktop-task-column"
                           active={tasks.shown && !sideFocused}
-                          subject={{ task: task.id, tab }}
+                          subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
                         >
                           {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-                          {tab === MAIN_TAB.CALL ? (
-                            <section
-                              className="desktop-agent"
-                              role="tabpanel"
-                              aria-label={TAB_WORDS.CALL}
-                              data-popover-room=""
-                            >
-                              <TaskCall
-                                region={tasks.transcript.region}
-                                onRetry={tasks.transcript.onRetry}
-                                conversation={tasks.work.conversation}
-                                onLoadEarlier={tasks.work.onLoadEarlier}
-                                onOpenSubagent={(callId) => openPanelTab({ subagent: callId })}
-                                onOpenTarget={openTarget}
-                                cards={cards.call}
-                                shown={tasks.shown && !sidePanel.fullScreen}
-                                models={agents.models}
-                                reveal={tasks.transcript.reveal ?? tasks.work.reveal}
-                                video={<CallTabVideo taskId={task.id} />}
-                              />
-                            </section>
-                          ) : null}
-                          {tab === MAIN_TAB.CHAT && chatOn ? (
-                            <section
-                              className="desktop-task-chat"
-                              role="tabpanel"
-                              aria-label="Chat"
-                            >
-                              <TaskChatTab tasks={tasks} taskId={task.id} />
-                            </section>
-                          ) : null}
-                          {tab === MAIN_TAB.CALL || tab === MAIN_TAB.CHAT ? null : (
-                            <AgentPane
-                              label={mainTabLabel(tab, agents)}
-                              tabbed
-                              tab={tab}
-                              agents={agents}
-                              shown={tasks.shown && !sidePanel.fullScreen}
-                              views={views}
-                              onOpenDelegation={openDelegation}
-                              onOpenPullRequest={openPullRequest}
-                              onOpenTarget={openTarget}
-                              cards={cards}
-                              chat={chat}
-                              onFork={
+                          {tab === undefined ? (
+                            <NoAgentPane
+                              onNewVoiceChat={archived ? undefined : tasks.onNewVoiceChat}
+                              onNewAgent={
                                 archived
                                   ? undefined
-                                  : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
-                              }
-                              onContinue={
-                                archived
-                                  ? undefined
-                                  : (agentId, words, attachments) =>
-                                      openColumnTab({
-                                        draft: agents.onContinueDraft(agentId, words, attachments),
-                                      })
+                                  : () => openColumnTab({ draft: agents.onNewDraft() })
                               }
                             />
+                          ) : null}
+                          {tab === undefined ? null : (
+                            <CallCaptions.Provider value={captions}>
+                              <AgentPane
+                                call={tasks.calls}
+                                label={mainTabLabel(tab, agents)}
+                                tabbed
+                                tab={tab}
+                                agents={agents}
+                                shown={tasks.shown && !sidePanel.fullScreen}
+                                views={views}
+                                onOpenDelegation={openDelegationDoor}
+                                onOpenPullRequest={openPullRequestDoor}
+                                onOpenTarget={openTargetDoor}
+                                cards={cards}
+                                chat={chat}
+                                onFork={forkDoor}
+                                onContinue={continueDoor}
+                              />
+                            </CallCaptions.Provider>
                           )}
                         </FindScope>
                         <TaskSummary
@@ -976,19 +1056,6 @@ function PlanDocument({
                           onOpenAgent={(agent) => openColumnTab({ agent })}
                         />
                       </div>
-                      {/* Note that a call of the plan's own still stands, so it can be
-            ended, when only a race left one on a plan just archived. */}
-                      {!voiceOffered || (archived && !tasks.stop.shown) ? null : (
-                        <div className="desktop-call-bar">
-                          {captions}
-                          <CallBar
-                            status={tasks.status}
-                            microphone={tasks.microphone}
-                            speaker={tasks.speaker}
-                            stop={tasks.stop}
-                          />
-                        </div>
-                      )}
                     </div>
                     {drawing.panel ? (
                       <SidePanel
@@ -1002,7 +1069,6 @@ function PlanDocument({
                         shownCode={tasks.shownCode}
                         codeFailed={tasks.workFailed ? { onRetry: tasks.onRetryWork } : undefined}
                         pages={tasks.pages}
-                        transcript={tasks.transcript}
                         work={tasks.work}
                         agents={agents}
                         openAgents={mainTabs.openAgents}
@@ -1016,7 +1082,19 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
-                        inbox={{ body: inboxBody, waiting: inbox.board.open.length }}
+                        task={{ name: task.name, status: listed.status }}
+                        inbox={{
+                          body: inboxBody,
+                          waiting: inbox.board.open.length,
+                          drafted: inbox.drafted,
+                        }}
+                        chat={
+                          chatOn && tasks.chatView.available ? (
+                            <section className="desktop-task-chat" aria-label="Chat">
+                              <TaskChatTab tasks={tasks} taskId={task.id} />
+                            </section>
+                          ) : undefined
+                        }
                       />
                     ) : null}
                     {stranded.dialog}
@@ -1031,7 +1109,14 @@ function PlanDocument({
   );
 }
 
-export function DesktopTasks({
+/**
+ * The Tasks tab's work column: the open task's page, or the home page.
+ *
+ * A memo boundary: the shell drawn again over the same tasks, as a setting
+ * that moves draws it, leaves the open plan, its transcripts, and its side
+ * panel as they were.
+ */
+export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
   captions,
@@ -1087,4 +1172,4 @@ export function DesktopTasks({
         </>
       );
   }
-}
+});

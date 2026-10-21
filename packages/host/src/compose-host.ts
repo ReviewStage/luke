@@ -1,10 +1,10 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAutomationClient,
   HostedCodingAgentClient,
   HostedFactoryWorldClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
-  HostedIssueClient,
   HostedMacCommandClient,
   HostedTaskClient,
   HostedTerminalClient,
@@ -21,7 +21,7 @@ import {
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
@@ -30,10 +30,10 @@ import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
+import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeFactory } from "./compose-factory.js";
 import { composeIntegrations } from "./compose-integrations.js";
-import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
@@ -50,6 +50,7 @@ import {
   type Environment,
   Reporter,
   ShutdownSignal,
+  SignInConsent,
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
@@ -62,6 +63,7 @@ import {
   unavailableConcern,
 } from "./host-concerns.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { macBrowserParamsWire, macBrowserResultOf } from "./mac-browser-tabs.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
@@ -76,7 +78,6 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
-  HOST_CONCERN.ISSUES,
   HOST_CONCERN.FACTORY,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
@@ -101,6 +102,7 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
+  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
 
 /**
@@ -136,6 +138,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // the live composer reads the open task, and hands it the task's drafts
     // and their activity, through these late bindings.
     let activeTaskId: () => string | undefined = () => undefined;
+    let agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
+      Effect.succeed(undefined);
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (taskId: string) => void = () => undefined;
@@ -145,6 +149,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       settings,
       account,
       activeTaskId: () => activeTaskId(),
+      agentTaskOf: (agentId) => agentTaskOf(agentId),
       showPlanDraft: (draft) => showPlanDraft(draft),
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (taskId) => taskCallEnded(taskId),
@@ -160,9 +165,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });
+    /** The account signed in now, by its id, which every live read names. */
+    const accountId = () => {
+      const signedIn = account.session.snapshot();
+      return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+    };
     const tasks = yield* composeTasks({
       kernel,
       account,
+      accountId,
       endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
         new HostedTaskClient({
@@ -183,20 +194,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
+      accountId,
       client: codingAgentClient,
+      typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
     });
     const automations = yield* composeAutomations({
       kernel,
       account,
+      accountId,
       client: new HostedAutomationClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        credential: account.credential,
-      }),
-    });
-    const issues = yield* composeIssues({
-      kernel,
-      account,
-      client: new HostedIssueClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
       }),
@@ -227,6 +233,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeMacCommands({
           kernel,
           account,
+          accountId,
           enabled: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
@@ -235,6 +242,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
           }),
+          browser: {
+            // Note that a settings file that cannot be read runs no browser command, as the experiment off would.
+            enabled: settings.store.snapshot().pipe(
+              Effect.map(({ experiments }) => experimentOn(experiments, EXPERIMENT.BROWSER)),
+              Effect.orElseSucceed(() => false),
+            ),
+            run: (params) =>
+              Effect.map(
+                kernel.nodes.invoke(HOST_NODE_CAPABILITY.BROWSER_ACT, macBrowserParamsWire(params)),
+                macBrowserResultOf,
+              ),
+          },
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
     const macTerminal = platform.has(HOST_PLATFORM_CONCERN.MAC_TERMINAL)
@@ -251,7 +270,16 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           openSocket: yield* TerminalSocket,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
+    const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
+      ? yield* composeChatGptSignIn({
+          kernel,
+          account,
+          client: codingAgentClient,
+          openConsent: (yield* SignInConsent).open,
+        })
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
+    agentTaskOf = codingAgents.agentTaskOf;
     showPlanDraft = tasks.showDraft;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
@@ -260,20 +288,26 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
-     * behind an account already signed in runs: the preferences reconciled and
-     * the voice credential applied.
+     * behind an account already signed in runs: the preferences reconciled,
+     * the account's access read, and the voice credential applied.
      */
     const openCapabilities = Effect.gen(function* () {
-      if (account.signedIn()) yield* settings.reconcileAccountPreferences();
+      if (account.signedIn()) {
+        yield* settings.reconcileAccountPreferences();
+        yield* account.refreshAccess;
+      }
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
 
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
+      yield* account.forgetAccess;
       yield* tasks.reset;
-      yield* terminals.reset;
       yield* codingAgents.reset;
+      yield* automations.reset;
+      yield* terminals.reset;
+      yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -303,12 +337,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
-      [HOST_CONCERN.ISSUES]: issues,
       [HOST_CONCERN.FACTORY]: factory,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
+      [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);
@@ -328,10 +362,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         Effect.gen(function* () {
           const snapshot = yield* Effect.orDie(settings.store.snapshot());
           const replay = yield* account.sessionReplayState;
+          const access = yield* account.accessState;
           return {
             settings: carried(snapshot),
             account: carried(account.snapshot()),
             sessionReplay: carried(replay),
+            access: carried(access),
             voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
             agentTraceEnabled: account.agentTrace !== undefined,
           };

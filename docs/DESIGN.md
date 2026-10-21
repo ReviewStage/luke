@@ -89,9 +89,9 @@ text changes size mid-motion, and each move runs as
 one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
-Repository checks hold one part of this contract: the generated brand art and
-motion tokens must match their generators in `@luke/brand`. The rest is held by review:
-renderer CSS may not reintroduce `@starting-style`, and no rule may transition
+Review holds this contract: the generated brand art and motion tokens match
+their generators in `@luke/brand` (`pnpm --filter @luke/brand check` reports
+drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 
 ## Shared tokens and components
@@ -174,7 +174,7 @@ vocabulary is missing a name.
 
 Spacing in the desktop window comes from one scale, `@luke/ui`'s, read in the
 window's stylesheets as `--luke-space-2` through `--luke-space-48`, and the
-names built from it in `desktop.css`'s `:root`. Every column holds its
+names built from it in `shell.css`'s and `desktop.css`'s `:root`. Every column holds its
 rows `--column-inset` from its edges, every row holds its glyph or words
 `--row-inset` from its own, so a column's words start at `--content-inset`
 whether a row carries them or not: the sidebar's text, the task's tab, the
@@ -182,7 +182,7 @@ side panel's first tab, the transcript, and Settings' page list all read down
 that one edge. Controls in a row stand `--luke-control-gap` apart, a glyph
 `--luke-icon-gap` from its words, a column's groups `--luke-section-gap`, and a page's
 content `--luke-page-inset` from its column, each the desktop profile's role.
-No pixel of padding, margin, or gap in `desktop.css`,
+No pixel of padding, margin, or gap in `shell.css`, `desktop.css`,
 `sign-in.css`, and `tooltip.css` is anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
@@ -252,25 +252,6 @@ rather than a menu, so it keeps the 12px corner those rows' `--luke-control-radi
 sits concentric in. The agent's context popover is a panel too, a bar and its
 legend rather than rows: it draws the menu's ground, edge, corner, and shadow,
 and pads what it holds with steps of the scale rather than a menu's inset.
-
-## The keys Luke takes from the machine
-
-A key Luke registers takes its chord away from every other app on the Mac, so
-which chord is a product decision and is argued about here rather than in
-`voice-hotkey.ts`.
-
-- **Option-Space talks.** It is where a macOS user already reaches for a voice
-  assistant: Superwhisper, the ChatGPT desktop app, and Alfred all sit there.
-- **Option-S stops.** S is for stop, and Option-letter is the family the talk
-  key lives in. It is a sibling of Escape rather than of the talk key: it
-  asks for quiet and nothing in its place, where speaking over a reply with
-  the talk key held interrupts Luke and carries the conversation on.
-- **There is no ask key.** Luke is voice only: there is no field to type to
-  him in, so no chord summons one. Option-L, which once did, is given back to
-  the machine.
-
-The two may not be able to land on one chord. `hotkeyCandidates` is where
-that is enforced, and says why.
 
 ## Copy: delete what describes, keep what instructs
 

@@ -37,6 +37,13 @@
       opacity var(--luke-duration-hover) ease;
   }
 
+  /* Under a finger, a finger's height at least. */
+  @media (pointer: coarse) {
+    .luke-provider-button {
+      height: max(40px, var(--luke-touch-target));
+    }
+  }
+
   .luke-provider-button:hover:not(:disabled) {
     background: var(--luke-color-fill-strong);
   }

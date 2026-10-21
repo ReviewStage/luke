@@ -6,6 +6,7 @@ import {
   type CodingAgentStartedFromIt,
   continuationsOf,
   latestTurnsOfReached,
+  nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
@@ -13,9 +14,8 @@ import type { TaskArchivedAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { Clock, DateTime, Effect, Option, Redacted, Result } from "effect";
+import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { HostedEnvironment } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -23,19 +23,24 @@ import {
   hostedCarriesBearer,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { admitsPlanWriter } from "../agent-reach.js";
+import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   type EveMount,
-  type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
+import { deploymentEve } from "../deployment-eve.js";
+import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
   codingAgentStatusOf,
   codingAgentSummary,
   lineAwaitsTurn,
+  startedBlank,
   summaryAccounts,
 } from "./status.js";
 
@@ -64,9 +69,9 @@ export interface EveReach {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every Start and Stop as unavailable. */
   eveOrigin: () => string | undefined;
   /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
-  eve?: (authorization: Redacted.Redacted) => EveSessions;
+  eve?: (authorization: Redacted.Redacted) => AgentSessions;
   /** eve as the deployment reaches it acting for an account, for a request that carried the browser's session cookie and no bearer; a test hands a fake, and the deployment composes eve's client under its own secret. */
-  eveAs?: (account: string) => EveSessions;
+  eveAs?: (account: string) => AgentSessions;
 }
 
 /**
@@ -76,40 +81,49 @@ export interface EveReach {
  * request that carries none is one a browser's session cookie named
  * (`hostedCarriesBearer`, the question `auth/bearer.ts`'s `requestUserId`
  * asks too), which eve's channels never read, so it reaches eve as the
- * deployment acting for the account, under the deployment's own secret: the
- * channel's door admits that caller only for what its actor admits
- * (`brain-host/auth.ts`), and only on a session or a conversation the
- * account reaches, as it holds every caller. `account` is the one the
- * route resolved from this request (`resolveUserId`), never one a request
- * or a row names, so the cookie names the account eve acts for exactly as
- * the bearer would have. A deployment that names no origin for eve, or no
- * secret for a cookie's request, answers unavailable.
+ * deployment acting for the account, under the deployment's own secret
+ * (`../deployment-eve.ts`): the channel's door admits that caller only for
+ * what its actor admits (`brain-host/auth.ts`), and only on a session or a
+ * conversation the account reaches, as it holds every caller. `account` is
+ * the one the route resolved from this request (`resolveUserId`), never one
+ * a request or a row names, so the cookie names the account eve acts for
+ * exactly as the bearer would have. A deployment that names no origin for
+ * eve, or no secret for a cookie's request, answers unavailable.
+ *
+ * The client sends the kinds of turn `Turn` names and none unless a caller
+ * names one, so a route that holds it to stop, retire, or follow a session
+ * cannot open or steer one: a route that sends the account's words asks for
+ * `EveTypedTurn` by name.
  */
-export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
+export function eveFor<Turn extends BrainHostTurn = never>(
   reach: EveReach,
   request: Request,
   account: string,
   mount: EveMount = EVE_MOUNT.CODER,
-): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
-  if (hostedCarriesBearer(request)) {
-    const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-    if (reach.eve !== undefined) return reach.eve(authorization);
-    const origin = reach.eveOrigin();
-    if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    return yield* eveSessions({ origin, caller: { authorization }, mount });
-  }
-  if (reach.eveAs !== undefined) return reach.eveAs(account);
-  // Note that a runtime without the deployment's environment refuses a cookie's request as
-  // unavailable on purpose, as one whose environment names no secret does: the deployment acts
-  // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
-  const environment = yield* Effect.serviceOption(HostedEnvironment);
-  const secret = Option.getOrUndefined(environment)?.cronSecret;
-  const origin = reach.eveOrigin();
-  if (secret === undefined || origin === undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  return yield* eveSessions({ origin, caller: { secret, account }, mount });
-});
+): Effect.Effect<
+  AgentSessions<NoInfer<Turn>>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  // A coding agent's session is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
+  const routed = (eve: AgentSessions<NoInfer<Turn>>) =>
+    mount === EVE_MOUNT.CODER ? routedSessions(eve, account) : Effect.succeed(eve);
+  return Effect.gen(function* () {
+    if (hostedCarriesBearer(request)) {
+      const authorization = Redacted.make(request.headers.get("authorization") ?? "");
+      if (reach.eve !== undefined) return yield* routed(reach.eve(authorization));
+      const origin = reach.eveOrigin();
+      if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* routed(yield* eveSessions<Turn>({ origin, caller: { authorization }, mount }));
+    }
+    if (reach.eveAs !== undefined) return yield* routed(reach.eveAs(account));
+    // Note that a runtime without the deployment's environment refuses a cookie's request as
+    // unavailable on purpose, as one whose environment names no secret does: the deployment acts
+    // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
+    const eveAs = yield* deploymentEve<Turn>(reach.eveOrigin(), mount);
+    return eveAs(account);
+  });
+}
 
 /** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, and whether a line of the developer's awaits one. */
 export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -121,9 +135,11 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 > {
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOfReached(conversationIds));
   const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
+  const runtimes = yield* hostedStoreOrUnavailable(nativeRuntimesOfReached(conversationIds));
   return (conversationId) => ({
     turn: turns.get(conversationId),
     awaitingLineAt: awaiting.get(conversationId),
+    runtime: runtimes.get(conversationId),
   });
 });
 
@@ -168,6 +184,7 @@ export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
+    blank: startedBlank(agent),
   });
 });
 
@@ -191,6 +208,8 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   account: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  // An agent its starter's plan pays for is stopped by those the plan's policy admits.
+  yield* admitsPlanWriter(account, agent);
   yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
 });
 
@@ -206,7 +225,11 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * again as it first ran.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eveOf: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eveOf: Effect.Effect<
+    Pick<AgentSessions, "cancel">,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,
@@ -233,7 +256,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     );
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    return yield* Effect.fail(failedCallRefusal(cancelled));
   }
   const accepted = cancelled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
   const at = yield* DateTime.nowAsDate;
@@ -285,6 +308,7 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
+    blank: startedBlank(agent),
   };
   if (lineAwaitsTurn(turn, standing)) return false;
   const status = codingAgentStatusOf(turn, standing);
@@ -307,6 +331,7 @@ export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt: awaiting.get(agent.conversationId),
+    blank: agent.blank,
   });
   return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
 });

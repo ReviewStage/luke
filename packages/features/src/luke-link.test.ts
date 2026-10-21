@@ -31,8 +31,6 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   ],
   [{ kind: LINK_PLACE.VERSION, planId: TASK, revision: 12 }, `${HOME}/plan/${TASK}/version/12`],
   [{ kind: LINK_PLACE.PAGE, planId: TASK, pageId: OTHER }, `${HOME}/plan/${TASK}/page/${OTHER}`],
-  [{ kind: LINK_PLACE.CALL, planId: TASK }, `${HOME}/plan/${TASK}/call`],
-  [{ kind: LINK_PLACE.CALL, planId: TASK, callId: "call_9" }, `${HOME}/plan/${TASK}/call/call_9`],
   [
     { kind: LINK_PLACE.TURN, planId: TASK, at: 1760000000000 },
     `${HOME}/plan/${TASK}/work/1760000000000`,
@@ -98,7 +96,8 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
   [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
-  [{ kind: LINK_PLACE.ISSUE, issueId: OTHER }, `${HOME}/issue/${OTHER}`],
+  [{ kind: LINK_PLACE.CHAT }, `${HOME}/chat`],
+  [{ kind: LINK_PLACE.CHAT, channelId: OTHER }, `${HOME}/chat/${OTHER}`],
 ];
 
 test("every place is shared as its kind's address under its workspace, by its ids alone", () => {
@@ -218,6 +217,9 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/plan/Fix%20billing#rollout`,
     `${HOME}/plan/${TASK}/version/latest`,
     `${HOME}/plan/${TASK}/call/call_9/more`,
+    // The task's Call tab is gone, and a link to it, or to a call there, names nothing.
+    `${HOME}/plan/${TASK}/call`,
+    `${HOME}/plan/${TASK}/call/call_9`,
     `${HOME}/inbox/${OTHER}`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/inbox/${OTHER}`,
     `${HOME}/agent/${AGENT}/inbox/${OTHER}/answer`,
@@ -229,10 +231,10 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/people/user_9Fq2-x`,
     `${HOME}/person/user_9Fq2-x/tasks`,
     `${HOME}/person/charles%40acme.dev`,
-    `${HOME}/issue`,
-    `${HOME}/issues/${OTHER}`,
-    `${HOME}/issue/${OTHER}/comments`,
-    `${HOME}/issue/LUKE%2012`,
+    `${HOME}/issue/${OTHER}`,
+    `${HOME}/chats/${OTHER}`,
+    `${HOME}/chat/${OTHER}/message/${AGENT}`,
+    `${HOME}/chat/%23general`,
     `${HOME}/agent/%E0%A4%A`,
     `${HOME}/agent/${"a".repeat(201)}`,
     `luke://mcp/linear`,

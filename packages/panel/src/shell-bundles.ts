@@ -21,10 +21,17 @@ export interface ShellBundles {
 }
 
 let installed: ShellBundles | undefined;
+// Which install holds the door, so an older install's undo leaves a newer one's standing though both installed the same bundles.
+let installs = 0;
 
-/** Installs how this window's shell reaches its bundles; its root does this once, before anything is drawn. */
-export function installShellBundles(bundles: ShellBundles): void {
+/** Installs how this window's shell reaches its bundles; its root does this once, before anything is drawn, and calls what it answers as it closes. */
+export function installShellBundles(bundles: ShellBundles): () => void {
   installed = bundles;
+  installs += 1;
+  const mine = installs;
+  return () => {
+    if (installs === mine) installed = undefined;
+  };
 }
 
 /** How this window's root said its shell's bundles are reached. */

@@ -7,8 +7,17 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import {
+  GITHUB_ACCESS,
+  type GitHubAccess,
+  type WorkspaceTokenRepository,
+} from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
+import type {
+  TasksWorkspaceInvitationsAnswer,
+  TasksWorkspaceMembersAnswer,
+} from "@luke/features/tasks-view";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -18,15 +27,11 @@ import {
 } from "@luke/features/workspace-wire";
 import {
   ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import {
+  type ActPortClient,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -44,7 +49,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenPersonProvider } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
-import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -142,6 +154,20 @@ let macSaveHeld: Promise<void> | undefined;
 let githubRepositories: string[] = [];
 /** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
 let repositoriesHeld: Promise<void> | undefined;
+/** A repository as the picker's listing answers it, by its full name and what reaches it. */
+function listedRepository(fullName: string, access: GitHubAccess) {
+  const [owner = "", name = ""] = fullName.split("/");
+  return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
+}
+
+/** The repositories the reader's own token may push to that the picker's listing answers as addable, by full name. */
+let tokenReach: string[] = [];
+/** Whether the listing answers as a service older than `addable`, the token's repositories among its own. */
+let beforeAddable = false;
+/** The repositories members added to the workspace on their tokens, as the service lists them to the reader. */
+let tokenRepositories: WorkspaceTokenRepository[] = [];
+/** While set, the token repositories' read waits on it before answering what it read. */
+let tokenReadHeld: Promise<void> | undefined;
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -168,23 +194,16 @@ function automationOf(
   return mine === undefined ? summary : { ...summary, mine };
 }
 
-/** One ask of the window, on `app:act` or on its act port. */
-type Asked =
-  | Act
-  | {
-      [Kind in PortActKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
-    }[PortActKind];
+/** One ask of the window on its act port. */
+type Asked = AnyAct;
 
-/** Any answer a kind gives, on either side. */
-type AnswerValue = ActResultFor<ActKind> | PortActResult<PortActKind>;
+/** Any answer a kind gives. */
+type AnswerValue = PortActResult<PortActKind>;
 
-/** What the fake host answers an ask with, on either side. */
-type Answered =
-  | { readonly status: typeof ACT_OUTCOME_STATUS.DONE; readonly value: AnswerValue }
-  | { readonly status: typeof ACT_OUTCOME_STATUS.REFUSED; readonly reason: string }
-  | { readonly status: typeof ACT_OUTCOME_STATUS.UNKNOWN_ACT };
+/** What the fake host answers an ask with. */
+type Answered = FakeActAnswer;
 
-const done = (value: AnswerValue): Answered => ({ status: ACT_OUTCOME_STATUS.DONE, value });
+const done = (value: AnswerValue): Answered => ({ status: FAKE_ANSWER.DONE, value });
 
 /** What the Repositories group reads as the page opens, which a test of another group's acts leaves aside. */
 const MAC_GROUP_READS: ReadonlySet<string> = new Set([
@@ -198,7 +217,7 @@ function answer(request: Asked): Promise<Answered> {
   switch (request.kind) {
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
       if (refuseMembersRead) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
       }
       if (membersHeld !== undefined) {
         const held = membersHeld;
@@ -210,7 +229,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_MEMBER_REMOVE:
       if (refuseRemoval) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -218,14 +237,14 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_INVITATIONS_READ: {
       if (refuseInvitationsRead) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
       }
       const read = invitations;
       const held = firstRead;
       firstRead = undefined;
       const reads = sent.filter((one) => one.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length;
       if (refuseLaterReads && reads > 1) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
       }
       return (held ?? Promise.resolve()).then(() => done(read));
     }
@@ -237,7 +256,7 @@ function answer(request: Asked): Promise<Answered> {
       }
       if (refuseInvitation) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: ALREADY_INVITED_REFUSAL,
         });
       }
@@ -260,11 +279,11 @@ function answer(request: Asked): Promise<Answered> {
         linearConnectHeld = undefined;
         return held.then(() => done(undefined));
       }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: "Luke could not open your browser.",
         });
       }
@@ -274,7 +293,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_RENAME:
       if (refuseRename) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -282,7 +301,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_PHOTO_SET:
       if (refusePhoto) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -292,7 +311,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_MEMBER_ROLE: {
       if (refuseRole) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -322,10 +341,25 @@ function answer(request: Asked): Promise<Answered> {
           repositories: {
             installed: true,
             installationUrl: "https://github.com/apps/luke/installations/new",
-            repositories: githubRepositories.map((fullName) => {
-              const [owner = "", name = ""] = fullName.split("/");
-              return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1 };
-            }),
+            ...(beforeAddable
+              ? {
+                  repositories: [
+                    ...githubRepositories.map((fullName) =>
+                      listedRepository(fullName, GITHUB_ACCESS.APP),
+                    ),
+                    ...tokenReach.map((fullName) =>
+                      listedRepository(fullName, GITHUB_ACCESS.TOKEN),
+                    ),
+                  ],
+                }
+              : {
+                  repositories: githubRepositories.map((fullName) =>
+                    listedRepository(fullName, GITHUB_ACCESS.APP),
+                  ),
+                  addable: tokenReach.map((fullName) =>
+                    listedRepository(fullName, GITHUB_ACCESS.TOKEN),
+                  ),
+                }),
           },
         }),
       );
@@ -348,8 +382,24 @@ function answer(request: Asked): Promise<Answered> {
     }
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ: {
+      const read = tokenRepositories;
+      const held = tokenReadHeld;
+      tokenReadHeld = undefined;
+      return (held ?? Promise.resolve()).then(() => done(read));
+    }
+    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET: {
+      const { repository, added } = request.payload;
+      tokenRepositories = added
+        ? [
+            { fullName: repository, addedBy: READER_ID, addedAt: 2, removable: true },
+            ...tokenRepositories,
+          ]
+        : tokenRepositories.filter((one) => one.fullName !== repository);
+      return Promise.resolve(done(tokenRepositories));
+    }
     default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
 }
 
@@ -358,9 +408,9 @@ function onPort(kind: PortActKind) {
   return async (payload: PortActPayload<PortActKind>) => {
     // SAFETY: the port hands each procedure the payload its own kind takes.
     const outcome = await answer({ kind, payload } as Asked);
-    if (outcome.status === ACT_OUTCOME_STATUS.DONE) return outcome.value;
+    if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
     throw refusedOnPort(
-      outcome.status === ACT_OUTCOME_STATUS.REFUSED ? outcome.reason : "Not in this test.",
+      outcome.status === FAKE_ANSWER.REFUSED ? outcome.reason : "Not in this test.",
     );
   };
 }
@@ -377,6 +427,57 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }
+
+/** What the act port answers a workspace's people's stream with. */
+type PeopleStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_PEOPLE]>>;
+
+/** What the act port answers a workspace's invitations' stream with. */
+type InvitationsStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_INVITATIONS]>>;
+
+/** Each workspace's invitations' streams the page holds open, which a test pushes a word to. */
+let invitationStreams: {
+  readonly workspaceId: string;
+  push: (view: TasksWorkspaceInvitationsAnswer) => void;
+}[] = [];
+
+/** A stream the test pushes words into, as the host streams a followed workspace's people. */
+function pushableStream<A>() {
+  const held: A[] = [];
+  const waiting: ((read: IteratorResult<A, undefined>) => void)[] = [];
+  let ended = false;
+  const iterator: AsyncIteratorObject<A, undefined, unknown> = {
+    next: () => {
+      const value = held.shift();
+      if (value !== undefined) return Promise.resolve({ done: false, value });
+      if (ended) return Promise.resolve({ done: true, value: undefined });
+      return new Promise((resolve) => waiting.push(resolve));
+    },
+    return: () => {
+      ended = true;
+      for (const resolve of waiting.splice(0)) resolve({ done: true, value: undefined });
+      return Promise.resolve({ done: true, value: undefined });
+    },
+    [Symbol.asyncIterator]: () => iterator,
+    [Symbol.asyncDispose]: () => Promise.resolve(),
+  };
+  const push = (value: A) => {
+    const resolve = waiting.shift();
+    if (resolve === undefined) held.push(value);
+    else resolve({ done: false, value });
+  };
+  return { iterator, push };
+}
+
+/** Each workspace's people's streams the page holds open, newest last, which a test pushes a word to. */
+let peopleStreams: {
+  readonly workspaceId: string;
+  push: (view: TasksWorkspaceMembersAnswer) => void;
+}[] = [];
+
+/** A word of a workspace's people, pushed to every stream of it the page holds open. */
+const pushPeople = (workspaceId: string, view: TasksWorkspaceMembersAnswer) => {
+  for (const stream of peopleStreams) if (stream.workspaceId === workspaceId) stream.push(view);
+};
 
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
@@ -404,10 +505,30 @@ beforeEach(() => {
   macSaveHeld = undefined;
   githubRepositories = [];
   repositoriesHeld = undefined;
+  tokenReach = [];
+  beforeAddable = false;
+  tokenRepositories = [];
+  tokenReadHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
-  fakeAppBridge({ act: (request) => answer(request) as Promise<ActOutcome> });
+  fakeAppBridge({});
+  peopleStreams = [];
+  invitationStreams = [];
   fakeActPort({
     ...workspacePort(),
+    [ACT_KIND.WORKSPACE_PEOPLE]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_PEOPLE, payload: input });
+      const stream = pushableStream<TasksWorkspaceMembersAnswer>();
+      peopleStreams.push({ workspaceId: input.workspaceId, push: stream.push });
+      // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
+      return Promise.resolve(stream.iterator as PeopleStream);
+    },
+    [ACT_KIND.WORKSPACE_INVITATIONS]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS, payload: input });
+      const stream = pushableStream<TasksWorkspaceInvitationsAnswer>();
+      invitationStreams.push({ workspaceId: input.workspaceId, push: stream.push });
+      // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
+      return Promise.resolve(stream.iterator as InvitationsStream);
+    },
     [ACT_KIND.AUTOMATIONS_LIST]: () =>
       automations === undefined
         ? Promise.reject(new Error("Not in this test."))
@@ -827,7 +948,11 @@ test("the chosen team workspace's members are listed with their email and role, 
 
   assert.deepEqual(
     sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ],
+    [
+      ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ,
+      ACT_KIND.WORKSPACE_PEOPLE,
+      ACT_KIND.WORKSPACE_MEMBERS_READ,
+    ],
   );
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
@@ -1197,23 +1322,22 @@ test("an automation made after the page opened is named when the leave is next a
   assert.equal(after.includes("An automation you created stops running: Morning sweep."), true);
 });
 
-test("the members are read again when the window's list counts another, so an admin who joined meanwhile may be handed the workspace, and Transfer ownership reads them again as it opens", async () => {
-  const { page, restand } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 2 });
+test("the members the host streams are drawn with nothing read again, so an admin who joined meanwhile may be handed the workspace", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 2 });
   const offeredBefore = buttons(
     leaveGroup(page) ?? assert.fail("no leave"),
     "Transfer ownership",
   ).length;
-  stored = [OWNER, ADMIN_OLA, MEMBER];
-  await restand({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 3 });
-  const reads = () =>
-    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ).length;
-  const readsBeforePress = reads();
+  act(() => pushPeople(ACME.id, { members: [OWNER, ADMIN_OLA, MEMBER] }));
+  await settle();
   act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
   await settle();
 
   assert.equal(offeredBefore, 0);
-  assert.equal(readsBeforePress, 2);
-  assert.equal(reads(), 3);
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ).length,
+    1,
+  );
   assert.equal(
     dialog().querySelector('button[aria-label^="New owner"]')?.getAttribute("aria-label"),
     "New owner: Ola",
@@ -1383,7 +1507,7 @@ const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
 /** A connected workspace whose Linear is connected too. */
 const WITH_LINEAR: Workspace = { ...CONNECTED, linear: { active: true } };
 
-test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with one Manage on GitHub and no menu, and every account connected under it", async () => {
+test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...SEVERAL, role });
     const group = githubGroup(page);
@@ -1397,7 +1521,11 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       row.querySelector(".settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
-    assert.deepEqual(rowButtons(row), ["Manage on GitHub"], `a ${role}'s controls`);
+    assert.deepEqual(
+      rowButtons(row),
+      ["Add repository", "Manage on GitHub"],
+      `a ${role}'s controls`,
+    );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
       ["GitHub", MANAGES_ON_GITHUB],
@@ -1442,7 +1570,7 @@ test("a service from before several connections names one GitHub account alone, 
     ["GitHub", MANAGES_ON_GITHUB],
     ["acme-org", "Connected"],
   ]);
-  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Manage on GitHub"]);
+  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
 
 test("Escape in Linear's menu hands focus back to its ⋯", async () => {
@@ -1476,13 +1604,13 @@ test("a GitHub page the browser could not open is said under the row, from Manag
   }
 });
 
-test("an owner or an admin of a workspace with no GitHub is offered Connect alone, which opens the same connect", async () => {
+test("an owner or an admin of a workspace with no GitHub is offered Connect beside Add repository, which opens the same connect", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...ACME, role, githubInstallations: [] });
     const row = rowNamed(page, "GitHub");
 
     assert.deepEqual(rowWords(row), ["GitHub", "Not connected."]);
-    assert.deepEqual(rowButtons(row), ["Connect"]);
+    assert.deepEqual(rowButtons(row), ["Add repository", "Connect"]);
     assert.equal(row.querySelector('[aria-haspopup="menu"]'), null);
     assert.deepEqual(integrationRows(page), [["GitHub", "Not connected."]]);
     act(() => button(row, "Connect").click());
@@ -1495,7 +1623,7 @@ test("an owner or an admin of a workspace with no GitHub is offered Connect alon
   ]);
 });
 
-test("a member reads every account connected, or is told to ask an owner or admin, and is offered no Manage on GitHub, Connect, or right-click menu", async () => {
+test("a member reads every account connected, or is told to ask an owner or admin, and is offered Add repository alone: no Manage on GitHub, Connect, or right-click menu", async () => {
   const connected = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const unconnected = await mount(ACME);
 
@@ -1509,7 +1637,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
   ]);
   for (const { page } of [connected, unconnected]) {
     const group = githubGroup(page);
-    assert.equal(group.querySelector("button"), null);
+    assert.deepEqual(rowButtons(group), ["Add repository"]);
     for (const row of group.querySelectorAll<HTMLElement>(ROWS)) {
       act(() => {
         row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
@@ -1517,6 +1645,109 @@ test("a member reads every account connected, or is told to ask an owner or admi
       assert.equal(document.querySelector('[role="menu"]'), null);
     }
   }
+});
+
+test("the repositories members added on their tokens stand under GitHub's accounts marked Token, with Remove where the service says the reader may, and a removal lists what the service answers", async () => {
+  tokenRepositories = [
+    { fullName: "octo-member/side", addedBy: MEMBER.userId, addedAt: 2, removable: false },
+    { fullName: "acme/relay", addedBy: READER_ID, addedAt: 1, removable: true },
+  ];
+  const { page } = await mount(SEVERAL);
+  const group = githubGroup(page);
+
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs", "octo-member/side", "acme/relay"],
+  );
+  for (const name of ["octo-member/side", "acme/relay"]) {
+    assert.equal(rowNamed(group, name).querySelector(".luke-badge")?.textContent, "Token");
+  }
+  assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
+
+  act(() => button(rowNamed(group, "acme/relay"), "Remove").click());
+  await settle();
+
+  assert.deepEqual(
+    sent
+      .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
+      .map((one) => one.payload),
+    [{ workspaceId: SEVERAL.id, repository: "acme/relay", added: false }],
+  );
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs", "octo-member/side"],
+  );
+});
+
+test("Add repository offers the repositories the reader's own token may push to that the workspace lists nowhere yet, and a pick adds one", async () => {
+  githubRepositories = ["acme/relay"];
+  tokenReach = ["octo-member/side", "octo-member/notes"];
+  tokenRepositories = [
+    { fullName: "octo-member/notes", addedBy: MEMBER.userId, addedAt: 1, removable: false },
+  ];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const offered = [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent);
+  const side =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (one) => one.textContent === "octo-member/side",
+    ) ?? assert.fail("octo-member/side is not offered");
+  act(() => side.click());
+  await settle();
+
+  assert.deepEqual(offered, ["octo-member/side"]);
+  assert.deepEqual(
+    sent
+      .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
+      .map((one) => one.payload),
+    [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
+  );
+  assert.equal(
+    rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
+    "Token",
+  );
+});
+
+test("Add repository offers the token's repositories from a service older than addable, which lists them among the picker's own", async () => {
+  beforeAddable = true;
+  githubRepositories = ["acme/relay"];
+  tokenReach = ["octo-member/side"];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent),
+    ["octo-member/side"],
+  );
+});
+
+test("a token repositories read that lands after an add does not take back what the add answered", async () => {
+  tokenReach = ["octo-member/side"];
+  let release: () => void = () => undefined;
+  tokenReadHeld = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const side =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (one) => one.textContent === "octo-member/side",
+    ) ?? assert.fail("octo-member/side is not offered");
+  act(() => side.click());
+  await settle();
+  release();
+  await settle();
+
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs", "octo-member/side"],
+  );
 });
 
 test("the page has no workspace picker of its own, and shows another workspace, the account's role in it, and its own members once the sidebar lists it", async () => {
@@ -1585,6 +1816,30 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
   await settle();
 }
 
+test("the invitations the host streams are drawn, another Mac's invitation among them, with nothing read again", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const pushed = {
+    id: "inv-ola@example.com",
+    email: "ola@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    expiresAt: "2026-10-16T12:00:00.000Z",
+    acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-ola@example.com",
+  };
+  act(() => {
+    for (const stream of invitationStreams) {
+      if (stream.workspaceId === ACME.id) stream.push({ invitations: [pushed] });
+    }
+  });
+  await settle();
+
+  assert.equal(invitationRows(page).length, 1);
+  assert.ok(invitationRows(page)[0]?.textContent?.includes("ola@example.com"));
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length,
+    1,
+  );
+});
+
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -1611,16 +1866,19 @@ test("the owner invites an address as a role, sees it pending with its link to c
     sent
       .filter(
         (request) =>
-          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ && !MAC_GROUP_READS.has(request.kind),
+          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
+          request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
+          !MAC_GROUP_READS.has(request.kind),
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
+      [ACT_KIND.WORKSPACE_INVITATIONS, { workspaceId: ACME.id }],
       [
         ACT_KIND.WORKSPACE_INVITE,
         { workspaceId: ACME.id, email: "alan@example.com", role: WORKSPACE_ROLE.ADMIN },
       ],
-      [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
@@ -1701,6 +1959,27 @@ test("an invitation made stays listed with its link when the read after it fails
   const row = invitationRows(page)[0] ?? assert.fail("the invitation was lost");
   assert.equal(addressOf(row)?.textContent, "alan@example.com");
   assert.ok(button(row, "Copy link"));
+});
+
+test("an invitation's answer that lands after the stream told a newer list does not bring back what another window canceled", async () => {
+  let release: () => void = () => undefined;
+  inviteHeld = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+  // Another window cancels the invitation the moment it is made, and the stream tells the list after it.
+  act(() => {
+    for (const stream of invitationStreams) {
+      if (stream.workspaceId === ACME.id) stream.push({ invitations: [] });
+    }
+  });
+  await settle();
+  release();
+  await settle();
+
+  assert.deepEqual(invitationRows(page), []);
 });
 
 test("Cancel invitation sends nothing while an invitation is on its way", async () => {

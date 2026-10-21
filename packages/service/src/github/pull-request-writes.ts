@@ -667,6 +667,88 @@ export const discardPendingReview = /* @__PURE__ */ Effect.fn("web/discardPendin
   },
 );
 
+const REVIEW_COMMENT_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequestReviewComment { viewerDidAuthor state pullRequest { id } }
+  }
+}`;
+
+const ReviewCommentSchema = Schema.Struct({
+  node: Schema.NullOr(
+    Schema.Struct({
+      viewerDidAuthor: Schema.optionalKey(Schema.Boolean),
+      state: Schema.optionalKey(Schema.String),
+      pullRequest: Schema.optionalKey(Schema.Struct({ id: Schema.String })),
+    }),
+  ),
+});
+
+/** What the member is told where the comment named is not one of their own pending review on this pull request. */
+const NOT_OWN_PENDING_COMMENT =
+  "That comment is not one of your pending review's on this pull request.";
+
+/**
+ * Refuses unless the comment named is one the member wrote, still pending,
+ * on this pull request, as GitHub answers it on their own token, so an
+ * edit or a deletion never reaches another's comment, a published one, or
+ * one on another pull request.
+ */
+const ownPendingComment = /* @__PURE__ */ Effect.fn("web/ownPendingComment")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  commentId: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const read = yield* githubWrite(
+    token,
+    REVIEW_COMMENT_QUERY,
+    { id: commentId },
+    ReviewCommentSchema,
+  );
+  const comment = read.node;
+  const own =
+    comment?.viewerDidAuthor === true &&
+    comment.state === "PENDING" &&
+    comment.pullRequest?.id === pullRequestId;
+  if (!own) return yield* refusalOf([NOT_OWN_PENDING_COMMENT]);
+});
+
+const EDIT_REVIEW_COMMENT_MUTATION = `mutation($id: ID!, $body: String!) {
+  updatePullRequestReviewComment(input: { pullRequestReviewCommentId: $id, body: $body }) {
+    pullRequestReviewComment { id }
+  }
+}`;
+
+const DELETE_REVIEW_COMMENT_MUTATION = `mutation($id: ID!) {
+  deletePullRequestReviewComment(input: { id: $id }) { pullRequestReview { id } }
+}`;
+
+/** A comment of the member's own pending review on the pull request given new words, on their token, once it is held to being theirs (`ownPendingComment`). */
+export const editPendingComment = /* @__PURE__ */ Effect.fn("web/editPendingComment")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  comment: { readonly commentId: string; readonly body: string },
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* ownPendingComment(token, pullRequestId, comment.commentId);
+  yield* githubWrite(
+    token,
+    EDIT_REVIEW_COMMENT_MUTATION,
+    { id: comment.commentId, body: comment.body },
+    Schema.Unknown,
+  );
+});
+
+/** A comment of the member's own pending review on the pull request taken out of it, on their token, once it is held to being theirs (`ownPendingComment`). */
+export const deletePendingComment = /* @__PURE__ */ Effect.fn("web/deletePendingComment")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    commentId: string,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    yield* ownPendingComment(token, pullRequestId, commentId);
+    yield* githubWrite(token, DELETE_REVIEW_COMMENT_MUTATION, { id: commentId }, Schema.Unknown);
+  },
+);
+
 const CLOSE_MUTATION = `mutation($id: ID!) {
   closePullRequest(input: { pullRequestId: $id }) { pullRequest { state } }
 }`;

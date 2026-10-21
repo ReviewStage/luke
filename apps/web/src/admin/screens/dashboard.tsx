@@ -1,10 +1,11 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 import type { AdminMetrics, AdminTrend } from "@luke/service/admin/admin-metrics";
 import type { AdminOverview, AdminOverviewAccount } from "@luke/service/admin/admin-overview";
 import {
   RETENTION_BASIS,
   type RetentionBasis,
 } from "@luke/service/admin/admin-overview-vocabulary";
-import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import type { AdminMetricsWindow, AdminWindowedQuery } from "@luke/service/admin/http";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
@@ -15,15 +16,16 @@ import { TrendMove } from "../charts/chart-frame";
 import { RetentionGrid } from "../charts/retention-grid";
 import { FunnelChart, ReachChart } from "../charts/share-bars";
 import { SignupsChart } from "../charts/signups-chart";
-import { SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminSection, StatCard, StatGroup } from "../charts/stat-card";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { METRICS_PATH, windowedReadPath } from "../routing";
-import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
+import { windowedReadQuery } from "../routing";
+import { CHART_PAIR_WIDE, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import {
+  ADMIN_READ,
   type AdminReader,
   type AdminReadHandle,
   adminReadFailure,
@@ -32,9 +34,12 @@ import {
 
 const METRICS_ERROR = "The metrics endpoint did not answer.";
 
-// SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
-const readMetrics: AdminReader<AdminMetrics> = async (response) =>
-  (await response.json()) as AdminMetrics;
+/** The dashboard's numbers, as the admin metrics procedure answers them. */
+const readMetrics =
+  (query: AdminWindowedQuery): AdminReader<AdminMetrics> =>
+  async (signal) =>
+    // SAFETY: the admin metrics procedure answers an AdminMetrics (`@luke/service/admin/admin-metrics`), which the contract cannot name.
+    (await browserClient.admin.metrics(query, { signal })) as AdminMetrics;
 
 /** What the page is called, in the sidebar and over the page alike. */
 const OVERVIEW_TITLE = "Overview";
@@ -185,11 +190,14 @@ export function useMetricsRead(
   windowDays: AdminMetricsWindow,
   enabled: boolean,
 ): AdminReadHandle<AdminMetrics> {
+  const query = windowedReadQuery(hideAdmins, windowDays);
   return useAdminRead(
-    windowedReadPath(METRICS_PATH, hideAdmins, windowDays),
-    readMetrics,
+    { procedure: ADMIN_READ.METRICS, query: query },
+    readMetrics(query),
     METRICS_ERROR,
-    { enabled },
+    {
+      enabled,
+    },
   );
 }
 
@@ -222,22 +230,17 @@ export function DashboardScreen({
   // The basis is the page's own choice, kept across refreshes and windows:
   // both grids ride every answer, so flipping it reads nothing.
   const [basis, setBasis] = useState<RetentionBasis>(RETENTION_BASIS.MEANINGFUL);
+  const controls = (
+    <>
+      <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+      <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+    </>
+  );
 
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title={OVERVIEW_TITLE}
-          account={account}
-          onSignOut={signOut}
-          controls={
-            <>
-              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            </>
-          }
-          shapes={DASHBOARD_SHAPES}
-        />,
+        <PageSkeleton title={OVERVIEW_TITLE} controls={controls} shapes={DASHBOARD_SHAPES} />,
       );
     case "signed-out":
       return <SignInCard />;
@@ -246,84 +249,82 @@ export function DashboardScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, METRICS_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title={OVERVIEW_TITLE} controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, METRICS_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready": {
       const metrics = state.value;
       const overview = metrics.overview;
 
       return frame(
-        <AdminPage
-          title={OVERVIEW_TITLE}
-          account={account}
-          onSignOut={signOut}
-          controls={
-            <>
-              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            </>
-          }
-        >
+        <AdminPage title={OVERVIEW_TITLE} controls={controls}>
           {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
           says so while the next read is in flight. */}
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <SectionHeading>This week</SectionHeading>
-            <HeadlineTiles headline={overview.headline} />
+            <AdminSection title="This week">
+              <HeadlineTiles headline={overview.headline} />
+            </AdminSection>
 
-            <SectionHeading>Activity by feature</SectionHeading>
-            <ActivityChart
-              activity={overview.activity}
-              generatedAt={metrics.generatedAt}
-              onOpenDay={onOpenDay}
-            />
-            <ActivityNote />
-
-            <SectionHeading>Activation and reach</SectionHeading>
-            <div className="grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <FunnelChart funnel={overview.funnel} windowDays={metrics.windowDays} />
-              <ReachChart reach={overview.reach} />
-            </div>
-
-            <SectionHeading>Retention · weekly cohorts</SectionHeading>
-            <div className="mb-3">
-              <ChoiceBar
-                label="Retained by"
-                items={RETENTION_OPTIONS}
-                value={basis}
-                look={CHOICE_BAR_LOOK.SEGMENTED}
-                onChange={setBasis}
+            <AdminSection title="Activity by feature">
+              <ActivityChart
+                activity={overview.activity}
+                generatedAt={metrics.generatedAt}
+                onOpenDay={onOpenDay}
               />
-            </div>
-            <RetentionGrid
-              retention={
-                basis === RETENTION_BASIS.MEANINGFUL ? overview.retention : metrics.retention
-              }
-            />
-            <RetentionNote basis={basis} />
+              <ActivityNote />
+            </AdminSection>
 
-            <SectionHeading>Most active accounts</SectionHeading>
-            <AccountsTable
-              rows={overview.topAccounts}
-              windowDays={metrics.windowDays}
-              emptyText="No meaningful actions recorded in this window yet."
-              minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
-              onOpen={onOpenAccount}
-              hostedColumns={false}
-              trailingColumns={OVERVIEW_ACCOUNT_COLUMNS}
-            />
-            <TopAccountsNote />
+            <AdminSection title="Activation and reach">
+              <div className={CHART_PAIR_WIDE}>
+                <FunnelChart funnel={overview.funnel} windowDays={metrics.windowDays} />
+                <ReachChart reach={overview.reach} />
+              </div>
+            </AdminSection>
 
-            <SectionHeading>Signups</SectionHeading>
-            <SignupsChart
-              daily={metrics.users.dailySignups}
-              trend={metrics.users.signupTrend}
-              generatedAt={metrics.generatedAt}
-            />
+            <AdminSection title="Retention · weekly cohorts">
+              <div>
+                <ChoiceBar
+                  label="Retained by"
+                  items={RETENTION_OPTIONS}
+                  value={basis}
+                  look={CHOICE_BAR_LOOK.SEGMENTED}
+                  onChange={setBasis}
+                />
+              </div>
+              <RetentionGrid
+                retention={
+                  basis === RETENTION_BASIS.MEANINGFUL ? overview.retention : metrics.retention
+                }
+              />
+              <RetentionNote basis={basis} />
+            </AdminSection>
+
+            <AdminSection title="Most active accounts">
+              <AccountsTable
+                rows={overview.topAccounts}
+                windowDays={metrics.windowDays}
+                emptyText="No meaningful actions recorded in this window yet."
+                minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
+                onOpen={onOpenAccount}
+                hostedColumns={false}
+                trailingColumns={OVERVIEW_ACCOUNT_COLUMNS}
+              />
+              <TopAccountsNote />
+            </AdminSection>
+
+            <AdminSection title="Signups">
+              <SignupsChart
+                daily={metrics.users.dailySignups}
+                trend={metrics.users.signupTrend}
+                generatedAt={metrics.generatedAt}
+              />
+            </AdminSection>
           </Refreshing>
         </AdminPage>,
       );

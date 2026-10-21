@@ -178,6 +178,8 @@ function AccountHeading({
  */
 function accountMenuGroups(
   signedIn: boolean,
+  /** Whether the window is an installed app's, whose menu bar's chords the Keyboard shortcuts page lists. */
+  desktopApp: boolean,
   acts: {
     /** Opens the reader's own page; none outside the window, or before the account's id is known. */
     onProfile: (() => void) | undefined;
@@ -214,12 +216,16 @@ function accountMenuGroups(
         icon: <LightbulbIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SUGGEST_FEATURE),
       },
-      {
-        label: "Keyboard shortcuts",
-        icon: <KeyboardIcon />,
-        command: APP_COMMAND.KEYBOARD_SHORTCUTS,
-        onSelect: () => runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS),
-      },
+      ...(desktopApp
+        ? [
+            {
+              label: "Keyboard shortcuts",
+              icon: <KeyboardIcon />,
+              command: APP_COMMAND.KEYBOARD_SHORTCUTS,
+              onSelect: () => runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS),
+            },
+          ]
+        : []),
       {
         label: "Contact us",
         icon: <LifeBuoyIcon />,
@@ -275,7 +281,8 @@ function AccountMenu({
   );
   const openPerson = useOpenPerson();
   const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-  const groups = accountMenuGroups(signedIn, {
+  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const groups = accountMenuGroups(signedIn, desktopApp, {
     onProfile:
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
     onSettings,

@@ -37,15 +37,13 @@ export interface HostSettingSideEffectDependencies {
 
 /**
  * The side effects a setting has in the host. The client applies its own — the
- * login item, the keys, the duck —
+ * login item and the duck —
  * from the same answered snapshot; nothing here reaches a window.
  */
 export function hostSettingSideEffects(dependencies: HostSettingSideEffectDependencies) {
   return {
     [SETTING_SIDE_EFFECT.NONE]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     // The stored voice reaches the source first, so the session the peer
     // opens next is created under it; only then is the standing session

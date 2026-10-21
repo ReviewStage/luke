@@ -55,6 +55,15 @@ export const task = pgTable(
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
     priority: text("priority").$type<TaskPriority>().notNull().default(TASK_PRIORITY.NONE),
+    /**
+     * The member the task is assigned to, who is on it now, apart from the
+     * account that started it (`user_id`, its creator); a member of the
+     * task's workspace as it was written, and null for a task no one is on.
+     * Deleting that account, or that member leaving the workspace (the
+     * `task_assignee_leaves_with_member` trigger on `member`), lets the task
+     * go unassigned rather than taking it with them.
+     */
+    assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
@@ -83,10 +92,10 @@ export const task = pgTable(
      */
     linearIssue: jsonb("linear_issue"),
     /**
-     * The workspace's own issue the task was started from (`issue.ts`), one
-     * of the same workspace, which a move to another workspace lets go;
-     * null for a task started from none, and once the issue is deleted. An
-     * issue may have many tasks, each an attempt at it.
+     * @deprecated Luke keeps no issues of its own now (`issue.ts`), and
+     * nothing writes or reads this. It was the workspace's own issue the task
+     * was started from. It stands until no running build reads it, then a
+     * later migration drops it.
      */
     issueId: uuid("issue_id").references(() => issue.id, { onDelete: "set null" }),
     /**
@@ -116,11 +125,13 @@ export const task = pgTable(
     index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
-    // An issue's tasks, and the issue's deletion letting each of them go. Note that it is not
+    // Deprecated with `issue_id`: an issue's deletion let each of its tasks go. Note that it is not
     // named `task_issue`, because an index shares its name's namespace with the table of links.
     index("task_workspace_issue").on(table.issueId),
     // The key names one task of its workspace, and a new task takes the next number.
     uniqueIndex("task_organization_number").on(table.organizationId, table.number),
+    // A workspace's tasks assigned to one member, and that member leaving letting each of them go.
+    index("task_organization_assignee").on(table.organizationId, table.assigneeId),
   ],
 );
 

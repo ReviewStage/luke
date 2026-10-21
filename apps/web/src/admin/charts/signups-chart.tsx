@@ -17,6 +17,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
+import { barRadius, barTopRadius } from "./bar-radius";
 import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
 
 const SIGNUPS_CHART = {
@@ -67,7 +68,7 @@ export function SignupsChart({
               />
             }
           />
-          <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="count" fill="var(--color-count)" radius={barTopRadius()}>
             {daily.map((point) => (
               <Cell
                 key={point.day}
@@ -134,13 +135,12 @@ export function SignInMethodsChart({
           <XAxis type="number" hide />
           <YAxis dataKey="method" type="category" tickLine={false} axisLine={false} width={56} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar dataKey="accounts" fill="var(--color-accounts)" radius={4} barSize={18}>
+          <Bar dataKey="accounts" fill="var(--color-accounts)" radius={barRadius()} barSize={18}>
             <LabelList
               dataKey="label"
               position="right"
               offset={8}
               className="fill-(--luke-color-text-muted)"
-              fontSize={12}
             />
           </Bar>
         </BarChart>

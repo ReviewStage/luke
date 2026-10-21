@@ -20,7 +20,7 @@ import type { SessionAuth, SessionContext } from "eve/context";
 import {
   type IntegrationAdmission,
   integrationAccessToken,
-} from "../../integrations/integration-connection.js";
+} from "../../integrations/integration-token.js";
 import type { WebAgentRun, WebAgentServices } from "../../run.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { RelayStateStore } from "../brain-host/relay.js";

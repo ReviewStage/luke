@@ -807,6 +807,15 @@ const MEMBER_REPOSITORIES = new Map([
   ["/repos/octo-member/fork", { fixture: { owner: "octo-member", name: "fork" }, push: false }],
 ]);
 
+/** GitHub's SAML SSO page for the fixture's organization, as an `X-GitHub-SSO` header names it. */
+const SSO_AUTHORIZE_URL = "https://github.com/orgs/octo-sso/sso?authorization_request=fixture";
+
+/** The repositories GitHub answers the member's own token 403 on, with the headers of each answer. */
+const MEMBER_FORBIDDEN = new Map<string, Record<string, string>>([
+  ["/repos/octo-sso/vault", { "X-GitHub-SSO": `required; url=${SSO_AUTHORIZE_URL}` }],
+  ["/repos/octo-locked/vault", {}],
+]);
+
 /** GitHub answering the member's own token, the fixture's, on the repositories above, and refusing it 401 where `refused` says so. */
 const memberToken =
   (refused: () => boolean = () => false) =>
@@ -817,6 +826,10 @@ const memberToken =
         : undefined;
     }
     if (refused()) return Response.json({ message: "Bad credentials" }, { status: 401 });
+    const forbidden = MEMBER_FORBIDDEN.get(new URL(sent.url).pathname.toLowerCase());
+    if (forbidden !== undefined) {
+      return Response.json({ message: "Forbidden" }, { status: 403, headers: forbidden });
+    }
     // GitHub folds case in a repository's path, as it does in its name.
     const known = MEMBER_REPOSITORIES.get(new URL(sent.url).pathname.toLowerCase());
     return known === undefined
@@ -883,11 +896,18 @@ it.layer(getTestDB())("a repository on a member's own token", (it) => {
         );
         assert.ok(Option.isSome(write));
         assert.equal(Redacted.value(write.value.token), GITHUB_FIXTURE_MEMBER.TOKEN);
-        assert.deepEqual(write.value.access, {
-          kind: GITHUB_ACCESS.TOKEN,
-          githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
-          githubUserId: GITHUB_FIXTURE_MEMBER.ID,
-        });
+        const { kind, githubLogin, githubUserId } =
+          write.value.access.kind === GITHUB_ACCESS.TOKEN
+            ? write.value.access
+            : { ...write.value.access, githubLogin: undefined, githubUserId: undefined };
+        assert.deepEqual(
+          { kind, githubLogin, githubUserId },
+          {
+            kind: GITHUB_ACCESS.TOKEN,
+            githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
+            githubUserId: GITHUB_FIXTURE_MEMBER.ID,
+          },
+        );
         assert.equal(ci, true);
         assert.equal(reason(fork), REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH);
         assert.equal(reason(hidden), REPOSITORY_UNREACHED.TOKEN_NO_ACCESS);
@@ -897,6 +917,40 @@ it.layer(getTestDB())("a repository on a member's own token", (it) => {
         assert.ok(read);
         assert.equal(read.headers.get("accept"), "application/vnd.github+json");
         assert.equal(read.headers.get("x-github-api-version"), "2022-11-28");
+      }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
+  );
+
+  it.effect(
+    "a 403 whose X-GitHub-SSO header names GitHub's page is the token unauthorized for the organization's SAML SSO, with that page; a 403 without it is a repository the token does not reach",
+    () =>
+      Effect.gen(function* () {
+        const fake = githubReaching([], GITHUB_APP_WITH_TOKENS, {}, memberToken());
+        const member = yield* openTokenMember();
+        const workspace = yield* openWorkspace(member);
+        const app = yield* GitHubApp;
+        const ask = (fullName: string) =>
+          app.repositoryReach(workspace, fullName, member).pipe(Effect.provide(fake.layer));
+
+        const sso = yield* ask("octo-sso/vault");
+        const locked = yield* ask("octo-locked/vault");
+        const row = yield* readGitHubTokenRow(member);
+
+        assert.deepEqual(
+          Result.getFailure(sso),
+          Option.some({
+            reason: REPOSITORY_UNREACHED.TOKEN_SSO,
+            repository: "octo-sso/vault",
+            authorizeUrl: SSO_AUTHORIZE_URL,
+          }),
+        );
+        assert.deepEqual(
+          Result.getFailure(locked),
+          Option.some({
+            reason: REPOSITORY_UNREACHED.TOKEN_NO_ACCESS,
+            repository: "octo-locked/vault",
+          }),
+        );
+        assert.equal(row?.status, GITHUB_TOKEN_STATUS.VERIFIED);
       }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
   );
 

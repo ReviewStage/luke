@@ -205,10 +205,27 @@ test("a blank tab asks for an address, and opens a dev server on the Mac over pl
 
   assert.deepEqual(doors.sent[0], {
     kind: ACT_KIND.BROWSER_OPEN,
-    payload: { browserId: tab.browserId, address: "http://localhost:3000/" },
+    payload: { browserId: tab.browserId, address: "http://localhost:3000/", taskId: "task" },
   });
   assert.deepEqual(tab.opened, ["http://localhost:3000/"]);
   assert.equal(tab.field().value, "http://localhost:3000/");
+});
+
+test("the bar's steps are the app's own glyph buttons, as every other tab's bar draws them", () => {
+  main();
+  const tab = mount(undefined);
+  const steps = [...tab.container.querySelectorAll(".browser-view-bar button")];
+
+  assert.deepEqual(
+    steps.map((step) => step.getAttribute("aria-label")),
+    ["Back", "Forward", "Reload", "Open in your browser"],
+  );
+  for (const step of steps) {
+    assert.ok(
+      step.matches('.luke-button[data-icon-only="true"]'),
+      step.getAttribute("aria-label") ?? "",
+    );
+  }
 });
 
 test("the bar's steps follow how main says the page stands, and a typed line moves the open page", async () => {
@@ -270,6 +287,24 @@ test("a chord pressed over the page answers on the window, and ⌘L takes the ad
 
   assert.deepEqual(heard, ["⌘k", "⌘l"]);
   assert.equal(document.activeElement, tab.field());
+});
+
+test("while an agent drives the page the bar says so, and its Stop tells main, until main says the agent let go", async () => {
+  const doors = main();
+  const tab = mount("http://localhost:4000/");
+  await act(async () => undefined);
+  assert.doesNotMatch(tab.container.textContent ?? "", /An agent is using this tab/u);
+
+  doors.says(pageAt(tab.browserId, "http://localhost:4000/", { agent: true }));
+  assert.match(tab.container.textContent ?? "", /An agent is using this tab/u);
+  await tab.press("Stop agent");
+  assert.deepEqual(doors.sent.at(-1), {
+    kind: ACT_KIND.BROWSER_STOP,
+    payload: { browserId: tab.browserId },
+  });
+
+  doors.says(pageAt(tab.browserId, "http://localhost:4000/"));
+  assert.doesNotMatch(tab.container.textContent ?? "", /An agent is using this tab/u);
 });
 
 test("a page that failed to load says why, and its retry reloads it", async () => {

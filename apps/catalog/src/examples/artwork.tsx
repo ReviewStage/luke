@@ -1,8 +1,10 @@
 import {
   AgentPlaceholderIcon,
   ArchiveIcon,
+  ArrowDownIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpIcon,
   BackIcon,
   BoardIcon,
   CallIcon,
@@ -54,6 +56,7 @@ import {
   UserIcon,
   VideoIcon,
   VideoOffIcon,
+  WaveformIcon,
   WingFace,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -69,8 +72,10 @@ import { CatalogSection } from "../section";
 const GLYPHS = Object.entries({
   AgentPlaceholderIcon,
   ArchiveIcon,
+  ArrowDownIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpIcon,
   BackIcon,
   BoardIcon,
   CallIcon,
@@ -119,6 +124,7 @@ const GLYPHS = Object.entries({
   UserIcon,
   VideoIcon,
   VideoOffIcon,
+  WaveformIcon,
 });
 
 function Artwork(): React.JSX.Element {

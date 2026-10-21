@@ -15,7 +15,7 @@ import {
   LUKE_ACTOR,
   latestActivity,
 } from "@luke/ui/actor-model";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
@@ -199,10 +199,15 @@ function CallOwner({ edit, place }: { edit: PlanLastEdit; place: EditPlace }): R
   );
 }
 
-/** The reader with the members of the directory standing around the caller. */
+/**
+ * The reader with the members of the directory standing around the caller,
+ * the same while neither changes, so a reader handed over afresh on each draw
+ * leaves what is drawn from it as it was.
+ */
 export function useEditReader(reader: TaskReader): EditReader {
   const { members, former } = useMemberDirectory();
-  return { ...reader, members, former };
+  const { readerId, owner } = reader;
+  return useMemo(() => ({ readerId, owner, members, former }), [readerId, owner, members, former]);
 }
 
 /** Who last wrote each of `edits`, each once, in the order they stand, as a facepile draws them. */

@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentMessagesAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
@@ -18,7 +17,6 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -30,7 +28,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import {
   continuationsOf,
@@ -177,10 +175,7 @@ async function drawnTab(input: {
   /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
   usage?: Pick<CodingAgentMessagesAnswer, "usage" | "turnUsage">;
 }) {
-  fakeAppBridge({
-    act: (_request: Act): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   const source = agentOf(SOURCE, { status: input.status, ...input.source });
   const continued: {
     agentId: string;
@@ -193,7 +188,6 @@ async function drawnTab(input: {
     continued.push({ agentId, note, attachments });
     return input.answer?.() ?? Promise.resolve(undefined);
   };
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [source, ...(input.others ?? [])],
     archived: input.archived ?? [],
@@ -209,18 +203,16 @@ async function drawnTab(input: {
     },
     onMessage: () =>
       Promise.resolve(input.message ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
+    transcripts: pushedTranscripts(() => [
+      {
         messages: [...(input.messages ?? MESSAGES)],
         cursor: "2:0",
         status: input.status,
         title: null,
         ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
         ...input.usage,
-      });
-    },
+      },
+    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

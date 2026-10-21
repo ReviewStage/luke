@@ -1,20 +1,19 @@
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
-  type CodingAgentInboxParams,
+  type CodingAgentInboxScope,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_BLOCK,
-  INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
@@ -26,16 +25,20 @@ import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DRAFT_PLACE,
+  type Draft,
   draftOfItem,
+  EMPTY_DRAFT,
   type InboxPlace,
   useDraftWriter,
   useInboxDrafts,
 } from "../composer-drafts.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import {
+  awaitsNod,
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
   type InboxDraft,
+  type InboxNote,
   type InboxThreadSend,
   inboxBoard,
   inboxMessageOf,
@@ -44,19 +47,19 @@ import {
   inboxThreadSend,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
+import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.js";
 
 /**
- * use-task-inbox.ts -- the open task's inbox as one control: its items, read on the service's held long-poll while the window shows the tasks, and the answers on their way back.
+ * use-task-inbox.ts -- the open task's inbox as one control: its items, followed while the window shows the tasks and pushed as they change, and the answers on their way back.
  *
- * The service holds a read open while nothing changed past the cursor and
- * lets it go at its own hold, so the loop is one read after another with no
- * clock of its own, as an agent's transcript is read (`use-agent-transcript.ts`);
- * each answer is the inbox whole, which replaces what was held. The loop
- * runs while the window shows the tasks and a task with an agent, or one
- * main says an item waits on, is open, so the tab's
- * count stands whichever tab is chosen, and another task starts from
- * nothing of this one's. A read that did not answer ends the loop and says
- * so, with Try again, rather than asking again at once.
+ * The inbox is followed (`use-followed-inboxes.ts`) while the window shows
+ * the tasks and a task with an agent, or one main says an item waits on,
+ * is open, so the tab's count stands whichever tab is chosen, and another
+ * task starts from nothing of this one's. Each push is the inbox whole,
+ * which replaces what was held; nothing here asks again or holds a cursor.
+ * An item marked read or unread is pushed as any change is, so nothing
+ * reads it again. An inbox that could not be read is let go and says so,
+ * with Try again, rather than following it again at once.
  *
  * An answer goes under a key minted here and kept with its words, so the
  * same answer sent again after a lost reply is taken once. It stands over
@@ -76,8 +79,13 @@ import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
  * item, nor changes where it stands, and once taken it stands over the
  * window's other reads of the item until they hold it. It reaches the agent as one of the
  * developer's messages, which may wake it, so the agents are read again
- * too. A message refused leaves nothing on the thread, and the box says
- * why. On a thread from version 5 the message may carry the answer to its
+ * too. As the agent's own box does (`use-agent-composer.ts`), a send takes
+ * what the box holds out of it at once, so the box stands empty and open
+ * while the message is out, and a message refused leaves nothing on the
+ * thread, its words and files coming back into the box where it holds
+ * nothing newer, and the box says why. Only one send of an item is out at
+ * a time, so a second Enter before the first lands sends nothing again.
+ * On a thread from version 5 the message may carry the answer to its
  * open ask, which the reader pressed and attached: such a reply settles
  * the ask, so it stands over every read from the moment it is sent, as an
  * answer does, and a refusal brings the item back as it stood.
@@ -109,17 +117,9 @@ import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
  * an answer taken or a message written lets go of its own.
  */
 
-/** How one read is asked: the task and the cursor to read past, answered as the view hears it. */
-export type InboxReader = (params: CodingAgentInboxParams) => Promise<CodingAgentInboxAnswerView>;
-
 /** How one answer is sent: the item, its revision, the answer, and the key the send is known by. */
 export type InboxAnswerer = (
   params: CodingAgentInboxAnswerParams,
-) => Promise<CodingAgentInboxAnsweredView>;
-
-/** How one close of an item without an answer is sent: the item, its revision, and the key the send is known by. */
-export type InboxCloser = (
-  params: CodingAgentInboxCloseParams,
 ) => Promise<CodingAgentInboxAnsweredView>;
 
 /** How one message on an item's thread is sent: the item, the words and files, and the key the send is known by. */
@@ -148,9 +148,13 @@ export interface TaskInboxControl {
   /** The items whose answer is on its way, by id. */
   readonly sending: ReadonlySet<string>;
   /** Why an answer did not go, or was not taken, by item, said on its card until the next send. */
-  readonly notes: ReadonlyMap<string, string>;
+  readonly notes: ReadonlyMap<string, InboxNote>;
+  /** Lets go of an item's note once what it said no longer stands, as an agent unarchived from it; nothing where a later send has said something else since. */
+  readonly onDropNote: (itemId: string, note: InboxNote) => void;
   /** What the developer has put on the item's card so far, at the revision it stands at; an empty card where nothing, or where the agent has changed the item since. */
   readonly draftOf: (item: InboxItem) => InboxDraft;
+  /** Whether a card holds a draft for its item as it now stands, which the Inbox tab marks with the pencil (`draft-mark.tsx`). */
+  readonly drafted: boolean;
   /** Keeps what the developer has put on the item's card, at its revision. */
   readonly onDraft: (item: InboxItem, draft: InboxDraft) => void;
   /** Moves the files on the item's card on from what they are as the write lands, so two reads landing in one render both stand. */
@@ -160,8 +164,6 @@ export interface TaskInboxControl {
   ) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
-  /** Closes an open item without an answer, its draft let go once taken; nothing where it is settled or a send is out. */
-  readonly onClose: (item: InboxItem) => void;
   /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is; nothing where it holds nothing the service takes or a send is out. */
   readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
@@ -176,9 +178,6 @@ export interface TaskInboxControl {
 const INBOX_NOT_TAKEN_NOTE = {
   /** The agent changed the item before the answer landed. */
   CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
-  /** The agent changed the item before the close landed. */
-  CHANGED_BEFORE_CLOSE:
-    "The agent changed this item before you closed it. Read it as it stands now.",
   /** The item was answered first, from another window or Mac. */
   ANSWERED: "This item was already answered.",
   /** The agent took the item back first. */
@@ -187,8 +186,8 @@ const INBOX_NOT_TAKEN_NOTE = {
   CLOSED_BY_MEMBER: "This item was already closed.",
 } as const;
 
-/** Why an answer, or a close where `closing`, was not taken, from the item as the service answered it. */
-function notTakenNote(item: InboxItem, closing = false): string {
+/** Why an answer was not taken, from the item as the service answered it. */
+function notTakenNote(item: InboxItem): string {
   switch (item.status) {
     case INBOX_STATUS.ANSWERED:
       return INBOX_NOT_TAKEN_NOTE.ANSWERED;
@@ -197,7 +196,7 @@ function notTakenNote(item: InboxItem, closing = false): string {
         ? INBOX_NOT_TAKEN_NOTE.CLOSED
         : INBOX_NOT_TAKEN_NOTE.CLOSED_BY_MEMBER;
     case INBOX_STATUS.OPEN:
-      return closing ? INBOX_NOT_TAKEN_NOTE.CHANGED_BEFORE_CLOSE : INBOX_NOT_TAKEN_NOTE.CHANGED;
+      return INBOX_NOT_TAKEN_NOTE.CHANGED;
   }
 }
 
@@ -281,11 +280,35 @@ function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxI
     : [item, ...items];
 }
 
+/** A card's draft as the drafts keep it. */
+function keptDraft(draft: InboxDraft): Draft {
+  return {
+    text: draft.note,
+    attachments: draft.attachments,
+    choices: draft.choices,
+    values: draft.values,
+    steps: draft.steps,
+    press: draft.press,
+  };
+}
+
+/** Whether a card holds nothing at all: no words, files, picks, fields, steps, or press. */
+function holdsNothing(draft: Draft): boolean {
+  return (
+    draft.text === "" &&
+    draft.attachments.length === 0 &&
+    draft.choices.length === 0 &&
+    draft.values.length === 0 &&
+    (draft.steps ?? []).length === 0 &&
+    draft.press === undefined
+  );
+}
+
 export function useTaskInbox(input: {
-  /** The task whose inbox is held, or, with `reader`, the agent with no task whose inbox is. */
+  /** The task whose inbox is held, or, with `kind` an agent's, the agent with no task whose inbox is. */
   taskId: string | undefined;
-  /** How the inbox is read where it is one agent's with no task rather than a task's. */
-  reader?: ((after: string) => Promise<CodingAgentInboxAnswerView>) | undefined;
+  /** Whose inbox `taskId` names: a task's, unless it is one agent's with no task. */
+  kind?: CodingAgentInboxScope["kind"] | undefined;
   /** Whether the window shows the tasks. */
   shown: boolean;
   /** Whether main's read of what waits across the account says an item waits on the task. */
@@ -293,9 +316,9 @@ export function useTaskInbox(input: {
   agents: {
     /** Every agent of the task by id, an archived one among them, whose items still stand. */
     readonly heldIds: readonly string[] | undefined;
-    readonly readInbox: InboxReader;
+    /** How the inbox is followed and heard pushed. */
+    readonly inboxFollower: InboxFollower;
     readonly answerInbox: InboxAnswerer;
-    readonly closeInbox: InboxCloser;
     readonly messageInbox: InboxMessenger;
     readonly readInboxImage: InboxImageReader;
     /** Reads the task's agents again, for where an agent an answer reached stands now. */
@@ -303,6 +326,7 @@ export function useTaskInbox(input: {
   };
 }): TaskInboxControl {
   const { taskId, shown, waiting, agents } = input;
+  const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
   const [held, setHeld] = useState<Held>(() => fresh(taskId));
   if (held.taskId !== taskId) setHeld(fresh(taskId));
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
@@ -317,69 +341,114 @@ export function useTaskInbox(input: {
   useEffect(() => {
     setImages((standing) => imagesNamed(standing, named));
   }, [named]);
-  const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
-  const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
+  const [notes, setNotes] = useState<ReadonlyMap<string, InboxNote>>(new Map());
   // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
   // shares them, under the plan, or under none where the inbox is an agent's with no plan.
-  const ownTask = input.reader === undefined ? taskId : undefined;
+  const ownTask = kind === INBOX_SCOPE_KIND.PLAN ? taskId : undefined;
   const draftsOn = ownTask ?? null;
   // Note that an agent with no plan is the planId its inbox is read by.
-  const readAgent = input.reader === undefined ? undefined : taskId;
+  const readAgent = kind === INBOX_SCOPE_KIND.AGENT ? taskId : undefined;
   const drafts = useInboxDrafts(draftsOn);
+  // The drafts as last drawn, which a refusal landing later reads.
+  const draftsNow = useRef(drafts);
+  draftsNow.current = drafts;
   const writer = useDraftWriter();
   const settler = useInboxSettler();
   const attempts = useRef(new Map<string, Attempt>());
-  const latest = useRef({ ...agents, taskId, reader: input.reader });
-  latest.current = { ...agents, taskId, reader: input.reader };
+  // The items whose send is out, as `sending` holds them but at once, so a second press before
+  // the render that draws the first sends nothing again.
+  const out = useRef(new Set<string>());
+  const latest = useRef({ ...agents, taskId });
+  latest.current = { ...agents, taskId };
 
   // A task with no agent, standing or archived, has no Inbox tab and nothing
-  // to read, so it holds no read open, unless an item waits on it, which an
-  // agent this window has not listed, one started on another Mac, posted.
+  // to follow, unless an item waits on it, which an agent this window has not
+  // listed, one started on another Mac, posted.
   const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
-  const active = shown && taskId !== undefined && readable && !held.failed;
+  const active = shown && taskId !== undefined && readable;
+  const followed = useFollowedInboxes(
+    kind,
+    useMemo(() => (active && taskId !== undefined ? [taskId] : []), [active, taskId]),
+    agents.inboxFollower,
+  );
+  const pushed = taskId === undefined ? undefined : followed.items.get(taskId);
+  const notRead = taskId !== undefined && followed.failed.has(taskId);
+  // Each push is the inbox whole, which replaces what was held, an answer's own patch among it.
   useEffect(() => {
-    if (!active || taskId === undefined) return;
-    let live = true;
-    const loop = async () => {
-      let after = INBOX_CURSOR_START;
-      while (live) {
-        const { reader, readInbox } = latest.current;
-        const read = reader === undefined ? readInbox({ taskId: taskId, after }) : reader(after);
-        const answer = await read.catch((): CodingAgentInboxAnswerView => UNANSWERED);
-        if (!live) return;
-        if ("failure" in answer) {
-          setHeld((was) => ({ ...was, failed: true }));
-          return;
-        }
-        after = answer.cursor;
-        setHeld((was) => ({ ...was, items: answer.items, read: true }));
-      }
-    };
-    void loop();
-    return () => {
-      live = false;
-    };
-  }, [active, taskId, attempt]);
+    if (pushed !== undefined) setHeld((was) => ({ ...was, items: pushed, read: true }));
+  }, [pushed]);
+  useEffect(() => {
+    setHeld((was) => (was.failed === notRead ? was : { ...was, failed: notRead }));
+  }, [notRead]);
 
+  const { onRetry: retryFollow } = followed;
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));
-    setAttempt((count) => count + 1);
-  }, []);
+    retryFollow();
+  }, [retryFollow]);
 
-  const note = useCallback((itemId: string, words: string | undefined) => {
+  const note = useCallback((itemId: string, said: InboxNote | undefined) => {
     setNotes((was) => {
       const next = new Map(was);
-      if (words === undefined) next.delete(itemId);
-      else next.set(itemId, words);
+      if (said === undefined) next.delete(itemId);
+      else next.set(itemId, said);
+      return next;
+    });
+  }, []);
+  const onDropNote = useCallback((itemId: string, said: InboxNote) => {
+    setNotes((was) => {
+      if (was.get(itemId) !== said) return was;
+      const next = new Map(was);
+      next.delete(itemId);
       return next;
     });
   }, []);
 
+  // Note that a refusal naming no agent may be an archive the list has not read yet, so the agents are read again for the card to say which.
+  const refused = useCallback(
+    (itemId: string, failure: CodingAgentCallFailure) => {
+      note(itemId, { words: messageFailureWords(failure), failure });
+      if (failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) latest.current.onRetryList();
+    },
+    [note],
+  );
+
+  // A send that settled its item at once, refused, brings the item back open, where a message
+  // written on it meanwhile would read as no draft of it and be let go; so its words and files are
+  // carried into the open box beside the picks it holds. Note that they take the place of the words
+  // that went, and are joined after any the open box holds besides, as another window may have
+  // written there meanwhile, so neither is lost.
+  const reopen = useCallback(
+    (item: InboxItem, went: Pick<Draft, "text" | "attachments">) => {
+      if (item.status !== INBOX_STATUS.OPEN) return;
+      const open = draftPlace(item, draftsOn);
+      const settled: InboxPlace = { ...open, thread: true };
+      const written = draftsNow.current.find((kept) => Equal.equals(kept.place, settled));
+      if (written === undefined) return;
+      if (written.text !== "" || written.attachments.length > 0) {
+        writer.update(open, (was) => {
+          const text = was.text === went.text ? "" : was.text;
+          const attachments = Equal.equals(was.attachments, went.attachments)
+            ? []
+            : was.attachments;
+          return {
+            ...was,
+            text: [text, written.text].filter((words) => words !== "").join("\n"),
+            attachments: [...attachments, ...written.attachments],
+          };
+        });
+      }
+      writer.drop((place) => Equal.equals(place, settled));
+    },
+    [writer, draftsOn],
+  );
+
   const onAnswer = useCallback(
     (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => {
       const reply = inboxReply(item, draft, press);
-      if (reply === undefined || sending.has(item.id)) return;
+      if (reply === undefined || out.current.has(item.id)) return;
+      out.current.add(item.id);
       const { attachments } = draft;
       const words = JSON.stringify([item.revision, reply, attachments]);
       const was = attempts.current.get(item.id);
@@ -400,6 +469,7 @@ export function useTaskInbox(input: {
         })
         .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
         .then((answer) => {
+          out.current.delete(item.id);
           setSending((standing) => {
             const next = new Set(standing);
             next.delete(item.id);
@@ -407,7 +477,8 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             settler.refuse(sent);
-            note(item.id, messageFailureWords(answer.failure));
+            reopen(item, { text: draft.note, attachments });
+            refused(item.id, answer.failure);
             return;
           }
           // An answer landing after the window moved to another task is that task's no longer.
@@ -418,61 +489,20 @@ export function useTaskInbox(input: {
           );
           if (!answer.taken) {
             settler.refuse(sent);
-            note(item.id, notTakenNote(answer.item));
+            note(item.id, { words: notTakenNote(answer.item) });
             return;
           }
           settler.take(sent, answer.item);
-          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
+          // Note that a message being written on the item settled meanwhile is kept, since the box takes words while the answer is out.
+          writer.drop(
+            (place) =>
+              place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id && place.thread !== true,
+          );
           // Note that an answer the agent hears may open its turn, so the agents are read again.
           if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
         });
     },
-    [sending, note, taskId, writer, settler],
-  );
-
-  const onClose = useCallback(
-    (item: InboxItem) => {
-      if (item.status !== INBOX_STATUS.OPEN || sending.has(item.id)) return;
-      const words = JSON.stringify([item.revision, "close"]);
-      const was = attempts.current.get(item.id);
-      const key = was?.words === words ? was.key : crypto.randomUUID();
-      attempts.current.set(item.id, { key, words });
-      setSending((standing) => new Set(standing).add(item.id));
-      note(item.id, undefined);
-      // Note that the close stands over every read the moment it is sent, as an answer does.
-      const sent = settler.close(item);
-      const askedOn = taskId;
-      latest.current
-        .closeInbox({ itemId: item.id, revision: item.revision, clientKey: key })
-        .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
-        .then((answer) => {
-          setSending((standing) => {
-            const next = new Set(standing);
-            next.delete(item.id);
-            return next;
-          });
-          if ("failure" in answer) {
-            settler.refuse(sent);
-            note(item.id, messageFailureWords(answer.failure));
-            return;
-          }
-          setHeld((standing) =>
-            standing.taskId === askedOn
-              ? { ...standing, items: withItem(standing.items, answer.item) }
-              : standing,
-          );
-          if (!answer.taken) {
-            settler.refuse(sent);
-            note(item.id, notTakenNote(answer.item, true));
-            return;
-          }
-          settler.take(sent, answer.item);
-          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
-          // Note that a close the agent waits on reaches it as a message, which may open its turn, so the agents are read again.
-          if (item.needsReply) latest.current.onRetryList();
-        });
-    },
-    [sending, note, taskId, writer, settler],
+    [note, refused, taskId, writer, settler, reopen],
   );
 
   const onMessage = useCallback(
@@ -480,14 +510,22 @@ export function useTaskInbox(input: {
       const thread = inboxThreadOf(item);
       const message: InboxThreadSend | undefined =
         thread === undefined ? inboxMessageOf(draft) : inboxThreadSend(thread, draft);
-      if (message === undefined || sending.has(item.id)) return;
+      if (message === undefined || out.current.has(item.id)) return;
+      out.current.add(item.id);
       const { text, attachments, answers } = message;
-      const words = JSON.stringify([text, attachments, answers]);
+      // Note that a reply on a notice names the revision shown, so it settles that notice and never one posted since.
+      const revision = thread !== undefined && awaitsNod(item, thread) ? item.revision : undefined;
+      const words = JSON.stringify([text, attachments, answers, revision]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      // Note that the box lets go of what it sent at once, as the agent's box does, and takes it
+      // back below where the send is refused, so it never stands holding words already sent.
+      const place = draftPlace(item, draftsOn);
+      const unsent = keptDraft(draft);
+      writer.update(place, () => EMPTY_DRAFT);
       // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
       const sent =
         answers === undefined
@@ -500,10 +538,12 @@ export function useTaskInbox(input: {
           text,
           ...(attachments.length === 0 ? undefined : { attachments }),
           ...(answers === undefined ? undefined : { answers }),
+          ...(revision === undefined ? undefined : { revision }),
           clientKey: key,
         })
         .catch((): CodingAgentInboxMessagedView => UNANSWERED)
         .then((answer) => {
+          out.current.delete(item.id);
           setSending((standing) => {
             const next = new Set(standing);
             next.delete(item.id);
@@ -511,7 +551,9 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             if (sent !== undefined) settler.refuse(sent);
-            note(item.id, messageFailureWords(answer.failure));
+            writer.update(place, (now) => (holdsNothing(now) ? unsent : now));
+            if (sent !== undefined) reopen(item, unsent);
+            refused(item.id, answer.failure);
             return;
           }
           setHeld((standing) =>
@@ -522,14 +564,13 @@ export function useTaskInbox(input: {
           // Note that the message stands over every other read until it holds it, so none draws the thread without it meanwhile.
           if (sent === undefined) settler.message(answer.item);
           else settler.take(sent, answer.item);
-          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that the key is let go with the words, because the same words written again are a new message, which the service refuses under a key already spent.
           attempts.current.delete(item.id);
           // Note that a message reaches the agent as one of the developer's, which may wake it, so the agents are read again.
           latest.current.onRetryList();
         });
     },
-    [sending, note, taskId, writer, settler],
+    [note, refused, taskId, writer, settler, draftsOn, reopen],
   );
 
   // An item of an agent the list has not read yet, one started from another
@@ -584,23 +625,26 @@ export function useTaskInbox(input: {
     });
   }, []);
 
+  // The board draws the window's own answers and messages over the read until it holds them.
+  const settled = useSettledItems(held.items);
   // A read lets go of the drafts of the items it covers that it no longer holds as they were
   // written for: a plan's, or, for an agent with no plan, that agent's alone. Note that a settled
   // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
+  // Note that a draft of the item as the board draws it is kept too, so a message written on an
+  // item the window's own send settled stands while the read still holds the item open.
   const { drop } = writer;
   useEffect(() => {
     if (!held.read || (ownTask === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
       (kept) =>
         (ownTask !== undefined || kept.place.agentId === readAgent) &&
-        !held.items.some((item) => draftOfItem(kept.place, item)),
+        !held.items.some((item) => draftOfItem(kept.place, item)) &&
+        !settled.some((item) => draftOfItem(kept.place, item)),
     );
     if (stale.length === 0) return;
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, ownTask, readAgent, drafts, drop]);
+  }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop]);
 
-  // The board draws the window's own answers and messages over the read until it holds them.
-  const settled = useSettledItems(held.items);
   const board = useMemo(() => inboxBoard(settled), [settled]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
@@ -618,6 +662,7 @@ export function useTaskInbox(input: {
     },
     [drafts],
   );
+  const drafted = drafts.some((kept) => settled.some((item) => draftOfItem(kept.place, item)));
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
       writer.update(draftPlace(item, draftsOn), (was) => ({
@@ -647,16 +692,17 @@ export function useTaskInbox(input: {
   return {
     board,
     draftOf,
+    drafted,
     onDraft,
     onAttachments,
-    reading: active && !held.read,
+    reading: active && !held.read && !held.failed,
     read: held.read,
     failed: held.failed,
     onRetry,
     sending,
     notes,
+    onDropNote,
     onAnswer,
-    onClose,
     onMessage,
     images,
     onImage,

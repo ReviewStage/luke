@@ -22,11 +22,11 @@ import { storeWriter } from "@luke/database/models/writer";
 import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
   CHAT_BLOCK,
-  CHAT_BOUNDS,
   CHAT_CURSOR_START,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatBlock,
+  type ChatJoinAnswer,
   type ChatReply,
   type ChatWriteAnswer,
   type ChatWriteRequest,
@@ -42,7 +42,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type { HttpClient } from "effect/http";
-import { HostedEnvironment } from "../environment.js";
+import type { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
@@ -50,7 +50,8 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
-import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
+import type { BrainHostTurn } from "./brain-host/bounds.js";
+import { type AgentSessions, EVE_MOUNT } from "./brain-host/eve-sessions.js";
 import { type ChatNamed, namedIn, subjectOf } from "./coder-host/chat-ask.js";
 import {
   CHAT_DOORS,
@@ -61,12 +62,14 @@ import {
 } from "./coder-host/chat-notify.js";
 import {
   channelOnWire,
+  joinWorkspaceChat,
   messageOnWire,
   readsOf,
   workspaceChatPast,
 } from "./coder-host/chat-page.js";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "./coder-host/start.js";
+import { sessionsRouter } from "./coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { deploymentEve } from "./deployment-eve.js";
 
 /**
  * workspace-chat.ts -- a workspace's chat as the window reads it and writes to it.
@@ -75,8 +78,12 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  * the workspace sees of its chat past the cursor, held open while nothing
  * moved (`hosted/coder-host/chat-page.ts`): the roster, the channels, the
  * messages posted or changed past the cursor, and the cursor to read on
- * from. `POST` to the same path writes as the account's own member of the
- * workspace, one of four things: a post, to the channel the window shows
+ * from. A read writes nothing: the person joins the workspace's chat first,
+ * `POST {join: true}`, which makes their member and `#general` where they
+ * are not yet, and a read of one who has not joined is not found. A read
+ * from the start joins too, since released desktops read from there without
+ * joining first. `POST` to the same path writes as the account's own member of the
+ * workspace, one of four things besides: a post, to the channel the window shows
  * by its id, a channel by `#name`, a member's DM by the member's mention
  * link, `#general` where unsaid, or a thread by the
  * place of the message it replies to, told to the members it addresses
@@ -100,17 +107,11 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 /** A cursor as the window hands it back: the next place in the workspace's sequence it has yet to read, in decimal. */
 const seqCursorSchema = chatCursorSchema.check(Schema.isPattern(/^(0|[1-9][0-9]{0,14})$/u));
 
-/** A write is at most a post's blocks at JSON's widest escape, its pictures as a message to an agent carries files, and room for the keys around them. */
-export const MAXIMUM_CHAT_WRITE_BODY_BYTES =
-  6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS +
-  MAXIMUM_ATTACHMENTS_BODY_BYTES +
-  4_096;
-
 export interface ChatSeams {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every post and answer as unavailable. */
   eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for the account an agent was started by; a test hands a fake, and the deployment composes eve's client under its own secret. */
-  eveAs?: (starterUserId: string) => EveSessions;
+  eveAs?: (starterUserId: string) => AgentSessions;
 }
 
 /** What a read or a write of the chat may require. */
@@ -154,6 +155,10 @@ export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   const after = readEither(seqCursorSchema)(unparsedWire(query.after ?? CHAT_CURSOR_START));
   if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const reader = yield* chatAccount(userId);
+  // A released desktop never joins, so its read from the start joins for it, once per loop rather than once per read.
+  if (after.success === CHAT_CURSOR_START) {
+    yield* hostedStoreOrUnavailable(joinWorkspaceChat(reader, workspace));
+  }
   const page = yield* hostedStoreOrUnavailable(
     workspaceChatPast(reader, workspace, Number(after.success)),
   );
@@ -163,32 +168,36 @@ export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * eve as the deployment acting for the account an agent was started by,
- * under the deployment's own secret, since a notice steers the agent's turn
- * as its starter whoever posted and the request carries only the poster's
- * bearer; unavailable where the deployment names no secret or no origin.
+ * under the deployment's own secret (`deployment-eve.ts`), since a notice
+ * steers the agent's turn as its starter whoever posted and the request
+ * carries only the poster's bearer; unavailable where the deployment names
+ * no secret or no origin.
  */
 const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
 ): Effect.fn.Return<
-  (starterUserId: string) => EveSessions,
+  (starterUserId: string) => AgentSessions,
   HostedRefusal,
-  HttpClient.HttpClient | HostedEnvironment
+  HttpClient.HttpClient | HostedEnvironment | DatabaseServices
 > {
-  if (seams.eveAs !== undefined) return seams.eveAs;
-  const secret = (yield* HostedEnvironment).cronSecret;
-  const origin = seams.eveOrigin();
-  if (secret === undefined || origin === undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const { eveAs } = seams;
+  if (eveAs !== undefined) {
+    // A test's own eve is answered by the runtime its conversation runs on, as the deployment's is.
+    const route = yield* sessionsRouter;
+    return (starter) => route(eveAs(starter), starter);
   }
-  const compose = yield* eveSessionsComposer;
-  return (account) => compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
+  return yield* deploymentEve<BrainHostTurn>(seams.eveOrigin(), EVE_MOUNT.CODER);
 });
 
 /** What a door needs to tell the members a person's message addresses. */
 const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
   writer: Writer,
-): Effect.fn.Return<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment> {
+): Effect.fn.Return<
+  ChatTelling,
+  HostedRefusal,
+  HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+> {
   return {
     eveFor: yield* eveAsStarter(seams),
     writer: storeWriter({ tools: CODER_TOOL_SET }),
@@ -274,7 +283,11 @@ function picturesOf(
 
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
+  telling: Effect.Effect<
+    ChatTelling,
+    HostedRefusal,
+    HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+  >,
   writer: Writer,
   post: PostPlace & {
     readonly text?: string;
@@ -321,7 +334,11 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
  * ask no longer open, is answered with the ask as it stands, not taken.
  */
 const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
+  telling: Effect.Effect<
+    ChatTelling,
+    HostedRefusal,
+    HttpClient.HttpClient | HostedEnvironment | DatabaseServices
+  >,
   writer: Writer,
   asked: {
     readonly answer: { readonly seq: number; readonly revision: number; readonly reply: ChatReply };
@@ -443,6 +460,17 @@ const editAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Result.isFailure(edited)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[edited.failure]);
   return { channel: channelOnWire(edited.success) };
+});
+
+/** The person's own member of the workspace's chat and its `#general`, made where they are not yet; not found where the account is not in it. */
+export const joinWorkspaceChatAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+): Effect.fn.Return<ChatJoinAnswer, HostedRefusal, DatabaseServices> {
+  const joiner = yield* chatAccount(userId);
+  const self = yield* hostedStoreOrUnavailable(joinWorkspaceChat(joiner, workspaceId));
+  if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return { self: self.value.id };
 });
 
 /** One write to the workspace's chat as the account's own member of it: a post, an answer, a resolve, a read, or a topic channel opened or edited. */

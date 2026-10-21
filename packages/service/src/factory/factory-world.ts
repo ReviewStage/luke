@@ -64,7 +64,11 @@ import {
 import { AREA_PATH, areaPathOf } from "@luke/features/pull-request-area";
 import { Clock, Duration, Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { codingAgentActivityAt, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import {
+  codingAgentActivityAt,
+  codingAgentStatusOf,
+  startedBlank,
+} from "../agents/coder-host/status.js";
 import {
   GitHubApp,
   type GitHubUnavailable,
@@ -326,8 +330,11 @@ function pullRequestOf(published: StoredPullRequest): FactoryPullRequest {
 function busiestRepository(agents: readonly ReadAgent[]): string | undefined {
   const tally = new Map<string, { name: string; count: number; latest: number }>();
   for (const { held, line } of agents) {
-    const key = held.agent.repository.toLowerCase();
-    const standing = tally.get(key) ?? { name: held.agent.repository, count: 0, latest: 0 };
+    const { repository } = held.agent;
+    // An agent with no repository counts towards none.
+    if (repository === null) continue;
+    const key = repository.toLowerCase();
+    const standing = tally.get(key) ?? { name: repository, count: 0, latest: 0 };
     tally.set(key, {
       name: standing.name,
       count: standing.count + 1,
@@ -363,6 +370,7 @@ const readAgents = Effect.fnUntraced(function* (
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: awaiting.get(agent.conversationId),
+      blank: startedBlank(agent),
     };
     const status = codingAgentStatusOf(turn, standing);
     const starter = names.get(agent.userId);
@@ -518,7 +526,7 @@ export const readFactoryWorld = /* @__PURE__ */ Effect.fn("web/readFactoryWorld"
   const { token, repository: reached } = chosen.value;
   const repository = { fullName: reached.fullName, defaultBranch: reached.defaultBranch };
   const onRepository = read.filter(
-    ({ held }) => held.agent.repository.toLowerCase() === reached.fullName.toLowerCase(),
+    ({ held }) => held.agent.repository?.toLowerCase() === reached.fullName.toLowerCase(),
   );
   const zones = yield* readZones(token, repository);
   const planned = yield* readPlanned(organizationId, onRepository, zones);

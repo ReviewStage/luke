@@ -35,6 +35,7 @@ import {
   type WhiteboardModule,
   type WhiteboardProps,
 } from "./contract.js";
+import { openingView } from "./opening-view.js";
 
 /**
  * index.tsx -- the whiteboard bundle: Excalidraw mounted into the Tasks tab, Luke's drawings put on it, and the panel told when the scene changed.
@@ -67,6 +68,8 @@ import {
  * theme is how the canvas is drawn and never what it holds: Excalidraw's dark
  * theme is a filter over the scene, so a drawing saved under either is the
  * same drawing.
+ *
+ * Worked by a finger, it opens in the hand (`opening-view.ts`).
  */
 
 /** Excalidraw's theme for the window's appearance as it stands, the one its stylesheet is drawn in. */
@@ -377,7 +380,7 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
       onChange={changed}
       initialData={{
         elements: restoredScene(props.board),
-        appState: { viewBackgroundColor: "transparent" },
+        appState: openingView(),
       }}
     />,
   );

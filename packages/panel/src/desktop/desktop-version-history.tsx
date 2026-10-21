@@ -36,6 +36,7 @@ import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
@@ -73,6 +74,7 @@ import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/versio
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -296,10 +298,10 @@ function SectionsHead({
   onBack: () => void;
 }): React.JSX.Element {
   const name = (
-    <span className="version-row-author" data-author={author.kind}>
+    <FadingWords className="version-row-author" data-author={author.kind}>
       {actorName(author)}
       <LeftWords actor={author} />
-    </span>
+    </FadingWords>
   );
   return (
     <>
@@ -734,12 +736,13 @@ export function DesktopVersionHistory({
   );
   useOpenedRowShown(versions.selected, rows, log);
   const hidden = hiddenColumns(room, versions.listed);
+  const screen = useNarrowFocus(room, versions.listed);
 
   return (
-    <div className="desktop-version-history">
+    <div ref={screen} className="desktop-version-history">
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} />
+        <HistoryButtons history={history} room={room} />
         <NavItem
           icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
@@ -861,4 +864,14 @@ export function DesktopVersionHistory({
       </section>
     </div>
   );
+}
+
+/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+export function TaskVersionHistory({
+  tasks,
+  ...view
+}: Omit<Parameters<typeof DesktopVersionHistory>[0], "subject"> & {
+  tasks: TasksControl;
+}): React.JSX.Element {
+  return <DesktopVersionHistory {...view} subject={taskVersionSubject(tasks)} />;
 }

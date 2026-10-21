@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -16,7 +16,6 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -24,14 +23,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
-import {
-  fakeActPort,
-  fakeActPortCalls,
-  fakeAppBridge,
-  refusedOnPort,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopFactory } from "./desktop-factory.js";
 
@@ -148,10 +143,10 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      onOpenItem: () => undefined,
       listed: false,
       onListed: () => undefined,
       pages: undefined,
-      onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
     },
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },
@@ -296,7 +291,7 @@ test("a pull request whose agent the service names opens in that agent's Pull re
 
 test("a question opens the Inbox on its item, an agent its page, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
   const { page, opened } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    callTaskId: DRAFT.id,
+    talkingTaskId: DRAFT.id,
     inbox: [
       {
         taskId: BILLING.id,
@@ -322,7 +317,7 @@ test("a question opens the Inbox on its item, an agent its page, a pull request 
 
 test("the task on the call stands in Talk however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
   const old = task(5, "Factory tab", 10 * 24 * HOUR);
-  const call = mount([old], { callTaskId: old.id });
+  const call = mount([old], { talkingTaskId: old.id });
   assert.deepEqual(rows(call.page, "talk"), ["Factory tab · On a call with Luke"]);
   act(() => root?.unmount());
 
@@ -339,7 +334,7 @@ test("the task on the call stands in Talk however old, and with nothing standing
 
 test("until the plan list is read the line stands in placeholder blocks, each station named and holding rows to come, saying to a reader that the tasks are being read, with nothing to press and no empty state; once the list lands, the rows stand in their place", () => {
   const { page, redraw } = mount([DRAFT, SEARCH, INVITES], {
-    callTaskId: DRAFT.id,
+    talkingTaskId: DRAFT.id,
     listRead: false,
   });
   const board = page.querySelector<HTMLElement>(".factory-board");
@@ -511,7 +506,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
         },
       },
     ],
-    { me: dean.userId, callTaskId: DRAFT.id },
+    { me: dean.userId, talkingTaskId: DRAFT.id },
   );
 
   const face = (words: string) =>
@@ -582,16 +577,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
     postedAt: NOW - HOUR,
     updatedAt: NOW - HOUR,
   };
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      const value: CodingAgentInboxAnswerView = {
-        items: taskId === BILLING.id ? [asked] : [],
-        cursor: "1",
-      };
-      return Promise.resolve(value);
-    },
-  });
+  answerInbox((taskId) => (taskId === BILLING.id ? [asked] : []));
   const { page } = mount([SEARCH, BILLING], {
     // Main's own count holds nothing: the agent is a teammate's.
     inbox: [],
@@ -609,24 +595,38 @@ test("a question a teammate's agent asks, which main does not count as the reade
   ]);
 });
 
-/** The act port answering a plan's Inbox read as `answer` says, counting the reads. */
+/** The question main counts on Billing, answered since, as the task's inbox holds it. */
+const ANSWERED: InboxItem = {
+  id: "i1",
+  agentId: AGENT_ID,
+  key: "1",
+  revision: 2,
+  version: INBOX_WIRE_VERSION,
+  title: QUESTION,
+  blocks: [],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+  needsReply: true,
+  status: INBOX_STATUS.ANSWERED,
+  postedAt: NOW - HOUR,
+  updatedAt: NOW - HOUR,
+};
+
+/** The host pushing a task's inbox as `answer` says once it is followed, or that it could not be read where it says nothing, counting the follows. */
 function answerInbox(answer: (taskId: string) => readonly InboxItem[] | undefined) {
-  const counted = { reads: 0 };
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      counted.reads += 1;
-      const items = answer(taskId);
-      if (items === undefined) return Promise.reject(refusedOnPort("No service."));
-      const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
-      return Promise.resolve(value);
-    },
+  const host = followedInboxes(({ id }) => {
+    const items = answer(id);
+    return items === undefined ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { items };
   });
-  return counted;
+  fakeActPort({ ...fakeActPortCalls(), ...host.procedures });
+  return {
+    get reads() {
+      return host.asked.length;
+    },
+  };
 }
 
 test("a question answered since main last counted it leaves Build once the Inbox's read says so", async () => {
-  answerInbox(() => []);
+  answerInbox(() => [ANSWERED]);
   const { page } = mount([SEARCH, BILLING], {
     inbox: [
       {
@@ -676,7 +676,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
 });
 
 test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
-  const counted = answerInbox((taskId) => (taskId === BILLING.id ? [] : undefined));
+  const counted = answerInbox((taskId) => (taskId === BILLING.id ? [ANSWERED] : undefined));
   const other = task(7, "Invites", HOUR);
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [
@@ -722,9 +722,8 @@ test("a question read that fails says so even while a refresh of the task list h
   assert.ok(alerts.some((each) => /Your tasks could not be read\./u.test(each)));
 });
 
-test("a question main counts after a plan's last read stands while that plan's reread is out or failed", async () => {
-  let fail = false;
-  answerInbox(() => (fail ? undefined : []));
+test("a question main counts later than a plan's last push stands until the plan's push catches up", async () => {
+  answerInbox(() => [ANSWERED]);
   const listed = (updatedAt: number) => ({
     tasks: [SEARCH, BILLING],
     archived: [],
@@ -738,15 +737,14 @@ test("a question main counts after a plan's last read stands while that plan's r
   const { page, redraw } = mount([SEARCH, BILLING], { listed: listed(NOW - HOUR) });
   await settle();
   assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
-  // Main counts a new question on the plan; its reread fails.
-  fail = true;
+  // Main counts a new question on the plan before the plan's own push of it lands.
   redraw({ listed: listed(NOW), inbox: [asked] });
   await settle();
   assert.equal(rows(page, "build")[0], `${QUESTION} · Mercury payouts (waits)`);
 });
 
 test("↓ from the window reaches the first row and moves on through the stations, and ↑ from the window the last", () => {
-  const { page } = mount([DRAFT, SEARCH, INVITES], { callTaskId: DRAFT.id });
+  const { page } = mount([DRAFT, SEARCH, INVITES], { talkingTaskId: DRAFT.id });
   const press = (key: string) =>
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -794,7 +792,7 @@ test("a row's right-click offers Copy link, copying what a press on it opens: it
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    callTaskId: DRAFT.id,
+    talkingTaskId: DRAFT.id,
     workspace: {
       id: "workspace-personal",
       slug: "acme",

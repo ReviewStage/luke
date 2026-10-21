@@ -18,16 +18,24 @@ import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
-import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab.js";
 import { agentCardReading, agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
+import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, newestFileNote } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PageCard } from "../tasks/page-card.js";
-import { TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -198,7 +206,9 @@ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
       // The summary keeps working on the pin it holds.
     }
   }, [kept]);
-  return { pinned: fixtureMode ? staged : kept, onToggle, wide, onMeasured: setWide };
+  const pinned = fixtureMode ? staged : kept;
+  // The same pin across draws while none of it moves, so the column it is handed to is not drawn again for a new one.
+  return useMemo(() => ({ pinned, onToggle, wide, onMeasured: setWide }), [pinned, onToggle, wide]);
 }
 
 /** How the summary stands now, whether its card hangs, and the presses that change either. */
@@ -469,6 +479,7 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
       files,
       changes,
       pages: tasks.pages ?? [],
+      plan: openPlanStanding(tasks),
     }),
     ...agentEntries(mainTabs, agents),
   ];

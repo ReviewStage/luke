@@ -256,6 +256,7 @@ test("the viewer over a set of eight walks all eight, the two the turn did not d
 test("a finished turn that ends on its pictures, with no words after them, keeps them out of its folded work", async () => {
   const { container } = await drawn(
     finished([
+      toolPart("bash", "call-build-only", { command: "pnpm build" }, { exitCode: 0 }),
       toolPart(
         "bash",
         "call-shot-only",
@@ -267,7 +268,7 @@ test("a finished turn that ends on its pictures, with no words after them, keeps
   );
 
   assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
-  assert.match(container.textContent ?? "", /1 tool call/u);
+  assert.match(container.textContent ?? "", /2 tool calls/u);
 });
 
 test("a set shown beside reasoning alone, with its words after, stands apart from the reasoning in a finished turn", async () => {

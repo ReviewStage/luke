@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import {
   ACCOUNT_ACT_KIND,
@@ -19,7 +19,7 @@ import {
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -45,7 +45,12 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -92,16 +97,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 let root: Root | undefined;
@@ -117,9 +112,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -202,10 +195,10 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        onOpenItem: () => undefined,
         listed: false,
         onListed: ignore,
         pages: undefined,
-        onRereadPages: () => undefined,
         onTaskAgents: () => undefined,
       },
       onNewTask: () => setAsked(true),
@@ -551,6 +544,20 @@ test("Factory's sidebar row and its command stand only while the account has its
   assert.equal(runAppCommand(APP_COMMAND.FACTORY), true);
 });
 
+test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  mount(false);
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handCapabilities(DESKTOP_CAPABILITIES);
+  mount(false);
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
+});
+
 test("a press on Factory's row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   handState(experimentsOn(EXPERIMENT.FACTORY));
   const told: SidebarCollapse["overlay"][] = [];
@@ -565,48 +572,44 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
-test("the Issues page's sidebar row and its command stand only while the account has its experiment on, and each opens the page", async () => {
-  let opens = 0;
-  const control = tasksControl();
-  const issuesView = { ...control.issuesView, onOpen: () => (opens += 1) };
-  handState({});
-  const off = mount(false, false, { issuesView });
+test("the sidebar offers no Issues row, with every experiment on, since Luke keeps no issues of its own", async () => {
+  handState(experimentsOn(...Object.values(EXPERIMENT)));
+  const page = mount(false);
   await settle();
-  assert.equal(placeRow(off, "Issues"), undefined);
-  assert.equal(runAppCommand(APP_COMMAND.ISSUES), false);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const on = mount(false, false, { issuesView });
-  await settle();
-  const issues = placeRow(on, "Issues");
-  assert.ok(issues, "the Issues row stands");
-  act(() => issues.click());
-  assert.equal(runAppCommand(APP_COMMAND.ISSUES), true);
-  assert.equal(opens, 2);
+  assert.ok(placeRow(page, "Automations"));
+  assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("the side panel's toggle stands over the Issues list once an issue has been peeked there, as over the Inbox once an item is chosen", async () => {
-  const control = tasksControl();
-  const toggles = (container: HTMLElement) =>
-    [...container.querySelectorAll("button")].some((button) =>
-      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
-    );
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const unpeeked = mount(false, false, { issuesView: { ...control.issuesView, open: true } });
+test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Tasks page's row stands either way", async () => {
+  handState({});
+  const off = mount(false);
   await settle();
-  const before = toggles(unpeeked);
+  assert.ok(placeRow(off, "Tasks"));
+  assert.equal(placeRow(off, "Board"), undefined);
+  assert.ok(placeRow(off, "Inbox"));
+  assert.equal(off.querySelector('aside .inbox-tasks[data-placement="sidebar"]'), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  const peeked = mount(false, false, {
-    issuesView: { ...control.issuesView, open: true, peeked: "issue-1" },
-  });
+  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
+  const on = mount(false);
   await settle();
-
-  assert.equal(before, false, "nothing peeked, no panel to show");
-  assert.equal(toggles(peeked), true);
+  assert.ok(placeRow(on, "Tasks"));
+  assert.equal(placeRow(on, "Board"), undefined);
+  assert.equal(
+    placeRow(on, "Inbox"),
+    undefined,
+    "the sidebar is the Inbox, so it needs no row for it",
+  );
+  assert.ok(
+    on.querySelector('aside .inbox-tasks[data-placement="sidebar"]'),
+    "the sidebar lists the Inbox",
+  );
+  assert.equal(
+    on.querySelector('aside nav[aria-label="Tasks"]'),
+    null,
+    "the task list stands on its page",
+  );
 });
 
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
@@ -620,6 +623,7 @@ test("the Automations page's sidebar row and its command stand with no experimen
 test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
+    ...tasksControl().automationsView,
     open: false,
     place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
@@ -664,9 +668,76 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.deepEqual(closed, ["closed"]);
 });
 
+test("while Factory's chunk is still loading its frame stands under its title, Escape closes Factory, and the line stands once the chunk lands", async () => {
+  const closed: string[] = [];
+  const factoryView = { open: true, onOpen: ignore, onClose: () => closed.push("closed") };
+  const registry = AtomRegistry.make();
+  handState(experimentsOn(EXPERIMENT.FACTORY));
+  mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME },
+    PANEL_TAB.TASKS,
+    ignore,
+    {},
+    registry,
+  );
+  await settle();
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  // Note that the window's state has landed in the registry, so Factory opens within one render, before its chunk can.
+  const page = mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME, factoryView },
+    PANEL_TAB.TASKS,
+    ignore,
+    {},
+    registry,
+  );
+  const loading = page.querySelector("section[aria-label=Factory]");
+  assert.ok(loading, "Factory's frame stands");
+  assert.equal(loading.querySelector("h1")?.textContent, "Factory");
+  assert.equal(loading.querySelector("[role=status]")?.textContent, "Reading tasks…");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_FACTORY), "Factory's way out is offered");
+  });
+  assert.deepEqual(closed, ["closed"]);
+
+  await import("./desktop-factory.js");
+  await settle();
+  assert.equal(
+    page.querySelector("section[aria-label=Factory] [role=status]"),
+    null,
+    "the line stands in the frame's place",
+  );
+});
+
+test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands", async () => {
+  const closed: string[] = [];
+  const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
+  handState({});
+  const page = mount(false, false, { history });
+  const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
+  assert.ok(versions, "the versions' column stands");
+  assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
+  const back = [...versions.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim().startsWith("Back") === true,
+  );
+  assert.ok(back, "the Back row stands");
+  act(() => back.click());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY), "Escape leaves the history");
+  });
+  assert.deepEqual(closed, ["closed", "closed"]);
+  await settle();
+});
+
 test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
   const closed: string[] = [];
   const automationsView = {
+    ...tasksControl().automationsView,
     open: true,
     place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
@@ -813,24 +884,26 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
 
 /**
  * The bridge as the window meets it, every act written down, with Factory
- * on, and Settings' chunk already loaded, as it is
- * once Settings has opened once, so it stands within a settle.
+ * on, and the chunks of Settings and of the pages drawn on demand
+ * (`pages-on-demand.ts`) already loaded, as each is once it has opened once,
+ * so each stands within a settle.
  */
 async function handBridge(): Promise<void> {
-  await import("./desktop-settings.js");
+  await Promise.all([
+    import("./desktop-settings.js"),
+    import("./desktop-factory.js"),
+    import("./desktop-version-history.js"),
+    import("./person-page.js"),
+  ]);
   handState(experimentsOn(EXPERIMENT.FACTORY));
   sentActs = [];
   const bridge = appBridge();
   fakeAppBridge({
     ...bridge,
-    act: (request: { kind: string }) => {
-      sentActs.push(request.kind);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-    },
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused, as `app:act` refused them before they moved onto the port.
+    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
@@ -941,7 +1014,7 @@ test("walking every place in the window during a call about another plan, the ca
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
   }
   assert.deepEqual(
     standing,
@@ -965,7 +1038,7 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
     act(() => root?.unmount());
     container.remove();
   }

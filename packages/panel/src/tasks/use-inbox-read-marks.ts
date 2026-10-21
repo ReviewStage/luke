@@ -1,12 +1,19 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_REPLY, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
-import { isUnread } from "./inbox-model.js";
+import {
+  acknowledgedOnOpen,
+  archivedHolder,
+  EMPTY_INBOX_DRAFT,
+  type InboxListed,
+  isUnread,
+} from "./inbox-model.js";
 import { useInboxSettler } from "./inbox-settling.js";
+import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
  * use-inbox-read-marks.ts -- the Inbox's read and unread marks as one control: an item marked read or unread, or every item marked read, its dot flipping at once.
@@ -31,6 +38,8 @@ import { useInboxSettler } from "./inbox-settling.js";
  * (`useReadOnOpen`), so an item the reader marks unread while it is shown
  * stays unread until they open it again, as a mail app keeps it; and a
  * plain U marks the chosen item read or unread, as its row's menu says.
+ * Opening the reader's own notice acknowledges it too (`useNodOnOpen`),
+ * once each time it is shown, so an update counts as seen once it is opened.
  */
 
 /** What the Inbox's read marks offer: the presses that mark. */
@@ -52,8 +61,9 @@ interface Wanted {
 
 /**
  * The Inbox's read marks, sent through `act`; every item marked read in
- * `workspaceId` where the Inbox lists one, and `onMarkedAll` heard once the
- * service took it, so the reads are asked again.
+ * `workspaceId` where the Inbox lists one. Nothing reads the Inbox again
+ * once the service took a mark: the followed inboxes are pushed each item's
+ * read state as it moves.
  *
  * A mark stands over every read the window draws (`inbox-settling.ts`)
  * until a read holds the item changed since, or a held read holds a later
@@ -65,20 +75,14 @@ interface Wanted {
 export function useInboxReadMarks({
   act,
   workspaceId,
-  onMarkedAll,
 }: {
   act: ActHandle["act"];
   workspaceId: string | undefined;
-  onMarkedAll: () => void;
 }): InboxReadMarks {
   const settler = useInboxSettler();
   // The writes, one after another, and each item's latest mark still to go, which its queued write sends.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const wanted = useRef(new Map<string, Wanted>());
-  const heard = useRef(onMarkedAll);
-  useLayoutEffect(() => {
-    heard.current = onMarkedAll;
-  });
   const send = useCallback((write: () => Promise<void>) => {
     queue.current = queue.current.then(write);
   }, []);
@@ -122,7 +126,6 @@ export function useInboxReadMarks({
               return;
             }
             settler.marked(made);
-            heard.current();
           }),
       );
     },
@@ -162,4 +165,46 @@ export function useReadOnOpen({
     APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
     active && chosen !== undefined ? () => onMark(chosen, !isUnread(chosen)) : undefined,
   );
+}
+
+/**
+ * Acknowledges the notice an Inbox shows as it is opened, as Got it did,
+ * once for each revision each time it is shown, where opening it settles it
+ * (`inbox-model.ts`'s `acknowledgedOnOpen`): the reader's own, messaging
+ * nobody, on a task not put away in the archive, and its box holding no
+ * words or files, which stay a reply to send. `shown` is the item the pane
+ * draws, none while the Inbox is hidden or shows its list alone; `control`
+ * is the held read of its holder, which the item is waited on until it
+ * holds, so the answer names the revision the service holds rather than an
+ * older list's. An item opened while it cannot be acknowledged is left as
+ * it is until it is opened again, so a box emptied of its draft does not
+ * settle it under the reader's hands.
+ */
+export function useNodOnOpen({
+  shown,
+  readerId,
+  control,
+}: {
+  shown: InboxListed | undefined;
+  readerId: string | undefined;
+  control: Pick<TaskInboxControl, "read" | "failed" | "draftOf" | "onAnswer">;
+}): void {
+  const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
+  const { read, failed, draftOf, onAnswer } = control;
+  useEffect(() => {
+    if (shown === undefined) {
+      nodded.current = undefined;
+      return;
+    }
+    // Note that nothing is settled until the holder's held read and the reader's id stand, so neither an older revision nor a teammate's notice is acknowledged.
+    if (!read || failed || readerId === undefined) return;
+    const { holder, item } = shown;
+    const was = nodded.current;
+    if (was !== undefined && was.id === item.id && was.revision === item.revision) return;
+    nodded.current = { id: item.id, revision: item.revision };
+    if (archivedHolder(holder) || !acknowledgedOnOpen(item, readerId)) return;
+    const draft = draftOf(item);
+    if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
+    onAnswer(item, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED);
+  }, [shown, readerId, read, failed, draftOf, onAnswer]);
 }

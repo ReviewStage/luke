@@ -5,7 +5,8 @@ import { SHOWN_CODE_BOUNDS } from "@luke/features/task-wire";
 import { unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { REPOSITORY_SANDBOX_CONTRACT, type RepositoryCall } from "../agents/repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
+import type { RepositoryCall } from "../agents/repository-shell.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {

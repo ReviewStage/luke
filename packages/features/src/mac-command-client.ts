@@ -1,32 +1,35 @@
-import { HTTP_METHOD } from "@luke/wire";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { CallCredential } from "./account-call.js";
+import { askHosted, askLive, type HostedClient, hostedClient } from "./hosted-link.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY, type MacCommandsLiveAnswer } from "./live-wire.js";
 import {
-  type AccountCallEffects,
-  accountCall,
-  type CallCredential,
-  callAnswered,
-} from "./account-call.js";
-import {
+  type MacBrowserResult,
   type MacCommand,
-  type MacCommandResult,
-  macCommandsAnswerSchema,
+  type MacCommandKind,
+  type MacCommandSettleResult,
+  macCommandKindsQuery,
 } from "./mac-command-wire.js";
-import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * mac-command-client.ts -- the Mac's side of the commands the account's agents queue for it: the held read that takes them, and each result posted back.
+ * mac-command-client.ts -- the Mac's side of the commands the account's agents queue for it: the unclaimed ones of its kinds followed live, each claimed by its id, that the Mac listens, and each result posted back.
  *
- * Every call is the one account call, so the bearer is read fresh per
- * attempt and a 401 is renewed and retried once. The read is held by the
- * service while nothing waits, so it travels under a deadline that outlasts
- * the hold. Neither call fails: a read the service did not answer is
- * nothing, which the caller rests after, and a result it did not take is
- * false, since its call has already given up on it.
+ * Each is a procedure of the hosted contract (`contract/live.ts`,
+ * `contract/mac-commands.ts`) over the one account call, so the bearer is
+ * read fresh per attempt and a 401 is renewed and retried once. The Mac
+ * asks for the unclaimed commands of its kinds sealed (or, polling, inline
+ * and held until they move) for the account it started for, claims each it
+ * hears of by its id, and says it listens. No call fails: a read refused as
+ * signed out is `LIVE_SIGNED_OUT` and any other unanswered a failure the
+ * caller asks again, a claim refused is `MAC_COMMAND_NOT_CLAIMED` and one
+ * unanswered nothing, and a presence or a result not taken is false, its
+ * call having given up on it. A browser
+ * command's result, which may carry an image, is posted to its own route.
  */
 
-/** The service's hold, and room for the answer to travel after it. */
-const HELD_READ_TIMEOUT_MS = 35_000;
+/** What a claim the service refused answers: another Mac took the command, or it waited past the claim window. */
+export const MAC_COMMAND_NOT_CLAIMED = { claimed: false } as const;
 
 export interface HostedMacCommandClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
@@ -36,42 +39,100 @@ export interface HostedMacCommandClientOptions {
 }
 
 export class HostedMacCommandClient {
-  readonly #call: AccountCallEffects;
-  readonly #held: AccountCallEffects;
+  readonly #hosted: HostedClient;
 
   constructor(options: HostedMacCommandClientOptions) {
-    const { credential } = options;
-    this.#call = accountCall({ baseUrl: options.serviceBaseUrl, credential });
-    this.#held = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
-      credential,
-      requestTimeoutMs: HELD_READ_TIMEOUT_MS,
+      credential: options.credential,
     });
-  }
-
-  /** The commands claimed for this Mac, once one waits or the service's hold ends; nothing where the read was not answered. */
-  waiting(): Effect.Effect<readonly MacCommand[] | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#held.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.MAC_COMMANDS },
-        macCommandsAnswerSchema,
-      ),
-      (answer) => answer?.commands,
-    );
   }
 
   /** One command's result posted back; whether the service took it. */
   settle(
     id: string,
-    result: MacCommandResult,
+    result: MacCommandSettleResult,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.MAC_COMMANDS,
-        body: JSON.stringify({ id, result }),
-      }),
-      (answer) => callAnswered(answer) && answer.response.ok,
+    return askHosted(this.#hosted.macCommands.settle, { id, result }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  /** One browser command's result, image and all, posted back; whether the service took it. */
+  settleBrowser(
+    id: string,
+    result: MacBrowserResult,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.macCommands.settleBrowser, { id, result }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  /**
+   * The commands of the kinds named that no Mac of the account has claimed,
+   * sealed for following, or with `poll` their rows inline, held past
+   * `after` until they move, for the account `userId` names: signed out
+   * where the session is no longer that account's, a failure where the
+   * service answered none.
+   */
+  live(
+    kinds: readonly MacCommandKind[],
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    MacCommandsLiveAnswer | { readonly failure: string },
+    never,
+    HttpClient.HttpClient
+  > {
+    return askLive(
+      this.#hosted.live.macCommands,
+      { kinds: macCommandKindsQuery(kinds), [LIVE_USER_QUERY]: userId },
+      poll,
+      after,
+    ).pipe(
+      Effect.catch((failed) =>
+        Effect.succeed(
+          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
+            ? LIVE_SIGNED_OUT
+            : { failure: "unanswered" },
+        ),
+      ),
+    );
+  }
+
+  /**
+   * One command heard of live, claimed for this Mac; `MAC_COMMAND_NOT_CLAIMED`
+   * where the service refused it (another took it, or it waited too long),
+   * and nothing where the claim was not answered, which the caller may ask
+   * again.
+   */
+  claim(
+    id: string,
+  ): Effect.Effect<
+    MacCommand | typeof MAC_COMMAND_NOT_CLAIMED | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
+    return askHosted(this.#hosted.macCommands.claim, { id }).pipe(
+      Effect.map((answer): MacCommand => answer.command),
+      Effect.catch((failed) =>
+        Effect.succeed(failed._tag === "HostedRefused" ? MAC_COMMAND_NOT_CLAIMED : undefined),
+      ),
+    );
+  }
+
+  /** That this Mac listens now for the kinds named; whether the service took it. */
+  listening(
+    kinds: readonly MacCommandKind[],
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.macCommands.listening, {
+      kinds: macCommandKindsQuery(kinds),
+    }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
     );
   }
 }

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
@@ -28,6 +28,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { type CallCardInput, callControls } from "../call/call-card.js";
+import { MOUSE_BUTTON } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -47,14 +48,14 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 
-/** The platform's updater, Browser tab, and window acts, which this window's fake refuses as `app:act` refused them before they moved onto the port. */
+/** The platform's updater, Browser tab, and window acts, which this window's fake refuses. */
 const PLATFORM_KINDS: ReadonlySet<string> = new Set([
   ...Object.values(BROWSER_ACT_KIND),
   ...Object.values(UPDATE_ACT_KIND),
   ...Object.values(WINDOW_SURFACE_ACT_KIND),
 ]);
 
-/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused as `app:act` refused it. */
+/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused. */
 const isAgentRead = (kind: string): boolean =>
   Object.values<string>({ ...AGENT_ACT_KIND, ...AGENT_INBOX_ACT_KIND }).includes(kind) &&
   kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
@@ -78,7 +79,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Coding agents", "Integrations", "Plan template", "Experimental"],
+    rows: ["Profile", "Agents", "Integrations", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -119,8 +120,7 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
 const HOMES = [
   { words: "Sign out", page: "Profile" },
   { words: "Delete account", page: "Profile" },
-  { words: "Talk to Luke", page: "Voice" },
-  { words: "Stop Luke", page: "Voice" },
+  { words: "Captions", page: "Voice" },
   { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
@@ -175,18 +175,6 @@ function settingsProps(
       onOpenLatest: ignore,
     },
     settings: settingsView({ voiceAvailable: true }),
-    shortcuts: {
-      voiceHotkey: "Alt+Space",
-      voiceHotkeyHeld: true,
-      voiceChosen: false,
-      voiceOff: false,
-      onVoiceHotkeyChange: accepted,
-      stopHotkey: "Alt+Escape",
-      stopChosen: false,
-      stopOff: false,
-      onStopHotkeyChange: accepted,
-      onCapture: ignore,
-    },
   } satisfies SettingsPanelProps;
 }
 
@@ -245,9 +233,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeAppPlatform(QUIET_PANEL);
 });
 
@@ -396,13 +382,49 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   assert.equal(about.includes("Changelog"), true);
   assert.equal(about.includes("Check for updates"), false);
   for (const words of [
-    "Talk to Luke",
+    "Captions",
     "Notify me when a coding agent finishes or needs me",
     "Let agents run commands on this Mac",
     "Updates",
   ]) {
     assert.deepEqual(foundUnder(page, words), [], `${words} is found nowhere`);
   }
+});
+
+test("a browser, which is no installed app, draws Appearance without Zoom or Open Luke at login, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
+  const drawnOn = (capabilities: readonly HostCapability[]) => {
+    const page = mount(createElement(SettingsHarness, { capabilities }));
+    const groups = pageGroups(page);
+    const appearance = openPage(page, "Appearance").textContent ?? "";
+    const found = ["Zoom", "Open Luke at login", "Keyboard shortcuts"].flatMap((words) =>
+      foundUnder(page, words),
+    );
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return {
+      last: groups.at(-1),
+      zoom: appearance.includes("Zoom"),
+      login: appearance.includes("Open Luke at login"),
+      found,
+    };
+  };
+
+  const desktop = drawnOn(DESKTOP_CAPABILITIES);
+  const browser = drawnOn(
+    DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP),
+  );
+
+  assert.equal(desktop.last?.heading, "This Mac");
+  assert.ok(desktop.last?.rows.includes("Keyboard shortcuts"));
+  assert.equal(desktop.zoom, true);
+  assert.equal(desktop.login, true);
+  assert.notDeepEqual(desktop.found, []);
+  assert.equal(browser.last?.heading, "This device");
+  assert.equal(browser.last?.rows.includes("Keyboard shortcuts"), false);
+  assert.equal(browser.zoom, false);
+  assert.equal(browser.login, false);
+  assert.deepEqual(browser.found, []);
 });
 
 test("a platform with voice but without its own microphone route draws Voice without the Microphone permission row or Prefer the Mac's microphone, and its search finds neither", () => {
@@ -523,7 +545,7 @@ test("a page turned to opens at its top, not where the last page was scrolled", 
   const scroller = shownScroller(page);
   // Note that jsdom lays nothing out, so the scroll offset is held by hand.
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
-  openPage(page, "Coding agents");
+  openPage(page, "Agents");
   assert.equal(shownScroller(page).scrollTop, 0);
 });
 
@@ -673,14 +695,10 @@ test("the plan template's version history keeps a call's card at the foot of its
   const sent: string[] = [];
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (request: { kind: string }) => {
-      sent.push(request.kind);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-    },
   });
   fakeActPortAnswering((request) => {
     sent.push(request.kind);
-    // A task kind is refused here as `app:act` refused it, since a task read answered nothing is no view.
+    // A task kind is refused here, since a task read answered nothing is no view.
     if (TASK_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     if (PLATFORM_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));
@@ -725,14 +743,47 @@ test("the plan template's version history keeps a call's card at the foot of its
   const back = card.querySelector<HTMLButtonElement>('button[aria-label="Open Checkout redesign"]');
   assert.ok(back);
   act(() => back.click());
-  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
+  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_AGENT]);
+});
+
+test("the mouse's Back button from the plan template's version history goes back to the template page and cancels the browser's own, so a browser tab takes no second step", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      Promise.resolve({ template: "# Context\n", custom: false }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const history = page.querySelector<HTMLButtonElement>('button[aria-label="Version history"]');
+  assert.ok(history, "the template page offers its version history");
+  act(() => history.click());
+  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the version history stands");
+
+  const release = new MouseEvent("mouseup", {
+    button: MOUSE_BUTTON.BACK,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    document.body.dispatchEvent(release);
+  });
+
+  assert.equal(release.defaultPrevented, true);
+  assert.equal(
+    page.querySelector('nav[aria-label="Versions"]'),
+    null,
+    "Back left the version history",
+  );
 });
 
 test("while the plan template is read its page stands its name over placeholder blocks, and the template lands in their place", async () => {
   const { promise: read, resolve: land } = Promise.withResolvers<void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   fakeActPort({
     [ACT_KIND.PLAN_TEMPLATE_READ]: () =>

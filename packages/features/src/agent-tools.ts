@@ -44,11 +44,6 @@ export const AGENT_TOOL = {
   DELETE_SECTION: "delete_section",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
-  // The workspace's issues, listed, read, filed, and changed, named for any agent offered `list_tasks`.
-  LIST_ISSUES: "list_issues",
-  READ_ISSUE: "read_issue",
-  CREATE_ISSUE: "create_issue",
-  UPDATE_ISSUE: "update_issue",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's.
@@ -56,6 +51,8 @@ export const AGENT_TOOL = {
   READ_WEB_PAGE: "read_web_page",
   // A command on the developer's own Mac, every role's.
   RUN_ON_MAC: "run_on_mac",
+  // A real browser in the agent's own sandbox, which the developer can watch and take over, every role's.
+  BROWSER: "browser",
   // eve's shell and file tools and the code extension's, started in a coding agent's checkout.
   BASH: "bash",
   READ_FILE: "read_file",
@@ -121,8 +118,9 @@ export const CONNECTION_TOOL = {
 /**
  * Tools no agent is offered now whose calls a transcript written then still
  * names: eve's provider-run web reads, which coding agents ran before they
- * had the public reads, and the planning model's four tools about the
- * task's coding agents, since named as `AGENT_TOOL`'s agent tools.
+ * had the public reads, the planning model's four tools about the
+ * task's coding agents, since named as `AGENT_TOOL`'s agent tools, and the
+ * four about the workspace's own issues, gone with them.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -138,4 +136,58 @@ export const RETIRED_TOOL = {
   // Folded into `post_to_inbox` (a post that asks nothing) and `withdraw_ask`.
   CLOSE_INBOX_ITEM: "close_inbox_item",
   REPLY_INBOX: "reply_inbox",
+  // Luke's own issues, removed: a task carries its status and priority now.
+  LIST_ISSUES: "list_issues",
+  READ_ISSUE: "read_issue",
+  CREATE_ISSUE: "create_issue",
+  UPDATE_ISSUE: "update_issue",
 } as const;
+
+/**
+ * Claude Code's own tools, by the names its CLI calls them, which a coding
+ * agent running on Claude Code calls in place of Luke's shell, file, search,
+ * todo, delegation, skill, and web tools, and waits with (background Bash,
+ * `Monitor`, `ScheduleWakeup`). Its transcript stores each call under this
+ * name; a call to Luke's own MCP server is stored under Luke's tool's name
+ * (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
+ */
+export const CLAUDE_CODE_TOOL = {
+  BASH: "Bash",
+  READ: "Read",
+  EDIT: "Edit",
+  WRITE: "Write",
+  NOTEBOOK_EDIT: "NotebookEdit",
+  GLOB: "Glob",
+  GREP: "Grep",
+  WEB_FETCH: "WebFetch",
+  WEB_SEARCH: "WebSearch",
+  TODO_WRITE: "TodoWrite",
+  AGENT: "Agent",
+  SKILL: "Skill",
+  MONITOR: "Monitor",
+  SCHEDULE_WAKEUP: "ScheduleWakeup",
+} as const;
+
+/** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_inbox` is Luke's `read_inbox`. */
+export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
+
+/**
+ * Codex's own work, by the type of the app-server item that does it (its
+ * todo list by its own name, since Codex reports it as the turn's plan
+ * rather than as an item), which a coding agent running on Codex does in
+ * place of Luke's shell, file, search, todo, and delegation tools. Its
+ * transcript stores each under this name; a call to Luke's own MCP server is
+ * stored under Luke's tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
+ * any other MCP server as `mcpToolCall`.
+ */
+export const CODEX_TOOL = {
+  COMMAND_EXECUTION: "commandExecution",
+  FILE_CHANGE: "fileChange",
+  MCP_TOOL_CALL: "mcpToolCall",
+  WEB_SEARCH: "webSearch",
+  TODO_LIST: "todoList",
+  SUBAGENT: "collabAgentToolCall",
+} as const;
+
+/** The name Codex knows Luke's MCP server by (`mcp_servers.luke`): its calls are Luke's tools. */
+export const CODEX_LUKE_MCP_SERVER = "luke";

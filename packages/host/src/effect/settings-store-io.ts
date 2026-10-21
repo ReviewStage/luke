@@ -66,6 +66,10 @@ export const readSettingsFileText = /* @__PURE__ */ Effect.fn("host/readSettings
  * creation and restated with `chmod` right after, because `mode` only takes
  * effect when the file is created — a temporary file left behind by an
  * earlier interrupted write would otherwise keep whatever mode it already had.
+ * A write that fails after the temporary file was made removes it, because a
+ * writer's own name (a browser tab's) is never written through again, and on
+ * a storage with a quota (a browser's `localStorage`) a file left behind there
+ * would hold its bytes forever.
  */
 export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("host/writeSettingsFileAtomic")(
   function* (
@@ -78,8 +82,10 @@ export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("host/writeSett
     const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
     const temporaryPath = path.join(directory, temporaryFileName(writer));
     yield* fileSystem.makeDirectory(directory, { recursive: true });
-    yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
-    yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);
-    yield* fileSystem.rename(temporaryPath, settingsPath);
+    yield* Effect.gen(function* () {
+      yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
+      yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);
+      yield* fileSystem.rename(temporaryPath, settingsPath);
+    }).pipe(Effect.onError(() => Effect.ignore(fileSystem.remove(temporaryPath, { force: true }))));
   },
 );

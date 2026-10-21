@@ -3,7 +3,7 @@ import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import { createContext, type ReactNode, useContext, useMemo, useRef } from "react";
+import { createContext, memo, type ReactNode, useContext, useMemo, useRef } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PlanDiagram } from "./plan-diagram.js";
@@ -22,7 +22,7 @@ type HastChild = Parameters<AllowElement>[0]["children"][number];
 type HastText = Extract<HastNode, { type: "text" }>;
 
 /** A stretch of the words, from one offset up to another. */
-interface MarkdownSpan {
+export interface MarkdownSpan {
   from: number;
   to: number;
 }
@@ -438,19 +438,23 @@ function TaskBox({
   checked: boolean;
   toggle: TaskToggler;
 }): React.JSX.Element {
+  // Note that the box stands in a label, as the editor's does, so a finger's
+  // press around it, wider than the box draws, ticks it (`markdown.css`).
   return (
-    <input
-      key={String(checked)}
-      type="checkbox"
-      aria-label={item.label}
-      defaultChecked={checked}
-      onChange={(event) => {
-        const box = event.currentTarget;
-        toggle(item.at).then((saved) => {
-          if (!saved) box.checked = checked;
-        });
-      }}
-    />
+    <label className="task-list-box">
+      <input
+        key={String(checked)}
+        type="checkbox"
+        aria-label={item.label}
+        defaultChecked={checked}
+        onChange={(event) => {
+          const box = event.currentTarget;
+          toggle(item.at).then((saved) => {
+            if (!saved) box.checked = checked;
+          });
+        }}
+      />
+    </label>
   );
 }
 
@@ -512,10 +516,24 @@ function plainLink(
 
 /**
  * Draws a link the place showing the words knows better than as words, a
- * mention's chip (`tasks/mention-chip.tsx`) say, from its destination
- * and its label's words; nothing for one it leaves drawn as any link is.
+ * mention's chip (`tasks/mention-chip.tsx`) say, from its destination,
+ * its label's words, and where the link is written in the words, which a
+ * date's chip names to change it in place; nothing for one it leaves drawn
+ * as any link is. Note that whether it draws a link never turns on `at`,
+ * since the words are glued around its links before they are placed.
  */
-export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
+export type LinkDrawer = (
+  href: string,
+  label: string,
+  at?: MarkdownSpan | undefined,
+) => ReactNode | undefined;
+
+/** Where a node is written in the words, where the tree kept its place. */
+function writtenAt(node: HastParent | undefined): MarkdownSpan | undefined {
+  const from = node?.position?.start.offset;
+  const to = node?.position?.end.offset;
+  return from === undefined || to === undefined ? undefined : { from, to };
+}
 
 /**
  * Draws a picture the place showing the words knows how to, a plan's say,
@@ -699,9 +717,11 @@ export function markdownClass(className?: string): string {
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
  * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
  * the same component reads at the caption's ten pixels and the plan's own
- * size.
+ * size. Note that it is drawn again only when what it is handed changes,
+ * because the engine parses the words afresh on every draw, and a plan
+ * drawing every section on each frame of its typing would parse them all.
  */
-export function MarkdownMessage({
+export const MarkdownMessage = memo(function MarkdownMessage({
   words,
   className,
   edit,
@@ -733,11 +753,14 @@ export function MarkdownMessage({
   const toggler = useRef(onTask);
   toggler.current = onTask;
   const toggles = onTask !== undefined;
-  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
-  if (toggles) rehypePlugins.push(placeTaskItems);
-  if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words]);
-  if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
-  if (link !== undefined) rehypePlugins.push([glueDrawnLinks, link]);
+  const rehypePlugins = useMemo(() => {
+    const plugins: NonNullable<Options["rehypePlugins"]> = [];
+    if (toggles) plugins.push(placeTaskItems);
+    if (edit !== undefined) plugins.push([drawEdit, edit, words]);
+    if (found !== undefined && found.length > 0) plugins.push([markFound, found]);
+    if (link !== undefined) plugins.push([glueDrawnLinks, link]);
+    return plugins;
+  }, [toggles, edit, words, found, link]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
@@ -755,7 +778,9 @@ export function MarkdownMessage({
       ...COMPONENTS,
       a: ({ href, children, node }) => {
         const drawn =
-          href === undefined || link === undefined ? undefined : link(href, labelOf(node));
+          href === undefined || link === undefined
+            ? undefined
+            : link(href, labelOf(node), writtenAt(node));
         return drawn === undefined || href === undefined
           ? plainLink(href, children, node, openLink)
           : drawnMarked(drawn, node, href, children, openLink);
@@ -793,4 +818,4 @@ export function MarkdownMessage({
       </FenceEdit.Provider>
     </div>
   );
-}
+});

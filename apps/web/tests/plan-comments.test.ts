@@ -10,6 +10,7 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/coding-agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -27,9 +28,9 @@ import {
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import {
+  type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
@@ -46,17 +47,7 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import {
-  Clock,
-  type Context,
-  Duration,
-  Effect,
-  Layer,
-  Option,
-  Queue,
-  Result,
-  Stream,
-} from "effect";
+import { Clock, type Context, Effect, Layer, Option, Queue, Result, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 
 /**
@@ -107,7 +98,7 @@ const resolveUserId = (incoming: Request) =>
 const opened: EveMessage[] = [];
 
 /** eve as the routes reach it under the member's bearer: every open accepted and written down, no other call made. */
-const fakeEve = (): EveSessions => ({
+const fakeEve = (): AgentSessions => ({
   open: (message) =>
     Effect.sync(() => {
       opened.push(message);
@@ -584,27 +575,6 @@ it.layer(getTestDB())("a plan's comments read held on the test's clock", (it) =>
         );
       }),
   );
-
-  it.effect(
-    "a read at the current cursor is let go at the route's own hold, no sooner, answering the threads unchanged",
-    () =>
-      Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedTask;
-        const first = yield* answer("comments", request(commentsPath(taskId), owner, {}));
-        const before = JSON.parse(first.body);
-
-        const startedAt = yield* Clock.currentTimeMillis;
-        const held = yield* heldRead(owner, taskId, before.cursor);
-        const answered = yield* driven(held, CODER.MESSAGES_POLL);
-        const heldFor = (yield* Clock.currentTimeMillis) - startedAt;
-
-        assert.equal(heldFor, Duration.toMillis(CODER.MESSAGES_HOLD));
-        assert.deepEqual(
-          { status: answered.status, body: JSON.parse(answered.body) },
-          { status: HOSTED_HTTP_STATUS.OK, body: before },
-        );
-      }),
-  );
 });
 
 it.layer(getTestDB())("the comment paths' refusals, byte for byte", (it) => {
@@ -682,7 +652,9 @@ it.layer(getTestDB())("the comment paths' refusals, byte for byte", (it) => {
       const body = JSON.stringify({
         action: PLAN_COMMENT_ACTION.REPLY,
         clientKey: randomUUID(),
-        words: "x".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 7),
+        words: "x".repeat(
+          PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048,
+        ),
       });
       const answered = yield* answer(
         "comments",

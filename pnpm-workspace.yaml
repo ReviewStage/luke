@@ -57,6 +57,13 @@ ignoredBuiltDependencies:
   - electron-winstaller
   - esbuild
 
+# The Agent SDK's native `claude` binaries, one optional package per platform
+# at about 290 MB each. Nothing here runs the CLI: `@luke/agent-runner` bundles
+# the SDK alone and runs the binary the agent's sandbox image installs, which
+# it names in `pathToClaudeCodeExecutable`.
+ignoredOptionalDependencies:
+  - "@anthropic-ai/claude-agent-sdk-*"
+
 # `@better-auth/oauth-provider` 1.7.7 declares its `/oauth2/authorize` OpenAPI
 # parameters with `items?: undefined`, which `exactOptionalPropertyTypes` (on in
 # `tsconfig.base.json`) refuses against better-call's `OpenAPIParameter`, so the
@@ -97,6 +104,16 @@ patchedDependencies:
 # it. Move the patch with every `eve` bump, and delete it if eve stops writing
 # the map.
   eve@0.74.0: patches/eve@0.74.0.patch
+
+# `@neon/realtime-drizzle` 0.1.0 declares `drizzle-orm` `>=0.45.2 <0.46.0` as
+# its peer, but its adapter reads only what a select compiles to and the
+# fields it selected, which 1.0.0-rc.4 builds the same way: sealing a
+# `liveSelection` read through it was checked to match our SQL and values
+# (`packages/service/src/live/realtime.test.ts`). Delete this when a release
+# declares the 1.0 line.
+peerDependencyRules:
+  allowedVersions:
+    "@neon/realtime-drizzle>drizzle-orm": 1.0.0-rc.4
 
 # A dependency is keyed by its peers' names alone, not by the peers' own peer
 # graphs, so one `vitest` serves every workspace. Keyed in full, a peer's own

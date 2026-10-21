@@ -6,7 +6,8 @@
    edge at the start, so its words stand where the label's stood and the row
    keeps its height; in a well, bare in the type around it, ringed by the
    well rather than by itself. How wide a field or a well stands is its
-   container's to say. */
+   container's to say. On a finger's device each look takes at least 16px
+   words, or iOS zooms the page into the field the moment it is focused. */
 
 @layer components {
   .luke-inline-edit {
@@ -52,5 +53,11 @@
     color: inherit;
     font: inherit;
     outline: none; /* no ring: its well rings */
+  }
+
+  @media (pointer: coarse) {
+    .luke-inline-edit[data-look] {
+      font-size: max(16px, 1em);
+    }
   }
 }

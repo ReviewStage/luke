@@ -20,12 +20,12 @@ import {
   automationProcedures,
 } from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
+import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import { type FactoryProceduresDependencies, factoryProcedures } from "./factory-procedures.js";
 import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
-import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import {
@@ -46,21 +46,17 @@ import {
  * context `ActPortContext` names.
  */
 
-export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
+export { accountAskProcedures } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
-export { type ActPortContext, actPortFor } from "./base.js";
+export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
-export type { IssueProceduresDependencies } from "./issue-procedures.js";
-export { WindowPushes } from "./push-procedures.js";
+export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
-export type { TaskIssueProceduresDependencies } from "./task-issue-procedures.js";
-export type { TasksProceduresDependencies } from "./tasks-procedures.js";
-export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
 export type ActPortHandler<Sender = unknown> = RPCHandler<ActPortContext<Sender>>;
@@ -78,8 +74,7 @@ export type PlatformActProcedures<Sender> = ContractedRouter<
 /**
  * Every platform kind refused in its own sentence, as a platform that can
  * carry none of them answers: a shell spreads these under the few it does
- * answer, so its table stays total and the window draws each refusal, as
- * `refusedRows` does for `app:act`.
+ * answer, so its table stays total and the window draws each refusal.
  */
 export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sender> {
   const port = actPortFor<Sender>();
@@ -103,9 +98,9 @@ export interface ActPortDependencies {
   readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
+  readonly chapters: ChaptersProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
-  readonly issues: IssueProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
@@ -135,9 +130,9 @@ export function createActPortHandler<Sender>(
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
+    ...chaptersProcedures(dependencies.chapters),
     ...factoryProcedures(dependencies.factory),
     ...integrationProcedures(dependencies.integrations),
-    ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
     ...taskIssueProcedures(dependencies.taskIssues),

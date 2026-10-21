@@ -1,18 +1,26 @@
 /**
- * stat-card.tsx -- the admin's metric cards and the headings its sections
- * stand under.
+ * stat-card.tsx -- the admin's metric cards and the sections they stand in.
  *
  * A metric card names what it counts in the shared label role, the figure
  * large under it in the page title's role, the largest the shared roles
  * hold, and a hint in the body role beneath. Words a card holds
  * are the shared roles, so a card, a chart's heading, and a section read as
  * one set.
+ *
+ * A section is the app's own (`SettingsSection`), without its card: its
+ * heading in the section role a step quieter than what it heads, a hair in
+ * from the cards' edge, and what it holds a short step under it and one
+ * from the next, each card drawing its own frame. A headed section is a
+ * region named by its heading. The room between one section and the next
+ * is the page's (`Refreshing`).
  */
 
 import {
   CARD_PADDING,
   Card,
   GAP,
+  SETTINGS_SECTION_FRAME,
+  SettingsSection,
   Skeleton,
   Stack,
   TEXT_ELEMENT,
@@ -27,7 +35,7 @@ import {
  * narrower than its own figure.
  */
 const METRIC_CARD_GROUPED =
-  "bg-(--luke-color-surface) px-5 py-4 min-[720px]:flex-1 min-[720px]:basis-36";
+  "bg-(--luke-color-surface) px-(--luke-card-inset) py-(--luke-card-inset-compact) min-[720px]:flex-1 min-[720px]:basis-36";
 
 /**
  * A figure stands on one line, never broken inside a number: a line that
@@ -42,9 +50,6 @@ const SKELETON_LABEL_WIDTH = "96px";
 const SKELETON_VALUE_WIDTH = "80px";
 
 const SKELETON_HINT_WIDTH = "128px";
-
-/** The room above a section's heading, which parts one section from the last, and under it. */
-const SECTION_HEADING = "mt-12 mb-4";
 
 /**
  * A metric's frame: a card of its own, or a cell of a StatGroup's. Note that
@@ -177,12 +182,20 @@ export function MetricCardSkeleton({
 }
 
 /**
+ * The room between two cards of one section, across a row or down a column:
+ * the step a section stands what it holds under its heading at
+ * (`settings-section.css`), so a section's cards read as one group and the
+ * section's gap parts it from the next.
+ */
+export const CARD_GAP = "gap-(--luke-space-8)";
+
+/**
  * A row of stat cards that wraps rather than holding fixed columns. Note that
  * a card's cell grows from nothing but never shrinks below its own figure,
  * so the row wraps once a figure needs the room rather than the figure
  * overflowing its card.
  */
-export const STAT_ROW = "flex flex-wrap gap-3";
+export const STAT_ROW = `flex flex-wrap ${CARD_GAP}`;
 
 export const STAT_CELL = "flex-1";
 
@@ -191,7 +204,7 @@ export const STAT_CELL = "flex-1";
  * row of four on a wide page, two rows of two on a narrower one, and one
  * column once a pair's figures need the room.
  */
-export const STAT_PAIR = "flex flex-1 basis-88 flex-wrap gap-3";
+export const STAT_PAIR = `flex flex-1 basis-88 flex-wrap ${CARD_GAP}`;
 
 /** The cards a StatGroup sets side by side once the page is wide enough for them. */
 export const STAT_GROUP_COLUMNS = 3;
@@ -213,12 +226,21 @@ export function StatGroup({ children }: { children: React.ReactNode }): React.JS
   );
 }
 
-export function SectionHeading({ children }: { children: React.ReactNode }): React.JSX.Element {
+/**
+ * `children`, its cards and the notes under them, under `title`, a region it
+ * names; or, with no title, what leads a page's first section (a page's note,
+ * its headline, an account's masthead), at the same step.
+ */
+export function AdminSection({
+  title,
+  children,
+}: {
+  title?: string | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
-    <div className={SECTION_HEADING}>
-      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.SECTION}>
-        {children}
-      </Text>
-    </div>
+    <SettingsSection title={title} frame={SETTINGS_SECTION_FRAME.NONE}>
+      {children}
+    </SettingsSection>
   );
 }

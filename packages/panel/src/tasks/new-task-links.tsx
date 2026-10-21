@@ -17,7 +17,9 @@ import {
   ProviderMark,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
+import { FadingWords } from "../fading-words.js";
 import { Tooltip } from "../tooltip.js";
+import { RELATION_DETAIL } from "./task-issue-links-model.js";
 
 /**
  * new-task-links.tsx -- the issues New task links the task it starts to, GitHub's and Linear's, each a chip over the words with its key, its title, the keyword its pull requests write, and the × that lets it go.
@@ -49,8 +51,6 @@ export type NewTaskLink =
 const LINK_WORDS = {
   [TASK_ISSUE_RELATION.CLOSES]: "Closes",
   [TASK_ISSUE_RELATION.PART_OF]: "Part of",
-  RELATION_HINT:
-    "Which keyword the agent writes: Closes settles the issue as its pull request merges",
   DROP: "Remove issue",
 } as const;
 
@@ -119,13 +119,13 @@ function LinkChip({
       <span className="new-task-issue-key">
         {github ? `#${link.issue.number}` : link.issue.identifier}
       </span>
-      <span className="new-task-issue-title">{link.issue.title}</span>
+      <FadingWords className="new-task-issue-title" words={link.issue.title} />
       <span className="new-task-issue-relation">
-        <Tooltip label={LINK_WORDS.RELATION_HINT}>
+        <Tooltip label={RELATION_DETAIL[link.relation]}>
           <Chip
             look={CHIP_LOOK.FILTER}
             size={CHIP_SIZE.COMPACT}
-            aria-label={`${LINK_WORDS[link.relation]}: ${LINK_WORDS.RELATION_HINT}`}
+            aria-label={`${LINK_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
             disabled={disabled}
             onClick={() => onRelation(flipped(link.relation))}
           >

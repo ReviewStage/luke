@@ -3,7 +3,7 @@ import { REPLY_TO_COMMENT_TOOL } from "@luke/service/tasks/comment-tools";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { offeredPlanTools, runCommentTool } from "../host.js";
+import { offeredTaskTools, runCommentTool } from "../host.js";
 
 /**
  * reply_to_comment.ts -- `reply_to_comment`, the agent answers one of the plan's comment threads, one a member sent it (`packages/service/src/tasks/comment-tools.ts`).
@@ -16,7 +16,7 @@ import { offeredPlanTools, runCommentTool } from "../host.js";
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.REPLY_TO_COMMENT)
+      (await offeredTaskTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.REPLY_TO_COMMENT)
         ? defineTool({
             description: REPLY_TO_COMMENT_TOOL.description,
             inputSchema: emitJsonSchema(REPLY_TO_COMMENT_TOOL.inputSchema),

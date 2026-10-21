@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import {
   ACCOUNT_ASK_ACT_KIND,
   ACT_ERROR,
@@ -16,14 +14,10 @@ import {
 } from "../contract/index.js";
 import {
   type AccountAskProceduresDependencies,
-  type ActPortDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type PlatformActProcedures,
-  type TasksProceduresDependencies,
-  WindowPushes,
-  type WorkspaceProceduresDependencies,
-} from "./index.js";
+  accountAskProcedures,
+} from "./account-ask-procedures.js";
+import type { ActSender } from "./base.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The account's own asks, through the act port as a window calls them: only
@@ -50,6 +44,11 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: "Could not read your API keys on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Could not save your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Could not remove your API key on this system.",
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]:
+    "Could not change your plan's default on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Could not sign in with ChatGPT on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
+    "Could not cancel the ChatGPT sign-in on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: "Could not read your plan template on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE]: "Could not save your plan template on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS]:
@@ -72,6 +71,21 @@ const ACTS = [
     payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI },
     ask: "providerKeyRemove",
   },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE,
+    payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH },
+    ask: "providerKeyRemove",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS,
+    payload: {
+      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+      forAgents: false,
+    },
+    ask: "providerKeyForAgents",
+  },
+  { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
   { kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ, payload: undefined, ask: "planTemplateRead" },
   {
     kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE,
@@ -102,10 +116,10 @@ const ACTS = [
 
 type HostAsk = AccountAskProceduresDependencies["host"];
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
 
 /**
@@ -127,56 +141,19 @@ function windowPort(
         return answer();
       });
   // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
-  const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
-  // SAFETY: no issue act is called here, so the issues' host is never reached.
-  const issues = { host: {} } as IssueProceduresDependencies;
-  // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
-  const workspaces = { host: {} } as WorkspaceProceduresDependencies;
-  // SAFETY: no platform act is called here, so no platform procedure is reached.
-  const platform = {} as PlatformActProcedures<unknown>;
-  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
-  const tasks = { host: {} } as TasksProceduresDependencies;
-  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
-  const unreached = { account: {}, settings: {} } as unknown as Pick<
-    ActPortDependencies,
-    "account" | "settings"
-  >;
-  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
-  const elsewhere = {
-    agentInbox: { host: {} },
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-    taskIssues: { host: {} },
-  } as Pick<
-    ActPortDependencies,
-    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
-  >;
-  const handler = createActPortHandler(
-    {
-      ...unreached,
-      ...elsewhere,
-      accountAsks: { host },
-      issues,
-      pushes: new WindowPushes(),
-      tasks,
-      workspaces,
-    },
-    platform,
-  );
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
-    }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  const host = Object.fromEntries([
+    ...ACTS.map((act) => [act.ask, ask(act.ask)]),
+    [
+      "chatGptSignInCancel",
+      () =>
+        Effect.sync(() => {
+          asked.push(["chatGptSignInCancel"]);
+        }),
+    ],
+  ]) as HostAsk;
+  const port = testActPort(accountAskProcedures({ host }));
+  ports.push(port);
+  const client = port.as(actor, { trusted: options.trusted ?? true });
   return { client, asked };
 }
 
@@ -277,4 +254,19 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
     { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ] },
   );
   assert.deepEqual(asked, []);
+});
+
+it("a ChatGPT sign-in waiting on the browser is withdrawn by a panel alone, and the voice window is refused", async () => {
+  const panel = windowPort(PANEL);
+  assert.deepEqual(
+    await settled(panel.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
+    { answer: undefined },
+  );
+  assert.deepEqual(panel.asked, [["chatGptSignInCancel"]]);
+  const voice = windowPort(VOICE);
+  assert.deepEqual(
+    await settled(voice.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
+    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL] },
+  );
+  assert.deepEqual(voice.asked, []);
 });

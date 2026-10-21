@@ -126,6 +126,10 @@ export class PanelManager {
   #dark = true;
   /** The windows whose renderer has drawn its first frame, the ones the avatar's grant may reach. */
   readonly #drawn = new WeakSet<BrowserWindow>();
+  /** The windows hidden, minimized, or wholly covered since they last showed, the ones whose document is held. */
+  readonly #hidden = new WeakSet<BrowserWindow>();
+  /** Whether the avatar's grant stands, so the panel running its session is left unthrottled and told every document. */
+  #avatarSession = false;
   readonly #avatar = new PanelAvatarRelay(() => {
     const window = this.primaryPanel();
     if (!window || !this.#drawn.has(window)) return undefined;
@@ -191,7 +195,59 @@ export class PanelManager {
    * its video at the top of the Call tab.
    */
   showAvatarSession(grant: AvatarGrant | undefined): void {
+    this.#avatarSession = grant !== undefined;
+    for (const window of this.windows()) {
+      this.#throttle(window);
+      this.#holdState(window);
+    }
     this.#avatar.showAvatarSession(grant);
+  }
+
+  /**
+   * A window runs the avatar's session, whose video and lip-sync must go on
+   * while it is hidden or covered, only for as long as a grant stands; any
+   * other time it is throttled as Chromium does by default. Applied to a
+   * page that has just loaded as well, so a reload cannot drop it.
+   */
+  #throttle(window: BrowserWindow): void {
+    window.webContents.setBackgroundThrottling(!this.#avatarSession);
+  }
+
+  /**
+   * A window no one can see is told no document until it shows again, when
+   * it is handed the newest at once, because every document it is pushed is
+   * rendered there whether or not the window is drawn, and while agents run
+   * that is a hidden panel's whole CPU. A window running the avatar's
+   * session is the exception, as it is for throttling. Only the document is
+   * held: its events and its own calls still go through.
+   */
+  #holdState(window: BrowserWindow): void {
+    windowPushes.holdState(window.webContents, this.#hidden.has(window) && !this.#avatarSession);
+  }
+
+  /**
+   * Follows whether anyone can see the window. Note that on macOS Electron
+   * says `hide` and `show` as the window's occlusion changes, so a window
+   * wholly covered, minimized, or under a hidden app reads as hidden, and one
+   * partly in view reads as shown. A window that takes the keyboard is shown
+   * whatever was said before, so a missed `show` cannot leave it stale.
+   */
+  #followVisibility(window: BrowserWindow): void {
+    const hidden = () => {
+      if (window.isDestroyed()) return;
+      this.#hidden.add(window);
+      this.#holdState(window);
+    };
+    const shown = () => {
+      if (window.isDestroyed()) return;
+      this.#hidden.delete(window);
+      this.#holdState(window);
+    };
+    window.on("hide", hidden);
+    window.on("minimize", hidden);
+    window.on("show", shown);
+    window.on("restore", shown);
+    window.on("focus", shown);
   }
 
   /** One message of Luke's voice feed, for the avatar to lip-sync. */
@@ -356,14 +412,20 @@ export class PanelManager {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: trafficLightsAt(zoomFactor),
       webPreferences: {
-        ...hardenedWebPreferences({ preloadPath: this.#preloadPath, runMode: this.#runMode }),
+        ...hardenedWebPreferences({
+          preloadPath: this.#preloadPath,
+          runMode: this.#runMode,
+          backgroundThrottling: !this.#avatarSession,
+        }),
         zoomFactor,
       },
     };
     const window = new BrowserWindow(windowOptions);
     this.#windows.set(displayId, window);
+    const page = window.webContents;
 
     refuseForeignNavigation(window, this.#rendererUrl);
+    this.#followVisibility(window);
     // Each page the window loads, a reload's included, is handed the avatar's
     // grant standing, since the renderer it replaced ran the session and the
     // voice window stays muted while the avatar reads as up. Note that the
@@ -371,6 +433,7 @@ export class PanelManager {
     const drew = () => {
       if (window.isDestroyed()) return;
       this.#drawn.add(window);
+      if (this.#avatarSession) this.#throttle(window);
       this.#avatar.pageDrew();
     };
     window.webContents.on("did-finish-load", drew);
@@ -408,6 +471,7 @@ export class PanelManager {
     // Found by the window rather than the id it was born under, because a
     // rebind may have moved it.
     window.on("closed", () => {
+      windowPushes.holdState(page, false);
       for (const [id, candidate] of [...this.#windows]) {
         if (candidate !== window) continue;
         this.#windows.delete(id);

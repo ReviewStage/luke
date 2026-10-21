@@ -25,7 +25,9 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
  * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
  *
  * Archive agent stands in an agent's tab menu and in the menu of its row in
- * the task's summary. An agent at rest is archived at once; one still
+ * the task's summary, and for an agent with no task in its page's ⋯ and its
+ * sidebar row's menu, whose Unarchive stands in its place once archived
+ * (`useAgentUnarchive`). An agent at rest is archived at once; one still
  * working asks first, since archiving it stops the turn it is on, and a
  * stopped turn is not given back. Note that an agent drawn at rest is read
  * again before it is archived unasked, because nothing follows an agent
@@ -42,8 +44,10 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
  * after its name, the fold landing at once as the sidebar's does.
  * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
- * while it is hovered or reached from the keyboard, in the sidebar
- * rows' Pin and Archive style, and whose right-click offers the same. The
+ * while it is hovered or reached from the keyboard, as the sidebar task
+ * rows' Pin and Archive do: at rest it takes no room, the name running the
+ * row's full width, and shown, the name is cut where it begins and fades
+ * out there. A screen with no hover shows it at rest. Its right-click offers the same. The
  * row hangs the agent's card beside it as a standing row does, saying it
  * was archived and when (`agent-ref.tsx`), though no press opens it,
  * since its tab is gone. It draws nothing while no agent is archived, and
@@ -85,13 +89,19 @@ export interface AgentArchive {
   dialog: React.JSX.Element;
 }
 
+/** An archived agent's Unarchive as a menu offers it, its refusal said in a toast. */
+export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl): MenuAction {
+  const press = useArchivePress(agents);
+  return { label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: () => press(agentId, false) };
+}
+
 /**
  * One agent's Archive as a menu offers it, and the dialog it asks through
  * while the agent still works, which the caller draws beside the menu. The
  * question goes with the surface it was asked on.
  */
 export function useAgentArchive(
-  agent: CodingAgentSummary,
+  agent: Pick<CodingAgentSummary, "id" | "status" | "title" | "automationName" | "model">,
   agents: CodingAgentsControl,
   shown: boolean,
 ): AgentArchive {
@@ -132,12 +142,12 @@ function ArchivedAgentRow({
   agents: CodingAgentsControl;
   shown: boolean;
 }): React.JSX.Element {
-  const [words, clipped] = useClipped();
   const press = useArchivePress(agents);
   const menu = useMenu(shown);
   const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
+  const [words, clipped] = useClipped(subject.name);
   return (
     <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
       <Tooltip

@@ -8,9 +8,8 @@ import type {
   IntegrationToolsView,
 } from "@luke/features/integration-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { INTEGRATION_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /**
  * integration-procedures.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations.

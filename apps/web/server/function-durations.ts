@@ -1,14 +1,21 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
+import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
+import { LUKE_MCP_FUNCTION, LUKE_MCP_PATH } from "@luke/service/agents/luke-mcp/app";
+import {
+  PULL_REQUEST_CHAPTERS_FUNCTION,
+  PULL_REQUEST_CHAPTERS_ROUTE_PATH,
+} from "@luke/service/chapters/chapters-function";
 import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
 } from "@luke/service/maintenance/maintenance-bounds";
+import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the WebSocket functions, the voice sessions and the terminal
- * relay, carry the platform's longest generally available duration.
+ * may run, so the WebSocket functions, the voice sessions, the terminal
+ * relay, and the Browser tab's live view, carry the platform's longest generally available duration.
  */
 const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
 
@@ -30,7 +37,9 @@ function routeKeyOf(path: string): string {
  */
 const FUNCTION_GROUP = {
   DEFAULT: "default",
+  LUKE_MCP: "luke-mcp",
   MAINTENANCE_SWEEP: "maintenance-sweep",
+  PULL_REQUEST_CHAPTERS: "pull-request-chapters",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
@@ -62,25 +71,42 @@ const GROUPS: readonly GroupDefinition[] = [
     maxDuration: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(MAINTENANCE_SWEEP_PATH)],
   },
+  // A Generate runs one model call of up to three minutes, past the platform's default duration.
+  {
+    file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
+    maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(PULL_REQUEST_CHAPTERS_ROUTE_PATH)],
+  },
+  // A native agent's `run_on_mac` waits on the developer's Mac for up to eight minutes, past the platform's default duration.
+  {
+    file: FUNCTION_GROUP.LUKE_MCP,
+    maxDuration: LUKE_MCP_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(LUKE_MCP_PATH)],
+  },
 ];
 
-/** The WebSocket services, each a function of its own: the voice sessions and the terminal relay. */
+/** The WebSocket services, each a function of its own: the voice sessions, the terminal relay, and the Browser tab's live view. */
 const STANDALONE_ROUTES: readonly string[] = [
   ...Object.values(VOICE_SERVICE_PATH),
   TERMINAL_RELAY.PATH,
+  BROWSER_LIVE.PATH,
 ].map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:
- * the grouped functions, the standalone voice function, and the default
- * group over every route none of those claimed. Sorted by file, so the stubs,
- * the bundles, and the rewrites are written in one order.
+ * the grouped functions, the standalone WebSocket functions, and the default
+ * group over every route none of those claimed and the hosted oRPC route,
+ * which holds every path that is no route file's. Sorted by file, so the
+ * bundles and the rewrites are written in one order.
  */
 export function functionDefinitions(routeKeys: readonly string[]): readonly FunctionDefinition[] {
+  if (routeKeys.includes(ORPC_ROUTE_KEY)) {
+    throw new Error(`the route key ${ORPC_ROUTE_KEY} is the hosted oRPC route's, not a file's`);
+  }
   const claimed = new Set([...GROUPS.flatMap((group) => group.routes), ...STANDALONE_ROUTES]);
   const unclaimed = routeKeys.filter((key) => !claimed.has(key));
   const definitions: FunctionDefinition[] = [
-    { file: FUNCTION_GROUP.DEFAULT, routes: unclaimed, dispatches: true },
+    { file: FUNCTION_GROUP.DEFAULT, routes: [...unclaimed, ORPC_ROUTE_KEY], dispatches: true },
     ...GROUPS.map((group) => ({ ...group, dispatches: true })),
     ...STANDALONE_ROUTES.map((route) => ({
       file: route,

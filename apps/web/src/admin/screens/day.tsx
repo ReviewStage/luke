@@ -1,4 +1,6 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
+import type { AdminDayQuery } from "@luke/service/admin/http";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -8,25 +10,24 @@ import {
 import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { AccountCell } from "../accounts-table/accounts-table";
-import { SectionHeading, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
-import { BackLink } from "../chrome/back-link";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminSection, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
-import { AdminPage, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { dayReadPath } from "../routing";
+import { dayReadQuery } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const DAY_ERROR = "The day endpoint did not answer.";
 
-// SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
-const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
-  (await response.json()) as AdminDayDetail;
-
-/** What the day's page says it is, under the heading the address already names. */
-const DAY_DESCRIPTION = "One UTC day of hosted-tier calls";
+/** One day's accounts, as the admin day procedure answers them. */
+const readDayDetail =
+  (query: AdminDayQuery): AdminReader<AdminDayDetail> =>
+  async (signal) =>
+    // SAFETY: the admin day procedure answers an AdminDayDetail (`@luke/service/admin/admin-day`), which the contract cannot name.
+    (await browserClient.admin.day(query, { signal })) as AdminDayDetail;
 
 /** One day's own sections. */
 const DAY_SHAPES: readonly SkeletonShape[] = [
@@ -101,24 +102,24 @@ export function DayScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
+  const query = dayReadQuery(day, hideAdmins);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    dayReadPath(day, hideAdmins),
-    readDayDetail,
+    { procedure: ADMIN_READ.DAY, query: query },
+    readDayDetail(query),
     DAY_ERROR,
     { keeps: (shown) => shown.day === day },
   );
   const signOut = () => void withdraw(onSignOut);
+  const back: AdminWayBack = { tab: "dashboard", onBack };
+  const controls = <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />;
 
   switch (state.status) {
     case "loading":
       return frame(
         <PageSkeleton
           title={formatDayHeading(day)}
-          description={DAY_DESCRIPTION}
-          account={account}
-          onSignOut={signOut}
-          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-          back={{ tab: "dashboard", label: "Overview", onBack }}
+          back={back}
+          controls={controls}
           shapes={DAY_SHAPES}
         />,
       );
@@ -129,11 +130,13 @@ export function DayScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, DAY_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
+        <AdminPage title={formatDayHeading(day)} back={back} controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, DAY_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
       );
     case "ready": {
       const detail = state.value;
@@ -141,49 +144,43 @@ export function DayScreen({
       const soFar = stillFilling ? "so far today" : undefined;
 
       return frame(
-        <AdminPage
-          title={formatDayHeading(detail.day)}
-          description={`${DAY_DESCRIPTION}${stillFilling ? " — still filling" : ""}`}
-          account={account}
-          onSignOut={signOut}
-          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-        >
+        <AdminPage title={formatDayHeading(detail.day)} back={back} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <BackLink tab="dashboard" label="Overview" onBack={onBack} />
-
-            <SectionHeading>Hosted tier · this day</SectionHeading>
-            {/* Note that each card shares the row from nothing up but never
+            <AdminSection title="Hosted tier · this day">
+              {/* Note that each card shares the row from nothing up but never
             shrinks below its own figure, so the pair stacks once a figure
             needs the room rather than overflowing its card. */}
-            <div className={STAT_ROW}>
-              <div className={STAT_CELL}>
-                <StatCard
-                  label="Active accounts"
-                  value={formatNumber(detail.totals.accounts)}
-                  hint={soFar}
-                />
+              <div className={STAT_ROW}>
+                <div className={STAT_CELL}>
+                  <StatCard
+                    label="Active accounts"
+                    value={formatNumber(detail.totals.accounts)}
+                    hint={soFar}
+                  />
+                </div>
+                <div className={STAT_CELL}>
+                  <StatCard
+                    label="Hosted calls"
+                    value={formatNumber(detail.totals.calls)}
+                    hint={soFar}
+                  />
+                </div>
               </div>
-              <div className={STAT_CELL}>
-                <StatCard
-                  label="Hosted calls"
-                  value={formatNumber(detail.totals.calls)}
-                  hint={soFar}
-                />
-              </div>
-            </div>
+            </AdminSection>
 
-            <SectionHeading>Accounts active this day</SectionHeading>
-            <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
-            {detail.accounts.length > 0 ? (
-              <DayNote
-                truncatedTo={
-                  detail.totals.accounts > detail.accounts.length
-                    ? detail.accounts.length
-                    : undefined
-                }
-                totalAccounts={detail.totals.accounts}
-              />
-            ) : null}
+            <AdminSection title="Accounts active this day">
+              <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
+              {detail.accounts.length > 0 ? (
+                <DayNote
+                  truncatedTo={
+                    detail.totals.accounts > detail.accounts.length
+                      ? detail.accounts.length
+                      : undefined
+                  }
+                  totalAccounts={detail.totals.accounts}
+                />
+              ) : null}
+            </AdminSection>
           </Refreshing>
         </AdminPage>,
       );

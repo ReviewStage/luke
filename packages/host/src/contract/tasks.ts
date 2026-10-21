@@ -2,18 +2,24 @@
  * tasks.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds, as procedures.
  *
  * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused, as `app:act` refused it.
+ * with no payload and one sent anything is refused.
  * Each output is its value's schema flipped, so oRPC's output check encodes
  * the row's value into what crosses the port; a write that answers whether
  * the service took it answers a boolean, and one the panel reads nothing of
  * answers `void`.
  */
 
+import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
 import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent-view";
 import {
   codeLinesSchema,
+  type TasksPagesAnswer,
+  type TasksRevisionsAnswer,
+  taskHistoryFollowSchema,
+  taskPagesFollowSchema,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
+  tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
   tasksCommentStartParamsSchema,
@@ -58,6 +64,7 @@ import {
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
+import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {
   COLOURED_CODE_MAX_CHARS,
@@ -148,11 +155,14 @@ export const tasksActsContract = {
   )
     .input(takesNothing)
     .output(EffectSchema.Void),
+  [TASKS_ACT_KIND.ADMIN_OPEN]: actProcedure("Could not open the admin dashboard on this system.")
+    .input(takesNothing)
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: actProcedure("Could not disconnect GitHub on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_TALK]: actProcedure("Could not talk about that task on this system.")
-    .input(takesNothing)
+  [TASKS_ACT_KIND.TASKS_TALK]: actProcedure("Could not call that agent on this system.")
+    .input(exactInput(EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString })))
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actProcedure("Could not save the board on this system.")
     .input(exactInput(tasksBoardSaveParamsSchema))
@@ -196,6 +206,9 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_ISSUE]: actProcedure("Could not read that issue on this system.")
     .input(exactInput(tasksIssueParamsSchema))
     .output(EffectSchema.flip(tasksIssueSchema)),
+  [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actProcedure("Could not read the task's Browser tabs.")
+    .input(exactInput(tasksBrowserTabsParamsSchema))
+    .output(EffectSchema.flip(agentBrowserTabsAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actProcedure("Could not colour that code on this system.")
     .input(exactInput(colourCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
@@ -218,6 +231,16 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PAGES]: actProcedure("Could not read that plan's pages on this system.")
     .input(exactInput(tasksPagesParamsSchema))
     .output(EffectSchema.flip(tasksPagesAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
+    "Could not follow that plan's pages on this system.",
+  )
+    .input(exactInput(taskPagesFollowSchema))
+    .output(eventIterator(type<TasksPagesAnswer>())),
+  [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
+    "Could not follow that plan's history on this system.",
+  )
+    .input(exactInput(taskHistoryFollowSchema))
+    .output(eventIterator(type<TasksRevisionsAnswer>())),
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actProcedure("Could not read that picture on this system.")
     .input(exactInput(tasksPictureParamsSchema))
     .output(EffectSchema.flip(tasksPictureAnswerSchema)),

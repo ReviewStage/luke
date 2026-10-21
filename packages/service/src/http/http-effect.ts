@@ -43,6 +43,10 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -52,10 +56,11 @@ export const HOSTED_REFUSAL_STATUS = {
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, and for a repository out of reach, why (`repositoryNotReachable`). */
+/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), and for an upstream that refused, its status (`upstreamRefused`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
+  readonly upstreamStatus?: number;
 };
 
 /**
@@ -104,6 +109,14 @@ export const HOSTED_REFUSAL = {
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
   /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
+  /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
+  AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
+  /** The agent runs on a native harness this function cannot reach (the eve apps', until P11b); nothing was written, and nothing fell through to eve. */
+  NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
+  /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
+  AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },
+  /** The agent runs on its starter's plan, whose provider did not answer; nothing was written, and the same request later may be taken. */
+  AGENT_PLAN_UNREACHABLE: { error: HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE },
   /** The task is archived, so it takes nothing until it is brought back; nothing was written. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
@@ -119,6 +132,11 @@ export const HOSTED_REFUSAL = {
 /** The repository out of reach, with why, so the desktop can offer what mends it. */
 export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {
   return { ...HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE, unreached };
+}
+
+/** The upstream refused what was asked of it, with the status it answered and none of its body. */
+export function upstreamRefused(upstreamStatus: number): HostedRefusal {
+  return { ...HOSTED_REFUSAL.UPSTREAM_ERROR, upstreamStatus };
 }
 
 /**
@@ -146,12 +164,17 @@ export function hostedCarriesBearer(request: Request): boolean {
  * own (`sandbox`). Note that the policy is what keeps markup among them, an
  * SVG's, from acting as this origin, because every account route takes the
  * browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`) and a
- * tab opened on one of these paths carries it.
+ * tab opened on one of these paths carries it. For the same reason no other
+ * site's page may embed them (`cross-origin-resource-policy`): an `<img>` there
+ * would load them with the cookie of whoever is looking. Every reader of them
+ * is same-origin: the web app's own tab, and the Mac's host, which fetches
+ * them with its bearer and hands its renderer the bytes.
  */
 export const HOSTED_BYTES_HEADERS = {
   "x-content-type-options": "nosniff",
   "cache-control": "private, no-store",
   "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  "cross-origin-resource-policy": "same-origin",
 } as const;
 
 /**
@@ -193,10 +216,8 @@ export function hostedRefusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** A refusal as the response an `HttpApp` answers with outside an `HttpApi` group. */
-export function hostedRefusalResponse(
-  refusal: HostedRefusal,
-): HttpServerResponse.HttpServerResponse {
+/** A refusal as the response a route group answers with. */
+function hostedRefusalResponse(refusal: HostedRefusal): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(refusal, {
     status: HOSTED_REFUSAL_STATUS[refusal.error],
   });
@@ -271,15 +292,6 @@ export function hostedJsonResponse<Body extends object>(
   });
 }
 
-/** Refuses a request whose method is not the one the endpoint documents. */
-export function hostedMethod(
-  method: string,
-): Effect.Effect<void, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
-    request.method === method ? Effect.void : Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED),
-  );
-}
-
 /**
  * The request's body as the bytes it arrived as. The stream is counted as it
  * arrives rather than trusting a Content-Length the sender may omit or
@@ -319,10 +331,3 @@ export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireVal
     catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
 }
-
-/** The request's JSON body as the unparsed wire value a schema reads next, bounded as `readBodyBytesEffect` bounds it. */
-export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
-  maximumBytes: number,
-): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return yield* parseJsonBytes(yield* readBodyBytesEffect(maximumBytes));
-});

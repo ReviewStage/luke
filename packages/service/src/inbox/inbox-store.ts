@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import {
   LIVE_COUNT,
   type LiveStatement,
@@ -23,6 +22,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
+  agentSeenBy,
   taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
@@ -53,6 +53,7 @@ import {
   inboxPictureDestination,
 } from "@luke/features/inbox-attachment-link";
 import {
+  askStillAsked,
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -65,25 +66,26 @@ import {
   INBOX_WIRE_VERSION,
   type InboxAnswers,
   type InboxAsk,
+  type InboxAskStanding,
   type InboxBlock,
   type InboxImageType,
   type InboxItem,
   type InboxMessage,
   type InboxPost,
   type InboxPostBlock,
-  type InboxReadAsk,
   type InboxReply,
   type InboxResponse,
   inboxAnswersRefusal,
   inboxAnswersSchema,
   inboxAskResponse,
-  inboxAskSchema,
   inboxBlockSchema,
   inboxReadAskSchema,
   inboxReplyAnswers,
   inboxReplySchema,
   inboxResponseAsk,
   inboxResponseSchema,
+  knownAsk,
+  standingAsk,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { insideCode } from "@luke/features/mention-link";
@@ -93,7 +95,9 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableName,
+  inArray,
   isNotNull,
   isNull,
   max,
@@ -102,7 +106,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, type AnyPgTable, alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -192,8 +196,10 @@ export interface InboxAgent {
 
 /** Why a post was not written. */
 export const INBOX_POST_REFUSAL = {
-  /** The agent holds as many open items as it may; it closes one first. */
+  /** The agent holds as many open asks as it may; it closes one first. */
   TOO_MANY_OPEN: "too-many-open",
+  /** The agent holds as many notices the developer has yet to acknowledge as it may. */
+  TOO_MANY_NOTICES: "too-many-notices",
   /** The agent is no longer the account's. */
   NO_AGENT: "no-agent",
   /** The post names no title and opens a thread under a key with no item, which needs one. */
@@ -323,6 +329,16 @@ function messagesOf(source: SQL): SQL<unknown> {
 /** Whether the item is settled: answered, or closed by its agent. */
 const SETTLED = sql`${inboxItem.status} <> ${INBOX_STATUS.OPEN}`;
 
+/**
+ * Whether the item is a notice: a post that asked nothing, which waits on
+ * the developer's nod alone while it stands open and holds no ask, so it
+ * takes no place among the agent's open asks and no withdrawal finds it.
+ */
+const NOTICE = sql`${inboxItem.response} ->> 'type' = ${INBOX_RESPONSE.NONE}`;
+
+/** Whether the item holds an ask open: open, and no notice. */
+const ASKING = sql<boolean>`(${inboxItem.status} = ${INBOX_STATUS.OPEN} and not (${NOTICE}))`;
+
 const ITEM_TABLE = sql.identifier(getTableName(inboxItem));
 const ITEM_UPDATED_AT = sql`${ITEM_TABLE}.${sql.identifier(inboxItem.updatedAt.name)}`;
 const ITEM_READ_THROUGH = sql`${ITEM_TABLE}.${sql.identifier(inboxItem.readThrough.name)}`;
@@ -421,62 +437,8 @@ const MessageRowSchema = Schema.Struct({
 
 type MessageRow = typeof MessageRowSchema.Type;
 
-/** Where an item stands, as each ask of its thread is read against it. */
-interface AskStanding {
-  readonly status: InboxItem["status"];
-  readonly response: InboxResponse;
-  readonly openAskMessageId: string | null;
-  readonly closedReason: string | null;
-}
-
-/**
- * Whether the item's response still stands for the ask: the ask a response
- * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
- * carry. A post from before version 5 rewrites the response and not the
- * thread, so an ask it posted over stands for it no longer.
- */
-function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
-  const asked = inboxResponseAsk(response);
-  if (asked === undefined || asked.type !== ask.type) return false;
-  return asked.type === INBOX_ASK.DO || isDeepStrictEqual(asked, ask);
-}
-
-/** Whether the ask held open is still the one the item asks: an ask of a type a newer deployment wrote is taken at its word. */
-function askStillAsked(response: InboxResponse, ask: InboxReadAsk): boolean {
-  const known = knownAsk(ask);
-  return known === undefined || askStandsFor(response, known);
-}
-
-/**
- * An ask as a read carries it: as it was kept, unless it was kept open and
- * the item no longer holds it open, which a deployment from before version
- * 5 leaves by closing the item without a word to the ask; then withdrawn
- * with the item's reason where the item closed on it, answered where the
- * item was answered on it, and replaced where the item holds another or,
- * posted over from before version 5, asks something else.
- * Note that an ask withdrawn with no reason is a member's close without an
- * answer, the item's `closedBy` naming the member while the close stands,
- * because an agent's close always says why: a reader tells the two closes
- * apart by the reason alone, as it tells a closed item's.
- */
-function standingAsk(ask: InboxReadAsk, messageId: string, item: AskStanding): InboxReadAsk {
-  if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
-  const replaced = { ...ask, status: INBOX_ASK_STATUS.REPLACED };
-  if (messageId !== item.openAskMessageId) return replaced;
-  switch (item.status) {
-    case INBOX_STATUS.OPEN:
-      return askStillAsked(item.response, ask) ? ask : replaced;
-    case INBOX_STATUS.ANSWERED:
-      return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
-    case INBOX_STATUS.CLOSED:
-      return item.closedReason === null
-        ? { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN }
-        : { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: item.closedReason };
-  }
-}
-
 /** A message as the wire carries it: the member named where their account stands, no files where it carried none, and its ask as it stands on the item. */
-function storedMessage(row: MessageRow, item: AskStanding): InboxMessage {
+function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
   return {
     id: row.id,
     author: row.author,
@@ -563,12 +525,23 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** An item row's workspace: its own, or its task's on a row the backfill has not reached yet. */
-const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${inboxItem.taskId}))`;
+/** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
+const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task. */
+/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`). */
+function itemAgentSeenBy(userId: string): SQL {
+  const seen = exists(
+    queryBuilder
+      .select({ one: codingAgent.id })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.id, inboxItem.agentId), agentSeenBy(userId))),
+  );
+  return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
+}
+
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it. */
 function itemReachableBy(userId: string): SQL {
-  return workspaceReachableBy(userId, ITEM_WORKSPACE);
+  return sql`(${workspaceReachableBy(userId, ITEM_WORKSPACE)} and ${itemAgentSeenBy(userId)})`;
 }
 
 /** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
@@ -602,7 +575,7 @@ const lockAgent = SqlSchema.findOneOption({
     ),
 });
 
-/** How many items the agent holds open under a key other than the one given. */
+/** How many asks the agent holds open under a key other than the one given; a notice holds none. */
 const countOpenBesides = SqlSchema.findOne({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ open: Schema.Number }),
@@ -615,7 +588,28 @@ const countOpenBesides = SqlSchema.findOne({
           and(
             eq(inboxItem.userId, userId),
             eq(inboxItem.agentId, agentId),
+            ASKING,
+            ne(inboxItem.key, key),
+          ),
+        ),
+    ),
+});
+
+/** How many notices the agent holds open, waiting on the developer's nod, under a key other than the one given. */
+const countNoticesBesides = SqlSchema.findOne({
+  Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
+  Result: Schema.Struct({ open: Schema.Number }),
+  execute: ({ userId, agentId, key }) =>
+    Database.use((db) =>
+      db
+        .select({ open: sql<number>`count(*)::int` })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
+            NOTICE,
             ne(inboxItem.key, key),
           ),
         ),
@@ -980,7 +974,7 @@ const upsertItem = SqlSchema.findOne({
   },
 });
 
-/** The agent's open item under the key closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no open item under it. */
+/** The agent's item under the key that holds an ask open closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no such item under it, a notice among them. */
 const closeItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...AgentKeySchema.fields,
@@ -1007,7 +1001,7 @@ const closeItem = SqlSchema.findOneOption({
             eq(inboxItem.userId, userId),
             eq(inboxItem.agentId, agentId),
             eq(inboxItem.key, key),
-            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            ASKING,
           ),
         )
         .returning({ id: inboxItem.id }),
@@ -1128,6 +1122,7 @@ const findSettledStamps = SqlSchema.findAll({
 function accountWaiting(userId: string) {
   return and(
     taskReachableBy(userId),
+    itemAgentSeenBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
     isNull(task.archivedAt),
   );
@@ -1237,7 +1232,8 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        .where(tasklessWaiting(userId))
+        // Note that the repository stands where a task would, so an agent with neither has no place here yet.
+        .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)))
         .orderBy(...LATEST_FIRST),
     ),
 });
@@ -1390,7 +1386,8 @@ export function accountInboxLiveStatements(
       automation,
       and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
     )
-    .where(tasklessWaiting(userId));
+    // An agent with neither a task nor a repository has no place here yet, as in the read above.
+    .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)));
   const plans = queryBuilder
     .select({
       ...liveSelection({ planId: inboxItem.taskId }),
@@ -1426,6 +1423,187 @@ export function accountInboxLiveStatements(
     chatWaitingLiveStatements(userId),
     (parts, chat) => ({ ...parts, ...chat }),
   );
+}
+
+/**
+ * The statements a plan's or an agent's inbox is subscribed to live: its
+ * open items and its latest settled ones, as one result, and the threads
+ * and files they carry, each its own.
+ */
+export interface ScopeInboxLiveStatements {
+  readonly items: LiveStatement;
+  readonly messages: LiveStatement;
+  readonly files: LiveStatement;
+}
+
+/** A scope's thread read under its own name, so a message's latest siblings are read beside it. */
+const sibling = alias(inboxMessage, "sibling");
+
+/**
+ * A scope's items written for Neon Realtime: the same rows, joins, bound,
+ * and rule of who may read them as `scopeItems` with `MAX_ITEMS_READ`, and
+ * the same columns, whether each is unread for the reader among them, each
+ * column under the key `live-wire.ts` reads it by and each instant in epoch
+ * milliseconds. The open items and the latest settled ones are one
+ * statement, so an item settling moves from one to the other in one change
+ * rather than leaving the reader a moment holding neither. The order is the
+ * reader's to keep, since Realtime keeps none.
+ *
+ * Note that each item's thread, the messages either of a read's threads
+ * draws (`messagesOf`'s `LATEST_PLAIN_MESSAGES` and `THREAD_MESSAGES`), and
+ * the files its answer and its messages carried are statements of their own,
+ * which the reader joins to the items, rather than lists the item's row
+ * aggregates, because `jsonb_agg` and `jsonb_build_object` are only stable
+ * and Realtime refuses any function that is not immutable.
+ */
+function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveStatements> {
+  const latestSettled = queryBuilder
+    .select({ id: inboxItem.id })
+    .from(inboxItem)
+    .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
+    .orderBy(...LATEST_FIRST)
+    .limit(INBOX_BOUNDS.MAX_ITEMS_READ);
+  const read = and(
+    inScope(scope),
+    or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+  );
+  const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
+  const ofItem = eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId));
+  const latestOf = (plain: boolean) =>
+    queryBuilder
+      .select({ id: sibling.id })
+      .from(sibling)
+      .where(plain ? and(ofItem, isNull(sibling.ask), isNull(sibling.answers)) : ofItem)
+      .orderBy(desc(sibling.createdAt), desc(sibling.id))
+      .limit(INBOX_BOUNDS.MAX_MESSAGES_READ);
+  const first = queryBuilder
+    .select({ id: sibling.id })
+    .from(sibling)
+    .where(ofItem)
+    .orderBy(sibling.createdAt, sibling.id)
+    .limit(1);
+  // The messages either thread draws: the latest of all and of those that neither ask nor answer, the first, and the one whose ask is held open.
+  const latestMessage = and(
+    inArray(inboxMessage.itemId, itemIds),
+    or(
+      inArray(MESSAGE.id, latestOf(false)),
+      inArray(MESSAGE.id, latestOf(true)),
+      inArray(MESSAGE.id, first),
+      inArray(
+        MESSAGE.id,
+        queryBuilder.select({ id: inboxItem.openAskMessageId }).from(inboxItem).where(read),
+      ),
+    ),
+  );
+  // The message that answered an item's ask, under the answer's key, whose files are the answer's.
+  const answering = queryBuilder
+    .select({ id: inboxMessage.id })
+    .from(inboxMessage)
+    .innerJoin(inboxItem, eq(inboxItem.id, inboxMessage.itemId))
+    .where(
+      and(read, eq(inboxMessage.clientKey, inboxItem.answerKey), isNotNull(inboxMessage.answers)),
+    );
+  const items = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: inboxItem.id,
+            agentId: inboxItem.agentId,
+            key: inboxItem.key,
+            revision: inboxItem.revision,
+            version: inboxItem.version,
+            title: inboxItem.title,
+            blocks: inboxItem.blocks,
+            response: inboxItem.response,
+            needsReply: inboxItem.needsReply,
+            status: inboxItem.status,
+            startedBy: inboxItem.userId,
+            startedByName: INBOX_ITEM_COLUMNS.startedByName,
+            answer: inboxItem.answer,
+            answeredBy: inboxItem.answeredBy,
+            answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
+            closedReason: inboxItem.closedReason,
+            closedBy: inboxItem.closedBy,
+            closedByName: INBOX_ITEM_COLUMNS.closedByName,
+            openAskMessageId: inboxItem.openAskMessageId,
+            unread: unreadFor(scope.userId),
+          },
+          {
+            postedAt: inboxItem.postedAt,
+            updatedAt: inboxItem.updatedAt,
+            // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
+            settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
+          },
+        ),
+      )
+      .from(inboxItem)
+      .where(read),
+  );
+  const messages = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: MESSAGE.id,
+            itemId: qualified(inboxMessage, inboxMessage.itemId),
+            author: MESSAGE.author,
+            userId: MESSAGE.userId,
+            name: sql`(select "name" from ${user} where ${user.id} = ${MESSAGE.userId})`,
+            text: MESSAGE.text,
+            ask: MESSAGE.ask,
+            answers: MESSAGE.answers,
+          },
+          { createdAt: MESSAGE.createdAt },
+        ),
+      )
+      .from(inboxMessage)
+      .where(latestMessage),
+  );
+  const files = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          attachmentId: attachment.id,
+          answerOf: sql`case when ${attachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER} or ${attachment.inboxMessageId} in (${answering}) then ${attachment.inboxItemId} end`,
+          messageId: attachment.inboxMessageId,
+          name: attachment.name,
+          mediaType: attachment.contentType,
+          position: attachment.position,
+        }),
+      )
+      .from(attachment)
+      .where(
+        or(
+          and(
+            eq(attachment.kind, INBOX_ATTACHMENT_KIND.ANSWER),
+            inArray(attachment.inboxItemId, itemIds),
+          ),
+          inArray(
+            attachment.inboxMessageId,
+            queryBuilder.select({ id: MESSAGE.id }).from(inboxMessage).where(latestMessage),
+          ),
+          inArray(attachment.inboxMessageId, answering),
+        ),
+      ),
+  );
+  return Option.all({ items, messages, files });
+}
+
+/** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
+export function taskInboxLiveStatements(
+  userId: string,
+  taskId: string,
+): Option.Option<ScopeInboxLiveStatements> {
+  return scopeLiveStatements({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
+}
+
+/** One agent's inbox written for Neon Realtime, as `memberAgentInboxItems` reads it. */
+export function memberAgentInboxLiveStatements(
+  userId: string,
+  agentId: string,
+): Option.Option<ScopeInboxLiveStatements> {
+  return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
@@ -1671,6 +1849,45 @@ const answerItem = SqlSchema.findOneOption({
           ),
         )
         .returning({ id: inboxItem.id }),
+    ),
+});
+
+/**
+ * The notice settled by a member's message on its thread, as their Got it
+ * settles it: answered with the nod under the message's own key, so a
+ * hand-off that fails takes both back (`withdrawInboxMessage`); nothing
+ * where the item is no open notice at the revision the member was shown,
+ * so a reply to what came before never settles a notice posted since.
+ */
+const acknowledgeNotice = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    revision: Schema.Number,
+    answerKey: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: ({ userId, itemId, revision, answerKey, now }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          status: INBOX_STATUS.ANSWERED,
+          answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+          answerKey,
+          answeredBy: userId,
+          settledAt: now,
+          updatedAt: now,
+          openAskMessageId: null,
+        })
+        .where(
+          and(
+            eq(inboxItem.id, itemId),
+            eq(inboxItem.revision, revision),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            NOTICE,
+          ),
+        ),
     ),
 });
 
@@ -1940,19 +2157,20 @@ function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
 
 /**
  * The columns a post writes on the item. An ask opens the item, the view
- * standing for it; a post that asks nothing waits on nobody, so the item
- * stands to a desktop before version 5 as a note already settled, with no
+ * standing for it; a post that asks nothing opens it as a notice, waiting
+ * on the developer's nod alone, which the agent never hears, so a desktop
+ * before version 5 draws it as a note to answer with Got it, with no
  * blocks, since its message, which such a desktop draws, carries its words.
  */
-function postColumns(view: PostView, ask: InboxAsk | undefined, now: Date) {
+function postColumns(view: PostView, ask: InboxAsk | undefined) {
   if (ask !== undefined) return { ...view, status: INBOX_STATUS.OPEN, settledAt: null };
   return {
     title: view.title,
     blocks: [],
     response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
-    status: INBOX_STATUS.ANSWERED,
-    settledAt: now,
+    status: INBOX_STATUS.OPEN,
+    settledAt: null,
   } as const;
 }
 
@@ -1976,7 +2194,7 @@ function keepPost(
       ...agent,
       organizationId,
       key: post.key,
-      ...postColumns(post.view, post.ask, now),
+      ...postColumns(post.view, post.ask),
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
     const ask = post.ask === undefined ? null : { ...post.ask, status: INBOX_ASK_STATUS.OPEN };
@@ -2017,13 +2235,37 @@ function keepPost(
   });
 }
 
-/** The agent's open items besides the key's against the bound: whether one more may stand open. */
+/** The agent's open asks besides the key's against the bound: whether one more may stand open. */
 function roomToAsk(agent: InboxAgent, key: string): InboxStoreEffect<boolean> {
   return countOpenBesides({ ...agent, key }).pipe(
     // A count that returned no row is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", Effect.die),
     Effect.map(({ open }) => open < INBOX_BOUNDS.MAX_OPEN_PER_AGENT),
   );
+}
+
+/** The agent's open notices besides the key's against the same bound: whether one more may wait on the developer's nod. */
+function roomToNotify(agent: InboxAgent, key: string): InboxStoreEffect<boolean> {
+  return countNoticesBesides({ ...agent, key }).pipe(
+    // A count that returned no row is the database breaking its own contract, not an outcome.
+    Effect.catchTag("NoSuchElementError", Effect.die),
+    Effect.map(({ open }) => open < INBOX_BOUNDS.MAX_OPEN_PER_AGENT),
+  );
+}
+
+/** Whether the post finds room under its bound: an ask among the open asks, a notice among the open notices. */
+function roomToPost(
+  agent: InboxAgent,
+  key: string,
+  ask: InboxAsk | undefined,
+): InboxStoreEffect<Result.Result<void, InboxPostRefusal>> {
+  return ask === undefined
+    ? Effect.map(roomToNotify(agent, key), (room) =>
+        room ? Result.void : Result.fail(INBOX_POST_REFUSAL.TOO_MANY_NOTICES),
+      )
+    : Effect.map(roomToAsk(agent, key), (room) =>
+        room ? Result.void : Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN),
+      );
 }
 
 /** A file's own name from the path the agent named it by in its sandbox. */
@@ -2036,8 +2278,9 @@ function fileName(path: string): string {
  * item under its key, or the one standing under it written again, as
  * `keepPost` writes one. The message's words are the blocks in order, and
  * its ask is the one the response stands for; an acknowledgement asks
- * nothing, so its item waits on nobody. Refused where the agent would hold
- * more open items than the bound, or is no longer the account's. The
+ * nothing, so its item is a notice, which holds no ask. Refused where the
+ * agent would hold more open asks, or more open notices, than the bound, or
+ * is no longer the account's. The
  * pictures are the post's image blocks' bytes in the blocks' own order, one
  * each, read by the caller; each is kept as a file of the post's message
  * under an id minted here, which its block names. Note that the post's own
@@ -2054,10 +2297,9 @@ export function postInboxItem(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const ask = inboxResponseAsk(post.response);
-        // A post that asks nothing waits on nobody, so it takes no place among the open items.
-        if (ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
-          return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
-        }
+        // A post that asks nothing is a notice, which takes its place among the open notices rather than the open asks.
+        const room = yield* roomToPost(agent, post.key, ask);
+        if (Result.isFailure(room)) return Result.fail(room.failure);
         const now = yield* DateTime.nowAsDate;
         const posted = post.blocks ?? [];
         const names = posted.flatMap((block) =>
@@ -2129,10 +2371,12 @@ function followUp(
  * written as `keepPost` writes one, its view the words as blocks, each
  * picture standing alone on its line an image block, and the response
  * nearest its ask; it is refused where the agent would hold more open
- * items than the bound. A post that asks nothing is a message on the
- * thread of the item standing under its key, as the agent's reply is,
- * which moves nothing of the item but its last change; under a key with
- * no item it opens a thread that waits on nobody. A post naming no title
+ * asks than the bound, and a notice where it would hold more open notices
+ * than the same bound. A post that asks nothing on a thread whose ask
+ * still stands open is a message on it, as the agent's reply is, which
+ * moves nothing of the item but its last change; on any other thread, or
+ * under a key with no item, it is written as `keepPost` writes one, the
+ * item a notice waiting on the developer's nod again. A post naming no title
  * keeps the standing item's, read under the same lock; refused where no
  * item stands under the key, which a first post opens and must name. Refused
  * where the agent is no longer the account's.
@@ -2148,16 +2392,15 @@ export function postInboxThread(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const standing = yield* findAgentItem({ ...agent, key: post.key });
-        if (post.ask === undefined && Option.isSome(standing)) {
+        if (post.ask === undefined && Option.isSome(standing) && standing.value.asking) {
           return Result.succeed(
             yield* followUp(agent, locked.value, standing.value.id, post, pictures),
           );
         }
         const title = post.title ?? Option.getOrUndefined(standing)?.title;
         if (title === undefined) return Result.fail(INBOX_POST_REFUSAL.NO_TITLE);
-        if (post.ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
-          return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
-        }
+        const room = yield* roomToPost(agent, post.key, post.ask);
+        if (Result.isFailure(room)) return Result.fail(room.failure);
         const now = yield* DateTime.nowAsDate;
         const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
@@ -2570,12 +2813,6 @@ function bytesOf(file: CodingAgentAttachment): Uint8Array {
   return new Uint8Array(Buffer.from(file.data, "base64"));
 }
 
-/** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
-function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
-  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
-  return Schema.is(inboxAskSchema)(kept) ? kept : undefined;
-}
-
 /** A note bounded as an answer's note on the item, which a desktop before version 5 reads it as; words past the bound end in an ellipsis. */
 function boundedNote(words: string): string {
   const max = INBOX_BOUNDS.MAX_NOTE_CHARS;
@@ -2781,6 +3018,8 @@ interface InboxAskAnswered {
   readonly item: InboxItem;
   readonly outcome: InboxAskAnswer;
   readonly refusal?: string;
+  /** The ask this write answered, where it took the answer, which the item's thread read may no longer carry. */
+  readonly ask?: InboxAsk;
 }
 
 /**
@@ -2874,7 +3113,11 @@ export function answerInboxAsk(
           now,
         });
         const item = yield* itemAsWritten(userId, itemId);
-        return Option.some({ item, outcome: INBOX_ASK_ANSWER.TAKEN });
+        return Option.some({
+          item,
+          outcome: INBOX_ASK_ANSWER.TAKEN,
+          ...(ask === undefined ? undefined : { ask }),
+        });
       }),
     ),
   );
@@ -2886,6 +3129,8 @@ type InboxMessageWriter =
       readonly author: typeof INBOX_MESSAGE_AUTHOR.MEMBER;
       readonly userId: string;
       readonly clientKey: string;
+      /** The revision of the notice the member was shown, which their message settles; absent where it settles none. */
+      readonly revision?: number | undefined;
     }
   | { readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT };
 
@@ -2989,7 +3234,8 @@ function sameMessage(
  * The message written on the item's thread, the item standing open or
  * settled, with the files it carried in the order given, and the item's
  * last change moved to now, all in one write: the item's status, answer,
- * and revision are left as they stand. A member's message sent again under
+ * and revision are left as they stand, but that a member's message naming
+ * the revision of the notice it answers settles it as their nod does. A member's message sent again under
  * its key is the one already written, which writes nothing and moves
  * nothing; another message under a key already taken, by another member or
  * with other words or files, is refused as the key reused, so the thread
@@ -3034,8 +3280,15 @@ function writeInboxMessage(
             }),
           );
           yield* touchItem({ itemId, now });
-          // A member's own message leaves the item read for them, and unread for every other member.
-          if (member !== undefined) yield* upsertRead({ userId: member.userId, itemId });
+          if (member !== undefined) {
+            // A member's own message leaves the item read for them, and unread for every other member.
+            yield* upsertRead({ userId: member.userId, itemId });
+            // Their words on the notice they were shown are their nod to it, as Got it is.
+            const { userId, clientKey: answerKey, revision } = member;
+            if (revision !== undefined) {
+              yield* acknowledgeNotice({ userId, itemId, revision, answerKey, now });
+            }
+          }
         }
         const outcome = Option.isSome(written)
           ? INBOX_MESSAGE_OUTCOME.WRITTEN
@@ -3074,15 +3327,18 @@ export function postInboxMessage(
     readonly text: string;
     readonly clientKey: string;
     readonly files?: readonly CodingAgentAttachment[] | undefined;
+    /** The revision of the notice the member was shown, which the message settles where it still stands there. */
+    readonly revision?: number | undefined;
   },
 ): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
+  const { clientKey, revision } = message;
   return Effect.flatMap(findItem({ userId, itemId }), (found) =>
     Option.isNone(found)
       ? Effect.succeed(Option.none())
       : writeInboxMessage(
           userId,
           itemId,
-          { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey: message.clientKey },
+          { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey, revision },
           message.text,
           (message.files ?? []).map((file) => ({
             name: file.name,
@@ -3093,14 +3349,14 @@ export function postInboxMessage(
   );
 }
 
-/** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
+/** The agent's own item under the key, as its tools name one, and whether it holds an ask open, where the member who started the agent is still a member of the item's workspace. */
 const findAgentItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, title: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, title: Schema.String, asking: Schema.Boolean }),
   execute: ({ userId, agentId, key }) =>
     Database.use((db) =>
       db
-        .select({ id: inboxItem.id, title: inboxItem.title })
+        .select({ id: inboxItem.id, title: inboxItem.title, asking: ASKING })
         .from(inboxItem)
         .where(
           and(
@@ -3147,15 +3403,23 @@ export function replyInboxItem(
  * thread, its files with it, where the account still reaches the item: what
  * a hand-off to the agent that failed leaves, so the thread never shows a
  * message the agent was not told. The item's last change stays where the
- * message moved it.
+ * message moved it, and a notice the message settled waits on the
+ * developer's nod again.
  */
 export function withdrawInboxMessage(
   userId: string,
   itemId: string,
   clientKey: string,
 ): InboxStoreEffect<void> {
-  return Effect.flatMap(findItem({ userId, itemId }), (found) =>
-    Option.isNone(found) ? Effect.void : deleteMessage({ itemId, clientKey }),
+  const withdrawn = Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    yield* withdrawAnswer({ userId, itemId, answerKey: clientKey, openAsk: null, now });
+    yield* deleteMessage({ itemId, clientKey });
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    Effect.flatMap(findItem({ userId, itemId }), (found) =>
+      Option.isNone(found) ? Effect.void : client.withTransaction(withdrawn),
+    ),
   );
 }
 

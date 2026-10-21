@@ -73,8 +73,6 @@ export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   LOGIN_ITEM: "login-item",
   VOICE: "voice",
-  TALK_HOTKEY: "talk-hotkey",
-  STOP_HOTKEY: "stop-hotkey",
   MEDIA_DUCK: "media-duck",
 } as const;
 

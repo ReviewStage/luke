@@ -1,5 +1,6 @@
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+import { browserClient } from "@luke/features/contract/browser-client";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import type {
   AdminWorkspaceInstallation,
@@ -7,7 +8,7 @@ import type {
   AdminWorkspaceList,
   AdminWorkspaceRow,
 } from "@luke/service/admin/admin-workspaces";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/service/admin/http";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH, type AdminWorkspacesQuery } from "@luke/service/admin/http";
 import {
   BADGE_TONE,
   Badge,
@@ -32,8 +33,8 @@ import {
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { AccountCell } from "../accounts-table/accounts-table";
-import { STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
 import { WORKSPACES_SHARED_ONLY } from "../prefs";
@@ -42,9 +43,9 @@ import {
   searchFromLocation,
   searchHref,
   searchTerm,
-  workspacesReadPath,
+  workspacesReadQuery,
 } from "../routing";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 /**
  * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,
@@ -60,9 +61,12 @@ const WORKSPACES_ERROR = "The workspaces endpoint did not answer.";
 
 const WORKSPACES_EMPTY = "No workspace matches.";
 
-// SAFETY: a 200 from the admin workspaces endpoint is an AdminWorkspaceList body by its contract.
-const readWorkspaceList: AdminReader<AdminWorkspaceList> = async (response) =>
-  (await response.json()) as AdminWorkspaceList;
+/** The workspaces table, as the admin workspaces procedure answers it. */
+const readWorkspaceList =
+  (query: AdminWorkspacesQuery): AdminReader<AdminWorkspaceList> =>
+  async (signal) =>
+    // SAFETY: the admin workspaces procedure answers an AdminWorkspaceList (`@luke/service/admin/admin-workspaces`), which the contract cannot name.
+    (await browserClient.admin.workspaces(query, { signal })) as AdminWorkspaceList;
 
 /** The table's columns by key; a fixed set, so a heading never carries a free string. */
 const WORKSPACE_COLUMN = {
@@ -261,17 +265,13 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
 function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Element {
   const truncated = list.total > list.rows.length;
   return (
-    <div className="mt-3">
-      <Text tone={TEXT_TONE.MUTED}>
-        Tasks and Agents count those started in the last {list.activityDays} UTC days, and Merged
-        the distinct pull requests from the workspace's agents that merged in them; the table is
-        sorted by that week's activity. The headline counts read shared workspaces whatever the
-        table lists.
-        {truncated
-          ? ` Only the ${formatNumber(list.rows.length)} busiest of ${formatNumber(list.total)} are listed. Search reads every workspace.`
-          : ""}
-      </Text>
-    </div>
+    <Text tone={TEXT_TONE.MUTED}>
+      Tasks and Agents count those started in the last {list.activityDays} UTC days, and Merged the
+      distinct pull requests from the workspace's agents that merged in them.
+      {truncated
+        ? ` Only the ${formatNumber(list.rows.length)} busiest of ${formatNumber(list.total)} are listed. Search reads every workspace.`
+        : ""}
+    </Text>
   );
 }
 
@@ -311,9 +311,10 @@ export function WorkspacesScreen({
     setSharedOnly(next);
   };
 
+  const asked = workspacesReadQuery(hideAdmins, sharedOnly, searchTerm(query));
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    workspacesReadPath(hideAdmins, sharedOnly, searchTerm(query)),
-    readWorkspaceList,
+    { procedure: ADMIN_READ.WORKSPACES, query: asked },
+    readWorkspaceList(asked),
     WORKSPACES_ERROR,
     { debounceMs: SEARCH_DEBOUNCE_MS },
   );
@@ -322,7 +323,7 @@ export function WorkspacesScreen({
   const page = (
     content: Pick<
       React.ComponentProps<typeof AdminCollectionPage>,
-      "filters" | "state" | "empty" | "children"
+      "filters" | "state" | "empty" | "error" | "children"
     >,
   ) =>
     frame(
@@ -336,8 +337,6 @@ export function WorkspacesScreen({
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
           </>
         }
-        account={account}
-        onSignOut={signOut}
         loadingLabel="Loading…"
         {...content}
       />,
@@ -361,13 +360,17 @@ export function WorkspacesScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
     case "error":
-      return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, WORKSPACES_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
-      );
+      return page({
+        filters: search,
+        state: COLLECTION_STATE.ERROR,
+        error: (
+          <AdminErrorState
+            detail={adminReadFailure(state, WORKSPACES_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        ),
+      });
     case "ready": {
       const list = state.value;
       const needle = query.trim().toLowerCase();
@@ -379,8 +382,10 @@ export function WorkspacesScreen({
       const body = (table: React.ReactNode) => (
         <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
           <WorkspaceTiles list={list} />
-          <div className="mt-6">{table}</div>
-          <WorkspacesNote list={list} />
+          <AdminSection>
+            {table}
+            <WorkspacesNote list={list} />
+          </AdminSection>
         </Refreshing>
       );
 

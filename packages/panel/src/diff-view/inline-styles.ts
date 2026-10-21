@@ -4,8 +4,9 @@ import { toHtml as hastToHtml } from "hast-util-to-html";
 /**
  * inline-styles.ts -- the styles Pierre's diffs writes as markup, carried and applied through the CSSOM, which the panel's policy admits.
  *
- * The panel's policy is `style-src 'self'` (`../index.html`), which refuses
- * an inline `<style>` element and an inline `style` attribute parsed from
+ * The panel's policy is `style-src 'self'` (the desktop's
+ * `renderer/index.html` and the web's `vercel.json`), which refuses an
+ * inline `<style>` element and an inline `style` attribute parsed from
  * markup, and reports each one refused as an error on the console, which a
  * development run writes to its terminal (`main/window/renderer-errors.ts`).
  * Pierre draws a diff by writing its tree of elements as an HTML string

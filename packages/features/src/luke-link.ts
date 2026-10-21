@@ -17,8 +17,7 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *
  * - a task, `/plan/<id>`, and its section, `#<anchor>`, its version,
  *   `/plan/<id>/version/<seq>`, a page an agent wrote for it,
- *   `/plan/<id>/page/<pageId>`, its Call tab or one call there,
- *   `/plan/<id>/call[/<callId>]`, and a turn of Luke's in its Work,
+ *   `/plan/<id>/page/<pageId>`, and a turn of Luke's own work on it,
  *   `/plan/<id>/work/<at>`;
  * - one of its agents, `/plan/<id>/agent/<agentId>`, and under it a worker,
  *   `/worker/<callId>`, its Changes, `/changes`, one review thread of its
@@ -32,9 +31,13 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - Factory, `/factory`, and a page of Settings, `/settings[/<page>]`;
+ * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
+ *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
- *   someone who left, by the account id the service names them by;
- * - an issue's page, `/issue/<issueId>`, by the id the service minted it.
+ *   someone who left, by the account id the service names them by.
+ *
+ * An issue's page, `/issue/<issueId>`, is no place now that Luke keeps no
+ * issues of its own, so an old link to one reads as a link it does not know.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
  * is read as its task, and a picture in an Inbox item's words, the item's
@@ -58,7 +61,6 @@ export const LINK_PLACE = {
   COMMENT: "comment",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   TURN: "turn",
   AGENT: "agent",
   WORKER: "worker",
@@ -74,7 +76,8 @@ export const LINK_PLACE = {
   FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
-  ISSUE: "issue",
+  /** Chat, on For you, or on one of its channels by the id the service mints it. */
+  CHAT: "chat",
 } as const;
 
 /** Which of a Pull request tab's views a review thread's link opens it in: its Conversation, or Files changed, on its line. */
@@ -94,7 +97,6 @@ const STEP = {
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   WORK: "work",
   AGENT: "agent",
   WORKER: "worker",
@@ -109,7 +111,7 @@ const STEP = {
   FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
-  ISSUE: "issue",
+  CHAT: "chat",
 } as const;
 
 /** The query a task's link names one of its comment threads under. */
@@ -165,11 +167,6 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.PAGE),
     planId: idSchema,
     pageId: idSchema,
-  }),
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(LINK_PLACE.CALL),
-    planId: idSchema,
-    callId: EffectSchema.optionalKey(idSchema),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.TURN),
@@ -228,7 +225,10 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.FACTORY) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.ISSUE), issueId: idSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.CHAT),
+    channelId: EffectSchema.optionalKey(idSchema),
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
@@ -290,10 +290,9 @@ function namesItemPicture(more: readonly string[]): boolean {
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
-/** The steps after a task's id: a version, a page, the Call tab or a call, a turn, an agent's, or a worker of Luke's. */
+/** The steps after a task's id: a version, a page, a turn, an agent's, or a worker of Luke's. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
-  if (step === STEP.CALL && id === undefined) return { kind: LINK_PLACE.CALL, planId: taskId };
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
   // A picture in an item's words opens the item, and nothing of the picture.
   if (step === STEP.INBOX && id !== undefined && namesItemPicture(more)) {
@@ -307,8 +306,6 @@ function taskFields(taskId: string, rest: readonly string[]) {
         : undefined;
     case STEP.PAGE:
       return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: id };
-    case STEP.CALL:
-      return { kind: LINK_PLACE.CALL, planId: taskId, callId: id };
     case STEP.WORK:
       return WHOLE.test(id) ? { kind: LINK_PLACE.TURN, planId: taskId, at: Number(id) } : undefined;
     case STEP.WORKER:
@@ -379,15 +376,16 @@ function placeFields(steps: readonly string[]) {
       return id === undefined || rest.length > 0
         ? undefined
         : { kind: LINK_PLACE.PERSON, userId: id };
-    case STEP.ISSUE:
-      return id === undefined || rest.length > 0
-        ? undefined
-        : { kind: LINK_PLACE.ISSUE, issueId: id };
     case STEP.SETTINGS:
       if (rest.length > 0) return undefined;
       return id === undefined
         ? { kind: LINK_PLACE.SETTINGS }
         : { kind: LINK_PLACE.SETTINGS, page: id };
+    case STEP.CHAT:
+      if (rest.length > 0) return undefined;
+      return id === undefined
+        ? { kind: LINK_PLACE.CHAT }
+        : { kind: LINK_PLACE.CHAT, channelId: id };
     default:
       return undefined;
   }
@@ -424,10 +422,6 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
     case LINK_PLACE.PAGE:
       return [STEP.PLAN, place.planId, STEP.PAGE, place.pageId];
-    case LINK_PLACE.CALL:
-      return place.callId === undefined
-        ? [STEP.PLAN, place.planId, STEP.CALL]
-        : [STEP.PLAN, place.planId, STEP.CALL, place.callId];
     case LINK_PLACE.TURN:
       return [STEP.PLAN, place.planId, STEP.WORK, String(place.at)];
     case LINK_PLACE.AGENT:
@@ -464,10 +458,10 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.FACTORY];
     case LINK_PLACE.PERSON:
       return [STEP.PERSON, place.userId];
-    case LINK_PLACE.ISSUE:
-      return [STEP.ISSUE, place.issueId];
     case LINK_PLACE.SETTINGS:
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
+    case LINK_PLACE.CHAT:
+      return place.channelId === undefined ? [STEP.CHAT] : [STEP.CHAT, place.channelId];
   }
 }
 

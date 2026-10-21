@@ -8,7 +8,9 @@ import { storedMessageLine } from "./context.js";
  * at the session's start, so a new eve session over an old conversation
  * remembers what was said without eve's history being the record. Our
  * tables are the record; the seed is a bounded view of them, newest last,
- * cut from the front. A conversation with nothing said seeds nothing.
+ * cut from the front. A conversation with nothing said seeds nothing. A
+ * coding agent's session opened afresh after its last one retired is seeded
+ * the same way (`coder-host/host.ts`'s `seed`).
  */
 
 /** The marker the seed rides behind, so the model knows it is data. */

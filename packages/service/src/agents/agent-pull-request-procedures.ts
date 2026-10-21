@@ -32,7 +32,11 @@
  * changes.
  */
 
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  type WithRepository,
+} from "@luke/database/models/coding-agent-store";
 import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
@@ -40,20 +44,25 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestViewedAnswer,
 } from "@luke/features/pull-request-write-wire";
 import { Effect, Option, type Redacted } from "effect";
 import type { HttpClient } from "effect/http";
-import { namedOverviewConversation, namedOverviewPullRequest } from "../github/github-people.js";
+import {
+  namedOverviewConversation,
+  namedOverviewPullRequest,
+  namedPendingReview,
+} from "../github/github-people.js";
 import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
   addLineComment,
   commentOnPullRequest,
+  deletePendingComment,
   discardPendingReview,
+  editPendingComment,
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
@@ -86,7 +95,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { reachedAgentById } from "./agent-reach.js";
 import {
   askedPublished,
@@ -111,14 +120,6 @@ export interface AgentPullRequestProcedureSeams extends PublishedReach {
   resolveUserId: UserIdResolver;
 }
 
-/**
- * A change to a pull request names the change and its few fields, a
- * review's words the longest of them, so a body past this is no change.
- * Note that each of those words' characters may take six bytes as JSON,
- * a control character escaped as `\u0000`.
- */
-const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
-
 /** The `number` a request names, as the query spelled it, read as the number it names. */
 const numberNamed = (number: string | undefined) =>
   pullRequestNumberOf(number === undefined ? [] : [number]);
@@ -139,7 +140,7 @@ const askedOfAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
 type OverviewRead<A, R> = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
   /** The member reading, whose own reads mark what is theirs. */
   userId: string,
@@ -148,8 +149,8 @@ type OverviewRead<A, R> = (
 /**
  * One part of the agent's pull request's overview: the pull request asked
  * about, read from GitHub afresh on a token minted for the agent's
- * repository; none where it names no pull request yet. Each part is a
- * procedure of its own, so each lands on its own.
+ * repository; none where it names no pull request yet, or the agent works in
+ * no repository. Each part is a procedure of its own, so each lands on its own.
  */
 const overviewPart = <A, R>(
   agent: CodingAgent,
@@ -158,7 +159,7 @@ const overviewPart = <A, R>(
   read: OverviewRead<A, R>,
 ) =>
   Effect.gen(function* () {
-    if (pullRequest === null) return { pullRequest };
+    if (pullRequest === null || !hasRepository(agent)) return { pullRequest: null };
     const part = yield* Effect.gen(function* () {
       const { token } = yield* agentPullRequestReach(userId, agent);
       return yield* read(token, agent, pullRequest, userId);
@@ -209,7 +210,7 @@ const mergingOrNone = (token: Redacted.Redacted, repository: string, number: num
  */
 const overviewPullRequestRead = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
 ) =>
   Effect.gen(function* () {
@@ -233,7 +234,7 @@ const overviewPullRequestRead = (
  */
 const overviewChecksRead = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
 ) =>
   Effect.map(
@@ -267,7 +268,7 @@ const memberPendingReview = (userId: string, repository: string, number: number)
  */
 const overviewConversationRead = (
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
   userId: string,
 ) =>
@@ -283,7 +284,10 @@ const overviewConversationRead = (
           ),
           (read) => namedOverviewConversation(agent, pullRequest.number, read),
         ),
-        memberPendingReview(userId, agent.repository, pullRequest.number),
+        Effect.flatMap(
+          memberPendingReview(userId, agent.repository, pullRequest.number),
+          (pending) => namedPendingReview(agent, pullRequest.number, pending),
+        ),
       ],
       { concurrency: "unbounded" },
     ),
@@ -355,6 +359,10 @@ function writeOf(
     }
     case PULL_REQUEST_ACTION.DISCARD_REVIEW:
       return discardPendingReview(token, id);
+    case PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT:
+      return editPendingComment(token, id, request);
+    case PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT:
+      return deletePendingComment(token, id, request.commentId);
     case PULL_REQUEST_ACTION.MARK_FILE_VIEWED:
     case PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED:
       return setFileViewed(
@@ -404,7 +412,6 @@ function actionWrite(
 export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams) {
   const published = seams.published ?? instancePublishedCache();
   const signedIn = hosted.agentPullRequests.use(accountMiddleware(seams.resolveUserId));
-  const changing = signedIn.use(bodyLimit(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES));
   return {
     /** What the agent published, from the instance's kept answers; or, where the request names a number, that pull request of its repository. */
     pullRequest: signedIn.pullRequest.effect(function* ({ input, context }) {
@@ -419,14 +426,16 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
      * GitHub answered, the kept answer is let go, so the reads after it ask
      * GitHub afresh.
      */
-    action: changing.action.effect(function* ({ input, context }) {
+    action: signedIn.action.effect(function* ({ input, context }) {
       const { agent, pullRequest } = yield* askedOfAgent(
         published,
         context.userId,
         input.params.id,
         input.query?.number,
       );
-      if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (pullRequest === null || !hasRepository(agent)) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      }
       const written = yield* memberPullRequestWrite(
         context.userId,
         agent,
@@ -448,7 +457,7 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
         input.id,
         input.number,
       );
-      if (pullRequest === null) {
+      if (pullRequest === null || !hasRepository(agent)) {
         const none: PullRequestViewedAnswer = {
           outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
           files: [],

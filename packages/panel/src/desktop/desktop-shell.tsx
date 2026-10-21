@@ -1,13 +1,16 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  BackIcon,
   COLLECTION_STATE,
   CollectionPage,
   ComposeIcon,
+  DetailPage,
   IconButton,
+  NavItem,
   PAGE_FRAME,
   ScrollArea,
   SettingsPage,
@@ -15,8 +18,8 @@ import {
   SidebarIcon,
   Skeleton,
 } from "@luke/ui";
+import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -28,37 +31,36 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history.js"
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { Shortcut } from "../shortcut.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
+import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
-  ISSUES_PAGE,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
+import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCallingAgent } from "../use-voice-view.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopChat } from "./desktop-chat.js";
-import { DesktopFactory } from "./desktop-factory.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
+import { FACTORY, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
-import { PersonPage } from "./person-page.js";
 import { SidePanelToggle } from "./side-panel.js";
-import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
+import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { taskCardOf } from "./task-card.js";
 import { useSummaryPin } from "./task-summary.js";
 import { useWindowTitle } from "./window-title.js";
@@ -66,8 +68,7 @@ import { useWindowTitle } from "./window-title.js";
 /**
  * Settings, loaded as a chunk of its own the first time it opens rather than
  * with the window, because the renderer bundle is parsed at every window
- * open, the voice window's included, and Settings is opened seldom
- * (`bundle-budget.json`). The chunk is a local file, so it stands a frame
+ * open, the voice window's included, and Settings is opened seldom. The chunk is a local file, so it stands a frame
  * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
 const DesktopSettings = lazy(() =>
@@ -78,7 +79,7 @@ const DesktopSettings = lazy(() =>
  * The Automations pages, loaded as a chunk of their own the first time
  * they open, as Settings is and for the same reason: the renderer bundle is
  * parsed at every window open, and the pages, their editor and its triggers
- * among them, are opened seldom (`bundle-budget.json`). What stands while
+ * among them, are opened seldom. What stands while
  * the chunk loads is the pages' own empty frame, for a frame.
  */
 const AutomationsPage = lazy(() =>
@@ -87,30 +88,22 @@ const AutomationsPage = lazy(() =>
   })),
 );
 
-/**
- * The Issues page, loaded as a chunk of its own the first time it opens,
- * as the Automations pages are and for the same reason.
- */
-const IssuesPage = lazy(() =>
-  import("./issues-page.js").then((loaded) => ({ default: loaded.IssuesPage })),
+/** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
+const TasksPage = lazy(() =>
+  import("./tasks-page.js").then((loaded) => ({ default: loaded.TasksPage })),
 );
 
-/** The Board, its own chunk, loaded the first time it is opened. */
-const TasksBoard = lazy(() =>
-  import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
-);
-
-/** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
-function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+/** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
+function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
-      label="Board"
+      label="Tasks"
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Board</h1>
+            <h1 className="desktop-toolbar-title">Tasks</h1>
           </div>
         </header>
       }
@@ -120,14 +113,89 @@ function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   );
 }
 
+/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Tasks page's does. */
+function FactoryLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_FACTORY, onExit);
+  return (
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Factory"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Factory</h1>
+            <ExperimentTag />
+          </div>
+        </header>
+      }
+      state={COLLECTION_STATE.LOADING}
+      loadingLabel="Reading tasks…"
+    />
+  );
+}
+
+/** What stands while a person's page's chunk loads: its frame, their name where the place that opened it knew it, and its own way out. */
+function PersonLoading({
+  name,
+  onExit,
+}: {
+  name: string | undefined;
+  onExit: () => void;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, onExit);
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label={name ?? "Profile"}
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">
+              {name ?? <Skeleton width={PERSON_SKELETON_NAME} />}
+            </h1>
+          </div>
+        </header>
+      }
+    >
+      {null}
+    </DetailPage>
+  );
+}
+
+/** How wide the placeholder name stands while a person's page's chunk loads, as the page's own does. */
+const PERSON_SKELETON_NAME = "180px";
+
 /**
- * What stands while the Issues page's chunk loads: its empty frame, and its
- * own way out, so Escape pressed in that frame closes Issues as the list
- * would rather than falling through to the plan behind it.
+ * What stands while a version history's chunk loads: its frame, the list's
+ * column where the sidebar stood, and its own way out, its Back row and
+ * Escape, so the history is left as it would be once drawn.
  */
-function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_ISSUES, onExit);
-  return <section className="automations-view" aria-label="Issues" />;
+function VersionHistoryLoading({
+  onExit,
+  hidden,
+}: {
+  onExit: () => void;
+  hidden: HiddenColumns;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
+  return (
+    <div className="desktop-version-history">
+      <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
+        <div className="desktop-drag-strip" />
+        <NavItem
+          icon={<BackIcon />}
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
+          onClick={onExit}
+        >
+          Back
+        </NavItem>
+      </nav>
+      <section className="version-page" aria-label="Version" hidden={hidden.item}>
+        <div className="desktop-drag-strip" />
+      </section>
+    </div>
+  );
 }
 
 /**
@@ -277,17 +345,6 @@ function usePlaceCommands(
         }
       : undefined,
   );
-  // The Issues page is an experiment on the same terms as Factory.
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  useAppCommand(
-    APP_COMMAND.ISSUES,
-    pastGate && tasks.signedIn && issuesOn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.issuesView.onOpen();
-        }
-      : undefined,
-  );
   // Factory is an experiment: offered nowhere, ⌘K, its chord, or the menu, while it is off.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   useAppCommand(
@@ -318,9 +375,11 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // The page lists an installed app's chords, and stands nowhere else (`pages.tsx`).
+  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
-    pastGate
+    pastGate && desktopApp
       ? () => {
           // Arriving at Settings lands on Account, so the page is turned
           // after.
@@ -351,17 +410,20 @@ function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element 
 }
 
 /**
- * Whether the open task's Transcript is on screen with its words, streaming
- * a call's as they are said. A Call tab standing behind another chosen
- * tab, or under a side panel filling the window, is not on screen, and one
- * still reading, or failed, shows no words.
+ * Whether the tab of the agent the call speaks into is on screen, where its
+ * transcript streams the call's words as they are said and its foot draws
+ * the call bar. A tab standing behind another chosen tab, or under a side
+ * panel filling the window, is not on screen.
  */
-function transcriptStreaming(tasks: TasksControl): boolean {
-  const { mainTabs, sidePanel, transcript } = tasks;
+function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+  const { mainTabs, sidePanel } = tasks;
+  const tab = mainTabs.tab;
   return (
+    calling !== undefined &&
     !sidePanel.fullScreen &&
-    mainTabs.tab === MAIN_TAB.CALL &&
-    transcript.region.kind === TRANSCRIPT_REGION.READY
+    tab !== undefined &&
+    isAgentTab(tab) &&
+    tab.agent === calling
   );
 }
 
@@ -390,8 +452,7 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
-  if (tasks.issuesView.open) return { signedIn, subject: "Issues", workspace: tasks.workspace };
-  if (tasks.boardView.open) return { signedIn, subject: "Board", workspace: tasks.workspace };
+  if (tasks.boardView.open) return { signedIn, subject: "Tasks", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -482,17 +543,13 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  const { open: issuesShown, onClose: closeIssues } = tasks.issuesView;
-  useEffect(() => {
-    if (issuesShown && !issuesOn) closeIssues();
-  }, [issuesShown, issuesOn, closeIssues]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
+    room === SHELL_ROOM.NARROW,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -503,12 +560,20 @@ export function DesktopShell({
     tasks.factoryView.open ||
     tasks.automationsView.open ||
     tasks.chatView.open ||
-    tasks.issuesView.open ||
     tasks.boardView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
+  // Note that the sidebar draws its list, so the list holds still while the sidebar is in sight.
+  const inboxListing = useInboxListing(
+    tasks,
+    inboxFirst && tasks.signedIn,
+    tasks.shown && sidebarInSight(sidebar),
+  );
+  const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
@@ -517,20 +582,42 @@ export function DesktopShell({
     [tasks.agents.models, tasks.me],
   );
   // A chip naming a task hangs the task's card, as its sidebar row does.
-  const chipCards = {
-    taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
-      const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
-      if (task === undefined) return undefined;
-      // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
-      const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-      const card = taskCardOf(tasks, task, now, focus);
-      return home === undefined ? (
-        card
-      ) : (
-        <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
-      );
-    },
-  };
+  // Note that what the columns are handed is held across draws over the same
+  // tasks, because each column holds while what it is handed does
+  // (`DesktopSidebar`, `DesktopTasks`), and a chip reads its cards from here.
+  const chipCards = useMemo(
+    () => ({
+      taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
+        const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
+        if (task === undefined) return undefined;
+        // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
+        const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+        const card = taskCardOf(tasks, task, now, focus);
+        return home === undefined ? (
+          card
+        ) : (
+          <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
+        );
+      },
+    }),
+    [tasks],
+  );
+  // New task asks over whatever stands, the tasks or a version history.
+  const newTaskDialog = useMemo(() => <NewTaskDialog newTask={tasks.newTask} />, [tasks.newTask]);
+  // Note that the shell says whether the panel's toggle stands, because the
+  // toolbar beneath it leaves the toggle room then and only then. Factory,
+  // the Automations page, and Chat stand in the plan's place, so they draw
+  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
+  // the chosen item's task's.
+  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
+  const calling = useCallingAgent();
+  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const speechHidden = callShown;
+  const captionStrip = useMemo(
+    () => <CaptionStrip {...captions} speechHidden={speechHidden} />,
+    [captions, speechHidden],
+  );
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (
@@ -581,26 +668,34 @@ export function DesktopShell({
       </div>
     );
   }
-  // New task asks over whatever stands, the tasks or a version history.
-  const newTaskDialog = <NewTaskDialog newTask={tasks.newTask} />;
   // A plan's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
+    const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
     return (
       <div className="desktop-shell" data-room={room}>
         {/* A chip in a version's words hangs the cards the plan's own words do. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
-            <DesktopVersionHistory
-              sidebar={sidebar}
-              room={room}
-              history={history}
-              subject={taskVersionSubject(tasks)}
-              account={account}
-              call={call}
-              onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
-              onRestored={history.onLeaveVersionHistory}
-            />
+            <Suspense
+              fallback={
+                <VersionHistoryLoading
+                  onExit={exitHistory}
+                  hidden={hiddenColumns(room, tasks.history.listed)}
+                />
+              }
+            >
+              <VERSION_HISTORY.Route
+                sidebar={sidebar}
+                room={room}
+                history={history}
+                tasks={tasks}
+                account={account}
+                call={call}
+                onExit={exitHistory}
+                onRestored={history.onLeaveVersionHistory}
+              />
+            </Suspense>
           </ChipCards>
         </MentionedAgents>
         <CaptionStrip {...captions} />
@@ -608,37 +703,23 @@ export function DesktopShell({
       </div>
     );
   }
-  // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. Factory,
-  // the Automations page, and Chat stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own, the Inbox
-  // the chosen item's task's, and the Issues list the issue it peeked.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
-  const issuesOpen = tasks.issuesView.open && issuesOn;
   const boardOpen = tasks.boardView.open;
-  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  // The Issues list draws the panel beside it once an issue has been peeked there, as the Inbox does once an item is chosen.
-  const issuePeeked =
-    issuesOpen &&
-    tasks.issuesView.place.kind === ISSUES_PAGE.LIST &&
-    tasks.issuesView.peeked !== undefined;
   const panelToggle =
-    planToggle ||
-    pageAgent !== undefined ||
-    (inboxOpen && tasks.inboxView.chosen !== undefined) ||
-    issuePeeked;
-  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
-  // Note that a panel filling the window hides the task's column, call bar
-  // and all, so the captions float in its place then.
-  const captionsInColumn = taskDrawn && !tasks.sidePanel.fullScreen;
-  const captionStrip = (
-    <CaptionStrip {...captions} speechHidden={taskDrawn && transcriptStreaming(tasks)} />
-  );
+    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
+  // Note that the captions ride the call bar at the foot of the call's agent's
+  // tab while that is on screen, and float at the window's foot otherwise.
+  const captionsInColumn = callShown;
+  // A phone's drawer is modal, as a phone's own drawers are: while it stands
+  // over the work, the work is inert, so neither a screen reader nor a
+  // keyboard reaches what the drawer covers, and a press there only puts it
+  // away. Its toggle stays, the way to close it.
+  const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   return (
     <div
       ref={shell}
@@ -661,8 +742,9 @@ export function DesktopShell({
         call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
         room={room}
+        inboxListing={sharedListing}
       />
-      <main className="desktop-main">
+      <main className="desktop-main" inert={drawerOver}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
@@ -673,7 +755,7 @@ export function DesktopShell({
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             ) : inboxOpen ? (
-              <DesktopInbox tasks={tasks} />
+              <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
@@ -685,29 +767,30 @@ export function DesktopShell({
                 at={pagePerson}
                 active={tasks.shown}
               >
-                <PersonPage
-                  tasks={tasks}
-                  userId={pagePerson}
-                  name={tasks.personView.name}
-                  staged={sidebar.staged}
-                />
+                <Suspense
+                  fallback={
+                    <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />
+                  }
+                >
+                  <PERSON_PAGE.Route
+                    tasks={tasks}
+                    userId={pagePerson}
+                    name={tasks.personView.name}
+                    staged={sidebar.staged}
+                  />
+                </Suspense>
               </PageFind>
             ) : factoryOpen ? (
               <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
-                <DesktopFactory tasks={tasks} />
-              </PageFind>
-            ) : issuesOpen ? (
-              <PageFind page={FIND_PAGE.ISSUES} active={tasks.shown}>
-                <Suspense fallback={<IssuesLoading onExit={tasks.issuesView.onClose} />}>
-                  <IssuesPage tasks={tasks} />
+                <Suspense fallback={<FactoryLoading onExit={tasks.factoryView.onClose} />}>
+                  <FACTORY.Route tasks={tasks} />
                 </Suspense>
               </PageFind>
             ) : boardOpen ? (
-              <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
-                <Suspense fallback={<BoardLoading onExit={tasks.boardView.onClose} />}>
-                  <TasksBoard tasks={tasks} />
-                </Suspense>
-              </PageFind>
+              // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
+              <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
+                <TasksPage tasks={tasks} room={room} />
+              </Suspense>
             ) : automationsOpen ? (
               <PageFind
                 page={FIND_PAGE.AUTOMATIONS}
@@ -715,7 +798,7 @@ export function DesktopShell({
                 active={tasks.shown}
               >
                 <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
-                  <AutomationsPage tasks={tasks} />
+                  <AutomationsPage tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : (
@@ -756,7 +839,7 @@ export function DesktopShell({
         {sidebar.collapsed ? <OfflineMark /> : null}
       </div>
       {panelToggle ? (
-        <div className="title-bar-controls" data-edge="end">
+        <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
             disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}

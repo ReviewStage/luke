@@ -1,28 +1,78 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AUTOMATION_CALL_FAILURE, automationViewSchema } from "@luke/features/automation-view";
+import type {
+  AutomationRunsLiveAnswer,
+  AutomationsLiveAnswer,
+} from "@luke/features/automation-live";
+import {
+  AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
+  automationViewSchema,
+} from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
-import { unparsedWire, type WireRecord } from "@luke/wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayEventKind,
+  type GatewayMethod,
+} from "@luke/gateway";
+import { unparsedWire, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Effect, Result } from "effect";
+import { vi } from "vitest";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 
 /**
  * The automations concern: behind a closed gate nothing is asked of the
  * service, a write's params reach the service as the window named them,
  * the window hears the service's answer whole, and params of the wrong
- * shape are refused before anything travels. Synthetic ids and words.
+ * shape are refused before anything travels. What a window follows is
+ * emitted as it stands and each time it moves, for the account signed in as
+ * it started, until let go or signed out. Synthetic ids and words.
  */
 
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 const WORKSPACE_ID = "workspace-1";
+
+const ACCOUNT_ID = "account-1";
+
+/** A workspace with no automations, its live read answered polled, as while Realtime is off. */
+const POLLED_LIST: AutomationsLiveAnswer = {
+  url: LIVE_POLL_URL,
+  queries: {
+    automations: {
+      capability: "",
+      queryFingerprint: "",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      rows: [],
+      digest: "d1",
+    },
+  },
+};
+
+/** An automation with no runs yet, its live read answered polled. */
+const POLLED_RUNS: AutomationRunsLiveAnswer = {
+  url: LIVE_POLL_URL,
+  queries: {
+    runs: {
+      capability: "",
+      queryFingerprint: "",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      rows: [],
+      digest: "r1",
+    },
+  },
+};
+
+const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
@@ -59,6 +109,13 @@ const CREATE = {
 /** The service as a script that writes down every ask it hears, as the ask runs. */
 function fakeService(options: { replaceRefused?: boolean } = {}) {
   const asked: unknown[] = [];
+  /** What the list's live read answers first; a poll past it holds until the test ends, as nothing moves. */
+  const live: {
+    list: AutomationsLiveAnswer | typeof LIVE_SIGNED_OUT;
+    /** What the runs' live read answers first, and what a poll past it answers; not found, and held, where unsaid. */
+    runs?: AutomationRunsLiveAnswer;
+    runsPolled?: { readonly failure: typeof AUTOMATION_CALL_FAILURE.NOT_FOUND };
+  } = { list: POLLED_LIST };
   const answer =
     <A>(name: string, value: A) =>
     (params: Parameters<AutomationsClient[keyof AutomationsClient]>[0]) =>
@@ -79,8 +136,25 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
         ? { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED }
         : { automation: SUMMARY },
     ),
+    listLive: (workspaceId, userId, poll) =>
+      poll
+        ? Effect.never
+        : Effect.sync(() => {
+            asked.push(["list-live", workspaceId, userId]);
+            return live.list;
+          }),
+    runsLive: (automationId, userId, poll) =>
+      poll
+        ? live.runsPolled === undefined
+          ? Effect.never
+          : // A poll is held a while before it answers, as the service holds one.
+            Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
+        : Effect.sync(() => {
+            asked.push(["runs-live", automationId, userId]);
+            return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+          }),
   };
-  return { client, asked };
+  return { client, asked, live };
 }
 
 function subject(
@@ -88,9 +162,16 @@ function subject(
 ) {
   return Effect.gen(function* () {
     const service = fakeService(options);
+    const emitted: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const composer = yield* composeAutomations({
-      kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
+      kernel: {
+        runMode: { sendsNetwork: options.sendsNetwork ?? true },
+        now: () => 0,
+        hostedServiceBaseUrl: "https://service.example",
+        emit: (kind, payload) => emitted.push({ kind, payload }),
+      },
       account: { capabilitiesActive: () => options.signedIn ?? true },
+      accountId: () => (options.signedIn === false ? undefined : ACCOUNT_ID),
       client: service.client,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -98,7 +179,12 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked };
+    /** What the follows told the windows, in order. */
+    const changed = () =>
+      emitted
+        .filter((each) => each.kind === GATEWAY_EVENT.AUTOMATIONS_CHANGED)
+        .map((each) => each.payload);
+    return { call, asked: service.asked, live: service.live, changed, reset: composer.reset };
   });
 }
 
@@ -196,5 +282,82 @@ it.effect(
       assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED });
       assert.deepEqual(unasked, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(closed.asked, []);
+    }),
+);
+
+it.effect(
+  "a webhook secret Web Crypto cannot hash is never sent, and the window hears the call unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      vi.spyOn(crypto.subtle, "digest").mockRejectedValue(
+        new DOMException("The operation is insecure.", "SecurityError"),
+      );
+
+      const answered = yield* call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, {
+        automationId: AUTOMATION_ID,
+      });
+
+      assert.deepEqual(answered, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, []);
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.restoreAllMocks()))),
+);
+
+it.effect(
+  "a followed list is told as it stands for the account signed in, a gone automation's runs are told not found, and a sign-out ends the follows",
+  () =>
+    Effect.gen(function* () {
+      const workspace = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID };
+      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
+      const { call, asked, changed, reset } = yield* subject();
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace), {});
+      yield* settled;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs), {});
+      yield* settled;
+      assert.deepEqual(changed(), [
+        { scope: workspace, view: { automations: [] } },
+        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
+      ]);
+      assert.deepEqual(asked, [
+        ["list-live", WORKSPACE_ID, ACCOUNT_ID],
+        ["runs-live", AUTOMATION_ID, ACCOUNT_ID],
+      ]);
+
+      // Following again starts over, so a second window hears the list at once.
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* settled;
+      assert.equal(changed().length, 3);
+
+      yield* reset;
+      yield* settled;
+      assert.equal(changed().length, 3);
+
+      const signedOut = yield* subject();
+      signedOut.live.list = LIVE_SIGNED_OUT;
+      yield* signedOut.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* settled;
+      assert.deepEqual(signedOut.changed(), []);
+      assert.equal(signedOut.asked.length, 1);
+    }),
+);
+
+it.effect(
+  "an automation deleted while its runs are followed is told not found at once, and the follow ends",
+  () =>
+    Effect.gen(function* () {
+      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
+      const { call, asked, changed, live } = yield* subject();
+      live.runs = POLLED_RUNS;
+      live.runsPolled = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs);
+      yield* settled;
+
+      assert.deepEqual(changed(), [
+        { scope: runs, view: { runs: [] } },
+        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
+      ]);
+      assert.deepEqual(asked, [["runs-live", AUTOMATION_ID, ACCOUNT_ID]], "nothing asks again");
     }),
 );

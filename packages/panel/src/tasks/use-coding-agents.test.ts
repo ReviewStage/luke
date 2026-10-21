@@ -4,12 +4,15 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_PAYER,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { ACT_KIND, type ActKind } from "@luke/host/acts";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -42,8 +45,8 @@ interface Standing {
   archived?: boolean;
 }
 
-/** Any kind the hook asks: one `app:act` carries, or one the act port answers. */
-type AnyKind = ActKind | PortActKind;
+/** Any kind the hook asks. */
+type AnyKind = PortActKind;
 
 /** One act as the hook asked it. */
 interface Asked {
@@ -181,13 +184,14 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // The words, the choice, and the servers off are the draft's, held while another task opens a draft of its own.
+  // The words, the choice, the servers off, and the payer picked are the draft's, held while another task opens a draft of its own.
   const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
   act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
   act(() => tab.control().onDraftChange({ disabledServers }));
+  act(() => tab.control().onDraftChange({ payer: CODING_AGENT_PAYER.API_KEY }));
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft, undefined);
   let other = "";
@@ -202,6 +206,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
     attachments: [],
     choice,
     disabledServers,
+    payer: CODING_AGENT_PAYER.API_KEY,
   });
 
   let failed: Failure | undefined;
@@ -217,12 +222,21 @@ test("a draft asks nothing of the service, one per plan, until its first message
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
+    failed = await tab
+      .control()
+      .startPrompt(draft, prompt, undefined, [notes], disabledServers, CODING_AGENT_PAYER.API_KEY);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
     { taskId: TASK, idempotencyKey: draft, prompt, ...choice },
-    { taskId: TASK, idempotencyKey: draft, prompt, attachments: [notes], disabledServers },
+    {
+      taskId: TASK,
+      idempotencyKey: draft,
+      prompt,
+      attachments: [notes],
+      disabledServers,
+      payer: CODING_AGENT_PAYER.API_KEY,
+    },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
@@ -405,6 +419,59 @@ test("another agent named with no plan open holds nothing of the last, even wher
   assert.equal(tab.control().listFailed, true);
 });
 
+test("on an agent's own page, its agent is continued and forked through the page's draft, each Start naming no task so the service puts it where that agent is, and the agent started opens; a fork let go there lets its draft go", async () => {
+  const taskless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.COMPLETED };
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...taskless,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const continued = { ...taskless, id: "continued-1", status: CODING_AGENT_STATUS.STARTING };
+  const forked = { ...taskless, id: "forked-1", status: CODING_AGENT_STATUS.STARTING };
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: continued }, { agent: forked });
+  await tab.mount();
+
+  const control = tab.control();
+  assert.ok(control.continueAgent, "the page's agent is continued as a task's is");
+  let failed: Failure | undefined;
+  await act(async () => {
+    failed = await tab.control().continueAgent?.(AGENT, "Carry on with the clock.");
+  });
+  assert.equal(failed, undefined);
+
+  const fork = { agentId: AGENT, messageId: "message-1", opening: "Swept…" };
+  let draft = "";
+  act(() => {
+    draft = tab.control().onForkDraft(fork);
+  });
+  assert.equal(tab.control().draft?.fork, fork, "the page holds the fork's draft");
+  await act(async () => {
+    failed = await tab.control().startFork(draft, fork, "", undefined, [], []);
+  });
+  assert.equal(failed, undefined);
+  assert.equal(tab.control().draft, undefined, "a fork that started lets its draft go");
+
+  assert.deepEqual(startPayloads(tab.asked), [
+    { idempotencyKey: "key-1", from: { agentId: AGENT }, note: "Carry on with the clock." },
+    {
+      idempotencyKey: draft,
+      from: { agentId: AGENT, messageId: "message-1" },
+      disabledServers: [],
+    },
+  ]);
+  assert.deepEqual(tab.started, ["continued-1", "forked-1"]);
+
+  act(() => {
+    tab.control().onForkDraft(fork);
+  });
+  act(() => tab.control().onDropFork());
+  assert.equal(tab.control().draft, undefined, "nothing but a fork starts here, so its draft goes");
+});
+
 test("a read of an agent's changes keeps who its pull request names, by agent and with the pull request read, so its Changes card says them wherever it hangs; only the agent's newest read is kept, and a read naming no pull request drops them", async () => {
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   const url = "https://github.com/acme/relay/pull/42";
@@ -442,6 +509,51 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
 
   await act(() => tab.control().readChanges(AGENT));
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
+});
+
+test("a pull request's chapters are read and generated for the agent's own pull request or the one a tab names by its number, and an ask the port refused is heard as unanswered", async () => {
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  const none = {
+    pullRequest: {
+      number: 41,
+      headSha: "c0ffee1",
+      generatable: true,
+      chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+    },
+  };
+  const generating = {
+    pullRequest: {
+      ...none.pullRequest,
+      chapters: {
+        status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
+        headSha: "c0ffee1",
+        baseSha: "ba5e000",
+        startedAt: 1_800_000_000_000,
+      },
+    },
+  };
+  tab.answer(ACT_KIND.CHAPTERS_READ, none, none);
+  tab.answer(ACT_KIND.CHAPTERS_GENERATE, generating);
+  await tab.mount();
+
+  assert.deepEqual(await tab.control().readChapters(AGENT), none);
+  assert.deepEqual(await tab.control().readChapters(AGENT, 41), none);
+  assert.deepEqual(await tab.control().generateChapters(AGENT, 41), generating);
+  // Nothing more is queued, so the port refuses this one.
+  assert.deepEqual(await tab.control().generateChapters(AGENT), {
+    failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
+  });
+  assert.deepEqual(
+    tab.asked.filter(
+      ({ kind }) => kind === ACT_KIND.CHAPTERS_READ || kind === ACT_KIND.CHAPTERS_GENERATE,
+    ),
+    [
+      { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT } },
+      { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT, number: 41 } },
+      { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT, number: 41 } },
+      { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT } },
+    ],
+  );
 });
 
 test("a pull request a tab names by its number is read with its number and kept by agent and number apart from the agent's own; an older read landing last keeps the newer, and one naming none lets it go", async () => {
@@ -901,7 +1013,7 @@ test("a second continue of an agent once the first landed mints a key of its own
   assert.deepEqual(tab.started, [first.id, second.id, third.id]);
 });
 
-test("no continue is offered while no Start could run: an archived task, a task naming no repository, or an agent read with no task", async () => {
+test("no continue is offered while no Start could run: an archived task, or a task naming no repository", async () => {
   const archived = mount({ taskId: TASK, repository: "acme/relay", archived: true });
   archived.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await archived.mount();
@@ -911,9 +1023,4 @@ test("no continue is offered while no Start could run: an archived task, a task 
   bare.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await bare.mount();
   assert.equal(bare.control().continueAgent, undefined);
-
-  const page = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  page.answer(ACT_KIND.CODING_AGENTS_PAGE, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  await page.mount();
-  assert.equal(page.control().continueAgent, undefined);
 });

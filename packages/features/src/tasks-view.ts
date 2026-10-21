@@ -1,10 +1,13 @@
 import { Schema as EffectSchema } from "effect";
+import { agentBrowserTabsAnswerSchema } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentSummarySchema,
   storedObjectSchema,
   tasklessAgentSchema,
   turnRecordFields,
@@ -19,6 +22,7 @@ import {
   githubRepositoryIssueAnswerSchema,
   githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
+  workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
@@ -27,7 +31,7 @@ import {
   planPageVersionAnswerSchema,
   taskPagesAnswerSchema,
 } from "./page-wire.js";
-import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
+import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
   planCommentActionRequestSchema,
@@ -46,17 +50,18 @@ import {
 } from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  codeRefSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
+  taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
   taskFileRequestSchema,
   taskFileTextSchema,
+  taskFileWindowSchema,
   taskPrioritySchema,
   taskRenameRequestSchema,
   taskSchema,
@@ -87,6 +92,7 @@ import {
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
@@ -322,38 +328,17 @@ export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSc
 export type CodeLines = typeof codeLinesSchema.Type;
 
 /**
- * One code Luke showed on the active task: what he named, the repository
- * the service read it from, the file's lines as they arrived and this
- * Mac coloured them, the window's first line first, and his note on them. Nothing of it enters
- * the task's document.
- */
-const taskCodeSchema = EffectSchema.Struct({
-  ref: codeRefSchema,
-  /** The repository the lines were read from, `owner/name`. */
-  repository: EffectSchema.String,
-  /** The commit the checkout stood at when the lines were read; absent on code shown before it was recorded. */
-  commit: EffectSchema.optionalKey(EffectSchema.String),
-  /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
-  firstLine: EffectSchema.Int,
-  /** How many lines the whole file has. */
-  lineCount: EffectSchema.Int,
-  lines: codeLinesSchema,
-  /** What Luke said the lines are for; absent on code shown before notes were asked for. */
-  note: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type TaskCode = typeof taskCodeSchema.Type;
-
-/**
- * One code Luke showed on a task: the `show_code` call that showed it, the
- * turn it ran in and when that turn began writing, and the place and lines
- * as the call answered them.
+ * One code Luke or an agent showed on a task: the `show_code` call that
+ * showed it, the turn it ran in and when that turn began writing, the agent
+ * whose turn it was, and the place and lines as the call answered them.
  */
 const taskShownCodeFields = {
   callId: EffectSchema.String,
   turnId: EffectSchema.String,
   /** Epoch milliseconds the turn that showed it began. */
   shownAt: EffectSchema.Finite,
+  /** The agent on the task whose turn showed it; absent for Luke's own, and on a call's frame, which the record's copy names it on. */
+  agentId: EffectSchema.optionalKey(EffectSchema.String),
 };
 
 export const taskShownCodeSchema = EffectSchema.Struct({
@@ -365,14 +350,14 @@ export type TaskShownCode = typeof taskShownCodeSchema.Type;
 
 /**
  * One code shown on the active task as the Code tab draws it: the call that
- * showed it, its turn and when that began, and the lines coloured.
+ * showed it, its turn and when that began, and the lines pointed at with a
+ * few of the file around them, plain, as the service read them, which the
+ * window colours as it draws them (`code-snippet.tsx`).
  */
-const taskCodeShowingSchema = EffectSchema.Struct({
-  ...taskShownCodeFields,
-  code: taskCodeSchema,
-});
+export type TaskCodeShowing = TaskShownCode;
 
-export type TaskCodeShowing = typeof taskCodeShowingSchema.Type;
+/** The code of one showing as the Code tab draws it: what Luke named, where it was read, its lines, and his note on them. */
+export type TaskCode = TaskCodeShowing["code"];
 
 /**
  * A task's work as the service keeps it (GET `/api/plans/{id}/work`, with
@@ -419,6 +404,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasks: EffectSchema.Array(taskSummarySchema),
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
+  /**
+   * Every agent on a plan, the archived ones left out, each as its plan's
+   * own list names it, the first started first: present only while the list
+   * is followed live over Neon Realtime, when it is what the notices' ledger
+   * reads in place of listing each plan's agents again on a clock.
+   */
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
@@ -453,7 +445,7 @@ export const tasksViewSchema = EffectSchema.Struct({
    * the record's copy of it stand once; absent with none, and cleared with
    * the activity. A call's end keeps them.
    */
-  shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskCodeShowingSchema)),
+  shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
   /**
    * The brain turns of the active task's calls, oldest first: the newest
    * page read from the service when the task opens, each older page read as
@@ -567,16 +559,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, or both. */
-function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
-  return params.status !== undefined || params.priority !== undefined;
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
+function namesAStanding(params: {
+  status?: unknown;
+  priority?: unknown;
+  assigneeId?: unknown;
+}): boolean {
+  return (
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
+  );
 }
 
-/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
@@ -623,7 +622,7 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, or the workspace's own issue it was to start from is none of the workspace's. */
+/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, or the workspace it was to start in is none of the account's. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
   TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
@@ -715,22 +714,9 @@ export const tasksFileParamsSchema = EffectSchema.Struct({
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
-/** A window of a file as the File tab draws it: its place, the branch it was read on and the commit where the service named it, how long the whole file is, and its lines as this Mac coloured them. */
-const taskFileShownSchema = EffectSchema.Struct({
-  path: EffectSchema.String,
-  repository: EffectSchema.String,
-  branch: EffectSchema.String,
-  commit: EffectSchema.optionalKey(EffectSchema.String),
-  firstLine: EffectSchema.Int,
-  lineCount: EffectSchema.Int,
-  lines: codeLinesSchema,
-});
-
-export type TaskFileShown = typeof taskFileShownSchema.Type;
-
-/** The File tab's read, as the window hears it: the window coloured, the whole text read raw, why the file is not shown, or that the service did not answer. */
+/** The File tab's read, as the window hears it: the window as the service read it, the whole text read raw, why the file is not shown, or that the service did not answer. */
 export const tasksFileAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ file: taskFileShownSchema }),
+  EffectSchema.Struct({ file: taskFileWindowSchema }),
   EffectSchema.Struct({ text: taskFileTextSchema }),
   taskFileRefusalSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
@@ -877,6 +863,21 @@ export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
 
 export type TasksIssueLinksAnswer = typeof tasksIssueLinksAnswerSchema.Type;
 
+/** A task's agents' Browser tabs, as its side panel asks the host for them: the task. */
+export const tasksBrowserTabsParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+});
+
+export type TasksBrowserTabsParams = typeof tasksBrowserTabsParamsSchema.Type;
+
+/** A task's agents' Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
+export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
+  agentBrowserTabsAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksBrowserTabsAnswer = typeof tasksBrowserTabsAnswerSchema.Type;
+
 /** An issue to link to a task, as its page names it: by what its provider finds it by, with its relation. */
 export const tasksIssueLinkParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -942,6 +943,22 @@ export const tasksRevisionsAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
 
+/** One plan's newest page of history, followed by a window while its version history stands. */
+export const taskHistoryFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+
+export type TaskHistoryFollow = typeof taskHistoryFollowSchema.Type;
+
+/**
+ * A followed plan's newest page of history as it now stands, told each time
+ * a save lands while followed, or why there is none.
+ */
+export const taskHistoryFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksRevisionsAnswerSchema,
+});
+
+export type TaskHistoryFollowed = typeof taskHistoryFollowedSchema.Type;
+
 /** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -958,7 +975,7 @@ export const tasksRevisionAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionAnswer = typeof tasksRevisionAnswerSchema.Type;
 
-/** One picture of a plan, as the window drawing it names it: the plan, and the picture's id its text names. */
+/** One attachment of a plan, as the window drawing it names it: the plan, and the id its text or a comment's file names. */
 export const tasksPictureParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   attachmentId: EffectSchema.NonEmptyString,
@@ -967,14 +984,18 @@ export const tasksPictureParamsSchema = EffectSchema.Struct({
 export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
 
 /**
- * One picture of a plan, as the window hears it: its bytes in base64 under
- * its media type, which the window draws from a `data:` URL of its own
- * making, or why there is none: not the account's to read, or no answer.
- * The host fetched it under the account, so the window holds no bearer and
- * no address.
+ * One attachment of a plan, as the window hears it: its bytes in base64
+ * under its media type, which the window draws or offers from a `data:` URL
+ * of its own making, or why there is none: not the account's to read, or no
+ * answer. A picture the plan's text names is an image; a file a comment
+ * carries is any type a coding agent's file may be. The host fetched it
+ * under the account, so the window holds no bearer and no address.
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ contentType: pictureTypeSchema, base64: EffectSchema.String }),
+  EffectSchema.Struct({
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    base64: EffectSchema.String,
+  }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals([TASK_CALL_FAILURE.NOT_FOUND, TASK_CALL_FAILURE.UNANSWERED]),
   }),
@@ -1036,6 +1057,22 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
+
+/** One plan's pages, followed by a window while its Inbox draws an item of that plan. */
+export const taskPagesFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
+
+export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
+
+/**
+ * A followed plan's pages as they now stand, each by its newest version,
+ * told each time they move while followed, or why there are none.
+ */
+export const taskPagesFollowedSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  view: tasksPagesAnswerSchema,
+});
+
+export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
 
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([
@@ -1130,6 +1167,23 @@ export const tasksWorkspaceMembersAnswerSchema = EffectSchema.Union([
 
 export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSchema.Type;
 
+/** A workspace's people, followed by a window while it draws them. */
+export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
+
+/**
+ * A followed workspace's people as they now stand, told by the host each
+ * time they move: its members and who its work names but left, or why there
+ * are none.
+ */
+export const workspacePeopleFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceMembersAnswerSchema,
+});
+
+export type WorkspacePeopleFollowed = typeof workspacePeopleFollowedSchema.Type;
+
 /** A workspace's photo, as a window's tile asks for it: the workspace. */
 export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
 
@@ -1148,6 +1202,27 @@ export const tasksWorkspacePhotoAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspacePhotoAnswer = typeof tasksWorkspacePhotoAnswerSchema.Type;
+
+/** A workspace's token repositories, as Settings › Workspace asks for them: the workspace. */
+export const tasksWorkspaceTokenRepositoriesParamsSchema = workspaceLeaveRequestSchema;
+
+export type TasksWorkspaceTokenRepositoriesParams =
+  typeof tasksWorkspaceTokenRepositoriesParamsSchema.Type;
+
+/** A repository added to a workspace on the account's own token, or removed from it, as Settings › Workspace asks it. */
+export const tasksWorkspaceTokenRepositorySetParamsSchema = workspaceTokenRepositoryRequestSchema;
+
+export type TasksWorkspaceTokenRepositorySetParams =
+  typeof tasksWorkspaceTokenRepositorySetParamsSchema.Type;
+
+/** A workspace's token repositories, as the window hears them after a read, an add, or a removal: as they then stand, or why there are none. */
+export const tasksWorkspaceTokenRepositoriesAnswerSchema = EffectSchema.Union([
+  workspaceTokenRepositoriesAnswerSchema,
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceTokenRepositoriesAnswer =
+  typeof tasksWorkspaceTokenRepositoriesAnswerSchema.Type;
 
 /** Leaving a workspace, as the window asks it: the workspace. */
 export const tasksWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;
@@ -1188,6 +1263,19 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
+
+/**
+ * A followed workspace's pending invitations as they now stand, told by the
+ * host to an owner's or an admin's windows each time they move, or why
+ * there are none. A follow names the workspace as a people's follow does
+ * (`workspacePeopleFollowSchema`).
+ */
+export const workspaceInvitationsFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: tasksWorkspaceInvitationsAnswerSchema,
+});
+
+export type WorkspaceInvitationsFollowed = typeof workspaceInvitationsFollowedSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
 export const tasksGitHubPageAnswerSchema = EffectSchema.Union([

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { UPDATE_ACT_KIND } from "@luke/host/contract";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import type { WebContents } from "electron";
@@ -80,7 +80,7 @@ it("a sender this build does not trust, and a payload a kind takes none of, are 
   assert.deepEqual(heard, []);
 });
 
-it("a check whose answer is no state of the updater is refused, where app:act passed any clonable answer", async () => {
+it("a check whose answer is no state of the updater is refused", async () => {
   // SAFETY: a forged answer, as an updater a newer build wrote might give it; no state is spelled so.
   const { port } = fixture({ ...SNAPSHOT, status: "paused" } as unknown as UpdateSnapshot);
 

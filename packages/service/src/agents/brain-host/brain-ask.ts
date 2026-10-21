@@ -28,10 +28,10 @@ import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "../../
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
-  type EveSessions,
 } from "./eve-sessions.js";
 
 /**
@@ -178,7 +178,7 @@ export interface AskInput<Origin extends AskOrigin = AskOrigin> {
  */
 export interface AskSeams<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly asks: AskRecord;
-  readonly eve: EveSessions<Turn>;
+  readonly eve: AgentSessions<Turn>;
 }
 
 /**
@@ -340,7 +340,7 @@ export type StopOutcome = Result.Result<StopAnswer, StopRefused>;
 interface StopSeams extends AskStandingReads {
   readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
-  readonly eve: Pick<EveSessions, "cancel">;
+  readonly eve: Pick<AgentSessions, "cancel">;
 }
 
 /** A turn as a Stop answers it: its status, and the stamp it carries where one stands. */
@@ -354,6 +354,16 @@ function turnStop(turn: StoredTurnRecord): StopAnswer {
 }
 
 /**
+ * What a Stop of a spoken ask that joined a typed turn answers: the turn's
+ * own status, with the ask's stamp as the cancel asked, unless the turn
+ * already ended, since then there was nothing left of the ask to stop.
+ */
+function joinedStop(turn: StoredTurnRecord, stampedAt: Date): StopAnswer {
+  if (TERMINAL_TURN_STATUSES.has(turn.status)) return turnStop(turn);
+  return { status: turn.status, cancelRequestedAt: stampedAt.getTime() };
+}
+
+/**
  * Stops one ask over plain arguments. A turn already settled is answered as
  * it stands and nothing is asked of eve. An ask eve has not yet started a
  * turn for takes the stamp on its record, for the start that names its
@@ -362,7 +372,10 @@ function turnStop(turn: StoredTurnRecord): StopAnswer {
  * conversation that records no session has nothing running to stop and is
  * refused as such. A row that names no eve turn was written ahead of eve's
  * start: eve runs nothing this build can name under it, so the Stop is the
- * stamp alone and eve is asked nothing.
+ * stamp alone and eve is asked nothing. A spoken ask that joined a typed
+ * turn under way (`AskRow.joinedAfterStep`) stops its own part alone: the
+ * stamp lands on the ask, which ends the voice's following of it, and the
+ * turn, an agent's coding of an hour, is neither cancelled nor stamped.
  */
 export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
   seams: StopSeams,
@@ -389,9 +402,17 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
     if (bound?.turnId === undefined) return stampedAnswer;
     const [started] = yield* seams.store.turns.named(userId, [bound.turnId]);
     if (started === undefined) return stampedAnswer;
+    // The binding that took it there named the place it joined a typed turn at, and its stamp stands.
+    if (bound.joinedAfterStep !== undefined) return Result.succeed(joinedStop(started, stampedAt));
     turn = started;
   } else {
     turn = standing.turn;
+    // A spoken ask that joined a typed turn stops its own part: its stamp, and nothing of the turn.
+    if (standing.ask?.joinedAfterStep !== undefined) {
+      if (TERMINAL_TURN_STATUSES.has(turn.status)) return Result.succeed(turnStop(turn));
+      yield* seams.asks.cancelRequested(standing.ask.id, at);
+      return Result.succeed(joinedStop(turn, standing.ask.cancelRequestedAt ?? at));
+    }
   }
   // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
   // is answered as it stands: a stamp that stands is the one cancel this turn gets.

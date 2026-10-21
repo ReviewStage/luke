@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
+import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -21,7 +17,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { SERVER_MENTION_NOTE } from "@luke/ui/agent-servers-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -39,7 +35,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -102,10 +98,7 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   // The main process answers the panel where the integrations stand and Linear's tools; nothing else here.
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: integrationStatuses() }),
     [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: TOOLS }),
@@ -221,20 +214,16 @@ function agentTab(
   messages: readonly CodingAgentMessage[],
   agent: CodingAgentSummary,
 ): Promise<HTMLElement> {
-  // Note that only the first read answers, because a read past the cursor waits on the service.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [agent],
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
+    transcripts: pushedTranscripts(() => [
+      {
         messages: [...messages],
         cursor: "9:0",
         status: agent.status,
         title: null,
-      });
-    },
+      },
+    ]),
     onMessage: () => new Promise<CodingAgentAgentAnswer>(ignore),
   });
   return drawn(

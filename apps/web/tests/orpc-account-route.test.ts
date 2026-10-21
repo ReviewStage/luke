@@ -1,9 +1,8 @@
 /**
  * orpc-account-route.test.ts -- a revision of the account's plan template, reached at its public path through the committed table, the dispatcher and the deployed route.
  *
- * The revision's number is a path segment the committed rewrite carries on
- * whole (its row is marked oRPC), so the deployed router reads it from the
- * path: a number that reads reaches the procedure, which then refuses an
+ * The revision's number is a path segment the committed fallback rewrite
+ * carries on whole, so the deployed router reads it from the path: a number that reads reaches the procedure, which then refuses an
  * unsigned caller as the old group did, and one that does not is refused as
  * a request that does not read, before the caller is, as the old group read
  * the number first. The signed-in reads and writes, which need a database,
@@ -14,6 +13,7 @@ import assert from "node:assert/strict";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { HTTP_METHOD } from "@luke/wire";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
 import { orpcRoute } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched } from "./support/platform-landing.js";
@@ -33,10 +33,7 @@ afterEach(async () => {
 const ORIGIN = "https://luke.test";
 const REVISIONS = `${ORIGIN}/api/account/plan-template/revisions`;
 
-const ROUTES = new Map([
-  ["account/plan-template/revision", orpcRoute],
-  ["account/plan-template/restore", orpcRoute],
-]);
+const ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
 
 test("a revision's public path reaches its procedure through the committed rewrite, which refuses an unsigned caller", async () => {
   for (const request of [

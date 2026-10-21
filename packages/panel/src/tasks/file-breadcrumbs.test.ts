@@ -8,10 +8,11 @@ import { afterEach, test, vi } from "vitest";
 import type { FolderListing } from "../file-tree/contract.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
+import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileViewBar } from "./file-view.js";
 
 /**
- * A File or Changes tab's path in its bar: each "…" names the folders it
+ * A File tab's path in its bar: each "…" names the folders it
  * stands for and opens the tree the last of them would, and a crumb's tree
  * goes once the bar is resized.
  */
@@ -38,15 +39,12 @@ function barOver(path = PATH) {
       onRegistry(
         AtomRegistry.make(),
         createElement(FileViewBar, {
-          path: {
+          lead: createElement(FileBreadcrumbs, {
+            repository: REPOSITORY,
             path,
-            browse: {
-              repository: REPOSITORY,
-              listFolder: () => new Promise<FolderListing>(() => undefined),
-              onOpen: () => undefined,
-            },
-          },
-          beside: null,
+            listFolder: () => new Promise<FolderListing>(() => undefined),
+            onOpen: () => undefined,
+          }),
           onGitHub: undefined,
           menu: null,
         }),

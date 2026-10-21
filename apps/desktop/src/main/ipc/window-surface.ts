@@ -9,7 +9,7 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
+import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
@@ -31,13 +31,6 @@ const MICROPHONE_STATUS_COUNTED_AS = {
   [MICROPHONE_STATUS.UNKNOWN]: undefined,
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
 
-/**
- * Where Contact us > Email writes to: the address the site's footer, the
- * privacy policy, and the security policy all name. Held here rather than
- * sent by the panel, so the act can open no other address.
- */
-const CONTACT_MAILTO = "mailto:founders@stagereview.app";
-
 interface WindowSurfaceDependencies {
   panels: Pick<PanelManager, "displayIdFor" | "focusIfExpanded">;
   requestMicrophone: () => Promise<MicrophoneStatus>;
@@ -49,6 +42,8 @@ interface WindowSurfaceDependencies {
   testNotification: () => void;
   /** Writes words to the system's clipboard. */
   copyText: (words: string) => void;
+  /** Writes a PNG, its bytes in base64, to the system's clipboard as a picture; answers false where the bytes draw no picture. */
+  copyImage: (png: string) => boolean;
   /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
   saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
   /** Carries a note to the people who make Luke, answering whether it arrived. */
@@ -64,7 +59,7 @@ const surfacePort = actPortFor<WebContents>();
  * own act and refused from anywhere else: it is about the display one panel
  * stands on, and no other surface has one. A save is a panel's too, since
  * only a panel draws a File tab, and its dialog hangs over the panel that
- * asked. The rest read no window, as none did on `app:act`.
+ * asked. The rest read no window.
  */
 export function windowSurfaceProcedures(
   dependencies: WindowSurfaceDependencies,
@@ -118,6 +113,11 @@ export function windowSurfaceProcedures(
     [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_TEXT]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_TEXT
     ].handler(({ input }) => dependencies.copyText(input.words)),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE
+    ].handler(({ input, errors }) => {
+      if (!dependencies.copyImage(input.png)) throw errors.REFUSED();
+    }),
     [WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE
     ].handler(async ({ input, context, errors }) => {

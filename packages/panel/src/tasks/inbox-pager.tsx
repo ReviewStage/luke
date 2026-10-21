@@ -1,12 +1,25 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
+import {
+  APP_COMMAND,
+  APP_SHORTCUTS,
+  type ShortcutChord,
+  shortcutAria,
+} from "@luke/settings/shortcuts";
 import { IconButton, LIST_VARIANT, List, ListRow, type ListRowHint } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { cloneElement } from "react";
+import { cloneElement, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { FadingWords } from "../fading-words.js";
 import { Shortcut } from "../shortcut.js";
 import { Tooltip } from "../tooltip.js";
-import { type InboxListed, type InboxListView, inboxSteps, nextNeedingYou } from "./inbox-model.js";
+import {
+  INBOX_DIRECTION,
+  type InboxDirection,
+  type InboxListed,
+  type InboxListView,
+  inboxSteps,
+  nextNeedingYou,
+} from "./inbox-model.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
@@ -25,13 +38,34 @@ import { cardTitle } from "./tool-call-model.js";
  * one column wide, the item standing alone, whose bar draws the pager with
  * its up and down arrows, as Mail's message toolbar does while its list is
  * hidden. Once an item is settled, the row over its box offers the next
- * item that needs the developer, wrapping round the list, so answering one
+ * item that needs the developer the way they last stepped, up after K and
+ * down after J or before either, wrapping round the list, so answering one
  * leads to the next without the list in between; it never moves on by
- * itself, so an answer is seen landing before the developer leaves it.
+ * itself, so an answer is seen landing before the developer leaves it. A
+ * press on a row turns no way, so Next goes on the way the keys last went.
  */
 
-/** J, the chord that chooses the item below. */
-const NEXT_CHORD = APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord;
+/** What a hint names as the key it is reached by: the chord, on the row's press. */
+function keyHint(chord: ShortcutChord): ListRowHint {
+  return ({ children }) => cloneElement(children, { "aria-keyshortcuts": shortcutAria(chord) });
+}
+
+/** How Next reads and which key reaches it, each way through the list: K and an arrow up, or J as it always read. */
+const NEXT_WAY = {
+  [INBOX_DIRECTION.UP]: {
+    lead: "Next ↑",
+    chord: APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord,
+    Hint: keyHint(APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord),
+  },
+  [INBOX_DIRECTION.DOWN]: {
+    lead: "Next",
+    chord: APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord,
+    Hint: keyHint(APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord),
+  },
+} as const satisfies Record<
+  InboxDirection,
+  { lead: string; chord: ShortcutChord; Hint: ListRowHint }
+>;
 
 /** What the pager draws and steps by. */
 export interface InboxPager {
@@ -43,40 +77,43 @@ export interface InboxPager {
   readonly onNext: (() => void) | undefined;
 }
 
-/** The next item that needs the developer, as a settled item offers it: its agent's tile and title, whether J reaches it too, and the press that opens it. */
+/** The next item that needs the developer, as a settled item offers it: its agent's tile and title, which way it was looked for in, whether that way's key reaches it too, and the press that opens it. */
 export interface InboxNext {
   readonly title: string;
   readonly mark: React.ReactNode;
-  /** Whether it is also the item J chooses, the one just below in the list, so the row may name the key. */
+  /** The way the developer last stepped, which it was looked for in, wrapping round past the list's end. */
+  readonly direction: InboxDirection;
+  /** Whether it is also the item that way's key chooses, the one just beside it in the list, so the row may name the key. */
   readonly byKey: boolean;
   readonly onOpen: () => void;
 }
 
-/** The next item that needs the developer after the chosen one among the rows, offered where it is settled; none while it waits, or where nothing else does. */
+/** The next item that needs the developer from the chosen one among the rows, the way they last stepped, offered where it is settled; none while it waits, or where nothing else does. */
 export function inboxNext(
   view: InboxListView,
   chosen: InboxListed | undefined,
   mark: (listed: InboxListed) => React.ReactNode,
   onChoose: (listed: InboxListed) => void,
   folded: (key: string) => boolean,
+  direction: InboxDirection,
 ): InboxNext | undefined {
   if (chosen === undefined || chosen.item.status === INBOX_STATUS.OPEN) return undefined;
-  const next = nextNeedingYou(view, chosen.item.id, folded);
+  const next = nextNeedingYou(view, chosen.item.id, folded, direction);
   if (next === undefined) return undefined;
+  const steps = inboxSteps(view, chosen.item.id, folded);
+  const beside = direction === INBOX_DIRECTION.UP ? steps?.previous : steps?.next;
   return {
     title: cardTitle(next.item.title),
     mark: mark(next),
-    byKey: inboxSteps(view, chosen.item.id, folded)?.next?.item.id === next.item.id,
+    direction,
+    byKey: beside?.item.id === next.item.id,
     onOpen: () => onChoose(next),
   };
 }
 
-/** What a row J reaches says it is reached by: J, on the row's press. */
-const NextKey: ListRowHint = ({ children }) =>
-  cloneElement(children, { "aria-keyshortcuts": shortcutAria(NEXT_CHORD) });
-
-/** The row a settled item offers over its box, a card of one row: Next, the item's agent's tile and title, and J where J reaches it. */
+/** The row a settled item offers over its box, a card of one row: Next, an arrow up where it lies above, the item's agent's tile and title, and K or J where that key reaches it. */
 export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
+  const way = NEXT_WAY[next.direction];
   return (
     <div className="inbox-next-dock">
       <List label="Next item" variant={LIST_VARIANT.CARD}>
@@ -84,13 +121,13 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
           leading={<span className="inbox-row-mark">{next.mark}</span>}
           title={
             <span className="inbox-next-words">
-              <span className="inbox-next-lead">Next</span>
-              <span>{next.title}</span>
+              <span className="inbox-next-lead">{way.lead}</span>
+              <FadingWords className="inbox-next-title" words={next.title} />
             </span>
           }
-          meta={next.byKey ? <Shortcut chord={NEXT_CHORD} /> : null}
+          meta={next.byKey ? <Shortcut chord={way.chord} /> : null}
           unread
-          hint={next.byKey ? { Hint: NextKey, label: next.title } : undefined}
+          hint={next.byKey ? { Hint: way.Hint, label: next.title } : undefined}
           onPress={next.onOpen}
         />
       </List>
@@ -104,28 +141,51 @@ export interface InboxPagerPlace {
   readonly folded: (key: string) => boolean;
 }
 
-/** The chosen item's place among the rows drawn and the steps either side of it, which keep it in its place where it has no row, K and J offered while the Inbox is on screen and each has somewhere to go; none where the steps do not hold the chosen item. */
+/** The pager, where the steps hold the chosen item, and the way the developer last stepped, which Next follows. */
+export interface InboxPaging {
+  readonly pager: InboxPager | undefined;
+  /** Up after K or the arrow up, down after J or the arrow down, and down before either. */
+  readonly direction: InboxDirection;
+}
+
+/** The chosen item's place among the rows drawn and the steps either side of it, which keep it in its place where it has no row, K and J offered while the Inbox is on screen and each has somewhere to go, and the way the last of them went; no pager where the steps do not hold the chosen item. */
 export function useInboxPager(
   steps: InboxListView,
   rows: InboxListView,
   chosen: string | undefined,
   onChoose: (listed: InboxListed) => void,
   place: InboxPagerPlace,
-): InboxPager | undefined {
+): InboxPaging {
+  const [direction, setDirection] = useState<InboxDirection>(INBOX_DIRECTION.DOWN);
   const at = inboxSteps(steps, chosen, place.folded);
   const row = inboxSteps(rows, chosen, place.folded);
   const previous = at?.previous;
   const next = at?.next;
-  const onPrevious = previous === undefined ? undefined : () => onChoose(previous);
-  const onNext = next === undefined ? undefined : () => onChoose(next);
+  const onPrevious =
+    previous === undefined
+      ? undefined
+      : () => {
+          setDirection(INBOX_DIRECTION.UP);
+          onChoose(previous);
+        };
+  const onNext =
+    next === undefined
+      ? undefined
+      : () => {
+          setDirection(INBOX_DIRECTION.DOWN);
+          onChoose(next);
+        };
   useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, place.shown ? onPrevious : undefined);
   useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, place.shown ? onNext : undefined);
-  if (at === undefined) return undefined;
-  return {
-    count: row === undefined ? undefined : { at: row.at, total: row.total },
-    onPrevious,
-    onNext,
-  };
+  const pager =
+    at === undefined
+      ? undefined
+      : {
+          count: row === undefined ? undefined : { at: row.at, total: row.total },
+          onPrevious,
+          onNext,
+        };
+  return { pager, direction };
 }
 
 /** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */

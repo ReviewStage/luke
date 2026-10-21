@@ -13,6 +13,7 @@ import {
   listPublishedCodingAgents,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
@@ -35,6 +36,8 @@ import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { afterEach, vi } from "vitest";
+import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -63,6 +66,12 @@ import { githubWebhookApp } from "./github-webhook-app.js";
 const ORIGIN = "https://luke.test";
 const WEBHOOK = "/api/github/webhook";
 const SECRET = "whsec-fixture-luke";
+/** The origin eve answers on, as `LUKE_EVE_ORIGIN` names it to the delivery's wakes. */
+const EVE_ORIGIN = "https://eve.test";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -98,6 +107,10 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
   });
   return (sent: SentToGitHub): Response | undefined => {
     const url = new URL(sent.url);
+    // eve's coding-agent service, which a wake reaches over the same client, takes every follow-up.
+    if (url.origin === EVE_ORIGIN) {
+      return Response.json({ sessionId: "wrun_eve", deliveryId: "delivery-1" }, { status: 202 });
+    }
     if (!url.pathname.startsWith(base)) return undefined;
     const path = url.pathname.slice(base.length);
     if (path === "/pulls") return Response.json([pullJson()]);
@@ -126,8 +139,10 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: undefined,
+    eveDeploymentSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
+    nativeAgentAccounts: [],
   };
 }
 
@@ -136,15 +151,20 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group over the test's database, the GitHub given, and the secret given, answering one request. */
-const answer = (github: FakeGitHub, secret: string | undefined, request: Request) =>
+/** The group over the test's database, the GitHub given, and the secret given (and any other values held), answering one request. */
+const answer = (
+  github: FakeGitHub,
+  secret: string | undefined,
+  request: Request,
+  held: Partial<HostedEnvironmentValues> = {},
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      Layer.succeed(HostedEnvironment, environment(secret)),
+      Layer.succeed(HostedEnvironment, { ...environment(secret), ...held }),
       github.layer,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
@@ -227,7 +247,7 @@ const openAgent = (pull: PullRequestFixture) =>
         listPublishedCodingAgents(owner, [task.id]),
         (agents) => agents.find((each) => each.agent.id === agent.id)?.published,
       );
-    return { github, kept, ref };
+    return { github, kept, ref, owner, agent };
   });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -802,5 +822,49 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         "the failed commit is kept by its address",
       );
     }),
+  );
+  it.effect(
+    "a person's review on an agent's branch wakes the agent through eve as the deployment acting for its owner, under the deployment's own secret and never the cron's",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.sync(() => vi.stubEnv(BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
+        const pull = { state: "open", merged: false, conclusion: "success" } as const;
+        const { github, ref, owner, agent } = yield* openAgent({ ...pull });
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          `wrun_${randomUUID()}`,
+          yield* DateTime.nowAsDate,
+        );
+        const review = {
+          action: "submitted",
+          repository,
+          sender: { login: "octocat", type: "User" },
+          review: {
+            id: 9,
+            state: "COMMENTED",
+            body: "Cover the expired invitation too.",
+            html_url: `https://github.com/${RELAY_FULL_NAME}/pull/41#pullrequestreview-9`,
+            submitted_at: "2026-10-16T12:00:00Z",
+          },
+          pull_request: { number: 41, head: { ref } },
+        };
+
+        const answered = yield* answer(github, SECRET, delivery("pull_request_review", review), {
+          cronSecret: Redacted.make("cron-secret-1"),
+          eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
+        });
+
+        assert.deepEqual(answered, { status: 200, body: { read: 0, queued: 0, told: 1 } });
+        assert.deepEqual(
+          github.sent
+            .filter((sent) => new URL(sent.url).origin === EVE_ORIGIN)
+            .map((sent) => ({
+              method: sent.method,
+              authorization: sent.headers.get("authorization"),
+              account: sent.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+            })),
+          [{ method: "POST", authorization: "Bearer eve-deployment-secret-1", account: owner }],
+        );
+      }),
   );
 });

@@ -5,13 +5,18 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { rendererRegistry, rendererServicesNow } from "@luke/panel/renderer-runtime";
-import { appSettingsNow, appStateNow, useAppState } from "@luke/panel/use-app-state";
+import {
+  APP_SETTINGS_VIEW,
+  APP_SLICE,
+  appSettingsNow,
+  appStateNow,
+  useAppSlice,
+} from "@luke/panel/use-app-state";
 import { createBrowserSilence } from "@luke/panel/voice/live-peer";
 import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
 import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
-import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_STATUS } from "@luke/voice/avatar";
+import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { hostedVoiceUnavailableNote } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,
@@ -46,6 +51,12 @@ const remoteStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<Media
 );
 const localStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<MediaStream | undefined>(
   undefined,
+);
+
+/** The avatar's status as the panel reported it, which redraws the session only as it moves, not as the words do. */
+const avatarStatusAtom: Atom.Atom<AvatarStatus> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.avatar.status ?? AVATAR_STATUS.OFF,
 );
 
 /** One of the two atoms as the slot a call shows its stream in and reads back before clearing it. */
@@ -97,10 +108,14 @@ export function useVoiceSession(
   const bridge: LiveVoiceBridge = {
     // Every exchange is a spoken one: a call is only ever opened by a press.
     // The speaker toggle is the view's, so it is played as reported.
-    reportView: (view, exchangeOpened) => {
+    reportView: (view, exchangeOpened, transcript) => {
       speakerMuted.current = view.speakerMuted;
       playRemoteAudio();
-      appBridge().reportVoiceView(view, exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined);
+      appBridge().reportVoiceView(
+        view,
+        exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined,
+        transcript,
+      );
     },
     requestMicrophone: () =>
       Effect.promise(
@@ -119,8 +134,8 @@ export function useVoiceSession(
       const call = new LiveCall({
         events,
         acts: {
-          createSession: (sdp, taskId) =>
-            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, taskId: taskId }),
+          createSession: (sdp, { taskId, agentId }) =>
+            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, taskId, agentId }),
           endSession: (request) => tell(ACT_KIND.VOICE_END_LIVE_SESSION, request),
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
@@ -191,21 +206,21 @@ export function useVoiceSession(
    * microphone's grant — on the one channel main holds it on, handed over
    * whole whenever it moves.
    */
-  const state = useAppState();
+  const settings = useAppSlice(APP_SETTINGS_VIEW);
+  const audio = useAppSlice(APP_SLICE.AUDIO);
   useEffect(() => {
-    const settings = state?.settings ? appSettingsView(state.settings) : undefined;
     const surroundings: LiveVoiceSurroundings = {
       voiceAvailable: settings?.voiceAvailable,
       captionsEnabled: settings?.voiceCaptions === true,
-      outputSilent: outputSilent(state?.audio.outputAudio),
-      microphoneGranted: state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED,
+      outputSilent: outputSilent(audio?.outputAudio),
+      microphoneGranted: audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
     };
     orchestrator.surround(surroundings);
-  }, [orchestrator, state]);
+  }, [orchestrator, settings, audio]);
 
   // The avatar's status as the panel reported it, for the call to hand
   // Luke's voice over to it, or take it back.
-  const avatarStatus = state?.voice.avatar.status ?? AVATAR_STATUS.OFF;
+  const avatarStatus = useAppSlice(avatarStatusAtom);
   useEffect(() => {
     callRef.current?.reportAvatarStatus(avatarStatus);
   }, [avatarStatus]);
@@ -280,11 +295,10 @@ export function useVoiceSession(
     [drive, orchestrator],
   );
 
-  // The Tasks tab's microphone, about the task the panel had open: a call about
-  // that task opened and heard, or its microphone toggled, as the main process
-  // forwards the press.
+  // An agent's Call button, as the main process forwards the press: a call
+  // into that agent opened and heard, or its microphone toggled.
   useEffect(
-    () => appBridge().onTasksTalk(({ taskId }) => drive(orchestrator.talkAboutTask(taskId))),
+    () => appBridge().onTasksTalk((about) => drive(orchestrator.talkTo(about))),
     [drive, orchestrator],
   );
 
@@ -295,40 +309,6 @@ export function useVoiceSession(
         drive(orchestrator.obeySessionChange(change)),
       ),
     [drive, orchestrator],
-  );
-
-  // The talk key is registered by the main process so it answers from any app,
-  // which is the whole point: no window to find, nothing to focus first. It
-  // is held to talk: the press opens the microphone and the release closes
-  // it, so the device is open exactly while the key is down. A press during
-  // a chord being recorded is held back in the main process, where the
-  // recording is known; a release always lands, so a hold begun before the
-  // recording still ends. A press made while the panel has a task open names
-  // that task, and is heard on that task's call.
-  // The call is told too, since a hold over Luke gone quiet flushes his avatar.
-  useEffect(
-    () =>
-      appBridge().onVoiceHotkeyPress((press) => {
-        callRef.current?.reportTalkKey(true);
-        drive(orchestrator.beginTalk(press?.taskId));
-      }),
-    [drive, orchestrator],
-  );
-  useEffect(
-    () =>
-      appBridge().onVoiceHotkeyRelease(() => {
-        callRef.current?.reportTalkKey(false);
-        drive(orchestrator.endTalk());
-      }),
-    [drive, orchestrator],
-  );
-  // The stop key stops Luke from any app, call or no call (`LUKE_STOP`); a call is told back as the stop command above.
-  useEffect(
-    () =>
-      appBridge().onStopHotkeyPress(() => {
-        tell(ACT_KIND.LUKE_STOP, {});
-      }),
-    [tell],
   );
 
   useEffect(

@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import type { BrowserFocus, BrowserKey } from "@luke/features/browser-acts";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -21,7 +20,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
@@ -34,10 +33,18 @@ import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
-import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeActs,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -145,30 +152,25 @@ afterEach(() => {
 /** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
-function answer(request: AnyAct): Promise<AnyActOutcome> {
+/** The host's inbox streams for the window, the task's inbox pushed as holding the one item. */
+const follows = followedInboxes(() => ({ items: [ITEM] }));
+
+function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.CODING_AGENTS_INBOX:
-      // A read past the cursor is held open while nothing changes, as the service holds it.
-      return request.payload.after === "0"
-        ? Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { items: [ITEM], cursor: "1" } satisfies CodingAgentInboxAnswerView,
-          })
-        : new Promise(() => undefined);
     case ACT_KIND.CODING_AGENTS_LIST:
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: { agents: [ARCHIVED, AGENT] },
       });
     case ACT_KIND.CODING_AGENTS_PULL_REQUEST:
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: {
           repository: REPOSITORY,
           branch: "luke/batch-invitations",
@@ -185,7 +187,7 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
         },
       });
     default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
   }
 }
 
@@ -212,7 +214,7 @@ async function inbox(
   const main: MainBrowserEvents = {};
   const links: ReadLink[] = [];
   const tasks: string[] = [];
-  const left = { links, tasks, rereads: 0 };
+  const left = { links, tasks };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeActs({
     act: answer,
@@ -225,7 +227,10 @@ async function inbox(
       main.focus = listener;
       return () => undefined;
     },
+    onBrowserOpened: () => () => undefined,
+    onBrowserClosed: () => () => undefined,
   });
+  fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(experiments);
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
@@ -261,12 +266,10 @@ async function inbox(
             onOpen: () => undefined,
             onClose: () => undefined,
             onChoose: setChosen,
+            onOpenItem: () => undefined,
             listed,
             onListed: setListed,
             pages,
-            onRereadPages: () => {
-              left.rereads += 1;
-            },
             onTaskAgents: taskAgents.onRead,
           },
           sidePanel,
@@ -333,10 +336,9 @@ test("a pull request, a page, and a file the item names open as tabs of the pane
   assert.equal(panelTabs(container)?.length, 3, "nothing of another plan opens in the panel");
 });
 
-test("a page the item names whose plan's pages did not answer asks for them again, so its tab stands once they do", async () => {
+test("a page the item names before its plan's pages are read is still the panel's to open, its tab standing once they land", async () => {
   const { container, left } = await inbox({ pages: undefined });
   await pressChip(container, "Invite funnel");
-  assert.equal(left.rereads, 1);
   assert.equal(left.links.length, 0, "the page is still the panel's to open");
 });
 

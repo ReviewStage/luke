@@ -33,13 +33,19 @@ import {
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
 const TREND_TONE = {
-  [TREND_DIRECTION.UP]: "text-complete",
-  [TREND_DIRECTION.DOWN]: "text-attention",
-  [TREND_DIRECTION.FLAT]: "text-muted-foreground",
+  [TREND_DIRECTION.UP]: "text-(--luke-color-complete)",
+  [TREND_DIRECTION.DOWN]: "text-(--luke-color-attention)",
+  [TREND_DIRECTION.FLAT]: "text-(--luke-color-text-muted)",
 } as const;
 
 /** The room an empty window's line stands in, about a short plot's height. */
-const CHART_EMPTY = "py-6 text-center";
+const CHART_EMPTY = "py-(--luke-space-24) text-center";
+
+/** A legend's entries, wrapping a field's gap apart, and close under each other where they wrap. */
+export const LEGEND = "flex flex-wrap gap-x-(--luke-field-gap) gap-y-(--luke-space-4)";
+
+/** A legend entry's swatch a short step from its name, closer than a glyph to its words, since the swatch is smaller. */
+export const LEGEND_ENTRY = "inline-flex items-center gap-(--luke-space-6)";
 
 /** A heading bone's width, about the words it stands for. */
 const SKELETON_TITLE_WIDTH = "144px";
@@ -82,9 +88,9 @@ export function SeriesLegend({
   series: readonly { key: string; label: string; color: string }[];
 }): React.JSX.Element {
   return (
-    <span className="flex flex-wrap gap-x-4 gap-y-1">
+    <span className={LEGEND}>
       {series.map((entry) => (
-        <span key={entry.key} className="inline-flex items-center gap-1.5">
+        <span key={entry.key} className={LEGEND_ENTRY}>
           <span
             className="inline-block size-2.5 rounded-sm"
             style={{ backgroundColor: entry.color }}

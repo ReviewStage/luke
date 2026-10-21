@@ -2,10 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
@@ -19,7 +15,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,10 +23,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { type AnyAct, type AnyActOutcome, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -155,33 +157,34 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`, every place a press opened kept in `opened`. */
-async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<readonly Element[]> {
+/** The developer's messages as `reader` sees the tab drawn, one element for each of `messages`, every place a press opened kept in `opened`. */
+async function drawnFor(
+  reader: string,
+  opened: LinkPlace[] = [],
+  agent: CodingAgentSummary = AGENT,
+  messages: readonly CodingAgentMessage[] = MESSAGES,
+): Promise<readonly Element[]> {
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> =>
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
           : request.kind === ACT_KIND.CODING_AGENTS_LIST
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [SENDER_NOW] } }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+            ? { status: FAKE_ANSWER.DONE, value: { agents: [SENDER_NOW] } }
+            : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
   });
-  // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
-  let reads = 0;
   const control = codingAgentsControl({
-    agents: [AGENT],
+    agents: [agent],
     me: reader,
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
-        messages: [...MESSAGES],
+    transcripts: pushedTranscripts(() => [
+      {
+        messages: [...messages],
         cursor: "7:0",
         status: CODING_AGENT_STATUS.COMPLETED,
         title: null,
-      });
-    },
+      },
+    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -195,7 +198,7 @@ async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<reado
             workspace: ACME,
             readerId: reader,
             children: createElement(AgentTab, {
-              agent: AGENT,
+              agent,
               control,
               shown: true,
               onOpenSubagent: () => undefined,
@@ -210,17 +213,21 @@ async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<reado
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const drawn = [...container.querySelectorAll(".is-user")];
-  assert.equal(drawn.length, MESSAGES.length);
+  assert.equal(drawn.length, messages.length);
   return drawn;
 }
 
 /** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
-async function sendersFor(reader: string): Promise<readonly Seen[]> {
-  const drawn = await drawnFor(reader);
+async function sendersFor(
+  reader: string,
+  agent: CodingAgentSummary = AGENT,
+  messages: readonly CodingAgentMessage[] = MESSAGES,
+): Promise<readonly Seen[]> {
+  const drawn = await drawnFor(reader, [], agent, messages);
   return drawn.flatMap((message, index): Seen[] => {
     const sender = message.querySelector<HTMLElement>(".message-sender [data-actor-ref]");
     if (sender === null) return [];
-    const id = MESSAGES[index]?.id ?? "";
+    const id = messages[index]?.id ?? "";
     const name = sender.querySelector(".luke-inline-ref-label")?.textContent ?? "";
     const picture = sender.querySelector("img")?.getAttribute("src");
     const kind = sender.dataset.kind ?? "";
@@ -340,4 +347,19 @@ test("a sent message keeps its bubble on top, with its Copy, who sent it, and wh
   // The reader's own message names nobody, and still offers its Copy under the bubble; one from a service older than the time names none.
   assert.deepEqual(readingOrder(own, "Use seven days."), ["words", "Copy"]);
   fakeAppBridge({});
+});
+
+test("an agent started blank draws its first line as a line, no plan's card and no task under its starter's name, a line spoken on a call naming no one and a teammate's typed line naming them", async () => {
+  const blank: CodingAgentSummary = { ...AGENT, brief: CODING_AGENT_BRIEF.BLANK };
+  const spoken: CodingAgentMessage = {
+    ...line("spoken", "What did you change?"),
+    metadata: { author: "developer", channel: "voice", voice_session_id: "call-1", from_ms: 0 },
+  };
+  const typed = line("typed", "Keep the old copy.", { ...DEAN, kind: MEMBER });
+
+  // Every line is drawn as a line of the developer's, the first among them, and none as the plan's card.
+  assert.deepEqual(await sendersFor(CHARLES.userId, blank, [spoken, typed]), [
+    ["typed", ACTOR_KIND.PERSON, "Dean Stratakos"],
+  ]);
+  assert.equal(document.querySelector("[data-task-card]"), null);
 });

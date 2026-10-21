@@ -22,7 +22,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
@@ -40,12 +40,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
-import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
+import {
+  type DiffListProps,
+  type DiffViewModule,
+  GAP_CONTROL,
+  GAP_CONTROL_ATTRIBUTE,
+} from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActPort,
   fakeActPortCalls,
   fakeActs,
@@ -128,6 +134,8 @@ let commits: ImageCommits = {};
 
 /** The pull request's files, in the order GitHub lists them, which is not the tree's. */
 let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
+/** Whether the read stopped short of every file; it did not unless a test says so. */
+let truncated = false;
 
 /** How the service answers the read of the member's viewed marks; unanswered unless a test answers it. */
 let viewedAnswer: CodingAgentPullRequestViewedAnswerView = {
@@ -152,7 +160,7 @@ const control = codingAgentsControl({
       pullRequest: {
         url: "https://github.com/acme/relay/pull/7",
         ...commits,
-        truncated: false,
+        truncated,
         files,
         reviewers: [],
         comments: [],
@@ -169,14 +177,21 @@ let boxWidth = 900;
 let root: Root | undefined;
 
 const standIn: DiffViewModule = {
-  colourLines: () => Promise.resolve(undefined),
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
+  mountFile: () => ({
+    update: () => undefined,
+    revealLines: () => undefined,
+    pickedLines: () => undefined,
+    unmount: () => undefined,
+  }),
   mountList: (_host, props) => {
     drawn.push(props);
     return {
       update: (next) => drawn.push(next),
       reveal: (path) => revealed.push(path),
       revealLine: (path, side, line) => revealed.push(`${path}:${side}:${line}`),
+      revealLines: (range) =>
+        revealed.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },
@@ -188,6 +203,8 @@ let treeOpens: Array<(path: string, newTab: boolean) => void> = [];
 let treeProps: FileTreeProps[] = [];
 /** The marks the trees were handed, the latest last. */
 let treeMarks: Array<readonly FileMark[]> = [];
+/** The files the trees marked as the one shown, in order. */
+let treeRevealed: string[] = [];
 
 /** The tree bundle, stood in for: it draws nothing and keeps the doors and the marks it is handed. */
 const treeStandIn: FileTreeModule = {
@@ -196,7 +213,7 @@ const treeStandIn: FileTreeModule = {
     treeProps.push(props);
     const nothing = () => undefined;
     return {
-      reveal: nothing,
+      reveal: (path) => treeRevealed.push(path),
       search: nothing,
       only: nothing,
       within: nothing,
@@ -224,7 +241,9 @@ beforeEach(() => {
   treeOpens = [];
   treeProps = [];
   treeMarks = [];
+  treeRevealed = [];
   files = [changed("src/seats.ts")];
+  truncated = false;
   commits = {};
   viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
   viewedReads = 0;
@@ -515,7 +534,7 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
   assert.equal(lastDrawn().files.length, 3);
 });
 
-test("with the file stood on filtered out, the bar names the file the list scrolls to", async () => {
+test("with the file stood on filtered out, the tree marks the file the list scrolls to", async () => {
   files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
   await drawTab({ treeOpen: true });
   act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
@@ -524,7 +543,7 @@ test("with the file stood on filtered out, the bar names the file the list scrol
   typeSearch("lib");
   await flush();
   act(() => lastDrawn().onTopFile("lib/c.ts"));
-  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /c\.ts/u);
+  assert.equal(treeRevealed.at(-1), "lib/c.ts");
 });
 
 test("a file the filter leaves out, chosen in a tree of every changed file, clears the filter and is scrolled to", async () => {
@@ -543,7 +562,7 @@ test("a file the filter leaves out, chosen in a tree of every changed file, clea
 
   assert.equal(lastDrawn().files.length, 3, "the filter is cleared");
   assert.deepEqual(revealed, ["README.md"]);
-  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /README\.md/u);
+  assert.equal(treeRevealed.at(-1), "README.md");
 });
 
 /** A tree as the panel holds it, open as given, counting its toggles and keeping the widths asked for. */
@@ -630,7 +649,6 @@ test("J and K step through the files inside the view, ; and ⇧; fold, and Escap
   press(box, { key: "k" });
   assert.deepEqual(revealed, ["a.ts", "b.ts", "c.ts", "b.ts"]);
   assert.ok(header("b.ts").hasAttribute("data-standing"));
-  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /b\.ts/u);
 
   press(box, { key: ";", code: "Semicolon" });
   await flush();
@@ -710,6 +728,54 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
   const hint = letter().getAttribute("aria-describedby");
   assert.ok(hint !== null, "the letter is described by its hint");
   assert.equal(document.getElementById(hint)?.textContent, "Modified");
+});
+
+test("a finger's arrival on a header draws none of it anew, so iOS spends no tap on the fold", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  act(() => {
+    fold.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "touch" }));
+  });
+  await flush();
+
+  assert.ok(fold.isConnected, "the fold the finger is on still stands");
+  assert.ok(header("a.ts").querySelector("button") === fold, "the fold is the one drawn before");
+});
+
+test("on a touch screen a header's hints stand from the start, so a long press on its fold hangs the fold's", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      fold.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 3,
+          pointerType: "touch",
+          isPrimary: true,
+        }),
+      );
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+
+  assert.ok(header("a.ts").contains(fold), "the hold drew no fold anew");
+  const hint = fold.getAttribute("aria-describedby");
+  assert.ok(hint !== null, "the fold is described by its hint");
+  assert.match(document.getElementById(hint)?.textContent ?? "", /^Collapse file/u);
 });
 
 test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {
@@ -853,7 +919,7 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
     ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
     ["Text", ["Syntax theme", "For dark mode", "Font", "Font size", "Line height", "Ligatures"]],
   ]);
-  assert.match(popover.textContent ?? "", /Or press I in the list/u, "Minimize names its key");
+  assert.match(popover.textContent ?? "", /Or press I over the code/u, "Minimize names its key");
 
   act(() => settingControl(popover, '[role="radio"]', "Light").click());
   assert.ok(
@@ -892,20 +958,66 @@ test("the diff settings set the layout, the indicators, and a switch for every d
   assert.deepEqual((await drawTab()).look, expected);
 });
 
-test("the ⋯ holds the view's actions alone, Copy path among them, its looks set in View settings", async () => {
+test("the ⋯ holds the pull request's actions alone, no file's, its looks set in View settings", async () => {
   files = [changed("src/seats.ts")];
-  const copied: string[] = [];
-  fakeAppPlatform(copyingInto(copied));
   await drawTab();
 
-  const items = menuItems();
   assert.deepEqual(
-    items.map((item) => item.textContent),
-    ["Copy file name", "Copy path", "Copy patch", "Download patch", "Refresh changes"],
+    menuItems().map((item) => item.textContent),
+    ["Copy PR patch", "Download PR patch", "Refresh changes"],
   );
-  act(() => items[1]?.click());
+});
+
+test("the ⋯ copies and saves the whole pull request's patch, every file with lines in the list's order, named for the pull request", async () => {
+  files = [
+    changed("src/seats.ts"),
+    changed("logo.png", { patch: null }),
+    changed("lib/plan.ts", { status: CHANGED_FILE_STATUS.ADDED, patch: "@@ -0,0 +1 @@\n+new" }),
+  ];
+  const copied: string[] = [];
+  const saved: Array<{ readonly name: string; readonly text: string }> = [];
+  fakeAppPlatform({
+    ...copyingInto(copied),
+    saveFile: (file) => {
+      saved.push(file);
+      return Promise.resolve(false);
+    },
+  });
+  await drawTab();
+
+  const whole = [
+    "diff --git a/lib/plan.ts b/lib/plan.ts",
+    "--- /dev/null",
+    "+++ b/lib/plan.ts",
+    "@@ -0,0 +1 @@",
+    "+new",
+    "diff --git a/src/seats.ts b/src/seats.ts",
+    "--- a/src/seats.ts",
+    "+++ b/src/seats.ts",
+    PATCH,
+    "",
+  ].join("\n");
+  const [copy] = menuItems();
+  act(() => copy?.click());
   await flush();
-  assert.deepEqual(copied, ["src/seats.ts"]);
+  assert.deepEqual(copied, [whole]);
+
+  const [, download] = menuItems();
+  act(() => download?.click());
+  await flush();
+  assert.deepEqual(saved, [{ name: "relay-pr-7.patch", text: whole }]);
+});
+
+test("a read that stopped short of every file offers no patch, and says why", async () => {
+  truncated = true;
+  files = [changed("src/seats.ts")];
+  await drawTab();
+
+  const [copy, download] = menuItems();
+  for (const item of [copy, download]) {
+    assert.equal(item?.getAttribute("aria-disabled") ?? String(item?.disabled), "true");
+    assert.match(item?.textContent ?? "", /This pull request has more files than were read/u);
+  }
 });
 
 test("Split draws the diff side by side, which the next view keeps", async () => {
@@ -1100,15 +1212,10 @@ function comeIntoView(): void {
   }
 }
 
-/** Every `app:act` this test does not answer, refused. */
-function refuseEveryAct(): Promise<ActOutcome> {
-  return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-}
-
 /** The images the service was asked for, by address, each answered with a picture of its own. */
 function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1363,10 +1470,18 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
   ],
 };
 
+/** What the bar's count of the files viewed says. */
+function viewedCount(): string {
+  return (
+    document.querySelector(".file-view-bar .files-viewed")?.textContent ??
+    assert.fail("the bar counts the files viewed")
+  );
+}
+
 /** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1386,7 +1501,7 @@ function viewedBox(path: string): HTMLInputElement {
   );
 }
 
-test("the member's viewed marks tick their files, count toward the foot's progress, and fold them; a file changed since reads not viewed", async () => {
+test("the member's viewed marks tick their files, count toward the bar's progress, and fold them; a file changed since reads not viewed", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab();
@@ -1400,7 +1515,7 @@ test("the member's viewed marks tick their files, count toward the foot's progre
     ["b.ts", false],
     ["c.ts", false],
   ]);
-  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /1 \/ 3 viewed/u);
+  assert.equal(viewedCount(), "1 / 3 files viewed");
 });
 
 test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
@@ -1418,7 +1533,7 @@ test("ticking a file's box marks it viewed on GitHub at once and folds it; one G
   await flush();
   assert.equal(viewedBox("c.ts").checked, true);
   assert.deepEqual(folds()[2], ["c.ts", true]);
-  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /2 \/ 3 viewed/u);
+  assert.equal(viewedCount(), "2 / 3 files viewed");
 
   refuse = true;
   act(() => viewedBox("a.ts").click());
@@ -1432,6 +1547,97 @@ test("ticking a file's box marks it viewed on GitHub at once and folds it; one G
     { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" },
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: "a.ts" },
   ]);
+});
+
+test("the bar leads with the count of files viewed in the crumbs' place, polite to a screen reader, and no count stands under the list or the tree", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("src/billing/a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab({ treeOpen: true });
+
+  const bar = document.querySelector(".file-view-bar") ?? assert.fail("a bar");
+  assert.equal(bar.querySelector(".luke-breadcrumbs"), null, "no crumbs");
+  assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
+  const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");
+  assert.equal(count.getAttribute("aria-live"), "polite");
+  assert.equal(count.querySelector("button, input"), null, "the count is words, not a control");
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /changed/u,
+    "no files or lines changed count",
+  );
+  assert.equal(document.querySelectorAll(".files-viewed").length, 1, "the bar's count alone");
+
+  await redraw({ treeOpen: false });
+  assert.doesNotMatch(document.body.textContent ?? "", /changed/u);
+  assert.equal(document.querySelectorAll(".files-viewed").length, 1);
+});
+
+test("with no marks read the bar says only how many files there are", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  assert.equal(viewedCount(), "3 files");
+
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
+  files = [changed("a.ts")];
+  await drawTab();
+  assert.equal(viewedCount(), "1 file");
+});
+
+test("every file viewed reads as complete, with a check, and unticking one counts again", async () => {
+  viewedAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+    files: [
+      { path: "a.ts", state: FILE_VIEWED_STATE.VIEWED },
+      { path: "b.ts", state: FILE_VIEWED_STATE.UNVIEWED },
+    ],
+  };
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+  const count = () =>
+    document.querySelector(".files-viewed") ?? assert.fail("the bar counts the files viewed");
+  assert.equal(viewedCount(), "1 / 2 files viewed");
+  assert.equal(count().hasAttribute("data-complete"), false);
+
+  act(() => viewedBox("b.ts").click());
+  await flush();
+  assert.equal(viewedCount(), "All 2 files viewed");
+  assert.equal(count().hasAttribute("data-complete"), true);
+  assert.notEqual(count().querySelector("svg"), null, "a check stands before the words");
+
+  act(() => viewedBox("a.ts").click());
+  await flush();
+  assert.equal(viewedCount(), "1 / 2 files viewed");
+  assert.equal(count().querySelector("svg"), null);
+});
+
+test("a read that stopped short of every file never reads as all viewed", async () => {
+  viewedAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+    files: [{ path: "a.ts", state: FILE_VIEWED_STATE.VIEWED }],
+  };
+  truncated = true;
+  files = [changed("a.ts")];
+  await drawTab();
+
+  assert.equal(viewedCount(), "1 / 1 file viewed");
+  assert.equal(document.querySelector(".files-viewed")?.hasAttribute("data-complete"), false);
+});
+
+test("the count goes up the moment a box is ticked, and back down where GitHub refuses the mark", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  assert.equal(viewedCount(), "1 / 3 files viewed");
+
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(viewedCount(), "2 / 3 files viewed", "counted before GitHub answers");
+
+  held[0]?.answer({ outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Locked." });
+  await flush();
+  assert.equal(viewedCount(), "1 / 3 files viewed");
 });
 
 test("V marks the file the keys stand on viewed and steps on to the next, and is no key at all until the marks are read", async () => {
@@ -1541,7 +1747,7 @@ function holdMarks(): Array<{
     readonly request: PullRequestActionRequest;
     readonly answer: (answer: PullRequestWriteAnswer) => void;
   }> = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1580,7 +1786,7 @@ test("presses on one file go to GitHub one at a time, the last of them winning, 
   held[1]?.answer(DONE);
   await flush();
   assert.equal(viewedBox("c.ts").checked, false);
-  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /0 \/ 1 viewed/u);
+  assert.equal(viewedCount(), "0 / 1 file viewed");
 });
 
 test("a read asked before a mark settled never undoes it, and a read that does not answer takes the boxes away", async () => {
@@ -1905,8 +2111,8 @@ function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
   fakeActs({
     act: (request: AnyAct) => {
       asked.push(request);
-      const outcome: AnyActOutcome = {
-        status: ACT_OUTCOME_STATUS.DONE,
+      const outcome: FakeActAnswer = {
+        status: FAKE_ANSWER.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
       };
       return Promise.resolve(outcome);
@@ -2046,24 +2252,32 @@ test("a file whose read is refused closes its gaps and says why, once, above its
   );
 });
 
-test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+test("a gap's control under the pointer or the keyboard's focus hangs its hint, what it opens, and a press lets it go", async () => {
   files = [changed("src/seats.ts")];
   await drawTab();
-  const hintOver = (long: boolean) => {
-    const wrapper = listBox().appendChild(document.createElement("div"));
-    wrapper.setAttribute("data-separator-wrapper", "");
-    const arrow = wrapper.appendChild(document.createElement("div"));
-    arrow.setAttribute("data-expand-button", "");
-    if (long)
-      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
-    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
-    const words = document.querySelector('[role="tooltip"]')?.textContent;
-    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
-    wrapper.remove();
-    return words;
-  };
-  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
-  assert.equal(hintOver(false), "Show these lines");
+  const band = listBox().appendChild(document.createElement("div"));
+  const words = band.appendChild(document.createElement("span"));
+  words.setAttribute(GAP_CONTROL_ATTRIBUTE, GAP_CONTROL.ALL);
+  words.setAttribute("aria-label", "Show all 51 lines");
+  words.tabIndex = 0;
+  const arrow = band.appendChild(document.createElement("div"));
+  arrow.setAttribute(GAP_CONTROL_ATTRIBUTE, GAP_CONTROL.MORE);
+  arrow.setAttribute("aria-label", "Show 20 more lines");
+  arrow.tabIndex = 0;
+  const hint = () => document.querySelector('[role="tooltip"]')?.textContent;
+
+  act(() => words.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  assert.equal(hint(), "Show all 51 lines");
+  act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  assert.equal(hint(), "Show 20 more lines");
+  act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.equal(hint(), undefined);
+
+  act(() => words.focus());
+  assert.equal(hint(), "Show all 51 lines");
+  act(() => words.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  assert.equal(hint(), undefined);
+  band.remove();
 });
 
 test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
@@ -2162,7 +2376,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
               },
             }
           : undefined;
-      const outcome: AnyActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      const outcome: FakeActAnswer = { status: FAKE_ANSWER.DONE, value };
       // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));

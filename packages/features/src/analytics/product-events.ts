@@ -243,9 +243,13 @@ export const PRODUCT_EXPERIMENT = {
   AUTOMATIONS: "automations",
   CODE_REVIEW: "code-review",
   VIDEO_CALLS: "video-calls",
+  /** Removed with Luke's own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   ISSUES: "issues",
+  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   SECTIONS: "sections",
+  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   GITHUB_TOKEN: "github-token",
+  INBOX_FIRST: "inbox-first",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
@@ -372,6 +376,14 @@ export interface ProductEvent {
 }
 
 export type ProductEventBatch = readonly ProductEvent[];
+
+/**
+ * What the service answers a batch it took: how many of its events it
+ * recorded, which a batch of nothing but retired names makes none.
+ */
+export const productEventsAnswerSchema = Schema.Struct({
+  accepted: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
 
 /**
  * How many events one request may carry. A flush past this is a desktop bug

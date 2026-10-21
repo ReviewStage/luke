@@ -1,5 +1,6 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { RUNNER_BUNDLE_FILE } from "@luke/service/agents/coder-host/runner-bundle";
 import { sourceMapUploadToken } from "@luke/service/observability/source-maps";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { type BuildOptions, build } from "esbuild";
@@ -9,12 +10,9 @@ import {
   HAND_WRITTEN_FUNCTIONS,
 } from "../server/build-output.js";
 import {
-  expectedExternals,
-  externalsByBundle,
-  externalsDrift,
+  bundlesReaching,
   FUNCTION_METAFILE,
   functionBundlePlan,
-  importChain,
   undeclaredImports,
 } from "../server/function-bundles.js";
 import {
@@ -24,7 +22,8 @@ import {
 } from "../server/function-layout.js";
 
 /**
- * Bundles the functions the routes under `server/routes/` are grouped into,
+ * Bundles the functions the routes under `server/routes/` and the hosted
+ * oRPC route are grouped into,
  * each a plain ESM file under `dist-functions/`, so Vercel's builder finds JavaScript
  * and only traces dependencies. Handed TypeScript, the builder runs its own
  * compiler over each function's whole import graph separately — thirty-odd
@@ -42,6 +41,28 @@ import {
  * the function would fail to load, so the build refuses it here instead.
  */
 const WEB = join(import.meta.dirname, "..");
+
+/**
+ * The runner a native harness's sandbox runs, as `@luke/agent-runner`'s own
+ * build leaves it, which the web build runs first; and the module that reads
+ * it beside a function's entry. Every function whose bundle reaches that
+ * module ships the runner in its `.func`, and a build without the runner
+ * fails here rather than deploy a launch that cannot upload it.
+ */
+const AGENT_RUNNER = {
+  BUNDLE: join(WEB, "..", "..", "packages", "agent-runner", "dist", RUNNER_BUNDLE_FILE),
+  READER: join(
+    WEB,
+    "..",
+    "..",
+    "packages",
+    "service",
+    "src",
+    "agents",
+    "coder-host",
+    "runner-bundle.ts",
+  ),
+} as const;
 /** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
 
@@ -53,7 +74,10 @@ const SITE_DIRECTORY = "dist";
  * `SENTRY_AUTH_TOKEN` uploads; any other, a Preview's included, bundles as
  * before, since a Preview's traces are rarely read and the maps cost its build. The plugin names
  * the release from the deployment's commit and writes it into each bundle,
- * which is the release the SDK then reports under.
+ * which is the release the SDK then reports under. A refused release or
+ * upload is only logged, the plugin's default with no `errorHandler`, so
+ * Sentry being down never fails the build; the maps are deleted after it
+ * either way. A failed deletion still throws, so no map can ship.
  */
 function withSentrySourceMaps(options: BuildOptions): BuildOptions {
   const authToken = sourceMapUploadToken(process.env);
@@ -78,6 +102,12 @@ function withSentrySourceMaps(options: BuildOptions): BuildOptions {
   };
 }
 
+const runnerBundle = await readFile(AGENT_RUNNER.BUNDLE).catch(() => {
+  throw new Error(
+    `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @luke/agent-runner build\` first`,
+  );
+});
+
 const task = await functionBundlePlan(WEB);
 // Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
@@ -92,25 +122,9 @@ if (undeclared.length > 0) {
 
 await writeFile(join(WEB, FUNCTION_METAFILE), JSON.stringify(result.metafile));
 
-const externals = externalsDrift(
-  await expectedExternals(WEB),
-  externalsByBundle(result.metafile, WEB),
+const shipsRunner = new Set(
+  [...bundlesReaching(result.metafile, WEB, AGENT_RUNNER.READER)].map((path) => join(WEB, path)),
 );
-if (externals.length > 0) {
-  const lines = externals.map((entry) => {
-    const outputPath = Object.keys(result.metafile.outputs).find((path) =>
-      path.endsWith(entry.bundle),
-    );
-    const chains = entry.added.map(
-      (added) =>
-        `${added} via ${(outputPath === undefined ? [] : importChain(result.metafile, outputPath, added)).join(" -> ")}`,
-    );
-    return `${entry.bundle}: added ${JSON.stringify(entry.added)} removed ${JSON.stringify(entry.removed)}${chains.length > 0 ? ` (${chains.join("; ")})` : ""}`;
-  });
-  throw new Error(
-    `function bundles load externals the record does not expect (run \`pnpm --filter @luke/web functions:externals\` if intended):\n${lines.join("\n")}`,
-  );
-}
 
 const durationOf = new Map(
   task.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),
@@ -132,6 +146,9 @@ const emitted = await emitBuildOutput({
         path: functionPublicPath(definition),
         contents: await readFile(join(WEB, bundlePath(definition))),
         maxDuration: definition.maxDuration,
+        files: shipsRunner.has(join(WEB, bundlePath(definition)))
+          ? [{ name: RUNNER_BUNDLE_FILE, contents: runnerBundle }]
+          : [],
       })),
     )),
     ...(await Promise.all(

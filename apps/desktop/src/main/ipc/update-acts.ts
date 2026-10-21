@@ -2,7 +2,7 @@
  * update-acts.ts -- the updater's acts as main carries them: a check, the install, and the releases page and changelog opened.
  *
  * Each is handed to the update service as it stands; none reads which window
- * asked, as none did on `app:act`.
+ * asked.
  */
 
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";

@@ -8,6 +8,7 @@ import {
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -16,24 +17,30 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId } from "react";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
-import { CodeLinesView, type LinesLook } from "./code-lines.js";
 import { FileTypeIcon } from "./file-type-icon.js";
-import { type ImageZoom, useImageZoom } from "./use-image-zoom.js";
+import {
+  IMAGE_OPENING,
+  type ImageOpening,
+  type ImageZoom,
+  useImageZoom,
+} from "./use-image-zoom.js";
+import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
- * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file's numbered lines, or any other file by its icon with a way to save it.
+ * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file drawn as every code is, or any other file by its icon with a way to save it.
  *
- * A picture opens fitted to the window and zooms as Preview's does: a pinch
- * or a Control-scroll about the pointer, a press to its own pixels there
+ * A picture opens fitted to the window, or at its own pixels where the place
+ * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
+ * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
  * moved by a drag or a two-finger scroll (`./use-image-zoom.ts`).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
  * far along the message's files it is, a note the place opening it gives
- * the file shown (who last edited it, for a plan's picture), beside Copy for a text file,
+ * the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
@@ -53,6 +60,7 @@ const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
   COPY: "Copy text",
+  COPY_IMAGE: "Copy image",
   ZOOM_OUT: "Zoom out",
   ZOOM_IN: "Zoom in",
   DOWNLOAD: "Download",
@@ -65,21 +73,14 @@ const ZOOM_CHORD = {
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
 } as const satisfies Record<string, ShortcutChord>;
 
-/** A text file's lines always wrap and are numbered, whatever the File tabs' settings say. */
-const TEXT_LOOK: LinesLook = { lineNumbers: true, wrap: true };
+/** No notes on a file of a message. */
+const NO_NOTES: readonly WholeFileNote[] = [];
 
 /** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
 export interface ViewerAction {
   readonly label: string;
   readonly icon: React.ReactNode;
   readonly onPress: (file: FileChip) => void;
-}
-
-/** A text file's lines; a final line break ends the last line rather than starting another. */
-function linesOf(text: string): string[] {
-  const lines = text.split(/\r?\n/u);
-  if (lines.length > 1 && lines.at(-1) === "") lines.pop();
-  return lines;
 }
 
 /** Saves the file where the system's download asks, under its own name. */
@@ -104,6 +105,26 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   );
 }
 
+/**
+ * Copy for a picture, put on the clipboard as a copy from Preview puts one,
+ * answered on its glyph as every copy button is. Note that the answer is
+ * shown only beside the picture it was for, because the button stands
+ * while the files are walked and a copy may land after the next is shown.
+ */
+function CopyImageButton({ url }: { url: string }): React.JSX.Element {
+  const { state: copyState, answeredImage, copyImage } = useCopyFeedback();
+  const state: CopyState = answeredImage === url ? copyState : "idle";
+  return (
+    <Tooltip label={copyHint(state, VIEWER_LABEL.COPY_IMAGE)}>
+      <IconButton
+        icon={<CopyGlyph state={state} />}
+        label={VIEWER_LABEL.COPY_IMAGE}
+        onClick={() => copyImage(url)}
+      />
+    </Tooltip>
+  );
+}
+
 /** One of the header's icon buttons, its name its hint, beside the key that does the same where there is one. */
 function HeaderButton({
   label,
@@ -123,7 +144,7 @@ function HeaderButton({
   );
 }
 
-/** The file shown: the picture, the numbered lines of its text, or the icon, name, and size over Download. */
+/** The file shown: the picture, its text drawn as every code is, or the icon, name, and size over Download. */
 function AttachmentBody({
   file,
   base64,
@@ -150,11 +171,14 @@ function AttachmentBody({
   if (text !== undefined) {
     return (
       <div className="attachment-viewer-body attachment-viewer-lines">
-        <CodeLinesView
-          look={TEXT_LOOK}
-          firstLine={1}
-          lines={linesOf(text).map((line) => [{ text: line }])}
-          pointed={{ path: file.name }}
+        <WholeFile
+          name={file.name}
+          text={text.replace(/\r\n/gu, "\n")}
+          revision={file.url}
+          lit={undefined}
+          notes={NO_NOTES}
+          findFrom={1}
+          findable={false}
         />
       </div>
     );
@@ -183,6 +207,7 @@ export function AttachmentViewer({
   onClose,
   action,
   note,
+  opening = IMAGE_OPENING.FITTED,
 }: {
   files: readonly FileChip[];
   at: number;
@@ -193,10 +218,13 @@ export function AttachmentViewer({
   action?: ViewerAction | undefined;
   /** A quiet line the place says of the file shown, after its size, such as who last edited a plan's picture; none where it says nothing. */
   note?: React.ReactNode;
+  /** How a picture is first drawn: fitted to the window, or at its own pixels, as a diagram too fine to read fitted opens. */
+  opening?: ImageOpening;
 }): React.JSX.Element | null {
   const titleId = useId();
   const file = files[at];
-  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "");
+  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
+  const [titleBox, titleClipped] = useClipped(file?.name ?? "");
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -223,10 +251,19 @@ export function AttachmentViewer({
   // buttons from there.
   return (
     <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose} onKeyDown={walkKey}>
-      <div className="attachment-viewer ph-no-capture" data-view={attachmentView(file)}>
+      <div
+        className="attachment-viewer ph-no-capture"
+        data-view={attachmentView(file)}
+        data-opening={opening}
+      >
         <header className="attachment-viewer-header">
           <FileTypeIcon name={file.name} />
-          <h2 id={titleId} className="attachment-viewer-title">
+          <h2
+            ref={titleBox}
+            id={titleId}
+            className="attachment-viewer-title"
+            data-overflow={String(titleClipped)}
+          >
             {file.name}
           </h2>
           <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
@@ -253,6 +290,7 @@ export function AttachmentViewer({
           {text === undefined ? null : <CopyTextButton text={text} />}
           {image ? (
             <>
+              <CopyImageButton url={file.url} />
               <HeaderButton
                 label={VIEWER_LABEL.ZOOM_OUT}
                 chord={ZOOM_CHORD.OUT}

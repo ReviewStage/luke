@@ -6,19 +6,22 @@ import {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
+  type BrainRunEvent,
+  type BrainRunEventBody,
+  toolCallSettlementOf,
   UI_PART_TYPE,
 } from "@luke/features/brain";
 import { wireValidatedTool } from "@luke/features/brain/tool-set";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
 import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { readMessageByClientId } from "../message-reads.js";
+import { listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { storeWriter } from "../writer.js";
 
 /**
@@ -229,6 +232,106 @@ it.layer(getTestDB())("the store writer's failed turns", (it) => {
         false,
       );
       assert.ok(parts.some((part) => "toolCallId" in part));
+    }),
+  );
+});
+
+it.layer(getTestDB())("the store writer's batches", (it) => {
+  it.effect(
+    "a batch of ten events growing one journal lands it once, at one revision past the last, and a reader past the revision before it reads the journal whole",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openTarget;
+        const writer = yield* storeWriter({ tools: TOOLS });
+        const turnId = randomUUID();
+        let sequence = 0;
+        const stamped = (body: BrainRunEventBody): BrainRunEvent => {
+          sequence += 1;
+          return { ...body, conversationId: sessionKey(target.conversationId), turnId, sequence };
+        };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consumeAll(target, [
+          stamped({
+            kind: BRAIN_RUN_EVENT.TURN_STARTED,
+            origin: BRAIN_TURN_ORIGIN.TYPED,
+            trigger: BRAIN_TURN_TRIGGER.ASK,
+            at: 0,
+          }),
+          stamped({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 }),
+        ]);
+        const before = yield* listMessagesPast(target.userId, target.conversationId, TOOLS, {
+          seq: 0,
+          revision: 0,
+        });
+        const callIds = Array.from({ length: 5 }, (_, index) => `call-${index}`);
+        const results = yield* writer.consumeAll(target, [
+          ...callIds.map((callId) =>
+            stamped({
+              kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+              callId,
+              name: "bash",
+              input: { command: `echo ${callId}` },
+            }),
+          ),
+          ...callIds.map((callId) =>
+            stamped({
+              kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+              callId,
+              name: "bash",
+              settlement: toolCallSettlementOf(JSON.stringify({ stdout: callId }), undefined),
+            }),
+          ),
+        ]);
+        assert.equal(results.length, 10);
+        assert.ok(results.every(Result.isSuccess));
+
+        const past = yield* listMessagesPast(
+          target.userId,
+          target.conversationId,
+          TOOLS,
+          before.cursor,
+        );
+        assert.equal(past.cursor.revision, before.cursor.revision + 1);
+        assert.ok(past.read.ok);
+        assert.equal(past.read.value.length, 1);
+        const parts = past.read.value[0]?.message.parts ?? [];
+        assert.deepEqual(
+          parts.flatMap((part) =>
+            "toolCallId" in part && "state" in part ? [[part.toolCallId, part.state]] : [],
+          ),
+          callIds.map((callId) => [callId, TOOL_PART_STATE.OUTPUT_AVAILABLE]),
+        );
+        const after = yield* listMessagesPast(
+          target.userId,
+          target.conversationId,
+          TOOLS,
+          past.cursor,
+        );
+        assert.deepEqual(after.read.ok ? after.read.value : undefined, []);
+      }),
+  );
+
+  it.effect("a batch for a conversation that does not stand refuses every event", () =>
+    Effect.gen(function* () {
+      const writer = yield* storeWriter({ tools: TOOLS });
+      const conversationId = randomUUID();
+      const results = yield* writer.consumeAll({ userId: `user-${randomUUID()}`, conversationId }, [
+        {
+          kind: BRAIN_RUN_EVENT.STEP_STARTED,
+          step: 1,
+          conversationId: sessionKey(conversationId),
+          turnId: randomUUID(),
+          sequence: 1,
+        },
+      ]);
+      assert.deepEqual(
+        results.map((result) => (Result.isFailure(result) ? result.failure.refusal : undefined)),
+        ["no_conversation"],
+      );
     }),
   );
 });

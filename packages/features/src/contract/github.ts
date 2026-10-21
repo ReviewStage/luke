@@ -5,7 +5,8 @@
  * connect intent, the page's claim of it, whether GitHub is connected, and
  * the disconnect. And the repositories of a workspace's GitHub installation
  * (`github-repositories-wire.ts`), and one of them's tree, skills, pull
- * request, and issue, and the issues New task's picker offers of it.
+ * request, and issue, and the issues New task's picker offers of it; and
+ * the repositories members added to a workspace on their own tokens.
  *
  * Every read of a repository is a GET whose input is its query, so each
  * field is declared by what the query carries, text, and decodes to the
@@ -36,6 +37,7 @@ import {
   githubRepositoryIssueAnswerSchema,
   githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
+  workspaceTokenRepositoriesAnswerSchema,
 } from "../github-repositories-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
@@ -44,7 +46,14 @@ import {
   taskTreeAnswerSchema,
   workspaceIdSchema,
 } from "../task-wire.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { workspaceTokenRepositoryRequestSchema } from "../workspace-wire.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
+const CLAIM_BODY_BYTES = 1_024;
+
+/** A token repository's add or removal is a workspace's id, a name, and a boolean, so a body past this is not one. */
+const TOKEN_REPOSITORY_BODY_BYTES = 1_024;
 
 /** The value a tree's `recursive` query carries when everything under the folder is asked. */
 export const GITHUB_REPOSITORY_TREE_RECURSIVE = "1";
@@ -76,6 +85,7 @@ export const githubContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT }))
     .output(EffectSchema.flip(githubConnectAnswerSchema)),
   claim: hostedProcedure
+    .meta(bodyCap(CLAIM_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT_CLAIM }))
     .input(exactInput(githubConnectClaimRequestSchema))
     .output(EffectSchema.flip(githubConnectClaimAnswerSchema)),
@@ -93,6 +103,15 @@ export const githubContract = {
       }),
     )
     .output(EffectSchema.flip(githubRepositoriesAnswerSchema)),
+  tokenRepositories: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES }))
+    .input(EffectSchema.Struct({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceIdSchema }))
+    .output(EffectSchema.flip(workspaceTokenRepositoriesAnswerSchema)),
+  setTokenRepository: hostedProcedure
+    .meta(bodyCap(TOKEN_REPOSITORY_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES }))
+    .input(exactInput(workspaceTokenRepositoryRequestSchema))
+    .output(EffectSchema.flip(workspaceTokenRepositoriesAnswerSchema)),
   repositoryTree: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE }))
     .input(

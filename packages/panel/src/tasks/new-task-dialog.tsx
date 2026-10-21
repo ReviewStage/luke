@@ -1,5 +1,6 @@
-import { DIALOG_SIZE, Dialog, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { DIALOG_SIZE, Dialog } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
+import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
@@ -8,11 +9,11 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds New task's composer
- * (`new-task-composer.tsx`), which takes focus, with the title handed to it
- * for its head row: "New task", the repository chip after it, and the
- * Issue chip at the row's right end. The task starts in the workspace the
+ * (`new-task-composer.tsx`), which takes focus, the card named by the
+ * composer's own head row: "New task", the repository chip after it, and
+ * the Issue chip at the row's right end, as Home draws it too. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
- * workspace's repositories and its issues, its own and Linear's.
+ * workspace's repositories and its Linear issues.
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
@@ -24,21 +25,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
- *
- * Opened from one of the workspace's own issues (its Start task…), the card
- * says so in its title, starts in the issue's workspace and no other, names
- * the task by the issue, and offers no Issue chip; the task it starts is
- * linked to that issue, which the issue's page lists it under. Opened from
- * the issue's Start agent…, the card is a new agent's: its composer stands
- * in Agent mode with no Plan toggle, and starts the task and an agent on it
- * at once.
  */
-
-/** The card's title, before the repository's chip: an agent's where one alone is asked for, and the issue it starts from where there is one. */
-function newTaskHeading(issue: string | undefined, agent: boolean): string {
-  const what = agent ? "New agent" : "New task";
-  return issue === undefined ? what : `${what} from ${issue}`;
-}
 
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
 const FIELD_SELECTOR = '[role="textbox"]';
@@ -52,10 +39,6 @@ const CARD_SELECTOR = '[aria-modal="true"]';
  * words are the draft's, which the opening brings back.
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
-  // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.
-  const from = newTask.preset?.issue;
-  // The workspace the task starts in: the issue's, else the one listed.
-  const startsIn = from?.workspaceId ?? newTask.workspaceId;
   const [starting, setStarting] = useState(false);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -87,16 +70,13 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
       <div className="new-task ph-no-capture" ref={body}>
         <NewTaskComposer
           newTask={newTask}
-          workspaceId={startsIn}
-          from={from}
+          workspaceId={newTask.workspaceId}
           onStarting={setStarting}
           onLeave={close}
           focusedByOwner
-          heading={
-            <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {newTaskHeading(from?.identifier, newTask.preset?.agent === true)}
-            </Text>
-          }
+          titleId={titleId}
+          // Note that the dialog's card is not at a page's top, so a list rises over the line as an agent's box's does.
+          listSide={MENTION_MENU_SIDE.ABOVE}
         />
       </div>
     </Dialog>

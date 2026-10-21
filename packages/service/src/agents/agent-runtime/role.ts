@@ -39,14 +39,17 @@ export type ConnectionPolicy = (typeof CONNECTION_POLICY)[keyof typeof CONNECTIO
  * kept between turns, so a later call reads it without cloning again. The
  * sandbox is never stopped at a turn's end, but it stops when its timeout
  * runs out, busy or not, so a call after that waits on it resuming. A
- * write checkout is the whole repository on a write token, made as the
- * sandbox opens, with its credential renewed at the firewall as it ages and
- * the sandbox stopped at each turn's end. A worker reads in its parent's
- * sandbox.
+ * shallow-then-deep checkout is the agent's one lazy policy: the sandbox
+ * opens on the first tool that needs it, with a depth-1 clone on a read
+ * token and no credential standing, so a turn that only reads the code, as
+ * a call's does, opens fast; the first write deepens it to the whole
+ * history on a write token, which then stands at the firewall, renewed as
+ * it ages (`../coder-host/deepen.ts`); and the sandbox is stopped at each
+ * turn's end. A worker reads in its parent's sandbox.
  */
 export const SANDBOX_POLICY = {
   READ_SHALLOW_LAZY: "read-shallow-lazy",
-  WRITE_FULL_EAGER: "write-full-eager",
+  SHALLOW_THEN_DEEP: "shallow-then-deep",
   PARENT: "parent",
 } as const;
 
@@ -79,7 +82,7 @@ export const ROLE_PROFILE = {
     delegated: false,
     connections: CONNECTION_POLICY.AGENT_SWITCHES_AND_MENTIONS,
     skills: true,
-    sandbox: SANDBOX_POLICY.WRITE_FULL_EAGER,
+    sandbox: SANDBOX_POLICY.SHALLOW_THEN_DEEP,
   },
   // Note that a worker follows its parent agent's switches, because its session is admitted for its
   // parent's conversation, and takes none of its mentions, which are its parent's turn's to take.

@@ -22,9 +22,9 @@ import {
   TASK_ROW,
   type TaskOrder,
   type TaskRow,
-  taskBoardColumns,
   taskRow,
   taskRowName,
+  taskRowsAssignedTo,
   taskRowsCreatedBy,
   taskRowsInStatuses,
   taskTime,
@@ -358,24 +358,16 @@ test("a status turned on joins the others in the order work moves through them, 
   ]);
 });
 
-test("the board's columns hold their status's tasks, the most pressing first and the unweighed last, the latest first within a priority, and a task with no status under Todo", () => {
-  const tasks = [
-    standing("Unweighed", TASK_STATUS.TODO, TASK_PRIORITY.NONE, 9),
-    standing("Low", TASK_STATUS.TODO, TASK_PRIORITY.LOW, 8),
-    standing("Urgent", TASK_STATUS.TODO, TASK_PRIORITY.URGENT, 1),
-    standing("High, older", TASK_STATUS.TODO, TASK_PRIORITY.HIGH, 2),
-    standing("High, newer", TASK_STATUS.TODO, TASK_PRIORITY.HIGH, 5),
-    standing("Shipped", TASK_STATUS.DONE, TASK_PRIORITY.HIGH, 3),
-    standing("Older service", undefined, undefined, 4),
+test("the rows assigned to one member are the tasks they are on and the one-off agents they started, and every row where nobody is named", () => {
+  const rows = [
+    taskRow({
+      ...task("Dean's on it", "acme/relay", 1, 10, CHARLES),
+      assignee: { userId: DEAN, name: "Dean" },
+    }),
+    taskRow(task("No one's on it", "acme/relay", 1, 20, DEAN)),
+    oneOff("Dean's agent", "acme/relay", 1, 30, DEAN),
+    oneOff("Charles's agent", "acme/relay", 1, 40, CHARLES),
   ];
-
-  const columns = taskBoardColumns(tasks, [TASK_STATUS.TODO, TASK_STATUS.DONE]);
-
-  expect(columns.map((column) => [column.status, column.tasks.map((each) => each.name)])).toEqual([
-    [
-      TASK_STATUS.TODO,
-      ["Urgent", "High, newer", "High, older", "Low", "Unweighed", "Older service"],
-    ],
-    [TASK_STATUS.DONE, ["Shipped"]],
-  ]);
+  expect(taskRowsAssignedTo(rows, DEAN).map(taskRowName)).toEqual(["Dean's on it", "Dean's agent"]);
+  expect(taskRowsAssignedTo(rows, undefined)).toHaveLength(4);
 });

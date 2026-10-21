@@ -5,7 +5,7 @@ import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
 import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
-import { CallTabVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
+import { AgentCallVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -27,6 +27,7 @@ import { CallWindowCard } from "./call-window-card";
  */
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 
 /** The browser's stream, which jsdom has none of: it holds the tracks it was made from. */
 class FakeMediaStream {
@@ -40,7 +41,7 @@ const LISTENING: VoiceView = {
   ...IDLE_VOICE_VIEW,
   voiceStatus: LIVE_STATUS.LISTENING,
   listening: true,
-  callTaskId: TASK_ID,
+  call: { taskId: TASK_ID, agentId: AGENT_ID },
 };
 
 const CARD: CallCardInput = {
@@ -164,7 +165,7 @@ test("with video on, the card draws Luke's video over the plan's name, on the tr
   assert.equal(container.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_ON}"]`), null);
 });
 
-test("the card's Video off and Video on are the Call tab's own toggle, and both views follow the one document", async () => {
+test("the card's Video off and Video on are the agent's tab's own toggle, and both views follow the one document", async () => {
   handBridge(onCall({ status: AVATAR_STATUS.LIVE }));
   function Views() {
     const video = useCallCardVideo();
@@ -174,7 +175,7 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
       createElement(
         "div",
         { className: "call-tab" },
-        createElement(CallTabVideo, { taskId: TASK_ID }),
+        createElement(AgentCallVideo, { agentId: AGENT_ID }),
       ),
       createElement(CallCardDock, {
         call: { ...CARD, video },
@@ -185,7 +186,7 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
   const page = mount(createElement(Views));
   await settle();
   const callTab = page.querySelector(".call-tab");
-  assert.ok(tileIn(callTab), "the Call tab draws the tile");
+  assert.ok(tileIn(callTab), "the agent's tab draws the tile");
   const cardTile = tileIn(card(page));
   assert.ok(cardTile, "and so does the card");
 
@@ -196,7 +197,7 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
   // Main's answer, the avatar down at the developer's word, reaches every view at once.
   act(() => deliver(onCall({ status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER }, 2)));
   await settle();
-  assert.equal(tileIn(callTab)?.dataset.status, AVATAR_STATUS.OFF);
+  assert.equal(tileIn(callTab), null, "the agent's tab puts its tile away");
   assert.equal(tileIn(card(page)), null, "the card falls back to itself");
   act(() => {
     const cardShown = card(page);

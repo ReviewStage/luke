@@ -9,8 +9,8 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { type ActPortClient, INTEGRATION_ACT_KIND, type PortActResult } from "../contract/index.js";
+import type { ActSender } from "./base.js";
 import type { IntegrationProceduresDependencies } from "./index.js";
 import { integrationProcedures } from "./integration-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";

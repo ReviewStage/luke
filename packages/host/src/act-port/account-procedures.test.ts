@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import { accountProcedures } from "./account-procedures.js";
+import type { ActSender } from "./base.js";
 import type { AccountProceduresDependencies } from "./index.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 

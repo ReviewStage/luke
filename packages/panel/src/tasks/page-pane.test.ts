@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { pageFindAnswerSchema } from "@luke/features/page-find";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
@@ -10,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane, type ReadPageSource } from "./page-pane.js";
 
 /**
@@ -49,7 +51,7 @@ function sourceOf(version: number): CodeLines {
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
 
 /** Mounts the pane over the page as the task lists it, answering what it draws and a way to list it again. */
-function mount(page: PageLine, read: ReadPageSource = readSource) {
+function mount(page: PageLine, read: ReadPageSource = readSource, findActive = true) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -57,7 +59,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        createElement(PagePane, { taskId: TASK, page: listed, readSource: read, findActive: true }),
+        createElement(PagePane, { taskId: TASK, page: listed, readSource: read, findActive }),
       ),
     );
   render(page);
@@ -71,12 +73,11 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
     assert.ok(button);
     await act(async () => button.click());
   };
-  // The source's lines as drawn, each its number then its text.
-  const sourceLines = () =>
-    [...container.querySelectorAll(".code-lines .code-line")].map(
-      (line) =>
-        `${line.querySelector(".code-line-number")?.textContent} ${line.querySelector(".code-line-text")?.textContent}`,
-    );
+  // The source's lines as drawn, each its number then its text, once Pierre has drawn them.
+  const sourceLines = async () => {
+    await wholeFileDrawn(container);
+    return wholeFileLines(container);
+  };
   return { container, frame, press, render, sourceLines };
 }
 
@@ -104,15 +105,15 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   await press("View source");
 
   assert.equal(container.querySelector("iframe"), null);
-  assert.deepEqual(sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
-  const tag = container.querySelector<HTMLElement>(".code-line-text span");
-  assert.equal(tag?.textContent, "<h1>");
-  assert.notEqual(tag?.getAttribute("style") ?? "", "");
-  assert.ok(container.querySelector(".code-lines")?.closest(".ph-no-capture"));
+  assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
+  const tag = wholeFileRoot(container)?.querySelector<HTMLElement>('[data-line="1"] span');
+  assert.equal(tag?.textContent, "<");
+  assert.match(tag?.getAttribute("style") ?? "", /--diffs-token/);
+  assert.ok(container.querySelector(".whole-file")?.closest(".ph-no-capture"));
 
   await press("View page");
 
-  assert.deepEqual(sourceLines(), []);
+  assert.deepEqual(wholeFileLines(container), []);
   assert.equal(frame().getAttribute("src"), versionUrl(3));
 });
 
@@ -155,13 +156,13 @@ test("the source stays shown while the versions are stepped, each version's own"
   await press("Earlier version");
 
   assert.equal(container.querySelector("iframe"), null);
-  assert.deepEqual(sourceLines(), ["1 <h1>Funnel v2", "2 <p>Invites sent</p>"]);
+  assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v2", "2 <p>Invites sent</p>"]);
   assert.match(container.textContent ?? "", /Version 2 of 3/);
 
   await press("View page");
   await press("Later version");
 
-  assert.equal(container.querySelector(".code-lines"), null);
+  assert.equal(container.querySelector(".whole-file"), null);
   assert.ok(container.querySelector(`iframe[src="${versionUrl(3)}"]`));
 });
 
@@ -187,21 +188,142 @@ test("a source the service did not answer says so in its place, and Retry reads 
   assert.ok(retry);
   await act(async () => retry.click());
 
-  assert.deepEqual(sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
+  assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
 });
 
-test("⌘F finds in the source, and in the page itself it answers nothing", async () => {
-  const { press, container } = mount(FUNNEL);
-
-  const offeredOverPage = runAppCommand(APP_COMMAND.FIND);
-  await press("View source");
-  let offeredOverSource = false;
+/** Types into the find bar's field as the keyboard does, which React hears as an input. */
+function typeFind(text: string): void {
+  const field = document.querySelector<HTMLInputElement>(
+    'search.find-bar input[aria-label="Find"]',
+  );
+  assert.ok(field, "the find bar stands open");
   act(() => {
-    offeredOverSource = runAppCommand(APP_COMMAND.FIND);
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** What the find bar's tally says. */
+function findTally(): string | null | undefined {
+  return document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent;
+}
+
+/** What the panel asks of a frame's find, each ask in the order it was posted. */
+function framePosts(frame: HTMLIFrameElement): unknown[] {
+  const posted: unknown[] = [];
+  const window = frame.contentWindow ?? assert.fail("the frame has no window");
+  vi.spyOn(window, "postMessage").mockImplementation((message) => {
+    posted.push(message);
+  });
+  return posted;
+}
+
+/** A message posted to the panel's window from `from`, as a frame's page posts one. */
+function postFrom(from: Window | null, data: typeof pageFindAnswerSchema.Type): void {
+  act(() => {
+    window.dispatchEvent(new MessageEvent("message", { data, source: from }));
+  });
+}
+
+test("⌘F over the page asks its frame to find, and the bar tallies what that frame alone answers", () => {
+  const { frame } = mount(FUNNEL);
+  const posted = framePosts(frame());
+
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("invites");
+  postFrom(null, { type: "luke-page-find", tally: { count: 9, at: 0 } });
+  const tallyBefore = findTally();
+  postFrom(frame().contentWindow, { type: "luke-page-find", tally: { count: 3, at: 0 } });
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND_NEXT);
   });
 
-  assert.equal(offeredOverPage, false);
-  assert.equal(offeredOverSource, true);
+  assert.equal(offered, true);
+  assert.deepEqual(posted, [
+    { type: "luke-page-find", act: "search", query: "invites" },
+    { type: "luke-page-find", act: "step", query: "invites", by: 1 },
+  ]);
+  assert.equal(tallyBefore, "No results");
+  assert.equal(findTally(), "1 of 3");
+});
+
+test("⌘F over the page is seeded with the words selected in its frame", () => {
+  const { frame } = mount(FUNNEL);
+
+  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+
+  const field = document.querySelector<HTMLInputElement>(
+    'search.find-bar input[aria-label="Find"]',
+  );
+  assert.equal(field?.value, "funnel");
+});
+
+test("a frame that loads again, as a Reload or another version does, is asked again for the query standing", () => {
+  const { frame } = mount(FUNNEL);
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("invites");
+  const posted = framePosts(frame());
+
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+
+  assert.deepEqual(posted, [{ type: "luke-page-find", act: "search", query: "invites" }]);
+});
+
+test("⌘F and ⌘G pressed in the page, which the window's keys never hear, open the find over it and step, whichever column held the keys", () => {
+  const { frame } = mount(FUNNEL, readSource, false);
+  const posted = framePosts(frame());
+
+  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
+  postFrom(frame().contentWindow, { type: "luke-page-find", key: "find" });
+  postFrom(frame().contentWindow, { type: "luke-page-find", key: "next" });
+
+  const field = document.querySelector<HTMLInputElement>(
+    'search.find-bar input[aria-label="Find"]',
+  );
+  assert.equal(field?.value, "funnel");
+  assert.deepEqual(posted, [
+    { type: "luke-page-find", act: "search", query: "funnel" },
+    { type: "luke-page-find", act: "step", query: "funnel", by: 1 },
+  ]);
+});
+
+test("a click into the page, which stirs only the window's blur, is told as a focus in the tab, which hands its column the keys", () => {
+  const { container, frame } = mount(FUNNEL);
+  // Note that jsdom tells a focus moved into a frame itself, which Chromium's click does not.
+  act(() => frame().focus());
+  const heard: EventTarget[] = [];
+  container.addEventListener("focusin", (event) => {
+    if (event.target !== null) heard.push(event.target);
+  });
+
+  act(() => {
+    window.dispatchEvent(new FocusEvent("blur"));
+  });
+
+  assert.deepEqual(heard, [frame()]);
+});
+
+test("⌘F over the source finds in its lines, the window's own, rather than through the frame", async () => {
+  const { press, container } = mount(FUNNEL);
+
+  await press("View source");
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.FIND);
+  });
+
+  assert.equal(offered, true);
+  assert.equal(container.querySelector("iframe"), null);
   assert.ok(container.querySelector("search[aria-label='Find']"));
 });
 
@@ -217,5 +339,5 @@ test("a source read before a Reload that answers after it does not replace the f
   await act(async () => answers[1]?.("<h1>Fresh</h1>"));
   await act(async () => answers[0]?.("<h1>Stale</h1>"));
 
-  assert.deepEqual(sourceLines(), ["1 <h1>Fresh</h1>"]);
+  assert.deepEqual(await sourceLines(), ["1 <h1>Fresh</h1>"]);
 });

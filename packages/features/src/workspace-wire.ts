@@ -1,5 +1,6 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { sniffImageType } from "./image-signature.js";
 import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
 import { countedNumber } from "./service-wire.js";
@@ -60,6 +61,14 @@ export const WORKSPACE_ROLE = {
 } as const;
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
+
+const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
+
+/** The highest role the plugin's role text names, which may list several comma-separated, read as a member where it names none Luke knows. */
+export function roleOf(text: string): WorkspaceRole {
+  const named = text.split(",").map((part) => part.trim());
+  return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
+}
 
 /**
  * The roles a member is given, by an invitation or by the owner: a
@@ -188,14 +197,14 @@ const workspacePhotoUrlSchema = EffectSchema.String.check(
 );
 
 /** The GitHub account a workspace's connected installation is on: its login, and whether the installation is active. */
-export const workspaceGithubSchema = EffectSchema.Struct({
+const workspaceGithubSchema = EffectSchema.Struct({
   login: EffectSchema.String,
   /** False where the installation was suspended or removed on GitHub: the workspace's repository work is refused there. */
   active: EffectSchema.Boolean,
 });
 
 /** One installation connected to a workspace: GitHub's id for it, the login of the account it is on, and whether it is active. */
-export const workspaceGithubInstallationSchema = EffectSchema.Struct({
+const workspaceGithubInstallationSchema = EffectSchema.Struct({
   installationId: EffectSchema.Number,
   login: EffectSchema.String,
   /** False where the installation was suspended or removed on GitHub: its repositories are out of reach. */
@@ -205,7 +214,7 @@ export const workspaceGithubInstallationSchema = EffectSchema.Struct({
 export type WorkspaceGithubInstallation = typeof workspaceGithubInstallationSchema.Type;
 
 /** A workspace's Linear connection: whether Connect still holds a grant for it; false once Linear refused it, which an owner or admin mends by connecting again. */
-export const workspaceLinearSchema = EffectSchema.Struct({
+const workspaceLinearSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
@@ -269,8 +278,6 @@ export type Workspace = typeof workspaceSchema.Type;
 export const workspacesAnswerSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceSchema),
 });
-
-export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
 
 /** One workspace: the one created, renamed, or given a photo. */
 export const workspaceAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
@@ -371,6 +378,8 @@ export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
 });
 
+export type WorkspaceMembersAnswer = typeof workspaceMembersAnswerSchema.Type;
+
 /** The query a members read names its workspace under. */
 export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
 
@@ -395,6 +404,13 @@ export const workspaceTransferSchema = EffectSchema.Struct({
 
 /** Leaving a workspace (POST), answered with the workspace left. */
 export const workspaceLeaveRequestSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+/** A repository added to a workspace on the caller's own GitHub token, or removed from it (`github-repositories-wire.ts`). */
+export const workspaceTokenRepositoryRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+  added: EffectSchema.Boolean,
+});
 
 /** The workspace the account left. */
 export const workspaceLeaveAnswerSchema = workspaceLeaveRequestSchema;

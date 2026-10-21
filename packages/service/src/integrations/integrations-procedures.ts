@@ -63,7 +63,7 @@
  * A provider's route names it as a path segment, read as words so a
  * provider this build has no route for is not found, as it was; every
  * procedure resolves its caller before it reads its input, and a rename's
- * body is held to its own cap first (`bodyLimit`). Root AGENTS.md pins that no
+ * body is held to its own cap as it is read (`bodyCap` on its contract). Root AGENTS.md pins that no
  * credential travels in an answer: what each endpoint answers is status
  * words, a server's or Connect's credential-free line, or the sign-in
  * address, never a token. The sign-in address is not logged either, since
@@ -103,7 +103,7 @@ import {
   hostedCarriesBearer,
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   GITHUB_GRANT_REFUSAL,
   githubIntegrationStatus,
@@ -643,9 +643,6 @@ function storedStanding(
   return INTEGRATION_STATUS.DISCONNECTED;
 }
 
-/** The most a rename's body may carry, in bytes: one label, well past its own bound. */
-const MAXIMUM_RENAME_BYTES = 2048;
-
 /** The account as it stands after a rename, read again so the answer is what is stored. */
 const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
@@ -671,7 +668,6 @@ const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
   const cache: ToolsCache = new Map();
   const integrations = hosted.integrations.use(accountMiddleware(seams.resolveUserId));
-  const renaming = integrations.use(bodyLimit(MAXIMUM_RENAME_BYTES));
   return {
     /**
      * GET: where every one of the caller's connections stands, settling each
@@ -847,7 +843,7 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
      * to `INTEGRATION_LABEL_MAX` characters; one the account does not hold is
      * not found, and any other body is an invalid request.
      */
-    rename: renaming.rename.effect(function* ({ context, input }) {
+    rename: integrations.rename.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount(input);
       const userId = context.userId;
       const renamed = yield* hostedStoreOrUnavailable(

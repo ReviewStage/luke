@@ -68,8 +68,8 @@ const SECONDS_PER_MINUTE = 60;
 export interface AdminAccountAgentSource {
   id: string;
   createdAt: Date;
-  /** The repository it works in, as `owner/name`. */
-  repository: string;
+  /** The repository it works in, as `owner/name`; null for an agent with none. */
+  repository: string | null;
   model: string;
   effort: string;
   contextWindow: ContextWindow;
@@ -147,7 +147,7 @@ export interface AdminAccountAgent {
   id: string;
   /** When it was started, in epoch milliseconds. */
   createdAt: number;
-  repository: string;
+  repository: string | null;
   model: string;
   effort: string;
   contextWindow: ContextWindow;

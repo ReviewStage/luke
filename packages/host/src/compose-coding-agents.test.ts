@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  ACCOUNT_CHAT_REASON,
-  type AccountChatEntry,
-  type AccountInboxEntry,
-  accountInboxAnswerSchema,
-} from "@luke/features/account-inbox-wire";
-import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
+import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -19,6 +15,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
+import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -30,7 +27,12 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { AccountInboxLiveAnswer } from "@luke/features/live-wire";
+import type {
+  AgentTranscriptLiveAnswer,
+  ScopeInboxLiveAnswer,
+  TranscriptNowAnswer,
+  WorkspaceChatLiveAnswer,
+} from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -41,6 +43,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
@@ -53,13 +56,12 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
-import type { WireRecord, WireValue } from "@luke/wire";
+import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Duration, Effect, ErrorReporter, Layer, Schema } from "effect";
+import { Effect } from "effect";
 import { TestClock } from "effect/testing";
-import type { LiveClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
-import { reporterLayer } from "./effect/seams.js";
+import type { LiveClient } from "./live-follow.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -75,10 +77,10 @@ const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
 const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
 
 /** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
-const CHAT = {
+const _CHAT = {
   self: MEMBER_ID,
   readSeq: 0,
-  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, name: "Ada", left: false }],
   channels: [],
   messages: [],
   cursor: "1",
@@ -130,6 +132,16 @@ const PUBLISHED = {
 };
 
 /** The agent's changes, as the service answers them. */
+/** A pull request's chapters as the service answers them: none made yet for its head. */
+const CHAPTERS = {
+  pullRequest: {
+    number: 11,
+    headSha: "c0ffee1",
+    generatable: true,
+    chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+  },
+} as const;
+
 const CHANGES = {
   pullRequest: {
     url: "https://github.com/acme/relay/pull/123",
@@ -178,6 +190,7 @@ const OVERVIEW = {
 
 /** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
+const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
 
 /** What the service answers of a kept key: never the key. */
 const KEPT: ProviderKeySummary = {
@@ -222,11 +235,24 @@ const WAITING: AccountInboxEntry = {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
+/** A page with something on it, as the service answers a transcript read unless a test scripts another. */
+const SAID = {
+  messages: [
+    { id: "m-1", role: "assistant" as const, parts: [{ type: "text" as const, text: "Hi" }] },
+  ],
+  status: CODING_AGENT_STATUS.RUNNING,
+  title: null,
+};
+
 /** The service as a script, writing down every ask in the order it was made. */
 function fakeService() {
   const asked: string[] = [];
-  let live: AccountInboxLiveAnswer | undefined;
+  let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
+  let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let chatLive: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined;
+  // Each page read at once, in turn; the last stands once the others are read.
+  let pagesNow: readonly TranscriptNowAnswer[] = [];
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -258,20 +284,29 @@ function fakeService() {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
-    messages: (agentId, after, callId) =>
+    startFrom: (request) =>
+      Effect.sync(() => {
+        asked.push(`start-from:${request.from?.agentId}:${request.idempotencyKey}`);
+        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
+      }),
+    messagesNow: (agentId, after, callId) =>
       Effect.sync(() => {
         asked.push(
           callId === undefined
-            ? `messages:${agentId}:${after}`
-            : `worker:${agentId}:${callId}:${after}`,
+            ? `messages-now:${agentId}:${after}`
+            : `worker-now:${agentId}:${callId}:${after}`,
         );
+        const [page, ...rest] = pagesNow;
+        if (rest.length > 0) pagesNow = rest;
         cursor = "2:1";
-        return {
-          messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-          cursor,
-          status: CODING_AGENT_STATUS.RUNNING,
-          title: null,
-        };
+        return page ?? { ...SAID, cursor, holds: false };
+      }),
+    agentTranscriptLive: (agentId, _userId, callId, poll) =>
+      Effect.sync(() => {
+        asked.push(
+          `${poll === true ? "transcript-poll" : "transcript-live"}:${agentId}${callId === undefined ? "" : `:${callId}`}`,
+        );
+        return transcript ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     message: (agentId, request) =>
       Effect.sync(() => {
@@ -313,10 +348,10 @@ function fakeService() {
         asked.push(`page:${agentId}`);
         return { agent: PAGE };
       }),
-    agentInbox: (agentId, after) =>
+    calls: (agentId) =>
       Effect.sync(() => {
-        asked.push(`agent-inbox:${agentId}:${after}`);
-        return { items: [ITEM], cursor: "8" };
+        asked.push(`calls:${agentId}`);
+        return { transcript: { calls: [], earlierOmitted: false } };
       }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
@@ -327,6 +362,26 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
+      }),
+    chapters: (agentId, number) =>
+      Effect.sync(() => {
+        asked.push(`chapters:${agentId}${number === undefined ? "" : `#${number}`}`);
+        return CHAPTERS;
+      }),
+    generateChapters: (agentId, number) =>
+      Effect.sync(() => {
+        asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
+        return CHAPTERS;
+      }),
+    readChaptersModel: () =>
+      Effect.sync(() => {
+        asked.push("chapters-model");
+        return { model: CHAPTERS_MODEL.HAIKU };
+      }),
+    writeChaptersModel: (model) =>
+      Effect.sync(() => {
+        asked.push(`chapters-model-write:${model}`);
+        return { model };
       }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
@@ -380,6 +435,26 @@ function fakeService() {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
       }),
+    setProviderKeyForAgents: (change) =>
+      Effect.sync(() => {
+        asked.push(`forAgents:${change.kind}:${String(change.forAgents)}`);
+        return { keys: [] };
+      }),
+    readGitHubToken: () =>
+      Effect.sync(() => {
+        asked.push("token");
+        return { token: null };
+      }),
+    saveGitHubToken: (save) =>
+      Effect.sync(() => {
+        asked.push(`save-token:${save.token === GITHUB_TOKEN ? "the token" : "another"}`);
+        return { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE };
+      }),
+    removeGitHubToken: () =>
+      Effect.sync(() => {
+        asked.push("remove-token");
+        return { token: null };
+      }),
     readPlanTemplate: () =>
       Effect.sync(() => {
         asked.push("template");
@@ -419,10 +494,15 @@ function fakeService() {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
         return { text: "Run the tests" };
       }),
-    inbox: (taskId, after) =>
+    taskInboxLive: (taskId) =>
       Effect.sync(() => {
-        asked.push(`inbox:${taskId}:${after}`);
-        return { items: [ITEM], cursor: "7" };
+        asked.push(`plan-inbox-live:${taskId}`);
+        return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      }),
+    agentInboxLive: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`agent-inbox-live:${agentId}`);
+        return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     inboxAttachment: (itemId, attachmentId) =>
       Effect.sync(() => {
@@ -496,20 +576,25 @@ function fakeService() {
           taken: true,
         };
       }),
-    accountInboxLive: () =>
+    accountInbox: (after) =>
       Effect.sync(() => {
-        asked.push("account-inbox-live");
-        return live ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      }),
-    chat: (workspaceId, after) =>
-      Effect.sync(() => {
-        asked.push(`chat:${workspaceId}:${after}`);
-        return CHAT;
+        asked.push(`account-inbox:${after}`);
+        return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
     chatPost: (workspaceId, write) =>
       Effect.sync(() => {
         asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
         return { readSeq: 4 };
+      }),
+    chatJoin: (workspaceId) =>
+      Effect.sync(() => {
+        asked.push(`chat-join:${workspaceId}`);
+        return chatLive !== undefined && "failure" in chatLive ? chatLive : { self: MEMBER_ID };
+      }),
+    workspaceChatLive: (workspaceId, userId, poll) =>
+      Effect.sync(() => {
+        asked.push(`chat-live:${workspaceId}:${userId}${poll ? ":poll" : ""}`);
+        return chatLive ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     chatAttachment: (workspaceId, messageId, attachmentId) =>
       Effect.sync(() => {
@@ -520,88 +605,39 @@ function fakeService() {
   return {
     client,
     asked,
-    /** What the service seals for following the account's inbox; none answers unanswered. */
-    seal: (next: AccountInboxLiveAnswer | undefined) => {
-      live = next;
+    /** What the service seals for following a transcript, or that the account reaches no such agent; none answers unanswered. */
+    sealTranscript: (
+      next: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined,
+    ) => {
+      transcript = next;
+    },
+    /** What the service seals for following a workspace's chat, or that the account is not in it; none answers unanswered. */
+    sealChat: (next: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined) => {
+      chatLive = next;
+    },
+    /** The pages the service answers read at once, in turn. */
+    pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
+      pagesNow = pages;
+    },
+    /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
+    sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
+      scope = next;
     },
   };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
-  return Effect.gen(function* () {
-    const service = fakeService();
-    const realtime = fakeRealtime();
-    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
-    // The host's clock, which `advance` moves with the test's.
-    let elapsed = 0;
-    const composer = yield* composeCodingAgents({
-      kernel: {
-        runMode: { sendsNetwork: options.sendsNetwork ?? true },
-        emit: (kind, payload) => void events.push({ kind, payload }),
-        now: () => NOW + elapsed,
-      },
-      account: { capabilitiesActive: () => options.signedIn ?? true },
-      client: service.client,
-      openLive: realtime.open,
-    }).pipe(Effect.provide(noNetwork));
-    const call = (method: GatewayMethod, params: WireRecord = {}) => {
-      const handler = composer.methods[method];
-      assert.ok(handler, `no handler for ${method}`);
-      return handler(params, context);
-    };
-    /** Every account inbox the host said changed, in order. */
-    const inboxes = () =>
-      events.flatMap((event) =>
-        event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
-      );
-    return {
-      call,
-      asked: service.asked,
-      seal: service.seal,
-      realtime,
-      inboxes,
-      reset: composer.reset,
-      /** The host's clock and the test's moved on together, a minute at a time, so neither runs far ahead of the other. */
-      advance: (millis: number) =>
-        Effect.gen(function* () {
-          for (let left = millis; left > 0; left -= MINUTE) {
-            const step = Math.min(left, MINUTE);
-            elapsed += step;
-            yield* TestClock.adjust(Duration.millis(step));
-          }
-        }),
-    };
-  });
-}
-
-/** The host's clock, which an answer read live is stamped with. */
+/** Now, as the host reads it in these tests. */
 const NOW = 1_800_000_100_000;
-
-const MINUTE = 60 * 1_000;
-const DAY = 24 * 60 * MINUTE;
 
 /** A sealed statement as the service answers one, named by the part it follows. */
 function sealed(part: string, expiresAt = NOW + 60_000) {
   return { capability: `capability-${part}`, queryFingerprint: `fingerprint-${part}`, expiresAt };
 }
 
-const SEALED: AccountInboxLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    items: sealed("items"),
-    planless: sealed("planless"),
-    plans: sealed("plans"),
-    automations: sealed("automations"),
-    failedRuns: sealed("failedRuns"),
-    chatAsks: sealed("chatAsks"),
-    chatNotices: sealed("chatNotices"),
-  },
-};
-
 /**
- * Realtime as a script: the address each client was opened at, each part's
- * subscription by its capability, the seals each was renewed with, and a
- * way to deliver rows to one or stop it for good.
+ * Realtime as a script: the address each client was opened at and closed,
+ * each part's subscription by its capability, and a way to deliver rows to
+ * one.
  */
 function fakeRealtime() {
   const opened: string[] = [];
@@ -610,7 +646,6 @@ function fakeRealtime() {
     string,
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
-  const renewed: string[] = [];
   const open = (url: string): LiveClient => {
     opened.push(url);
     return {
@@ -619,10 +654,7 @@ function fakeRealtime() {
           listeners.set(query.capability, listener);
           return () => listeners.delete(query.capability);
         },
-        renew: (next) => {
-          renewed.push(next.capability);
-          return Promise.resolve();
-        },
+        renew: () => Promise.resolve(),
         unsubscribe: () => void listeners.delete(query.capability),
       }),
       close: () => void closed.push(url),
@@ -632,21 +664,81 @@ function fakeRealtime() {
     open,
     opened,
     closed,
-    renewed,
     /** Rows delivered to the part's subscription, as Realtime's snapshot carries them. */
     deliver: (part: string, data: readonly unknown[]) => {
       const listener = listeners.get(`capability-${part}`);
       assert.ok(listener, `no subscription to ${part}`);
       listener({ status: "live", data });
     },
-    fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
+    /** The parts subscribed to now, by capability. */
     subscribed: () => [...listeners.keys()].toSorted(),
   };
 }
 
+/** Every step a subscription has to take, taken: it runs on a fiber of its own. */
+const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
+
+function subject(
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
+  } = {},
+) {
+  return Effect.gen(function* () {
+    const service = fakeService();
+    const realtime = fakeRealtime();
+    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    const composer = yield* composeCodingAgents({
+      kernel: {
+        runMode: { sendsNetwork: options.sendsNetwork ?? true },
+        emit: (kind, payload) => void events.push({ kind, payload }),
+        now: () => NOW,
+      },
+      account: { capabilitiesActive: () => options.signedIn ?? true },
+      accountId: () => "user-dana",
+      client: service.client,
+      openLive: realtime.open,
+      ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
+    }).pipe(Effect.provide(noNetwork));
+    const call = (method: GatewayMethod, params: WireRecord = {}) => {
+      const handler = composer.methods[method];
+      assert.ok(handler, `no handler for ${method}`);
+      return handler(params, context);
+    };
+    /** Every followed transcript's page the host told, in order. */
+    const pages = () =>
+      events.flatMap((event) =>
+        event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.payload] : [],
+      );
+    return {
+      call,
+      pages,
+      asked: service.asked,
+      sealTranscript: service.sealTranscript,
+      sealChat: service.sealChat,
+      /** Every workspace chat the host said changed, in order. */
+      chats: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.CHAT_CHANGED ? [event.payload] : [],
+        ),
+      pageNow: service.pageNow,
+      sealScope: service.sealScope,
+      realtime,
+      /** Every followed plan's or agent's inbox the host told, in order. */
+      told: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.INBOX_CHANGED ? [event.payload] : [],
+        ),
+      reset: composer.reset,
+    };
+  });
+}
+
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
-    const { call, asked } = yield* subject();
+    const { call, asked, sealTranscript } = yield* subject();
+    sealTranscript(SEALED_TRANSCRIPT);
 
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MODELS), { models: MODELS });
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ), {
@@ -750,13 +842,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       agent: PAGE,
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-        agentId: AGENT_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "8" },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
@@ -767,6 +852,24 @@ it.effect("each method asks the service once and answers what it said, whole", (
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
       CHANGES,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, { agentId: AGENT_ID }),
+      CHAPTERS,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE, {
+        agentId: AGENT_ID,
+        number: 11,
+      }),
+      CHAPTERS,
+    );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_READ), {
+      model: CHAPTERS_MODEL.HAIKU,
+    });
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
+      { model: CHAPTERS_MODEL.OPUS },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
@@ -802,13 +905,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-        taskId: TASK_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "7" },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
@@ -898,11 +994,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
     );
 
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
-        workspaceId: WORKSPACE_ID,
-        after: CHAT_CURSOR_START,
-      }),
-      CHAT,
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
+      { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
@@ -928,8 +1021,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
       `start:${TASK_ID}:press-1:default`,
-      `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
-      `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+      `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
@@ -938,10 +1031,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `archive:${AGENT_ID}:true`,
       `pin:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
-      `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
+      `chapters:${AGENT_ID}`,
+      `chapters-generate:${AGENT_ID}#11`,
+      "chapters-model",
+      `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `overview-pull-request:${AGENT_ID}`,
       `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,
@@ -949,7 +1045,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `pull-request-viewed:${AGENT_ID}`,
-      `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
@@ -959,7 +1054,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
-      `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
+      `account-inbox:${INBOX_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
       `chat-attachment:${WORKSPACE_ID}:message-1:${ATTACHMENT_ID}`,
     ]);
@@ -982,6 +1077,37 @@ it.effect(
       );
       assert.deepEqual(signedOut.asked, []);
       assert.deepEqual(offline.asked, []);
+    }),
+);
+
+it.effect(
+  "a Start from an agent that names no task asks the service to start where that agent is, one on a task still starts on it, and one naming neither a task nor an agent is refused, asking nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+
+      const fromTaskless = yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        idempotencyKey: "press-continue",
+        from: { agentId: AGENT_ID },
+      });
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        taskId: TASK_ID,
+        idempotencyKey: "press-fork",
+        from: { agentId: AGENT_ID },
+      });
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_START, {
+          idempotencyKey: "press-nowhere",
+          prompt: "Go.",
+        }),
+      );
+
+      assert.deepEqual(fromTaskless, { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(asked, [
+        `start-from:${AGENT_ID}:press-continue`,
+        `start:${TASK_ID}:press-fork:default`,
+      ]);
     }),
 );
 
@@ -1017,297 +1143,540 @@ it.effect(
     }),
 );
 
-/** Every step the follower has to take, taken: it runs on a fiber of its own. */
-const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+it.effect(
+  "a GitHub token passes through to the service once and is never answered back, and a save the schema refuses is refused in words that hold no token",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
 
-/** A second item, changed after `WAITING`, which the answer lists first. */
-const NEWER: AccountInboxEntry = {
-  ...WAITING,
-  id: "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f",
-  title: "Expire invites after a week?",
-  updatedAt: WAITING.updatedAt + 1_000,
+      const read = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_READ);
+      const saved = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: GITHUB_TOKEN });
+      const removed = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE);
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: `${GITHUB_TOKEN} spaced` }),
+      );
+
+      assert.deepEqual(read, { token: null });
+      assert.deepEqual(saved, { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE });
+      assert.deepEqual(removed, { token: null });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
+      assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
+    }),
+);
+
+const SEALED_TRANSCRIPT: AgentTranscriptLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    messages: sealed("messages"),
+    turns: sealed("turns"),
+    conversation: sealed("conversation"),
+    agent: sealed("agent"),
+    workers: sealed("workers"),
+  },
 };
 
-const AUTOMATION_ID = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
+/** The transcript's statements as they stand: `seq` its newest message, `turns` how many it has opened. */
+function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, turns = 1) {
+  realtime.deliver("messages", [{ rows: seq, seq }]);
+  realtime.deliver("turns", [
+    { status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 },
+  ]);
+  realtime.deliver("conversation", [{ id: "conversation-1", title: null, revision: seq }]);
+  realtime.deliver("agent", [{ id: AGENT_ID, title: "Invites" }]);
+  realtime.deliver("workers", []);
+}
 
-/** A run that failed to start, `daysAgo` before the host's clock. */
-function failedRun(id: string, daysAgo: number) {
+/** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
+function pageNow(
+  cursor: string,
+  options: { holds: boolean; text?: string; status?: typeof CODING_AGENT_STATUS.RUNNING },
+): TranscriptNowAnswer {
   return {
-    id,
-    automationId: AUTOMATION_ID,
-    automationName: "Nightly flake sweep",
-    workspaceId: "workspace-1",
-    reason: null,
-    failedAt: NOW - daysAgo * 24 * 60 * 60 * 1_000,
+    messages:
+      options.text === undefined
+        ? []
+        : [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text: options.text }] }],
+    cursor,
+    status: options.status ?? CODING_AGENT_STATUS.RUNNING,
+    title: "Invites",
+    holds: options.holds,
   };
 }
 
-/** One message waiting in chat, as a chat part's row delivers it. */
-function chatEntry(
-  messageId: string,
-  reason: AccountChatEntry["reason"],
-  updatedAt: number,
-): AccountChatEntry {
-  return {
-    messageId,
-    seq: 7,
-    workspaceId: "workspace-1",
-    reason,
-    from: "agent-1",
-    planId: null,
-    touchedSeq: 7,
-    updatedAt,
-  };
+/** A page as the window is answered it: the service's word on whether it would have held left in the host. */
+function windowPage(page: TranscriptNowAnswer) {
+  const { holds: _holds, ...rest } = page;
+  return rest;
 }
+
+const FOLLOWED = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID } as const;
 
 it.effect(
-  "the account inbox is followed over Realtime: every part subscribed at the address it names, and once each part has its rows the answer published whole, in the held read's order, with the last week's failed runs, and never a sealed statement",
+  "a followed transcript is told page by page from the start, the next at once after one that said something, then again only as its statements move or at the edge the service names; letting it go ends the telling",
   () =>
     Effect.gen(function* () {
-      const { call, asked, seal, realtime, inboxes } = yield* subject();
-      seal(SEALED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      const { call, asked, pages, sealTranscript, pageNow: script, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      const said = pageNow("1:0", { holds: false, text: "Reading the invites." });
+      const caught = { ...pageNow("1:0", { holds: true }), wakeIn: 3_000 };
+      script(said, caught);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
       yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED.url]);
-      assert.deepEqual(realtime.subscribed(), [
-        "capability-automations",
-        "capability-chatAsks",
-        "capability-chatNotices",
-        "capability-failedRuns",
-        "capability-items",
-        "capability-planless",
-        "capability-plans",
+      assert.deepEqual(pages(), [
+        { transcript: FOLLOWED, page: windowPage(said) },
+        { transcript: FOLLOWED, page: windowPage(caught) },
       ]);
 
-      const recent = "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d";
-      realtime.deliver("items", [WAITING, NEWER]);
-      realtime.deliver("planless", []);
-      realtime.deliver("plans", [{ planId: TASK_ID, items: 2, updatedAt: NEWER.updatedAt }]);
-      realtime.deliver("automations", []);
-      // A notice of an ask is the ask already, so only the other notice joins it.
-      const ask = chatEntry(
-        "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
-        ACCOUNT_CHAT_REASON.ASK,
-        NOW - 2,
-      );
-      const direct = chatEntry(
-        "5d6e7f8a-9b0c-4d1e-8f2a-3b4c5d6e7f8a",
-        ACCOUNT_CHAT_REASON.DIRECT,
-        NOW - 1,
-      );
-      realtime.deliver("chatAsks", [ask]);
-      realtime.deliver("chatNotices", [{ ...ask, reason: ACCOUNT_CHAT_REASON.MENTION }, direct]);
+      // Rows landing read the page again; the edge the service named reads it once more.
+      transcriptRows(realtime, 1);
       yield* settled;
-      // Nothing is published before every part has its first rows.
-      assert.deepEqual(inboxes(), []);
-      realtime.deliver("failedRuns", [
-        failedRun("3b4c5d6e-7f8a-4b9c-8d1e-2f3a4b5c6d7e", 8),
-        failedRun(recent, 1),
-      ]);
+      assert.equal(pages().length, 3);
+      yield* TestClock.adjust("3 seconds");
       yield* settled;
+      assert.equal(pages().length, 4);
 
-      // The cursor is a digest of what the answer holds, opaque to a reader but for comparing.
-      const published = inboxes().map((inbox) => {
-        const { cursor: _cursor, ...rest } =
-          Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox);
-        return rest;
-      });
-      assert.deepEqual(published, [
-        {
-          items: [NEWER, WAITING],
-          plans: [{ planId: TASK_ID, items: 2, updatedAt: NEWER.updatedAt }],
-          planless: [],
-          automations: [],
-          failedRuns: [failedRun(recent, 1)],
-          chat: [direct, ask],
-          readAt: NOW,
-        },
+      const moved = pageNow("2:0", { holds: false, text: "Writing the expiry." });
+      const ended = pageNow("2:0", { holds: false });
+      script(moved, ended);
+      transcriptRows(realtime, 2);
+      yield* settled;
+      // Note that each part landing may move the statements, so the page past the last may be read more than once.
+      assert.deepEqual(pages()[4], { transcript: FOLLOWED, page: windowPage(moved) });
+      assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(ended) });
+      assert.deepEqual(asked.slice(0, 3), [
+        `transcript-live:${AGENT_ID}`,
+        `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+        `messages-now:${AGENT_ID}:1:0`,
       ]);
-      assert.deepEqual(asked, ["account-inbox-live"]);
-      assert.ok(!JSON.stringify(inboxes()).includes("capability"));
+      assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:2:0`);
+      assert.ok(!JSON.stringify(pages()).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      const toldBefore = pages().length;
+      transcriptRows(realtime, 3);
+      yield* settled;
+      assert.equal(pages().length, toldBefore);
     }),
 );
 
 it.effect(
-  "a failed run that ages out of the last week with no row moving is let go: the answer is published again as it does",
+  "a followed transcript the account does not reach is told not found once; behind a closed gate it is told unanswered; and a sign-out lets every followed transcript go",
   () =>
     Effect.gen(function* () {
-      const { call, seal, realtime, inboxes, advance } = yield* subject();
-      seal({
-        ...SEALED,
-        // Sealed for a month, so no renewal falls in the week the test spans.
-        queries: {
-          items: sealed("items", NOW + 30 * DAY),
-          planless: sealed("planless", NOW + 30 * DAY),
-          plans: sealed("plans", NOW + 30 * DAY),
-          automations: sealed("automations", NOW + 30 * DAY),
-          failedRuns: sealed("failedRuns", NOW + 30 * DAY),
-          chatAsks: sealed("chatAsks", NOW + 30 * DAY),
-          chatNotices: sealed("chatNotices", NOW + 30 * DAY),
-        },
-      });
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      const worker = { ...FOLLOWED, callId: "call-7" };
+      const refused = yield* subject();
+      refused.sealTranscript({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, worker);
       yield* settled;
-      const ageing = failedRun("3b4c5d6e-7f8a-4b9c-8d1e-2f3a4b5c6d7e", 6);
-      for (const part of ["items", "planless", "plans", "automations", "chatAsks", "chatNotices"]) {
-        realtime.deliver(part, []);
-      }
-      realtime.deliver("failedRuns", [ageing]);
-      yield* settled;
-      const failedRunsOf = () =>
-        inboxes().map(
-          (inbox) => Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox).failedRuns,
-        );
-      assert.deepEqual(failedRunsOf(), [[ageing]]);
-
-      yield* advance(DAY - 1_000);
-      yield* settled;
-      assert.deepEqual(failedRunsOf(), [[ageing]], "a day short of a week, it still stands");
-      yield* advance(2_000);
-      yield* settled;
-      assert.deepEqual(failedRunsOf(), [[ageing], []]);
-    }),
-);
-
-it.effect(
-  "every seal is renewed ten seconds before the earliest expires, with what the service seals then, and a row that does not decode stops the subscription, which is started again",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked, seal, realtime } = yield* subject();
-      seal(SEALED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-
-      yield* TestClock.adjust("49 seconds");
-      yield* settled;
-      assert.deepEqual(realtime.renewed, []);
-      yield* TestClock.adjust("1 second");
-      yield* settled;
-      assert.deepEqual(realtime.renewed.toSorted(), [
-        "capability-automations",
-        "capability-chatAsks",
-        "capability-chatNotices",
-        "capability-failedRuns",
-        "capability-items",
-        "capability-planless",
-        "capability-plans",
-      ]);
-      assert.deepEqual(asked, ["account-inbox-live", "account-inbox-live"]);
-
-      realtime.deliver("items", [{ id: "not an item" }]);
-      yield* settled;
-      assert.deepEqual(realtime.closed, [SEALED.url]);
       yield* TestClock.adjust("5 seconds");
       yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+      assert.deepEqual(refused.pages(), [
+        { transcript: worker, page: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const signedOut = yield* subject({ signedIn: false });
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(signedOut.pages(), [
+        { transcript: FOLLOWED, page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(signedOut.asked, []);
+
+      const followed = yield* subject();
+      followed.sealTranscript(SEALED_TRANSCRIPT);
+      followed.pageNow(pageNow("1:0", { holds: true }));
+      yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* followed.reset;
+      yield* settled;
+      assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
+      assert.equal(followed.pages().length, 1);
     }),
 );
 
-/**
- * The host's line and the runtime's error reporters, as a follow started
- * under them hears them: every line said, and every error reported.
- */
-function heard() {
-  const lines: string[] = [];
-  const reported: Error[] = [];
-  const layer = Layer.merge(
-    reporterLayer((line) => void lines.push(line)),
-    ErrorReporter.layer([ErrorReporter.make(({ error }) => void reported.push(error))]),
-  );
-  return { lines, reported, layer };
+it.effect(
+  "a line typed while this Mac's call is up on the agent goes to the call and is not steered, and the tab hears the agent as it stands",
+  () =>
+    Effect.gen(function* () {
+      const typed: [string, string, string][] = [];
+      const { call, asked } = yield* subject({
+        typeIntoCall: (agentId, text, clientKey) => {
+          typed.push([agentId, text, clientKey]);
+          return agentId === AGENT_ID;
+        },
+      });
+      const {
+        automationId: _automation,
+        workspaceId: _workspace,
+        repository: _repository,
+        ...page
+      } = PAGE;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "Use the fixture branch.",
+          clientKey: "send-1",
+        }),
+        // Running, as a steer's answer is: the call asks the line a moment after the frame leaves.
+        { agent: { ...page, status: CODING_AGENT_STATUS.RUNNING } },
+      );
+      assert.deepEqual(typed, [[AGENT_ID, "Use the fixture branch.", "send-1"]]);
+      assert.deepEqual(asked, [`page:${AGENT_ID}`]);
+    }),
+);
+
+it.effect(
+  "a line typed with no call on the agent, a call on another agent, or files alone steers as before",
+  () =>
+    Effect.gen(function* () {
+      const typed: string[] = [];
+      const other = "0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f";
+      const { call, asked } = yield* subject({
+        typeIntoCall: (agentId, text) => {
+          typed.push(text);
+          return agentId === other;
+        },
+      });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "Expire them after a week.",
+          clientKey: "send-1",
+        }),
+        { agent: AGENT },
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: other,
+          text: "",
+          clientKey: "send-2",
+          attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
+        }),
+        { agent: AGENT },
+      );
+      // Only the line with words was offered to the call; the files-only line never was.
+      assert.deepEqual(typed, ["Expire them after a week."]);
+      assert.deepEqual(asked, [
+        `message:${AGENT_ID}:send-1:Expire them after a week.`,
+        `message:${other}:send-2:`,
+      ]);
+
+      const { call: callWithNoCalls, asked: steered } = yield* subject();
+      yield* callWithNoCalls(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+        agentId: AGENT_ID,
+        text: "Expire them after a week.",
+        clientKey: "send-3",
+      });
+      assert.deepEqual(steered, [`message:${AGENT_ID}:send-3:Expire them after a week.`]);
+    }),
+);
+
+const SEALED_SCOPE: ScopeInboxLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: { items: sealed("items"), messages: sealed("messages"), files: sealed("files") },
+};
+
+/** That item as a reader who has read it reads it live. */
+const LIVE_ITEM: InboxItem = { ...ITEM, unread: false };
+
+/** That item as its row delivers it, what it leaves out held as null. */
+const ITEM_ROW = {
+  ...LIVE_ITEM,
+  startedBy: "user-dana",
+  startedByName: null,
+  answer: null,
+  answeredBy: null,
+  answeredByName: null,
+  closedReason: null,
+  closedBy: null,
+  closedByName: null,
+  openAskMessageId: null,
+  settledAt: null,
+};
+
+const SEALED_CHAT: WorkspaceChatLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    self: sealed("self"),
+    members: sealed("members"),
+    channels: sealed("channels"),
+    messages: sealed("messages"),
+    reads: sealed("reads"),
+  },
+};
+
+const CHANNEL_ID = "6bd39277-e38a-4415-9dc7-9cadbecdf0a7";
+
+/** A message as the messages part's row delivers it, at its place. */
+function messageRow(id: string, seq: number) {
+  return {
+    id,
+    seq,
+    touchedSeq: seq,
+    channelId: CHANNEL_ID,
+    parentId: null,
+    authorId: MEMBER_ID,
+    blocks: [{ type: "markdown", text: `Message ${seq}.` }],
+    mentions: [],
+    postedAt: NOW - 10 + seq,
+    ask: null,
+    askKey: null,
+    askRevision: null,
+    askStatus: null,
+    answer: null,
+    answeredBy: null,
+    closedReason: null,
+  };
+}
+
+/** Every part of the chat delivered, the messages given among them. */
+function deliverChat(
+  realtime: ReturnType<typeof fakeRealtime>,
+  messages: readonly ReturnType<typeof messageRow>[],
+) {
+  realtime.deliver("self", [{ self: MEMBER_ID, readSeq: 0 }]);
+  realtime.deliver("members", [
+    {
+      id: MEMBER_ID,
+      kind: MEMBER_KIND.HUMAN,
+      handle: "ada",
+      name: "Ada Lovelace",
+      userId: "user-ada",
+      agentId: null,
+      planId: null,
+      left: false,
+      ordinal: 1,
+      joinedAt: NOW - 100,
+    },
+  ]);
+  realtime.deliver("channels", [
+    {
+      id: CHANNEL_ID,
+      kind: "general",
+      name: "general",
+      planId: null,
+      dmAMemberId: null,
+      dmBMemberId: null,
+      archived: false,
+      purpose: null,
+      createdAt: NOW - 100,
+    },
+  ]);
+  realtime.deliver("reads", []);
+  realtime.deliver("messages", messages);
 }
 
 it.effect(
-  "a follow whose socket never delivers is reported once, as a warning naming no address or seal, after thirty seconds, and goes on asking",
+  "a workspace's chat is followed over Realtime: joined once, every part subscribed, and each change told whole in the held read's order and never a sealed statement",
   () =>
     Effect.gen(function* () {
-      const { call, seal, realtime } = yield* subject();
-      const { lines, reported, layer } = heard();
-      seal(SEALED);
-      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      const { call, asked, sealChat, realtime, chats } = yield* subject();
+      sealChat(SEALED_CHAT);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED.url]);
-
-      yield* TestClock.adjust("29 seconds");
-      yield* settled;
-      assert.deepEqual(reported, []);
-      yield* TestClock.adjust("1 second");
-      yield* settled;
-      const [warning, ...more] = reported;
-      assert.ok(warning !== undefined && more.length === 0);
-      assert.equal(ErrorReporter.getSeverity(warning), "Warn");
-      const said = lines.filter((line) => line.includes("account inbox"));
-      assert.deepEqual(said, [
-        "the account inbox's live read has not answered in 30 seconds: Realtime has not delivered every part",
+      // Sealed for the account signed in, which every renewal names too.
+      assert.deepEqual(asked, [`chat-join:${WORKSPACE_ID}`, `chat-live:${WORKSPACE_ID}:user-dana`]);
+      assert.deepEqual(realtime.subscribed(), [
+        "capability-channels",
+        "capability-members",
+        "capability-messages",
+        "capability-reads",
+        "capability-self",
       ]);
-      assert.ok(!said[0]?.includes(SEALED.url) && !said[0]?.includes("capability"));
 
-      // It keeps following, and says so no more however long it waits.
-      yield* TestClock.adjust("5 minutes");
+      const first = "7ce4a388-f49b-4526-8ed8-adbecdf0a1b8";
+      const second = "8df5b499-a5ac-4637-9fe9-becdf0a1b2c9";
+      deliverChat(realtime, [messageRow(second, 2), messageRow(first, 1)]);
       yield* settled;
-      assert.equal(reported.length, 1);
-      assert.ok(realtime.subscribed().length > 0);
+      const told = chats();
+      assert.equal(told.length, 1);
+      const [only] = told;
+      assert.ok(isRecord(only) && only.workspaceId === WORKSPACE_ID && isRecord(only.chat));
+      assert.equal(only.chat.self, MEMBER_ID);
+      const messages = only.chat.messages;
+      assert.ok(Array.isArray(messages));
+      assert.deepEqual(
+        messages.map((message) => (isRecord(message) ? message.id : undefined)),
+        [first, second],
+      );
+      assert.ok(!JSON.stringify(told).includes("capability"));
     }),
 );
 
-it.effect("a follow that answers within thirty seconds reports nothing", () =>
-  Effect.gen(function* () {
-    const { call, seal, realtime, inboxes } = yield* subject();
-    const { lines, reported, layer } = heard();
-    seal(SEALED);
-    yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
-    yield* settled;
-    for (const part of [
-      "items",
-      "planless",
-      "plans",
-      "automations",
-      "failedRuns",
-      "chatAsks",
-      "chatNotices",
-    ]) {
-      realtime.deliver(part, []);
-    }
-    yield* settled;
-    assert.equal(inboxes().length, 1);
-    yield* TestClock.adjust("1 minute");
-    yield* settled;
-    assert.deepEqual(reported, []);
-    assert.deepEqual(
-      lines.filter((line) => line.includes("account inbox")),
-      [],
-    );
-  }),
-);
-
 it.effect(
-  "a seal the service did not answer is asked for again after a pause, and letting go, or a sign-out, ends the follow",
+  "a workspace's chat the service seals nothing for is told unanswered and followed again after a pause, one the account is not in is told not found and let go, and letting go, a sign-out, or a closed gate ends the follow",
   () =>
     Effect.gen(function* () {
       const unsealed = yield* subject();
-      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
-      assert.deepEqual(unsealed.asked, ["account-inbox-live"]);
-      unsealed.seal(SEALED);
+      assert.deepEqual(unsealed.chats(), [
+        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      unsealed.sealChat(SEALED_CHAT);
       yield* TestClock.adjust("5 seconds");
       yield* settled;
-      assert.deepEqual(unsealed.asked, ["account-inbox-live", "account-inbox-live"]);
-      assert.deepEqual(unsealed.realtime.opened, [SEALED.url]);
-      assert.deepEqual(unsealed.inboxes(), []);
+      assert.deepEqual(unsealed.realtime.opened, [SEALED_CHAT.url]);
+
+      const outside = yield* subject();
+      outside.sealChat({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* outside.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.deepEqual(outside.asked, [`chat-join:${WORKSPACE_ID}`]);
+      assert.deepEqual(outside.chats(), [
+        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
 
       const live = yield* subject();
-      live.seal(SEALED);
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      live.sealChat(SEALED_CHAT);
+      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
+      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
-      assert.deepEqual(live.realtime.closed, [SEALED.url]);
+      assert.deepEqual(live.realtime.closed, [SEALED_CHAT.url]);
       assert.deepEqual(live.realtime.subscribed(), []);
-
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
       yield* live.reset;
       yield* settled;
-      assert.deepEqual(live.realtime.closed, [SEALED.url, SEALED.url]);
+      assert.deepEqual(live.realtime.closed, [SEALED_CHAT.url, SEALED_CHAT.url]);
+
+      const closed = yield* subject({ signedIn: false });
+      yield* closed.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      assert.deepEqual(closed.asked, []);
+      assert.deepEqual(closed.chats(), [
+        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
     }),
+);
+
+const PLAN_SCOPE = { kind: "plan", id: TASK_ID } as const;
+
+/** Steps taken until the host has told `times` inboxes, since a row's digest is the platform's own promise. */
+const toldTimes = (told: () => readonly unknown[], times: number) =>
+  Effect.repeat(Effect.yieldNow, { until: () => told().length >= times, times: 10_000 });
+const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;
+
+it.effect(
+  "a followed plan's inbox is told from its Realtime subscription once its rows land, again each time they move and never when a delivery moved nothing; letting it go ends the telling",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, realtime, told } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
+      assert.deepEqual(told(), []);
+
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* toldTimes(told, 1);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      const closed = {
+        ...ITEM_ROW,
+        revision: 3,
+        status: INBOX_STATUS.CLOSED,
+        closedReason: "Done",
+      };
+      realtime.deliver("items", [closed]);
+      yield* toldTimes(told, 2);
+      assert.deepEqual(told(), [
+        { scope: PLAN_SCOPE, inbox: { items: [LIVE_ITEM] } },
+        {
+          scope: PLAN_SCOPE,
+          inbox: {
+            items: [
+              { ...LIVE_ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
+            ],
+          },
+        },
+      ]);
+      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.ok(!JSON.stringify(told()).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* settled;
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      assert.equal(told().length, 2);
+    }),
+);
+
+it.effect(
+  "a message landing after its item's row is told as soon as it lands, its item's thread whole",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, realtime, told } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* toldTimes(told, 1);
+      const message = {
+        id: "6f1d2a10-7b0f-4e3b-9a55-5e3b2c1d4c7a",
+        itemId: ITEM.id,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        userId: null,
+        name: null,
+        text: "Also the staging branch?",
+        ask: null,
+        answers: null,
+        createdAt: ITEM.updatedAt,
+      };
+      realtime.deliver("messages", [message]);
+      yield* toldTimes(told, 2);
+      assert.equal(told().length, 2);
+      assert.ok(JSON.stringify(told()[1]).includes("Also the staging branch?"));
+    }),
+);
+
+it.effect(
+  "an agent's inbox the account does not reach is told not found, one the service seals nothing for is told unanswered, and behind a closed gate every follow is told unanswered",
+  () =>
+    Effect.gen(function* () {
+      const refused = yield* subject();
+      refused.sealScope({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(refused.told(), [
+        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const unsealed = yield* subject();
+      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(unsealed.told(), [
+        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(unsealed.realtime.opened, []);
+
+      const signedOut = yield* subject({ signedIn: false });
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      assert.deepEqual(signedOut.told(), [
+        { scope: PLAN_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect("a sign-out lets every followed inbox go", () =>
+  Effect.gen(function* () {
+    const { call, sealScope, realtime, told, reset } = yield* subject();
+    sealScope(SEALED_SCOPE);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+    yield* settled;
+    yield* reset;
+    yield* settled;
+    assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
+    assert.deepEqual(told(), []);
+  }),
 );

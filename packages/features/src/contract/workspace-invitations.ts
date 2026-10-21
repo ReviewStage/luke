@@ -19,7 +19,10 @@ import {
   workspaceInvitationsAnswerSchema,
   workspaceInviteRequestSchema,
 } from "../workspace-invitation-wire.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** A workspace's id, an address, and a role are a few dozen characters, so a body past this is not one. */
+const BODY_BYTES = 1_024;
 
 /** The invitations read's query: the one workspace whose invitations are asked for. */
 const invitationsQuerySchema = EffectSchema.Struct({
@@ -32,6 +35,7 @@ export const workspaceInvitationsContract = {
     .input(invitationsQuerySchema)
     .output(EffectSchema.flip(workspaceInvitationsAnswerSchema)),
   invite: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -42,6 +46,7 @@ export const workspaceInvitationsContract = {
     .input(exactInput(workspaceInviteRequestSchema))
     .output(EffectSchema.flip(workspaceInvitationAnswerSchema)),
   cancel: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,

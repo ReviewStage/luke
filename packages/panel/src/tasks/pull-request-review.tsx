@@ -17,9 +17,9 @@ import {
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { FoldingButton } from "../folding-button.js";
 import { PopoverPanel } from "../popover-panel.js";
-import { Tooltip } from "../tooltip.js";
 import type { PendingReview } from "./line-comment.js";
 import { MarkdownField } from "./markdown-field.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
@@ -39,6 +39,9 @@ import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-wri
  * Once GitHub took it the panel closes and lets go of its words, and the
  * tab reads the conversation again (`usePullRequestWrites`); until then
  * what was written stands, the panel closed and opened again included.
+ * Under the line counting the member's pending comments stand the comments
+ * themselves, each with Edit and Delete (`pending-comments.tsx`); a Delete's
+ * question over the window leaves the panel open.
  */
 
 /** The panel's own words. */
@@ -90,6 +93,15 @@ function placeholderOf(event: ReviewEvent): string {
     : "Leave a summary comment (optional)…";
 }
 
+/**
+ * Whether a press or the focus went to a question asked over the window
+ * from inside the panel, a pending comment's Delete, which stands outside
+ * it in the document and leaves it open.
+ */
+function inQuestion(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[role="alertdialog"]') !== null;
+}
+
 /** The width the panel asks for, stage-cli's own; the side panel may narrow it. */
 const PANEL_WIDTH = 480;
 
@@ -113,6 +125,7 @@ function ReviewPanel({
   draft,
   writes,
   pending,
+  pendingList,
   onDiscard,
   onClose,
   onLeave,
@@ -121,6 +134,8 @@ function ReviewPanel({
   draft: ReviewDraft;
   writes: PullRequestWrites;
   pending: PendingReview;
+  /** The pending comments themselves, each with Edit and Delete, under the line counting them; none draws none. */
+  pendingList: ReactNode;
   /** Asks to throw the pending review away; offered only while one is held. */
   onDiscard: () => void;
   onClose: () => void;
@@ -151,6 +166,7 @@ function ReviewPanel({
           ? null
           : ` ${REVIEW_WORDS.pending(pending.comments)}`}
       </p>
+      {pendingList}
       <MarkdownField
         label={REVIEW_WORDS.BODY}
         placeholder={placeholderOf(draft.event)}
@@ -202,10 +218,13 @@ function ReviewPanel({
 export function PullRequestReview({
   writes,
   pending,
+  pendingList,
 }: {
   writes: PullRequestWrites;
   /** The member's own pending review, which the panel publishes or discards. */
   pending: PendingReview;
+  /** Its comments as the panel lists them, under the line counting them; none lists none. */
+  pendingList?: ReactNode;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>(REVIEW_EVENT.COMMENT);
@@ -232,6 +251,7 @@ export function PullRequestReview({
   useEffect(() => {
     if (!open || sending) return undefined;
     const pressed = (event: PointerEvent) => {
+      if (inQuestion(event.target)) return;
       if (!(event.target instanceof Node && root.current?.contains(event.target))) setOpen(false);
     };
     document.addEventListener("pointerdown", pressed, true);
@@ -253,29 +273,30 @@ export function PullRequestReview({
 
   return (
     <div className="pull-request-review" ref={root}>
-      {/* Note that a narrow row draws the glyph and the count alone, so the word stands in the hint and the name. */}
-      <Tooltip label={REVIEW_WORDS.OPEN}>
-        <Button
-          ref={trigger}
-          icon={<MessageSquarePlusIcon aria-hidden="true" />}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? panelId : undefined}
-          label={
-            pending == null || pending.comments === 0
-              ? REVIEW_WORDS.OPEN
-              : REVIEW_WORDS.openWith(pending.comments)
-          }
-          onClick={() => setOpen(!open)}
-        >
-          <span className="pull-request-review-words">{REVIEW_WORDS.OPEN}</span>
-          {pending == null || pending.comments === 0 ? null : (
-            <span className="pull-request-review-count" aria-hidden="true">
-              {pending.comments}
-            </span>
-          )}
-        </Button>
-      </Tooltip>
+      {/* Note that a narrow row folds the press to a square around its glyph, which wears the count at its corner, so the word stands in the hint and the name. */}
+      <FoldingButton
+        ref={trigger}
+        label={REVIEW_WORDS.OPEN}
+        icon={
+          <span className="pull-request-review-mark">
+            <MessageSquarePlusIcon aria-hidden="true" />
+            {pending == null || pending.comments === 0 ? null : (
+              <span className="pull-request-review-count" aria-hidden="true">
+                {pending.comments}
+              </span>
+            )}
+          </span>
+        }
+        name={
+          pending == null || pending.comments === 0
+            ? undefined
+            : REVIEW_WORDS.openWith(pending.comments)
+        }
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen(!open)}
+      />
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
           <ReviewPanel
@@ -283,6 +304,7 @@ export function PullRequestReview({
             draft={{ event, body, setEvent, setBody, submit }}
             writes={writes}
             pending={pending}
+            pendingList={pendingList}
             onDiscard={discarding.ask}
             onClose={close}
             onLeave={(left) => {
@@ -290,7 +312,7 @@ export function PullRequestReview({
               // press it was sent from is disabled as it goes, which drops the
               // focus the way a click outside would, and GitHub's answer is
               // drawn in the panel.
-              if (sending) return;
+              if (sending || inQuestion(left)) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
           />

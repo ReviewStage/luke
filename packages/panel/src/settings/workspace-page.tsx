@@ -61,7 +61,9 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref.js";
+import { actPort } from "../app-bridge.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
@@ -69,11 +71,18 @@ import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { encodeImage } from "../feedback-images.js";
 import { useOpenPerson } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
+import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { wholeWordsHint } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
+import { shownWorkspace } from "./settings-rows.js";
+import {
+  AddTokenRepository,
+  TokenRepositoryRows,
+  useTokenRepositories,
+} from "./workspace-token-repositories.js";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
@@ -307,44 +316,29 @@ function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): bool
 }
 
 /**
- * The workspace's members, read afresh whenever the workspace changes or
- * the window's list says it holds another count of them, as someone
- * joining or leaving elsewhere makes it; a write's answer stands in once it
- * lands. Retry reads again from nothing; a refresh reads again keeping the
- * list it has on screen until the new one lands, and a refresh that fails
- * keeps it. Note that only the newest thing asked is shown, a read or a
- * write's answer, because a read sent before a write can land after it and
- * would put back what the write changed.
+ * The workspace's members, read once and followed while the page stands
+ * (`useWorkspaceMembersRead`): whatever moves them, here or elsewhere, is
+ * pushed. A write's answer stands in once it lands, until the next push.
+ * Retry reads and follows again from nothing.
  */
-function useMembersRead(workspaceId: string, memberCount: number | undefined) {
-  const { act } = useAct();
-  const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
-  const [attempt, setAttempt] = useState({ count: 0, keep: false });
-  const latest = useRef(0);
-  useEffect(() => {
-    const asked = ++latest.current;
-    if (!attempt.keep) setRead(undefined);
-    act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
-      (items) => {
-        if (asked === latest.current) setRead({ items });
-      },
-      () => {
-        if (asked === latest.current && !attempt.keep) setRead({ failed: READ_FAILED.MEMBERS });
-      },
-    );
-    return () => {
-      // A read the workspace or a newer ask replaced is passed over when it lands.
-      if (asked === latest.current) latest.current += 1;
-    };
-  }, [act, workspaceId, memberCount, attempt]);
+function useMembersRead(workspace: Workspace) {
+  const followed = useWorkspaceMembersRead(workspace);
+  const [answered, setAnswered] = useState<{
+    readonly over: readonly WorkspaceMember[] | undefined;
+    readonly items: readonly WorkspaceMember[];
+  }>();
+  const read: ListRead<WorkspaceMember> =
+    answered !== undefined && answered.over === followed.members
+      ? { items: answered.items }
+      : followed.members !== undefined
+        ? { items: followed.members }
+        : followed.refused
+          ? { failed: READ_FAILED.MEMBERS }
+          : undefined;
   return {
     read,
-    retry: () => setAttempt((was) => ({ count: was.count + 1, keep: false })),
-    refresh: () => setAttempt((was) => ({ count: was.count + 1, keep: true })),
-    changed: (items: readonly WorkspaceMember[]) => {
-      latest.current += 1;
-      setRead({ items });
-    },
+    retry: followed.retry,
+    changed: (items: readonly WorkspaceMember[]) => setAnswered({ over: followed.members, items }),
   };
 }
 
@@ -653,20 +647,18 @@ function HeirChip({
  * the confirm dialog with the admin to make the owner as its field, the
  * first admin unless another is chosen; with none it says to make one
  * first. The members the service answers after the handover stand in at
- * once, and the reader's own new role arrives with the workspaces the host
- * reads again after it, which turns this row into a member's leave.
+ * once, and the reader's own new role arrives with the followed workspaces,
+ * which turns this row into a member's leave.
  */
 function OwnerLeave({
   workspace,
   members,
   onChanged,
-  onRefresh,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
   onChanged: (members: readonly WorkspaceMember[]) => void;
   /** Reads the members again keeping the list on screen, so the admins offered are the workspace's now. */
-  onRefresh: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const admins =
@@ -697,10 +689,7 @@ function OwnerLeave({
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               disabled={transfer.busy}
-              onClick={() => {
-                onRefresh();
-                transfer.ask();
-              }}
+              onClick={() => transfer.ask()}
             >
               {TRANSFER_WORDS.VERB}
             </Button>
@@ -745,7 +734,6 @@ function LeaveGroup({
   ownName,
   onLeft,
   onChanged,
-  onRefresh,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
@@ -753,19 +741,13 @@ function LeaveGroup({
   ownName: string | undefined;
   onLeft: () => void;
   onChanged: (members: readonly WorkspaceMember[]) => void;
-  onRefresh: () => void;
 }): React.JSX.Element | null {
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
     <SettingsSection anchor={SETTINGS_SECTION.LEAVE}>
       {owner ? (
-        <OwnerLeave
-          workspace={workspace}
-          members={members}
-          onChanged={onChanged}
-          onRefresh={onRefresh}
-        />
+        <OwnerLeave workspace={workspace} members={members} onChanged={onChanged} />
       ) : (
         <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
       )}
@@ -911,6 +893,10 @@ function Invitations({
   // Note that only the list last asked for is shown, because a read, an
   // invite's re-read, and a cancel can answer out of the order they were asked.
   const latest = useRef(0);
+  // Note that a write's answer is passed over where the stream told a list
+  // while it was out, since that list may already hold a newer change, such
+  // as another window canceling what this one just invited.
+  const streamed = useRef(0);
   const show = (listed: Promise<readonly WorkspaceInvitation[]>) => {
     const asked = ++latest.current;
     listed.then(
@@ -927,13 +913,17 @@ function Invitations({
   };
   // Note that one write runs at a time, invite or cancel, so no list read
   // after one can see the service before another has settled.
-  const write = <A,>(made: () => Promise<A>, done: (answer: A) => void) => {
+  const write = <A,>(made: () => Promise<A>, done: (answer: A, fresh: boolean) => void) => {
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
     setNote(undefined);
+    const before = streamed.current;
     made()
-      .then(done, (refused: Error) => setNote(refused.message))
+      .then(
+        (answer) => done(answer, streamed.current === before),
+        (refused: Error) => setNote(refused.message),
+      )
       .finally(() => {
         sending.current = false;
         setBusy(false);
@@ -952,16 +942,34 @@ function Invitations({
     };
   }, [act, workspaceId]);
 
-  // The invitation made is listed at once, its link copyable even if the
-  // read after it fails, and the read then reconciles with the service.
+  // The invitations are followed while the group stands: what any window or
+  // Mac invites or cancels, or what is accepted, is streamed, and is the
+  // newest word of them, whatever read is out.
+  useEffect(
+    () =>
+      streamFrom(
+        () => actPort()[ACT_KIND.WORKSPACE_INVITATIONS]({ workspaceId }),
+        (view) => {
+          if (!("invitations" in view)) return;
+          latest.current += 1;
+          streamed.current += 1;
+          setPending(view.invitations);
+        },
+      ),
+    [workspaceId],
+  );
+
+  // The invitation made is listed at once, its link copyable, and the
+  // followed list then carries it as the service holds it.
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
     write(
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
-      (made) => {
+      (made, fresh) => {
         setEmail("");
+        if (!fresh) return;
+        latest.current += 1;
         setPending((standing) => [...(standing ?? []).filter((one) => one.id !== made.id), made]);
-        show(act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }));
       },
     );
   };
@@ -970,7 +978,8 @@ function Invitations({
     write(
       () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
       // The cancel's own answer is the list after it, so a read out before it is passed over.
-      (left) => {
+      (left, fresh) => {
+        if (!fresh) return;
         latest.current += 1;
         setPending(left);
       },
@@ -1107,9 +1116,15 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
 function ManagedGitHub({
   workspace,
   connections,
+  add,
+  addRefusal,
 }: {
   workspace: Workspace;
   connections: readonly ShownConnection[];
+  /** Add repository, which stands before the row's own press. */
+  add: React.ReactNode;
+  /** What the last add was refused with, said under the row. */
+  addRefusal: string | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1127,23 +1142,26 @@ function ManagedGitHub({
         leading={GITHUB_MARK}
         label="GitHub"
         description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
-        error={refusal}
+        error={refusal ?? addRefusal}
       >
-        {() =>
-          connected ? (
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<ExternalLinkIcon aria-hidden="true" />}
-              onClick={open}
-            >
-              Manage on GitHub
-            </Button>
-          ) : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
-              Connect
-            </Button>
-          )
-        }
+        {() => (
+          <>
+            {add}
+            {connected ? (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<ExternalLinkIcon aria-hidden="true" />}
+                onClick={open}
+              >
+                Manage on GitHub
+              </Button>
+            ) : (
+              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+                Connect
+              </Button>
+            )}
+          </>
+        )}
       </SettingsRow>
     </div>
   );
@@ -1152,14 +1170,30 @@ function ManagedGitHub({
 /**
  * The workspace's GitHub: an owner's or an admin's to connect, and for a
  * member, read only, or the ask to have it; then every account connected,
- * the same for both.
+ * the same for both, and every repository a member added on their own
+ * token (`workspace-token-repositories.tsx`), which any member adds from
+ * GitHub's row.
  */
 function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const connections = connectionsOf(workspace);
+  const repositories = useTokenRepositories(workspace.id);
+  const [addRefusal, setAddRefusal] = useState<string>();
+  const add = (
+    <AddTokenRepository
+      workspaceId={workspace.id}
+      repositories={repositories}
+      onRefused={setAddRefusal}
+    />
+  );
   return (
     <>
       {managesWorkspace(workspace) ? (
-        <ManagedGitHub workspace={workspace} connections={connections} />
+        <ManagedGitHub
+          workspace={workspace}
+          connections={connections}
+          add={add}
+          addRefusal={addRefusal}
+        />
       ) : (
         <SettingsRow
           leading={GITHUB_MARK}
@@ -1167,8 +1201,9 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           description={
             connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
           }
+          error={addRefusal}
         >
-          {() => null}
+          {() => add}
         </SettingsRow>
       )}
       {connections.map((connection) => (
@@ -1177,6 +1212,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           connection={connection}
         />
       ))}
+      <TokenRepositoryRows repositories={repositories} />
     </>
   );
 }
@@ -1301,15 +1337,6 @@ export interface WorkspaceSettingsControl {
   listFailed: boolean;
   /** Asks for the workspaces again. */
   onRetryList: () => void;
-}
-
-/** The workspace the page shows: the one the sidebar lists, else the first; none before the workspaces are read. */
-export function shownWorkspace(
-  control: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId">,
-): Workspace | undefined {
-  return (
-    control.workspaces.find((each) => each.id === control.workspaceId) ?? control.workspaces[0]
-  );
 }
 
 /** A picked file read into a workspace's photo: the `data:` URL to send, or why it cannot be one. */
@@ -1563,7 +1590,7 @@ function ShownWorkspace({
   workspace: Workspace;
   readerId: string | undefined;
 }): React.JSX.Element {
-  const members = useMembersRead(workspace.id, workspace.memberCount);
+  const members = useMembersRead(workspace);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
   const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   return (
@@ -1596,7 +1623,6 @@ function ShownWorkspace({
         ownName={ownName}
         onLeft={() => control.onLeft(workspace.id)}
         onChanged={members.changed}
-        onRefresh={members.refresh}
       />
     </>
   );

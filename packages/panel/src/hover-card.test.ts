@@ -12,12 +12,14 @@ import { LIVE_CLOSE_REASON } from "@luke/live";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { TaskCard } from "./desktop/task-card.js";
-import { ChangesCard } from "./tasks/agent-changes-tab.js";
+import { GLYPH_STATE } from "./state-glyph.js";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref.js";
 import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card.js";
 import { CallEnded } from "./tasks/call-card.js";
+import { ChangesCard } from "./tasks/changes-card.js";
+import { subagentActor } from "./tasks/coding-agent-model.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { TurnCard } from "./tasks/turn-card.js";
@@ -45,6 +47,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   delete document.documentElement.dataset.keyboard;
@@ -118,6 +121,44 @@ const PULL_REQUEST = {
   changedFiles: 6,
 };
 
+test("a working agent's card says only how long its run has gone at its corner, its tile wearing the working mark in its harness's place", async () => {
+  // Note that only the date is faked, so the count's clock reads it while its ticks still run.
+  vi.useFakeTimers({ now: STARTED_AT + 65_000, toFake: ["Date"] });
+  const card = drawn(
+    createElement(AgentTabCard, {
+      name: "Audit the retry paths",
+      models: [],
+      read: () => ({
+        corner: cardCorner({
+          writing: true,
+          startedAt: STARTED_AT,
+          movedAt: undefined,
+          state: undefined,
+        }),
+        choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+        transcript: undefined,
+        tile: subagentActor(
+          "anthropic/claude-opus-5.5",
+          GLYPH_STATE.WORKING,
+          "Audit the retry paths",
+        ),
+      }),
+    }),
+  );
+  await vi.waitFor(() =>
+    assert.equal(card.querySelector(".luke-hover-card-corner")?.textContent, "1m 5s"),
+  );
+  assert.ok(
+    card.querySelector('.actor-card-head .state-glyph[data-state="working"]'),
+    "the tile wears the working mark",
+  );
+  assert.equal(
+    card.querySelector("[data-tab-card] > .visually-hidden")?.textContent,
+    "Working",
+    "a reader, whom the tile's mark is hidden from, hears that it works",
+  );
+});
+
 test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {
   const task = drawn(
     createElement(TaskCard, {
@@ -154,7 +195,11 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   );
   const agentHead = headOf(agent);
   assert.equal(agentHead.name, "Invite flow");
-  assert.equal(agentHead.corner, "Working…");
+  assert.equal(
+    agentHead.corner,
+    undefined,
+    "a working agent's corner says no word, and counts only from a known start",
+  );
   assert.match(agentHead.sub ?? "", /High/u, "the model and effort stand under the name");
 
   const changes = drawn(

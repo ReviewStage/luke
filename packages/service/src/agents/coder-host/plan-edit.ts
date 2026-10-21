@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { workspaceOf } from "@luke/database/models/workspace-store";
 import { PICTURE_BOUNDS, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress, taskPictureMarkdown } from "@luke/features/plan-attachment-link";
@@ -301,10 +301,10 @@ function picturesInSandbox(
 ): Effect.Effect<Result.Result<PicturesRead, string>, StoreFailure, DatabaseServices> {
   if (pictures.length === 0) return Effect.succeed(Result.succeed({ slug: "", files: [] }));
   return Effect.gen(function* () {
-    const stored = yield* readTask(binding.userId, binding.taskId);
+    const stored = yield* readTaskHeader(binding.userId, binding.taskId);
     if (Option.isNone(stored)) return Result.fail(PLAN_SAVE_REFUSAL.NO_TASK);
-    const { task } = stored.value;
-    if (task.archivedAt !== undefined) return Result.fail(PLAN_EDIT_REFUSAL.ARCHIVED);
+    const task = stored.value;
+    if (task.archived) return Result.fail(PLAN_EDIT_REFUSAL.ARCHIVED);
     const workspace = yield* workspaceOf(binding.userId, task.workspaceId);
     const slug = Option.getOrUndefined(workspace)?.slug ?? task.workspaceId;
     const files = yield* readPictureFiles(pictures, sandbox);

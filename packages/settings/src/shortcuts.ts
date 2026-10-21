@@ -2,8 +2,8 @@
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
  * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
- * Mac app's own chords do, so none can be the talk or stop key: those take
- * the machine, and Command chords belong to whichever app is frontmost. J
+ * Mac app's own chords do, since Command chords belong to whichever app is
+ * frontmost. J
  * and K are a letter alone, as Linear's and Superhuman's are, and R, which
  * replies to an agent's words selected as GitHub's R quotes them, answered
  * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
@@ -74,10 +74,7 @@ export const APP_COMMAND = {
   EXIT_FACTORY: "exit-factory",
   AUTOMATIONS: "automations",
   EXIT_AUTOMATIONS: "exit-automations",
-  ISSUES: "issues",
-  EXIT_ISSUES: "exit-issues",
   EXIT_BOARD: "exit-board",
-  NEW_ISSUE: "new-issue",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
@@ -465,24 +462,9 @@ export const APP_SHORTCUTS = {
     label: "Exit automations",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.ISSUES]: {
-    label: "Issues",
-    chord: { key: SHORTCUT_KEY.K, shift: true },
-    experiment: EXPERIMENT.ISSUES,
-  },
-  [APP_COMMAND.EXIT_ISSUES]: {
-    label: "Exit issues",
-    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.ISSUES,
-  },
   [APP_COMMAND.EXIT_BOARD]: {
-    label: "Exit board",
+    label: "Exit tasks",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-  },
-  [APP_COMMAND.NEW_ISSUE]: {
-    label: "New issue",
-    chord: { key: SHORTCUT_KEY.C, plain: true },
-    experiment: EXPERIMENT.ISSUES,
   },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
@@ -540,9 +522,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
       APP_COMMAND.REPLY_TO_SELECTION,
-      APP_COMMAND.ISSUES,
-      APP_COMMAND.EXIT_ISSUES,
-      APP_COMMAND.NEW_ISSUE,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
       APP_COMMAND.EXIT_FACTORY,
@@ -704,6 +683,45 @@ export const FILES_CHANGED_KEYS_LISTED: readonly FilesChangedKey[] =
 /** Every one of Files changed's keys, in the order the table declares them. */
 export const FILES_CHANGED_KEYS: readonly FilesChangedKey[] = Object.values(FILES_CHANGED_KEY);
 
+/**
+ * What a key does in Chapters, the Pull request tab's view of its chapters,
+ * as ReviewStage's chapter navigator answers them: ← and → step to the
+ * previous and the next chapter, and ⇧V marks every file of the chapter
+ * viewed, or unmarks them all. They answer only where the press lands inside
+ * the view and is not typing (`agent-chapters-tab.tsx` in `@luke/panel`),
+ * past the chapter's own Files changed list, whose keys come first and none
+ * of which these share, so none is an app command.
+ */
+export const CHAPTERS_KEY = {
+  PREVIOUS_CHAPTER: "chapters-previous-chapter",
+  NEXT_CHAPTER: "chapters-next-chapter",
+  MARK_CHAPTER_VIEWED: "chapters-mark-chapter-viewed",
+} as const;
+
+export type ChaptersKey = (typeof CHAPTERS_KEY)[keyof typeof CHAPTERS_KEY];
+
+/** Chapters' keys: the one table the view's handler matches a press against, and the Keyboard shortcuts page lists, in this order. */
+export const CHAPTERS_SHORTCUTS = {
+  [CHAPTERS_KEY.PREVIOUS_CHAPTER]: {
+    label: "Previous chapter",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [CHAPTERS_KEY.NEXT_CHAPTER]: {
+    label: "Next chapter",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [CHAPTERS_KEY.MARK_CHAPTER_VIEWED]: {
+    label: "Toggle chapter viewed",
+    chord: { key: SHORTCUT_KEY.V, plain: true, shift: true },
+  },
+} as const satisfies Record<ChaptersKey, FilesChangedShortcut>;
+
+/** The Keyboard shortcuts page's group of Chapters' keys, and its settings search's words for them. */
+export const CHAPTERS_GROUP_TITLE = "Chapters";
+
+/** Every one of Chapters' keys, in the order the table declares them, which the Keyboard shortcuts page lists. */
+export const CHAPTERS_KEYS: readonly ChaptersKey[] = Object.values(CHAPTERS_KEY);
+
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
 
@@ -778,8 +796,8 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
  * Any chord's glyphs as the window draws them, one per key: the modifiers in
  * the order macOS writes them, ⌃⌥⇧⌘, then the key. It reads Electron's
  * accelerator, the one spelling the window's chords (`shortcutAccelerator`)
- * and the system-wide keys Settings stores share, so the two are drawn by one
- * rule: a key the window's table names takes its glyph, ⏎ for Return and ⌫
+ * share, so every chord is drawn by one rule: a key the window's table names
+ * takes its glyph, ⏎ for Return and ⌫
  * for Delete, and any other, Space or a letter, its name.
  */
 export function shortcutGlyphs(accelerator: string): readonly string[] {
@@ -790,11 +808,6 @@ export function shortcutGlyphs(accelerator: string): readonly string[] {
   const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
   const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
   return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
-}
-
-/** Any chord as words, its glyphs set tight as a menu prints a key equivalent: ⇧⌘I, ⌥Space, Esc. */
-export function shortcutLabel(accelerator: string): string {
-  return shortcutGlyphs(accelerator).join("");
 }
 
 /** The chord as `aria-keyshortcuts` spells it. */
@@ -860,6 +873,11 @@ export function filesChangedKeyFor(event: ShortcutKeyPress): FilesChangedKey | u
   return FILES_CHANGED_KEYS.find((key) =>
     shortcutMatches(FILES_CHANGED_SHORTCUTS[key].chord, event),
   );
+}
+
+/** The Chapters key whose chord a key press is, or nothing. */
+export function chaptersKeyFor(event: ShortcutKeyPress): ChaptersKey | undefined {
+  return CHAPTERS_KEYS.find((key) => shortcutMatches(CHAPTERS_SHORTCUTS[key].chord, event));
 }
 
 /** Whether the keymap leaves the chord to the window's own Escape, which steps back a layer at a time. */

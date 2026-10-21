@@ -89,7 +89,7 @@ export function sameIssueChoice(a: TaskIssueChoice, b: TaskIssueChoice): boolean
  * GitHub's mark, open, closed, or closed as not planned, or the name of the
  * Linear workflow state it is in, `In Progress`. Never kept.
  */
-export const taskIssueStandingSchema = EffectSchema.Union([
+const taskIssueStandingSchema = EffectSchema.Union([
   EffectSchema.Struct({
     provider: EffectSchema.Literal(TASK_ISSUE_PROVIDER.GITHUB),
     state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
@@ -110,7 +110,7 @@ export type TaskIssueStanding = typeof taskIssueStandingSchema.Type;
  * it, the keyword its pull requests write of it, and where it stands now,
  * absent where the provider did not answer.
  */
-export const taskIssueLinkViewSchema = EffectSchema.Struct({
+const taskIssueLinkViewSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   provider: EffectSchema.Literals(Object.values(TASK_ISSUE_PROVIDER)),
   externalId: EffectSchema.String,

@@ -2,23 +2,18 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
 import type { AgentFork } from "./fork-model.js";
@@ -148,7 +143,15 @@ test("a settled turn of no words, its calls alone or failed before it said anyth
   assert.deepEqual(view.forks, [{ agentId: SOURCE, messageId: TURN, opening: "" }]);
 });
 
-test("no fork is offered on the developer's message, a task archived, an agent on no task, a place that opens no draft, or a tab that hands none, as a worker's", () => {
+test("an agent on no task offers Fork to new agent as a task's agent does, its press forking at that message", () => {
+  const view = drawn({ agent: summary(SOURCE, { planId: null }) });
+  assert.ok(view.fork, "the action is drawn");
+  act(() => view.fork?.click());
+  assert.equal(view.forks[0]?.agentId, SOURCE);
+  assert.equal(view.forks[0]?.messageId, TURN);
+});
+
+test("no fork is offered on the developer's message, a task archived, a place that opens no draft, or a tab that hands none, as a worker's", () => {
   const developers: CodingAgentMessage = {
     id: "line-1",
     role: MESSAGE_ROLE.USER,
@@ -157,7 +160,6 @@ test("no fork is offered on the developer's message, a task archived, an agent o
   const cases = {
     "the developer's message": drawn({ message: developers }),
     "a task archived": drawn({ taskArchived: true }),
-    "an agent on no task": drawn({ agent: summary(SOURCE, { planId: null }) }),
     "a place that opens no draft": drawn({ opensDraft: false }),
     "a worker's tab": drawn({ provided: false }),
   };
@@ -198,6 +200,21 @@ test("under a message, Forked to names the agents of the task forked at it in th
   assert.deepEqual(view.opened, [{ kind: TOOL_TARGET.AGENT, agent: "fork-b" }]);
 });
 
+test("an agent with no task names under a message the agents its own summary says were forked at it, by their titles, each opening its page, since its page lists that agent alone", () => {
+  const continuedBy = [
+    { agentId: "fork-a", title: "Try the queue", forked: true, messageId: TURN },
+    { agentId: "continued", title: "Carry on", forked: false },
+  ];
+  const view = drawn({ agent: summary(SOURCE, { planId: null, continuedBy }) });
+
+  const line = view.container.querySelector("[data-forked-to]");
+  assert.equal(line?.textContent, "Forked toTry the queue", "a continue names no message");
+  const chip = line?.querySelector<HTMLElement>("[data-actor-ref]");
+  assert.equal(chip?.tagName, "BUTTON", "the fork opens though the page does not list it");
+  act(() => chip?.click());
+  assert.deepEqual(view.opened, [{ kind: TOOL_TARGET.AGENT, agent: "fork-a" }]);
+});
+
 test("a message no agent was forked at names none", () => {
   const view = drawn({ listed: [summary(SOURCE), summary("other", { createdAt: 2 })] });
   assert.equal(view.container.querySelector("[data-forked-to]"), null);
@@ -223,19 +240,13 @@ async function forkedAtInTab(
   status: CodingAgentStatus,
   messages: readonly CodingAgentMessage[],
 ): Promise<readonly Omit<AgentFork, "agentId" | "opening">[]> {
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });
-  // Note that only the first read answers, because a read past the cursor waits on the service.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [agent],
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({ messages: [...messages], cursor: "2:0", status, title: null });
-    },
+    transcripts: pushedTranscripts(() => [
+      { messages: [...messages], cursor: "2:0", status, title: null },
+    ]),
   });
   const forks: AgentFork[] = [];
   const doors = agentForkDoors({

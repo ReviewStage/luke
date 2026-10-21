@@ -2,6 +2,7 @@ import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/feature
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { CHAT_PLACE } from "@luke/ui/chat-model";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -9,7 +10,7 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
 
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
@@ -20,7 +21,7 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * fills the window, else the
  * work column's agent, then the side panel's tab, then the task under them;
  * what stands in the plan's place (an agent's page, the Inbox on an item,
- * an automation, an issue, Factory) before the list it is in; and a page of Settings
+ * an automation, Factory, a channel of Chat) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
@@ -34,13 +35,15 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
  * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, Factory, an issue, or a page of Settings. The
- * history writes that link as the step's address, so the address and Copy
- * link never disagree. Chat, the Issues list, a new automation's page, and
- * the home page have none. A narrow room, which shows one pane at a time,
- * names the pane it shows as the step: the side panel's tab over the plan,
- * where the tab has a link, the Inbox's item standing alone, and Settings'
- * page list, whose link names no page.
+ * automation or the list, Factory, Chat, or a page of Settings. The history
+ * writes that link as the step's address, so the address and Copy link
+ * never disagree. Chat names its channel shown, or itself on For you. The
+ * Board, a new automation's page, and the home page have none. A narrow
+ * room, which shows one pane at a time, names the pane it shows as the
+ * step: the side panel's tab over the plan, where the tab has a link, the
+ * Inbox's item standing alone (as it is in an Inbox showing one column by
+ * its own width, in a room still wide), Settings' page list, whose link
+ * names no page, and Chat's rail, whose link names no channel.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -51,7 +54,6 @@ const LINK_THING = {
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "pull request",
@@ -62,7 +64,8 @@ const LINK_THING = {
   FACTORY: "Factory",
   SETTINGS: "settings page",
   PERSON: "profile",
-  ISSUE: "issue",
+  CHAT: "Chat",
+  CHANNEL: "channel",
 } as const;
 
 type LinkThing = (typeof LINK_THING)[keyof typeof LINK_THING];
@@ -130,8 +133,6 @@ export function panelTabPlace(
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
 function panelThing(place: LinkPlace): LinkThing | undefined {
   switch (place.kind) {
-    case LINK_PLACE.CALL:
-      return LINK_THING.CALL;
     case LINK_PLACE.PAGE:
       return LINK_THING.PAGE;
     case LINK_PLACE.CHANGES:
@@ -170,7 +171,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
         ];
   }
   const shown = tasks.mainTabs.tab;
-  const agentId = isAgentTab(shown) ? shown.agent : undefined;
+  const agentId = shown !== undefined && isAgentTab(shown) ? shown.agent : undefined;
   const agent: LinkAtHand | undefined =
     agentId === undefined
       ? undefined
@@ -246,8 +247,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
       "taskId" in chosen
         ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
         : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
-    // A narrow room's item standing alone is a step of its own.
-    if (at.narrow === true && !tasks.inboxView.listed) {
+    // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
+    if ((at.narrow === true || tasks.inboxView.single === true) && !tasks.inboxView.listed) {
       return [
         at_(item, LINK_THING.INBOX_ITEM),
         within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),
@@ -272,17 +273,17 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     return [at_(list, LINK_THING.AUTOMATIONS)];
   }
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
-  // Chat has no link of its own, and the task it stands over is not in sight, so it offers none.
-  if (tasks.chatView.open) return [];
+  if (tasks.chatView.open) {
+    const root = { kind: LINK_PLACE.CHAT } as const;
+    const { place } = tasks.chatView;
+    if (place.kind !== CHAT_PLACE.CHANNEL) return [at_(root, LINK_THING.CHAT)];
+    // A narrow room's rail stands alone over the channel it hides, so the rail is the step, at Chat's own link.
+    if (at.narrow === true && tasks.chatView.listed) return [at_(root, LINK_THING.CHAT)];
+    const channel: LinkPlace = { kind: LINK_PLACE.CHAT, channelId: place.channelId };
+    return [at_(channel, LINK_THING.CHANNEL), within(root, LINK_THING.CHAT)];
+  }
   // The Board has no link of its own either, on the same terms.
   if (tasks.boardView.open) return [];
-  // The Issues list has no link of its own, and the task it stands over is not in sight, so it offers none.
-  const issues = tasks.issuesView;
-  if (issues.open) {
-    return issues.place.kind === ISSUES_PAGE.ISSUE
-      ? [at_({ kind: LINK_PLACE.ISSUE, issueId: issues.place.issueId }, LINK_THING.ISSUE)]
-      : [];
-  }
   return taskLinks(tasks, at);
 }
 

@@ -2,32 +2,48 @@ import type { HostedAutomationClient } from "@luke/features";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationDeletedView,
+  type AutomationFollow,
+  type AutomationFollowed,
   type AutomationListView,
   type AutomationRunsView,
   type AutomationRunView,
   type AutomationView,
   automationChangeParamsSchema,
   automationCreateParamsSchema,
+  automationFollowSchema,
   automationIdParamsSchema,
   automationListParamsSchema,
   automationRunParamsSchema,
 } from "@luke/features/automation-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema, type Scope } from "effect";
+import { Data, Effect, FiberMap, Result, type Schema, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
+import { followAutomations } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
  * compose-automations.ts -- the account's automations, asked of the service on the window's behalf: listed, made, changed, deleted, run now, and their runs read.
  *
- * Nothing is held here. The window holds the automations it draws and asks
- * when its page opens and after each write, and every ask is one call of
- * the service answered whole. Behind a closed account gate, or on a run
+ * Nothing is held here but the follows. Every ask is one call of the
+ * service answered whole. What a window draws, a workspace's automations or
+ * an automation's runs, it follows while drawn (`automation-follow.ts`) on
+ * the service's live read for the account signed in as it started, each
+ * change emitted as `AUTOMATIONS_CHANGED`; following again starts it
+ * over, and letting it go, or a sign-out, ends it. Behind a closed account gate, or on a run
  * that sends nothing, every ask answers unanswered. A webhook's secret is
  * the one secret answered here, by root AGENTS.md's carve-out: one the
  * service minted as a webhook was made, or one minted here at the window's
@@ -38,16 +54,36 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the automations, as this concern asks it. */
 export type AutomationsClient = Pick<
   HostedAutomationClient,
-  "list" | "create" | "change" | "remove" | "runNow" | "runs" | "replaceWebhookSecret"
+  | "list"
+  | "create"
+  | "change"
+  | "remove"
+  | "runNow"
+  | "runs"
+  | "replaceWebhookSecret"
+  | "listLive"
+  | "runsLive"
 >;
 
 export interface AutomationsDependencies {
-  kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now" | "hostedServiceBaseUrl"> & {
+    runMode: Pick<RunMode, "sendsNetwork">;
+  };
   account: Pick<AccountComposer, "capabilitiesActive">;
+  /** The account signed in now, which a follow names from its start; none where nobody is. */
+  accountId: () => string | undefined;
   client: AutomationsClient;
+  /** Realtime's client for a follow's subscription; Realtime's own where none is handed in. */
+  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
-export type AutomationsComposer = Composer;
+export interface AutomationsComposer extends Composer {
+  /** Every follow let go, as a sign-out lets them go. */
+  readonly reset: Effect.Effect<void>;
+}
+
+/** The follows standing, one map per kind of what is followed, each by its id. */
+type Follows = Readonly<Record<AutomationFollow["kind"], FiberMap.FiberMap<string>>>;
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
@@ -60,25 +96,39 @@ function mintedWebhookSecret(): string {
 }
 
 /** The secret's SHA-256 as lowercase hex, the one form of it the service holds. */
-function webhookSecretHash(secret: string): Effect.Effect<string> {
+function webhookSecretHash(secret: string): Effect.Effect<string, WebhookSecretHashFailed> {
   return Effect.map(
-    Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret))),
+    Effect.tryPromise({
+      try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret)),
+      catch: (cause) => new WebhookSecretHashFailed({ cause }),
+    }),
     (digest) => Hex.encode(new Uint8Array(digest)),
   );
 }
+
+/** Web Crypto refused to hash a minted webhook secret. */
+class WebhookSecretHashFailed extends Data.TaggedError("WebhookSecretHashFailed")<{
+  readonly cause: unknown;
+}> {}
 
 export function composeAutomations(
   dependencies: AutomationsDependencies,
 ): Effect.Effect<AutomationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    return composed(dependencies, yield* HttpClient.HttpClient);
+    const http = yield* HttpClient.HttpClient;
+    const follows: Follows = yield* Effect.all({
+      workspace: FiberMap.make<string>(),
+      runs: FiberMap.make<string>(),
+    });
+    return composed(dependencies, http, follows);
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything. */
+/** The composer's one table, built from its seams; nothing here starts anything but what a window follows. */
 function composed(
   dependencies: AutomationsDependencies,
   http: HttpClient.HttpClient,
+  follows: Follows,
 ): AutomationsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
@@ -152,10 +202,13 @@ function composed(
         // Note that the secret is minted here and only its hash leaves for the service, so the
         // service never holds it, and the window that asked is the one place it is answered.
         const secret = mintedWebhookSecret();
+        // A secret that cannot be hashed is never sent, and the call is answered as unanswered.
+        const hashed = yield* Effect.result(webhookSecretHash(secret));
+        if (Result.isFailure(hashed)) return carried<AutomationView>(UNANSWERED);
         const replaced = yield* asked(
           client.replaceWebhookSecret({
             automationId: named.automationId,
-            webhookSecretHash: yield* webhookSecretHash(secret),
+            webhookSecretHash: hashed.success,
           }),
         );
         return carried<AutomationView>(
@@ -164,6 +217,40 @@ function composed(
             : { automation: replaced.automation, webhookSecret: secret },
         );
       }),
+    [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const scope = yield* read(automationFollowSchema, params, "a follow names what it follows");
+        // The account the follow starts for, which every read names, so one under another's session is refused as signed out and ends.
+        // Behind a closed gate every read is told unanswered and asked again; with nobody signed in the follow ends unsaid.
+        const userId = dependencies.accountId();
+        const follow = followAutomations(
+          {
+            liveList: (workspaceId, poll, after) =>
+              userId === undefined
+                ? Effect.succeed(LIVE_SIGNED_OUT)
+                : asked(client.listLive(workspaceId, userId, poll, after)),
+            liveRuns: (automationId, poll, after) =>
+              userId === undefined
+                ? Effect.succeed(LIVE_SIGNED_OUT)
+                : asked(client.runsLive(automationId, userId, poll, after)),
+            openLive: dependencies.openLive ?? openRealtimeClient,
+            now: kernel.now,
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            publish: (followed: AutomationFollowed) =>
+              kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed)),
+          },
+          scope,
+        );
+        // Following again starts over, so a window that opens on what another already follows hears it at once.
+        yield* FiberMap.run(follows[scope.kind], scope.id, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const scope = yield* read(automationFollowSchema, params, "a follow names what it follows");
+        yield* FiberMap.remove(follows[scope.kind], scope.id);
+        return {};
+      }),
     [GATEWAY_METHOD.AUTOMATIONS_RUNS]: (params) =>
       Effect.gen(function* () {
         const named = yield* read(automationIdParamsSchema, params, "a read names an automation");
@@ -171,5 +258,7 @@ function composed(
       }),
   };
 
-  return { methods, lifetime: Effect.void };
+  const reset = Effect.andThen(FiberMap.clear(follows.workspace), FiberMap.clear(follows.runs));
+
+  return { methods, lifetime: Effect.void, reset };
 }

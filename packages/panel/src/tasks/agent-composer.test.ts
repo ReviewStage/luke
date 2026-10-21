@@ -6,8 +6,12 @@ import {
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import {
+  REPOSITORY_UNREACHED,
+  type RepositoryUnreached,
+} from "@luke/features/repository-reach-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect } from "effect";
@@ -15,6 +19,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
@@ -78,7 +83,14 @@ async function settle(): Promise<void> {
 }
 
 /** The box on the composer's own control, its sends answered by `sender`. */
-function Box({ sender }: { sender: MessageSender }): ReactNode {
+function Box({
+  sender,
+  call,
+}: {
+  sender: MessageSender;
+  /** What stands in Call's place, and whether a call holds the microphone, as an agent's tab hands them. */
+  call?: { controls: ReactNode; onCall: boolean };
+}): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
     taskId: "plan-1",
@@ -86,7 +98,13 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: reading });
+  return createElement(AgentComposer, {
+    ...QUIET_COMPOSER,
+    composer,
+    skills: reading,
+    call: call?.controls,
+    dictates: !(call?.onCall ?? false),
+  });
 }
 
 /** The box mounted, every message it sends written down and answered by `answer`. */
@@ -417,6 +435,102 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   assert.equal(box.shown(), "Fix the bug in again this later", "the caret stands after the words");
 });
 
+/**
+ * The box at an agent's tab's foot with the microphone stubbed, its Call
+ * slot holding End call, every clip read as `transcribed` answers; `draw`
+ * puts a call up or takes it down.
+ */
+async function mountedForCall(transcribed: () => Promise<{ text: string }>) {
+  stubMicrophone();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: transcribed,
+  });
+  const sender: MessageSender = () => new Promise(ignore);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = async (onCall: boolean) => {
+    await act(async () =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(Box, {
+            sender,
+            call: {
+              onCall,
+              controls: createElement("button", { type: "button", "aria-label": "End call" }),
+            },
+          }),
+        ),
+      ),
+    );
+    await settle();
+  };
+  await draw(false);
+  const press = (label: string) => {
+    const found = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    assert.ok(found, `${label} is offered`);
+    act(() => found.click());
+  };
+  return { container, draw, press };
+}
+
+test("a call that begins mid-dictation ends it, keeping the words said, and the row holds the call rather than the dictation's strip", async () => {
+  const box = await mountedForCall(() => Promise.resolve({ text: "the invite page" }));
+  box.press("Dictate");
+  await settle();
+  assert.ok(box.container.querySelector(".dictation-strip"), "the dictation stands");
+
+  await box.draw(true);
+  assert.equal(box.container.querySelector(".dictation-strip"), null);
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "the call's controls stand",
+  );
+  assert.equal(box.container.querySelector('button[aria-label="Dictate"]'), null);
+  assert.equal(composerEditor(box.container).textContent, "the invite page");
+});
+
+test("a clip still being read as a call begins keeps its strip and its Cancel beside the call's controls until its words land, then the row holds the call", async () => {
+  let land: (answer: { text: string }) => void = ignore;
+  const box = await mountedForCall(
+    () =>
+      new Promise((resolve) => {
+        land = resolve;
+      }),
+  );
+  box.press("Dictate");
+  await settle();
+  box.press("Done");
+  await settle();
+
+  await box.draw(true);
+  assert.ok(box.container.querySelector(".dictation-strip"), "the reading still shows");
+  assert.ok(box.container.querySelector('button[aria-label="Cancel"]'), "and can still be let go");
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "while the call's controls stand beside it",
+  );
+
+  await act(async () => land({ text: "the members list" }));
+  await settle();
+  assert.equal(box.container.querySelector(".dictation-strip"), null);
+  assert.ok(
+    box.container.querySelector('button[aria-label="End call"]'),
+    "the call's controls stand",
+  );
+  assert.equal(composerEditor(box.container).textContent, "the members list");
+});
+
 /** The box under the window's repository doors, its one message refused for a repository its owner's other workspace reaches, and every later one taken. */
 async function mountedRefusedForMove() {
   const sent: { text: string; clientKey: string }[] = [];
@@ -512,4 +626,78 @@ test("a message sent and refused while the move is out is not sent again when th
     box.sent.map((each) => each.text),
     ["Rebase on main", "Rebase on main and fix CI"],
   );
+});
+
+/** What a remedy's press opened: pages of GitHub's, and places in Settings. */
+interface OpenedByRemedy {
+  readonly github: string[];
+  readonly settings: SettingsLink[];
+}
+
+/** The box under the window's doors and Settings opener, its one message refused for `unreached`; answers what each press opened. */
+async function mountedRefusedOnToken(unreached: RepositoryUnreached) {
+  const opened: OpenedByRemedy = { github: [], settings: [] };
+  const sender: MessageSender = () =>
+    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached });
+  const doors: RepositoryRemedyDoors = {
+    openWorkspaceGitHub: ignore,
+    openGitHub: (url) => opened.github.push(url),
+    chooseRepository: ignore,
+    moveTask: () => Promise.resolve(false),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => opened.settings.push(link) },
+          createElement(RepositoryRemedyProvider, { value: doors }, createElement(Box, { sender })),
+        ),
+      ),
+    ),
+  );
+  await settle();
+  typeInComposer(container, "Rebase on main");
+  pressInComposer(container, "Enter");
+  await settle();
+  const press = (label: string) =>
+    act(() =>
+      (
+        [...container.querySelectorAll("button")].find((each) => each.textContent === label) ??
+        assert.fail(`the note offers ${label}`)
+      ).click(),
+    );
+  return { container, opened, press };
+}
+
+test("a message refused because GitHub refused the member's own token offers Update GitHub token, which opens Settings › Profile", async () => {
+  const box = await mountedRefusedOnToken({
+    reason: REPOSITORY_UNREACHED.TOKEN_INVALID,
+    repository: "acme/relay",
+  });
+
+  box.press("Update GitHub token");
+
+  assert.ok(box.container.textContent?.includes("Your GitHub token was refused."));
+  assert.deepEqual(box.opened.settings, [{ page: SETTINGS_VIEW.ACCOUNT }]);
+  assert.deepEqual(box.opened.github, []);
+});
+
+test("a message refused because the member's token is not authorized for the organization's SAML SSO offers to authorize it, which opens GitHub's page", async () => {
+  const authorizeUrl = "https://github.com/orgs/acme/sso?authorization_request=fixture";
+  const box = await mountedRefusedOnToken({
+    reason: REPOSITORY_UNREACHED.TOKEN_SSO,
+    repository: "acme/relay",
+    authorizeUrl,
+  });
+
+  box.press("Authorize token for acme");
+
+  assert.deepEqual(box.opened.github, [authorizeUrl]);
+  assert.deepEqual(box.opened.settings, []);
 });

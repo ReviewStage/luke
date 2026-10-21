@@ -48,6 +48,8 @@ export const LIVE_DELEGATION_TYPE = "client";
 export const LiveDelegationTypeSchema = Schema.Literal(LIVE_DELEGATION_TYPE);
 
 interface LiveSessionOptions {
+  /** The tools the call's backend holds, which its instructions name (`sessionInstructions`). */
+  backendTools: readonly string[];
   /** The model, where a deployment pins one; `LIVE_DEFAULTS.MODEL` otherwise. */
   model?: string | undefined;
   /** Chosen at creation and immutable after startup. */
@@ -74,7 +76,7 @@ export function liveSessionConfig(options: LiveSessionOptions) {
   const input = options.input ?? [];
   return {
     model: options.model ?? LIVE_DEFAULTS.MODEL,
-    instructions: sessionInstructions(),
+    instructions: sessionInstructions(options.backendTools),
     ...(input.length > 0 ? { input: [...input] } : undefined),
     delegation: { type: LIVE_DELEGATION_TYPE },
     store: false,
@@ -143,6 +145,8 @@ export const LIVE_SESSION_OUTCOME = {
   QUOTA_EXHAUSTED: "quota-exhausted",
   /** The hosted tier is switched off service-side or not answering. */
   HOSTED_UNAVAILABLE: "hosted-unavailable",
+  /** The call named an agent that runs on Claude Code or Codex, which takes no call yet; nothing was charged. */
+  NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
 } as const;
 
 export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE_SESSION_OUTCOME];

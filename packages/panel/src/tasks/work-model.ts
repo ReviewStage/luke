@@ -28,8 +28,7 @@ import { cardTitle, changesSidebar } from "./tool-call-model.js";
  * worker is a delegation's part, which the agent tab draws as a subagent's
  * row; it stands where the worker's own session does, and the pair that
  * session ran on is the part's answer, as a coding agent's delegation
- * answers it. A stop names the subagent it stopped by that subagent's job
- * (`workerJobs`), wherever among the turns its start stands.
+ * answers it.
  */
 
 /** A worker's call: its kind, its subject apart, its state, and whether it still moves. */
@@ -242,15 +241,6 @@ function inputText(part: WireRecord, field: string): string | undefined {
   return isWireString(value) ? value : undefined;
 }
 
-/** How eve's receipt names the task a delegation started. */
-const STARTED_TASK = /^Started task (\S+)\./u;
-
-/** The task a delegation started, read off eve's receipt; nothing for one that sent a task more work, or before it answered. */
-function startedTaskOf(part: WireRecord): string | undefined {
-  if (inputText(part, "taskId") !== undefined || !isWireString(part.output)) return undefined;
-  return STARTED_TASK.exec(part.output)?.[1];
-}
-
 /**
  * A delegation's worker as its turn's journal holds it, where its own
  * session's page says it stands; one the pages say nothing of yet stands as
@@ -298,36 +288,6 @@ function workerOfPart(
       record,
     },
   };
-}
-
-/** The call a job is read off, which only its subject tells apart. */
-const JOB_CALL: WorkCallRow = {
-  id: "",
-  kind: CALL_KIND.WORKER,
-  state: TASK_WORK_STATE.DONE,
-  running: false,
-};
-
-/**
- * The job of each subagent the turns started, by eve's id for its task, so
- * a stop in any of the turns names the subagent it stopped as its line
- * does. Note that only a start names a task's job, never a call that sent
- * the task more work, whose message is no job of the subagent's, so a task
- * whose start is on a page not read names none.
- */
-export function workerJobs(conversation: TaskConversation): ReadonlyMap<string, string> {
-  const jobs = new Map<string, string>();
-  for (const message of conversation?.messages ?? []) {
-    for (const part of message.parts) {
-      if (!isRecord(part) || !isWireString(part.type) || !DELEGATION_PART_TYPES.has(part.type)) {
-        continue;
-      }
-      const task = startedTaskOf(part);
-      const words = inputText(part, "task") ?? inputText(part, "message") ?? "";
-      if (task !== undefined) jobs.set(task, workerJob({ ...JOB_CALL, subject: words }));
-    }
-  }
-  return jobs;
 }
 
 /**

@@ -9,7 +9,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
-import type { Task, TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -17,7 +17,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -31,8 +30,9 @@ import { DesktopTasks } from "./desktop-tasks.js";
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
  * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, the task's own tab hangs the task's card, and
- * a page's tab hangs a card previewing the page.
+ * that strip's "+" menu wears, the Plan tab is the task's own name and
+ * status, the task's own tab hangs the task's card, and a page's tab hangs a
+ * card previewing the page.
  */
 
 const TASK: Task = {
@@ -52,6 +52,7 @@ const SUMMARY: TaskSummary = {
   createdAt: TASK.createdAt,
   updatedAt: TASK.updatedAt,
   repository: TASK.repository,
+  status: TASK_STATUS.IN_PROGRESS,
   agents: {
     total: 1,
     working: 1,
@@ -139,7 +140,7 @@ async function settle(): Promise<void> {
  * it, and the side panel open with a working subagent's tab, the done
  * agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
-async function mount(): Promise<HTMLElement> {
+async function mount(onNewVoiceChat?: () => void): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -151,8 +152,8 @@ async function mount(): Promise<HTMLElement> {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.CALL, { agent: WORKING.id }, { draft: DRAFT }],
-      tab: MAIN_TAB.CALL,
+      tabs: [{ agent: WORKING.id }, { draft: DRAFT }],
+      tab: undefined,
       openAgents: [WORKING.id],
     },
     sidePanel: {
@@ -165,6 +166,7 @@ async function mount(): Promise<HTMLElement> {
       pages: [{ page: FUNNEL.id }],
     },
     pages: [FUNNEL],
+    onNewVoiceChat,
     work: {
       ...base.work,
       conversation: conversationOf([
@@ -236,27 +238,32 @@ function rowLooks(column: Element): Map<string, Look> {
   return new Map(rows);
 }
 
-test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New coding agent", async () => {
+test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New agent", async () => {
   const column = (await mount()).querySelector(".main-tabs");
   assert.ok(column, "the plan's column's strip");
   const tabs = tabLooks(column);
   const rows = rowLooks(column);
-  for (const name of [WORKING.title, "New coding agent"]) {
+  for (const name of [WORKING.title, TAB_WORDS.NEW_AGENT]) {
     assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
     assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
   }
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
-test("the Call's tab closes beside the agents', and the column's + offers the Call to open it again in the look its tab wears", async () => {
-  const column = (await mount()).querySelector(".main-tabs");
-  assert.ok(column, "the task's column's strip");
-  const pill = column.querySelector('.tab[data-anchored="true"]');
-  assert.equal(pill?.getAttribute("data-closable"), "true");
-  const tabs = tabLooks(column);
-  const rows = rowLooks(column);
-  assert.ok(tabs.has(TAB_WORDS.CALL), "the strip has the Call's tab");
-  assert.deepEqual(rows.get(TAB_WORDS.CALL), tabs.get(TAB_WORDS.CALL));
+test("the column's + offers New voice chat, then New agent, then each agent, where the window has a voice, and New agent first where it has none", async () => {
+  const order = (column: Element | null) => {
+    assert.ok(column, "the task's column's strip");
+    return [...rowLooks(column).keys()];
+  };
+  const voiced = order((await mount(() => undefined)).querySelector(".main-tabs"));
+  assert.deepEqual(voiced.slice(0, 2), [TAB_WORDS.NEW_VOICE_CHAT, TAB_WORDS.NEW_AGENT]);
+  assert.ok(voiced.indexOf(WORKING.title ?? "") > 1, "the agents stand after the two starts");
+  act(() => roots.pop()?.unmount());
+  document.body.innerHTML = "";
+
+  const voiceless = order((await mount()).querySelector(".main-tabs"));
+  assert.equal(voiceless.includes(TAB_WORDS.NEW_VOICE_CHAT), false);
+  assert.equal(voiceless[0], TAB_WORDS.NEW_AGENT);
 });
 
 test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", async () => {
@@ -276,19 +283,19 @@ test("the side panel's + offers a working subagent and an agent's Pull request i
   );
 });
 
-test("the Call's tab hangs the task's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", async () => {
-  const column = (await mount()).querySelector(".main-tabs");
-  const tab = column?.querySelector<HTMLElement>('[role="tab"]');
-  assert.equal(tab?.textContent, TAB_WORDS.CALL);
-  act(() => {
-    tab?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.ok(card, "the plan's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
-  assert.match(card.textContent ?? "", /acme\/relay/u);
-  // The card is the task as the list names it, its agents among it.
-  assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
+test("the side panel's Plan tab is named for the task and wears its status's mark, and its + offers it in that look", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
+  assert.ok(panel, "the side panel's strip");
+  const tabs = tabLooks(panel);
+  const rows = rowLooks(panel);
+  assert.ok(!tabs.has("Plan"), "no tab says Plan");
+  assert.ok(tabs.has(TASK.name), "the strip has a tab named for the task");
+  assert.match(
+    tabs.get(TASK.name)?.glyph ?? "",
+    /data-status="in-progress"/u,
+    "the Plan tab wears the task's status as the list holds it",
+  );
+  assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name), "the Plan looks the same in the +");
 });
 
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {

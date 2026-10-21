@@ -32,13 +32,25 @@ const repositoryNotReachableData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(repositoryNotReachableDataSchema),
 );
 
-/** Every hosted refusal, the slug its code, and the extra fields of the one that carries some. */
+/**
+ * What an upstream that refused carries beside its slug: the status it
+ * answered, and none of its body, for the alerts that watch the route.
+ */
+const upstreamErrorDataSchema = EffectSchema.Struct({
+  upstreamStatus: EffectSchema.optionalKey(EffectSchema.Int),
+});
+
+const upstreamErrorData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(upstreamErrorDataSchema),
+);
+
+/** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: {},
   [HOSTED_API_ERROR.INVALID_REQUEST]: {},
   [HOSTED_API_ERROR.QUOTA_EXHAUSTED]: {},
   [HOSTED_API_ERROR.UNAVAILABLE]: {},
-  [HOSTED_API_ERROR.UPSTREAM_ERROR]: {},
+  [HOSTED_API_ERROR.UPSTREAM_ERROR]: { data: upstreamErrorData },
   [HOSTED_API_ERROR.UPSTREAM_THROTTLED]: {},
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: {},
   [HOSTED_API_ERROR.PROMPT_TOO_LARGE]: {},
@@ -52,6 +64,10 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: {},
   [HOSTED_API_ERROR.AGENT_NOT_READY]: {},
   [HOSTED_API_ERROR.AGENT_RETIRED]: {},
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: {},
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: {},
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: {},
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: {},
   [HOSTED_API_ERROR.TASK_ARCHIVED]: {},
   [HOSTED_API_ERROR.NOT_PERMITTED]: {},
   [HOSTED_API_ERROR.ALREADY_INVITED]: {},

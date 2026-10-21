@@ -5,9 +5,8 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
-  hostedMethod,
   hostedNotFoundRoute,
-  hostedRefusalResponse,
+  hostedRefusing,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
 import { ANY_METHOD } from "@luke/service/route";
@@ -91,17 +90,21 @@ function gateRoute(resolveUserId: UserIdResolver<string | undefined>) {
     HttpRouter.add(
       ANY_METHOD,
       GATE_PATH,
-      Effect.gen(function* () {
-        yield* hostedMethod(HTTP_METHOD.GET);
-        const environment = yield* HostedEnvironment;
-        if (environment.openAiKey === undefined) {
-          return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-        }
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const account = yield* resolveUserId(request.headers.authorization);
-        if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-        return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId: account.value });
-      }).pipe(Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal)))),
+      hostedRefusing(
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          if (request.method !== HTTP_METHOD.GET) {
+            return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+          }
+          const environment = yield* HostedEnvironment;
+          if (environment.openAiKey === undefined) {
+            return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+          }
+          const account = yield* resolveUserId(request.headers.authorization);
+          if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+          return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId: account.value });
+        }),
+      ),
     ),
   );
 }

@@ -3,12 +3,15 @@ import type { Failure } from "@luke/features/failure-remedy";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
+import { useNativeAgentsAccess } from "../use-app-state.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { ArchivedComposerNote } from "./archived-task.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
+import { PayerField, useStartPayerKeys } from "./payer-field.js";
+import { payerOffer, startPayer } from "./payer-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
 import { useWorkingNow, WorkingLine } from "./working-time.js";
@@ -50,6 +53,14 @@ import { useWorkingNow, WorkingLine } from "./working-time.js";
  * once it lands the tab gives way to the new agent's, and a Start that did
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
+ *
+ * For an account in the native-agents cohort with a Claude plan connected,
+ * a draft on a Claude model shows beside its chip who pays for the agent
+ * (`payer-field.tsx`): the plan, or the API key or Luke's key, standing on
+ * the account's default until the developer picks one for this agent, and
+ * the Start names the payer the field shows, so a default changed in
+ * Settings since the keys were read never starts the agent on another;
+ * elsewhere nothing changes.
  *
  * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
@@ -115,6 +126,8 @@ export function DraftAgentTab({
     };
   }, []);
 
+  const inCohort = useNativeAgentsAccess();
+  const payerKeys = useStartPayerKeys();
   const { fork } = draft;
   const source =
     fork === undefined
@@ -122,6 +135,10 @@ export function DraftAgentTab({
       : [...(control.agents ?? []), ...(control.archived ?? [])].find(
           (agent) => agent.id === fork.agentId,
         );
+  // A fork runs on its source's model and effort until the developer picks another.
+  const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+  const offer = payerOffer(inCohort, payerKeys, choice?.model);
+  const shownPayer = startPayer(offer, draft.payer) ?? offer?.fallback;
   const send = () => {
     const prompt = draft.prompt.trim();
     if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
@@ -130,10 +147,12 @@ export function DraftAgentTab({
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
+    // Note that the payer the field shows is the one sent, so the Start runs on what the developer saw.
+    const payer = shownPayer;
     const started =
       fork === undefined
-        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers)
-        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers);
+        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers, payer)
+        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers, payer);
     started.then((failed) => {
       setSending(false);
       setSentAt(undefined);
@@ -152,8 +171,7 @@ export function DraftAgentTab({
     retry: send,
     sent: [],
   };
-  // A fork runs on its source's model and effort until the developer picks another.
-  const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+
   if (control.onUnarchive !== undefined) {
     return (
       <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
@@ -205,6 +223,18 @@ export function DraftAgentTab({
           followsUp={false}
           keywords={control.keywords}
           skills={control.readSkills}
+          actions={
+            offer === undefined || shownPayer === undefined
+              ? undefined
+              : () => (
+                  <PayerField
+                    offer={offer}
+                    value={shownPayer}
+                    disabled={sending}
+                    onChange={(payer) => control.onDraftChange({ payer })}
+                  />
+                )
+          }
         />
       </footer>
     </section>

@@ -33,9 +33,9 @@ import { dayText } from "../tasks/task-time.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
+ * api-keys-section.tsx -- Settings › Agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
  *
- * A group of the Coding agents page, under the default model it runs. One
+ * A group of the Agents page, under the default model it runs. One
  * row per provider. A provider with no key of the account's offers Add key;
  * one with a key draws how the provider last answered it, its hint — its
  * prefix and last four characters, as the service answers it — and when it
@@ -94,6 +94,8 @@ function keyStatusWords(provider: ProviderKeyProvider, status: ProviderKeyStatus
       return `Out of quota or credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return "This key can no longer be read.";
+    case PROVIDER_KEY_STATUS.UNVERIFIED:
+      return "Not checked yet";
   }
 }
 
@@ -114,6 +116,8 @@ function rejectionWords(provider: ProviderKeyProvider, rejection: ProviderKeyRej
       return `Couldn't reach ${name} to check this key. Try again.`;
     case PROVIDER_KEY_REJECTION.TOO_MANY_TRIES:
       return "Too many keys tried in the last hour. Try again later.";
+    case PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN:
+      return `${name} couldn't confirm this sign-in. Sign in again.`;
   }
 }
 

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { BROWSER_STEP, type BrowserBounds, type BrowserPage } from "@luke/features/browser-acts";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { BROWSER_ACT_KIND } from "@luke/host/contract";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect } from "effect";
@@ -30,6 +30,7 @@ afterEach(() => {
 });
 
 const BROWSER_ID = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+const TASK_ID = "0b6c1e2d-3f4a-4b5c-8d6e-7f8091a2b3c4";
 const ADDRESS = "http://localhost:3000/";
 const BOUNDS: BrowserBounds = { x: 640, y: 48, width: 480, height: 720 };
 
@@ -59,9 +60,9 @@ function fixture(options: { experiment?: boolean } = {}) {
   const has = (sender: WebContents, browserId: string) =>
     opened.get(sender)?.has(browserId) === true;
   const views: BrowserViews = {
-    open: (sender, browserId, address) => {
+    open: (sender, browserId, address, taskId) => {
       opened.set(sender, (opened.get(sender) ?? new Set()).add(browserId));
-      heard.push(`open:${address}`);
+      heard.push(`open:${address}:${taskId}`);
       return pageAt(address);
     },
     navigate: (sender, browserId, address) => {
@@ -82,6 +83,11 @@ function fixture(options: { experiment?: boolean } = {}) {
       heard.push(`close:${browserId}`);
       opened.get(sender)?.delete(browserId);
     },
+    stop: (sender, browserId) => {
+      heard.push(`stop:${browserId}`);
+      return has(sender, browserId);
+    },
+    agentTabs: () => ({ list: () => [], open: () => undefined, close: () => false }),
   };
   const port = testActPort(browserProcedures({ views, experimentOn: () => experiment }));
   ports.push(port);
@@ -110,6 +116,7 @@ const REFUSAL = {
   [ACT_KIND.BROWSER_PLACE]: "Could not show the page.",
   [ACT_KIND.BROWSER_CAPTURE]: "Could not draw the page.",
   [ACT_KIND.BROWSER_CLOSE]: "Could not close the page.",
+  [ACT_KIND.BROWSER_STOP]: "Could not stop the agent.",
 } satisfies Record<BrowserActKind, string>;
 
 const refusedAs = (kind: BrowserActKind) => ({ refused: REFUSAL[kind] });
@@ -121,11 +128,14 @@ it.effect("a panel opens a page, then moves, places, and catches it, each on its
   Effect.gen(function* () {
     const { router, heard } = fixture();
     const panel = windowOf();
-    const payload = { browserId: BROWSER_ID, address: ADDRESS };
+    const payload = { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID };
 
     const opened = yield* router.performAct({ kind: ACT_KIND.BROWSER_OPEN, payload }, panel);
     const moved = yield* router.performAct(
-      { kind: ACT_KIND.BROWSER_NAVIGATE, payload: { ...payload, address: "https://example.com/" } },
+      {
+        kind: ACT_KIND.BROWSER_NAVIGATE,
+        payload: { browserId: BROWSER_ID, address: "https://example.com/" },
+      },
       panel,
     );
     const stepped = yield* router.performAct(
@@ -145,7 +155,7 @@ it.effect("a panel opens a page, then moves, places, and catches it, each on its
     assert.deepEqual([moved, stepped, placed], [done(), done(), done()]);
     assert.deepEqual(still, done("data:image/jpeg;base64,AAAA"));
     assert.deepEqual(heard, [
-      `open:${ADDRESS}`,
+      `open:${ADDRESS}:${TASK_ID}`,
       "navigate:https://example.com/",
       "step:back",
       "place:480x720",
@@ -156,11 +166,14 @@ it.effect("a panel opens a page, then moves, places, and catches it, each on its
 it.effect("a view another panel opened, or none opened, is refused rather than reached", () =>
   Effect.gen(function* () {
     const { router } = fixture();
-    const payload = { browserId: BROWSER_ID, address: ADDRESS };
+    const payload = { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID };
     yield* router.performAct({ kind: ACT_KIND.BROWSER_OPEN, payload }, windowOf());
 
     const other = windowOf();
-    const moved = yield* router.performAct({ kind: ACT_KIND.BROWSER_NAVIGATE, payload }, other);
+    const moved = yield* router.performAct(
+      { kind: ACT_KIND.BROWSER_NAVIGATE, payload: { browserId: BROWSER_ID, address: ADDRESS } },
+      other,
+    );
     const placed = yield* router.performAct(
       { kind: ACT_KIND.BROWSER_PLACE, payload: { browserId: BROWSER_ID, bounds: null } },
       other,
@@ -178,7 +191,7 @@ it.effect("a view another panel opened, or none opened, is refused rather than r
 
 it.effect("a window that is no panel, or a panel with the experiment off, reaches no page", () =>
   Effect.gen(function* () {
-    const payload = { browserId: BROWSER_ID, address: ADDRESS };
+    const payload = { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID };
     const voice = fixture();
     const fromVoice = yield* voice.router.performAct(
       { kind: ACT_KIND.BROWSER_OPEN, payload },
@@ -200,7 +213,7 @@ it.effect("a page opened before the experiment went off is still closed with its
   Effect.gen(function* () {
     const { router, heard, turnOff } = fixture();
     const panel = windowOf();
-    const payload = { browserId: BROWSER_ID, address: ADDRESS };
+    const payload = { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID };
     yield* router.performAct({ kind: ACT_KIND.BROWSER_OPEN, payload }, panel);
     turnOff();
 
@@ -218,7 +231,7 @@ it.effect("a page opened before the experiment went off is still closed with its
 
     assert.deepEqual(closed, done());
     assert.deepEqual(stepped, refusedAs(ACT_KIND.BROWSER_STEP));
-    assert.deepEqual(heard, [`open:${ADDRESS}`, `close:${BROWSER_ID}`]);
+    assert.deepEqual(heard, [`open:${ADDRESS}:${TASK_ID}`, `close:${BROWSER_ID}`]);
   }),
 );
 
@@ -229,7 +242,7 @@ it.effect("an address of another scheme never reaches a view", () =>
       // A forged payload, as a window that skipped its own parse would send it.
       {
         kind: ACT_KIND.BROWSER_OPEN,
-        payload: { browserId: BROWSER_ID, address: "file:///etc/passwd" },
+        payload: { browserId: BROWSER_ID, address: "file:///etc/passwd", taskId: TASK_ID },
       },
       windowOf(),
     );
@@ -244,7 +257,10 @@ it.effect("a sender this build does not trust reaches no page, in each kind's ow
     const { router, heard } = fixture();
     const untrusted = { trusted: false };
     const opened = yield* router.performAct(
-      { kind: ACT_KIND.BROWSER_OPEN, payload: { browserId: BROWSER_ID, address: ADDRESS } },
+      {
+        kind: ACT_KIND.BROWSER_OPEN,
+        payload: { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID },
+      },
       windowOf(),
       untrusted,
     );
@@ -266,7 +282,7 @@ it.effect("a key the payload does not name is refused rather than dropped", () =
     const opened = yield* router.performAct(
       {
         kind: ACT_KIND.BROWSER_OPEN,
-        payload: { browserId: BROWSER_ID, address: ADDRESS, frame: "top" },
+        payload: { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID, frame: "top" },
       },
       windowOf(),
     );
@@ -281,5 +297,32 @@ it.effect("a key the payload does not name is refused rather than dropped", () =
     assert.deepEqual(opened, refusedAs(ACT_KIND.BROWSER_OPEN));
     assert.deepEqual(placed, refusedAs(ACT_KIND.BROWSER_PLACE));
     assert.deepEqual(heard, []);
+  }),
+);
+
+it.effect("a panel's Stop reaches its own page, even with the experiment off, and no other's", () =>
+  Effect.gen(function* () {
+    const { router, heard, turnOff } = fixture();
+    const panel = windowOf();
+    const payload = { browserId: BROWSER_ID, address: ADDRESS, taskId: TASK_ID };
+    yield* router.performAct({ kind: ACT_KIND.BROWSER_OPEN, payload }, panel);
+    turnOff();
+
+    const stopped = yield* router.performAct(
+      { kind: ACT_KIND.BROWSER_STOP, payload: { browserId: BROWSER_ID } },
+      panel,
+    );
+    const fromOther = yield* router.performAct(
+      { kind: ACT_KIND.BROWSER_STOP, payload: { browserId: BROWSER_ID } },
+      windowOf(),
+    );
+
+    assert.deepEqual(stopped, done());
+    assert.deepEqual(fromOther, refusedAs(ACT_KIND.BROWSER_STOP));
+    assert.deepEqual(heard, [
+      `open:${ADDRESS}:${TASK_ID}`,
+      `stop:${BROWSER_ID}`,
+      `stop:${BROWSER_ID}`,
+    ]);
   }),
 );

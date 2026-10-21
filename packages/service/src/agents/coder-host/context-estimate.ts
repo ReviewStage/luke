@@ -3,14 +3,20 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import { LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
+import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
 import {
   READ_COMMENTS_TOOL,
   REOPEN_THREAD_TOOL,
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
-import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { END_CALL_TOOL } from "../../tasks/end-call.js";
+import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
+import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import { BROWSER_TOOL } from "../browser/browser-tool.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -23,12 +29,6 @@ import {
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
-import {
-  CREATE_ISSUE_TOOL,
-  LIST_ISSUES_TOOL,
-  READ_ISSUE_TOOL,
-  UPDATE_ISSUE_TOOL,
-} from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
@@ -175,22 +175,6 @@ const AUTHORED_TOOLS = {
     description: UPDATE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
   },
-  [CODER_TOOL.LIST_ISSUES]: {
-    description: LIST_ISSUES_TOOL.description,
-    inputSchema: emitJsonSchema(LIST_ISSUES_TOOL.inputSchema),
-  },
-  [CODER_TOOL.READ_ISSUE]: {
-    description: READ_ISSUE_TOOL.description,
-    inputSchema: emitJsonSchema(READ_ISSUE_TOOL.inputSchema),
-  },
-  [CODER_TOOL.CREATE_ISSUE]: {
-    description: CREATE_ISSUE_TOOL.description,
-    inputSchema: emitJsonSchema(CREATE_ISSUE_TOOL.inputSchema),
-  },
-  [CODER_TOOL.UPDATE_ISSUE]: {
-    description: UPDATE_ISSUE_TOOL.description,
-    inputSchema: emitJsonSchema(UPDATE_ISSUE_TOOL.inputSchema),
-  },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,
     inputSchema: emitJsonSchema(CHAT_TOOLS.POST.inputSchema),
@@ -213,8 +197,8 @@ const AUTHORED_TOOLS = {
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
-    description: SHOW_PAGE_TOOL.description,
-    inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+    description: CODER_SHOW_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(CODER_SHOW_PAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_COMMENTS]: {
     description: READ_COMMENTS_TOOL.description,
@@ -240,11 +224,39 @@ const AUTHORED_TOOLS = {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
   },
+  [CODER_TOOL.BROWSER]: {
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
+  },
   [CODER_TOOL.SHOW_IMAGE]: {
     description: SHOW_IMAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_IMAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.SLEEP]: shown(SLEEP_TOOL),
+  [CODER_TOOL.QUEUE_QUESTION]: {
+    description: QUEUE_QUESTION_TOOL.description,
+    inputSchema: emitJsonSchema(QUEUE_QUESTION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.WITHDRAW_QUESTION]: {
+    description: WITHDRAW_QUESTION_TOOL.description,
+    inputSchema: emitJsonSchema(WITHDRAW_QUESTION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.END_CALL]: {
+    description: END_CALL_TOOL.description,
+    inputSchema: emitJsonSchema(END_CALL_TOOL.inputSchema),
+  },
+  [CODER_TOOL.SHOW_CODE]: {
+    description: SHOW_CODE_TOOL.description,
+    inputSchema: emitJsonSchema(SHOW_CODE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.DRAW_ON_BOARD]: {
+    description: DRAW_ON_BOARD_TOOL.description,
+    inputSchema: emitJsonSchema(DRAW_ON_BOARD_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LOOK_AT_BOARD]: {
+    description: LOOK_AT_BOARD_TOOL.description,
+    inputSchema: emitJsonSchema(LOOK_AT_BOARD_TOOL.inputSchema),
+  },
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */
@@ -261,7 +273,7 @@ function estimatedTokens(json: string): number {
   return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
 }
 
-/** The definitions of the authored tools, estimated once: the same for every agent. */
+/** The definitions of the authored tools, estimated once: the same for every agent and every turn. */
 const TOOL_DEFINITION_TOKENS = estimatedTokens(
   JSON.stringify(Object.entries(AUTHORED_TOOLS).map(([name, tool]) => ({ name, ...tool }))),
 );

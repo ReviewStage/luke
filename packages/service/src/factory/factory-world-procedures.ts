@@ -16,11 +16,8 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { readFactoryWorld } from "./factory-world.js";
-
-/** The most a request body may hold: a workspace id. */
-const MAXIMUM_BODY_BYTES = 1_024;
 
 export interface FactoryProcedureSeams {
   readonly resolveUserId: UserIdResolver;
@@ -28,9 +25,7 @@ export interface FactoryProcedureSeams {
 
 /** The factory resource: the workspace's world, to any member of it. */
 export function factoryProcedures(seams: FactoryProcedureSeams) {
-  const factory = hosted.factory
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const factory = hosted.factory.use(accountMiddleware(seams.resolveUserId));
   return {
     world: factory.world.effect(function* ({ input, context }) {
       const workspace = yield* hostedStoreOrUnavailable(

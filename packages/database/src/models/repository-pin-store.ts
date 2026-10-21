@@ -2,7 +2,8 @@ import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@luke/features/task-w
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -76,6 +77,25 @@ const deletePin = SqlSchema.void({
 export function listRepositoryPins(userId: string): TaskStoreEffect<readonly RepositoryPin[]> {
   return Effect.map(findPins(userId), (rows) =>
     rows.map((row) => ({ repository: row.repository, pinnedAt: row.pinnedAt.getTime() })),
+  );
+}
+
+/**
+ * The account's pinned repositories written for Neon Realtime: the same rows
+ * as `listRepositoryPins`, the instant in epoch milliseconds, and the order
+ * the reader's to keep. None where a value cannot be carried.
+ */
+export function repositoryPinsLiveStatement(userId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          { repository: repositoryPin.repository },
+          { pinnedAt: repositoryPin.pinnedAt },
+        ),
+      )
+      .from(repositoryPin)
+      .where(eq(repositoryPin.userId, userId)),
   );
 }
 

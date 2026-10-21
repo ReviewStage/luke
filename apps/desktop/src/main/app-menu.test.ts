@@ -40,7 +40,6 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Home",
       "Inbox",
-      "Issues",
       "Automations",
       "-",
       "Back",
@@ -54,14 +53,7 @@ describe("the menu bar's gate", () => {
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), [
-      "Home",
-      "Issues",
-      "Automations",
-      "-",
-      "Back",
-      "Forward",
-    ]);
+    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Automations", "-", "Back", "Forward"]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
@@ -69,7 +61,6 @@ describe("the menu bar's gate", () => {
       (command) =>
         command !== APP_COMMAND.HOME &&
         command !== APP_COMMAND.INBOX &&
-        command !== APP_COMMAND.ISSUES &&
         command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);

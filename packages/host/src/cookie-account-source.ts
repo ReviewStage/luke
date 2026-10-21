@@ -63,6 +63,12 @@ const LAUNCH_REREAD = {
   TIMES: 5,
 } as const;
 
+/**
+ * Returns to the tab that come this close together are one return: a tab
+ * shown again is focused as well, and both events say so.
+ */
+const REVISIT_WINDOW = Duration.seconds(1);
+
 /** The answer `get-session` gives: the session's user, or `null` for none. */
 const SessionAnswerSchema = Schema.fromJsonString(
   Schema.NullOr(
@@ -116,6 +122,9 @@ export class CookieSessionFailed extends Data.TaggedError("CookieSessionFailed")
 
 /** A session read the service did not answer: an outage, never a sign-out. */
 class SessionUnreadable extends Data.TaggedError("SessionUnreadable") {}
+
+/** A session read a change of the account overtook while it was asked, which settles nothing. */
+class ReadSuperseded extends Data.TaggedError("ReadSuperseded") {}
 
 /** The account a session read settled on. */
 type SessionRead =
@@ -196,10 +205,29 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   let account: AccountSnapshot = SIGNED_OUT;
   /**
    * Moved by every change of the account, a press's or a read's, so a read
-   * begun before one settles nothing and a gate move made for one is passed
+   * begun before one settles nothing and an opening made for one is passed
    * over once a later change stands.
    */
   let generation = 0;
+  /** The generation a sign-in left the tab for the provider at, and nothing before it left. */
+  let departedAt: number | undefined;
+  /**
+   * The arrival a read last forked, with what settles once it is shown or
+   * passed over, so a confirmation waits for the person it confirms rather
+   * than reading the signed-out moment between two people.
+   */
+  let arrival: { readonly asOf: number; readonly shown: Deferred.Deferred<void> } | undefined;
+  // Note that a read or a gate move ending after the session closed settles
+  // nothing, because the composers it would move have stopped.
+  let closed = false;
+  const sessionScope = yield* Effect.scope;
+  yield* Effect.addFinalizer(() =>
+    Effect.suspend(() => {
+      closed = true;
+      // A confirmation waiting on an arrival the closing cut off waits no more.
+      return arrival ? Deferred.succeed(arrival.shown, undefined) : Effect.void;
+    }),
+  );
   const gateMoves = yield* Semaphore.make(1);
 
   const send = (call: AccountCallEffects, request: CallRequest): Effect.Effect<CallAnswer> =>
@@ -214,12 +242,43 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     });
 
   /**
-   * One move of the capability gate, taken in turn with every other, and
-   * passed over where a later change of the account superseded it, so a
-   * slow opening can never land after the closing a sign-out made.
+   * One move of the capability gate, taken in turn with every other, so a
+   * slow opening can never land after the closing a sign-out made. Note that
+   * a closing always runs, however many changes came after it, because no
+   * later move closes what it would have; only an opening checks that no
+   * later change passed it over (`arrive`).
    */
-  const moveGate = (asOf: number, move: Effect.Effect<void>): Effect.Effect<void> =>
-    gateMoves.withPermits(1)(Effect.suspend(() => (asOf === generation ? move : Effect.void)));
+  const moveGate = (move: Effect.Effect<void>): Effect.Effect<void> =>
+    gateMoves.withPermits(1)(Effect.suspend(() => (closed ? Effect.void : move)));
+
+  /**
+   * The closings departures published and have not yet carried out. Note
+   * that a departure registers its closing as it is published, before its
+   * settings are dropped and its closing takes the gate, and an arrival waits
+   * for every closing registered before it, so no opening lands between a
+   * departure and its closing and the closing then resets the arrival's.
+   */
+  const closings = new Set<Deferred.Deferred<void>>();
+
+  /** A departure begun: the account moved on, and its closing registered to come. */
+  const depart: Effect.Effect<Deferred.Deferred<void>> = Effect.map(
+    Deferred.make<void>(),
+    (closing) => {
+      generation += 1;
+      closings.add(closing);
+      return closing;
+    },
+  );
+
+  /** A departure's closing, taken in turn, and carried out whatever becomes of it. */
+  const close = (closing: Deferred.Deferred<void>): Effect.Effect<void> =>
+    Effect.ensuring(
+      moveGate(host.stopCapabilities),
+      Effect.suspend(() => {
+        closings.delete(closing);
+        return Deferred.succeed(closing, undefined);
+      }),
+    );
 
   /** A settings step of an account change, whose failure is reported and never holds the change up. */
   const settingsStep = (step: Effect.Effect<unknown, Error>, what: string): Effect.Effect<void> =>
@@ -260,6 +319,49 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       return Effect.asVoid(PubSub.publish(changesPubSub, next));
     });
 
+  /** Settles on `next` only while no later change stands, checked as it is published. */
+  const settleOnAsOf = (asOf: number, next: AccountSnapshot): Effect.Effect<void> =>
+    Effect.suspend(() => (asOf === generation && !closed ? settleOn(next) : Effect.void));
+
+  /**
+   * An arrival, as a gate move: the capabilities of whoever stood before
+   * stopped first where someone did, so the arrival is never drawn over the
+   * previous person's tasks, terminals or agents; then the settings settled
+   * on the arrival, the arrival shown, which settles `shown`, and its
+   * capabilities started. The stop always runs; each step after it is passed
+   * over once a later change stands.
+   */
+  const arrive = (
+    asOf: number,
+    arriving: AccountSnapshot,
+    afterSomeone: boolean,
+    shown: Deferred.Deferred<void>,
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      if (afterSomeone) yield* host.stopCapabilities;
+      if (asOf !== generation) return;
+      yield* settleArrival(arriving);
+      yield* settleOnAsOf(asOf, arriving);
+      yield* Deferred.succeed(shown, undefined);
+      if (asOf !== generation) return;
+      yield* host.startCapabilities;
+    });
+
+  /**
+   * A read that names nobody while nobody stands. An arrival still on its
+   * way is passed over; and a sign-in the tab came back from unfinished,
+   * such as through the back button from the provider's page restoring this
+   * one, ends. A sign-in still asking the service for the provider's address
+   * stands, since that read may predate the session it is about to make.
+   */
+  const settleNobody: Effect.Effect<void> = Effect.suspend(() => {
+    if (account.status === ACCOUNT_STATUS.SIGNING_IN && departedAt !== generation) {
+      return Effect.void;
+    }
+    generation += 1;
+    return account.status === ACCOUNT_STATUS.SIGNING_IN ? settleOn(SIGNED_OUT) : Effect.void;
+  });
+
   /** One read of the session: who it names, nobody, or no answer at all. */
   const readSession: Effect.Effect<SessionRead, SessionUnreadable> = Effect.gen(function* () {
     const answer = yield* send(authCall, {
@@ -281,58 +383,81 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 
   /**
-   * One read settled on: the account published, and the capability gate's
-   * move forked rather than run, because a refused call's renewal may hold a
-   * lock the gate's closing needs (the Plans read holds the tasks lock, and
-   * `tasks.reset` waits on it). Answers the gate's move, for a caller that
-   * holds no such lock to wait on.
+   * One read settled on: a departure published at once, and the capability
+   * gate's move, with any arrival inside it, forked rather than run, because
+   * a refused call's renewal may hold a lock the gate's closing needs (the
+   * Plans read holds the tasks lock, and `tasks.reset` waits on it). Answers
+   * the gate's move, for a caller that holds no such lock to wait on. A read
+   * a change overtook fails with `ReadSuperseded`.
    */
-  const settleRead: Effect.Effect<Fiber.Fiber<void> | undefined, SessionUnreadable> = Effect.gen(
-    function* () {
-      if (!runMode.requiresAccount || !runMode.sendsNetwork) return undefined;
-      const asked = generation;
-      const read = yield* readSession;
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          if (asked !== generation) return undefined;
-          const standing = signedInId(account);
-          if (!read.signedIn) {
-            if (standing === undefined) return undefined;
-            const asOf = ++generation;
-            yield* settleOn(SIGNED_OUT);
-            yield* forgetDeparted;
-            return yield* Effect.forkDetach(moveGate(asOf, host.stopCapabilities));
-          }
-          // The same person, drawn anew where anything of them changed.
-          if (standing !== undefined && standing === signedInId(read.account)) {
-            if (!sameAccount(account, read.account)) yield* settleOn(read.account);
-            return undefined;
-          }
-          // Note that another person's session, such as a sign-in in another
-          // tab, is a departure and an arrival, never a swap under the gate.
-          const asOf = ++generation;
-          if (standing !== undefined) {
-            yield* settleOn(SIGNED_OUT);
-            yield* forgetDeparted;
-          }
-          yield* settleArrival(read.account);
-          yield* settleOn(read.account);
-          return yield* Effect.forkDetach(
-            moveGate(
-              asOf,
-              standing === undefined
-                ? host.startCapabilities
-                : Effect.andThen(host.stopCapabilities, host.startCapabilities),
+  const settleRead: Effect.Effect<
+    Fiber.Fiber<void> | undefined,
+    SessionUnreadable | ReadSuperseded
+  > = Effect.gen(function* () {
+    if (!runMode.requiresAccount || !runMode.sendsNetwork) return undefined;
+    const asked = generation;
+    const read = yield* readSession;
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        if (closed) return undefined;
+        if (asked !== generation) return yield* new ReadSuperseded();
+        const standing = signedInId(account);
+        if (!read.signedIn) {
+          if (standing === undefined) return yield* Effect.as(settleNobody, undefined);
+          const closing = yield* depart;
+          const steps = yield* Effect.exit(Effect.andThen(settleOn(SIGNED_OUT), forgetDeparted));
+          const moved = yield* Effect.forkIn(close(closing), sessionScope);
+          yield* steps;
+          return moved;
+        }
+        // The same person, drawn anew where anything of them changed.
+        if (standing !== undefined && standing === signedInId(read.account)) {
+          if (!sameAccount(account, read.account)) yield* settleOn(read.account);
+          return undefined;
+        }
+        // Note that another person's session, such as a sign-in in another
+        // tab, is a departure and an arrival, never a swap under the gate:
+        // the departure is shown now, the arrival only once the gate closed.
+        const asOf = ++generation;
+        if (standing !== undefined) {
+          yield* settleOn(SIGNED_OUT);
+          yield* forgetDeparted;
+        }
+        const shown = yield* Deferred.make<void>();
+        arrival = { asOf, shown };
+        const departures = [...closings];
+        return yield* Effect.forkIn(
+          Effect.ensuring(
+            Effect.andThen(
+              Effect.forEach(departures, Deferred.await, { discard: true }),
+              moveGate(arrive(asOf, read.account, standing !== undefined, shown)),
             ),
-          );
-        }),
-      );
-    },
-  );
+            Deferred.succeed(shown, undefined),
+          ),
+          sessionScope,
+        );
+      }),
+    );
+  });
 
   // One read at a time however many ask at once, every ask joining the one
   // under way; a read that ended is never reused, so the next ask reads again.
-  const reread = yield* Effect.cachedWithTTL(settleRead, Duration.zero);
+  const joinRead = yield* Effect.cachedWithTTL(settleRead, Duration.zero);
+  // Note that an ask that joined a read a change then overtook, such as a
+  // sign-out pressed while it was asked, reads again rather than settling on
+  // nothing, so a confirmation always answers for a read begun after it asked.
+  const reread = Effect.retry(joinRead, {
+    while: (error) => error._tag === "ReadSuperseded",
+  });
+
+  /** The arrival under way shown, while no later change passed it over; not its capabilities' starting. */
+  const arrivalSettled: Effect.Effect<void> = Effect.suspend(() =>
+    arrival?.asOf === generation ? Deferred.await(arrival.shown) : Effect.void,
+  );
+
+  // The account the service names now, the arrival a switch to it makes waited for.
+  const confirmAccount = (): Effect.Effect<void> =>
+    Effect.andThen(Effect.ignore(reread), arrivalSettled);
 
   const token: AccountToken = {
     // A cookie session holds no bearer: what reads one reads nothing.
@@ -344,9 +469,24 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
 
   // No header at all: the cookie rides the request, a refusal re-reads the
   // session, and the holder is the person the session named when the call began.
-  const credential: CallCredential = {
+  const signedInCredential: CallCredential = {
     renew: token.refreshAccount,
     holder: () => Effect.sync(() => signedInId(account)),
+  };
+  // Note that signed out, the call has nothing to go under, which an
+  // authorization that reads nothing says: the call answers no credential
+  // without going out, so a sender keeps what it queued for the sign-in, and
+  // a renewal still re-reads the session.
+  const signedOutCredential: CallCredential = {
+    authorization: () => Effect.succeed(undefined),
+    renew: token.refreshAccount,
+    holder: () => Effect.succeed(undefined),
+  };
+  const credential: CallCredential = {
+    resolve: () =>
+      Effect.sync(() =>
+        signedInId(account) === undefined ? signedOutCredential : signedInCredential,
+      ),
   };
 
   /**
@@ -356,10 +496,9 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
    */
   const leave: Effect.Effect<void> = Effect.uninterruptible(
     Effect.gen(function* () {
-      const asOf = ++generation;
-      yield* settleOn(SIGNED_OUT);
-      yield* forgetDeparted;
-      yield* moveGate(asOf, host.stopCapabilities);
+      const closing = yield* depart;
+      // The closing a departure registered is carried out however its steps end.
+      yield* Effect.ensuring(Effect.andThen(settleOn(SIGNED_OUT), forgetDeparted), close(closing));
     }),
   );
 
@@ -398,28 +537,39 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         if (started === generation) yield* settleOn(SIGNED_OUT);
         return yield* Effect.fail(left.failure);
       }
+      if (left.success) departedAt = generation;
       // The tab is leaving for the provider; the account lands on the page it comes back to.
       return account;
     });
 
-  const refreshOnce = (): Effect.Effect<void> =>
-    reread.pipe(
-      Effect.retry({
-        schedule: Schedule.exponential(LAUNCH_REREAD.FIRST),
-        times: LAUNCH_REREAD.TIMES,
-      }),
+  /** A read settled on, and the gate's move it made waited for. */
+  const settled = (read: typeof reread): Effect.Effect<void> =>
+    read.pipe(
       Effect.flatMap((moved) => (moved === undefined ? Effect.void : Fiber.await(moved))),
       Effect.ignore,
     );
 
-  // Every return to the tab reads the session again, for as long as the
-  // session stands open, but only once the launch's own read has settled, so
-  // that read's older answer can never land over a newer one.
+  // The launch's own check, which alone retries a service it could not read.
+  const refreshOnce = (): Effect.Effect<void> =>
+    settled(
+      Effect.retry(reread, {
+        schedule: Schedule.exponential(LAUNCH_REREAD.FIRST),
+        times: LAUNCH_REREAD.TIMES,
+      }),
+    );
+
+  // Every return to the tab reads the session again, once and unretried, for
+  // as long as the session stands open, but only once the launch's own read
+  // has settled, so that read's older answer can never land over a newer one.
+  // Note that returns made while a read is under way keep only the latest,
+  // and returns close together are one, so an outage piles up no reads.
   const initialized = yield* Deferred.make<void>();
+  const returns = door.revisits.pipe(
+    Stream.buffer({ capacity: 1, strategy: "sliding" }),
+    Stream.throttle({ cost: () => 1, units: 1, duration: REVISIT_WINDOW, strategy: "enforce" }),
+  );
   yield* Effect.forkScoped(
-    Stream.runForEach(door.revisits, () =>
-      Effect.andThen(Deferred.await(initialized), refreshOnce()),
-    ),
+    Stream.runForEach(returns, () => Effect.andThen(Deferred.await(initialized), settled(reread))),
   );
 
   return {
@@ -438,10 +588,13 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         Result.isSuccess(settled) && settled.success.signedIn
           ? settled.success.account
           : SIGNED_OUT;
-      // A change that landed while the launch read, a refused call's, stands over it.
+      // A change that landed while the launch read, a refused call's, stands
+      // over it, its arrival shown first so the launch answers that person.
       if (asked === generation) {
         yield* settleArrival(initial);
         account = initial;
+      } else {
+        yield* arrivalSettled;
       }
       yield* Deferred.succeed(initialized, undefined);
       return account;
@@ -496,7 +649,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         return account;
       }),
     refreshOnce,
-    confirmAccount: () => Effect.ignore(reread),
+    confirmAccount,
     token,
     credential,
     sessionCredential: credential,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { loopbackConsent } from "@luke/credentials/node";
-import type { HostSeams } from "@luke/host";
+import type { SecretCipher as SecretCipherSeam } from "@luke/host";
 import {
   ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
@@ -29,13 +29,14 @@ import type { DesktopConfig } from "./desktop-config";
 interface HostSeamDependencies {
   config: DesktopConfig;
   /** The client's own credential protection; the host encrypts nothing without it. */
-  cipher: HostSeams["cipher"];
+  cipher: SecretCipherSeam;
 }
 
 /** Every seam tag this process answers for, each stood up from what the launch already established. */
 function hostSeamLayersFor(dependencies: HostSeamDependencies) {
   const { config, cipher } = dependencies;
   const { runMode } = config;
+  const consent = Layer.succeed(SignInConsent, { open: loopbackConsent });
   return Layer.mergeAll(
     Layer.succeed(StateRoot, config.stateRoot),
     Layer.succeed(RunMode, runMode),
@@ -46,14 +47,13 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(VoiceSocket, openVoiceSocketOverWs),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
-    // cipher. The sign-in's consent is a loopback on this Mac: the browser
-    // hands the code back to a `node:http` listener on 127.0.0.1.
+    // cipher. Every sign-in's consent is a loopback on this Mac: the browser
+    // hands the code back to a `node:http` listener on 127.0.0.1, the
+    // account's and ChatGPT's alike.
+    consent,
     Layer.provide(
       oauthAccountSourceLayer,
-      Layer.merge(
-        Layer.succeed(SecretCipher, cipher),
-        Layer.succeed(SignInConsent, { open: loopbackConsent }),
-      ),
+      Layer.merge(Layer.succeed(SecretCipher, cipher), consent),
     ),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.

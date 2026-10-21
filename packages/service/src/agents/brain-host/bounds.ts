@@ -136,8 +136,9 @@ export type RelayTurn = (typeof RELAY_TURN)[keyof typeof RELAY_TURN];
  * delegation's id, while eve's input is the question the service composed
  * around it, already on record on the ask. Writing that input as a user row
  * too would leave two developer lines for one utterance, read back to the
- * brain twice, so the relay writes none for a spoken turn and instead ties the
- * transcript's row, which shares the ask's client id, to the turn.
+ * brain twice, so the relay writes none for a spoken ask's line and instead
+ * ties the transcript's row, which shares the ask's client id, to the turn,
+ * whether the ask opened a spoken turn or joined a typed one under way.
  */
 export const RECEIVED_LINE = {
   /** The relay writes eve's received message as the turn's user row. */
@@ -148,7 +149,7 @@ export const RECEIVED_LINE = {
 
 export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 
-/** The run stream's origin and trigger for each kind of turn the relay records, and whose row its received message is. */
+/** The run stream's origin and trigger for each kind of turn the relay records, and whose row the line that opens it is; a line that joins the turn under way is told apart as it arrives (`relay.ts`'s `#received`). */
 export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.TYPED]: {
     origin: BRAIN_TURN_ORIGIN.TYPED,
@@ -181,6 +182,13 @@ export const BRAIN_HOST_ENVIRONMENT = {
   MODEL_FIXTURE: "LUKE_BRAIN_MODEL_FIXTURE",
   /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/v1/*` rewrite. */
   EVE_ORIGIN: "LUKE_EVE_ORIGIN",
+  /**
+   * The secret the deployment acts for an account under at eve's door, read on
+   * both sides of it: the web functions and each eve service send it, and both
+   * eve services admit it. It is never the cron's `CRON_SECRET`, so the bearer
+   * Vercel's scheduler holds opens no eve session.
+   */
+  DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",
 } as const;
 
 /** The one fixture the model environment may name, and the model id its turns are recorded under. */

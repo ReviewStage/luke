@@ -2,17 +2,12 @@
  * app-bridge.ts -- the bridge and act port a test's window reaches main through: fakes answering only the calls its test gives them.
  */
 
-import {
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
-} from "@luke/host/acts";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@luke/features/automation-view";
 import type { AppBridge } from "@luke/host/bridge";
 import {
   ACT_ERROR,
   type ActPortClient,
+  AUTOMATION_ACT_KIND,
   actContract,
   type PortActKind,
   type PortActPayload,
@@ -38,14 +33,87 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
+/** What a follow of the automations pushes: a workspace's list, or an automation's runs. */
+type FollowedView =
+  PortActResult<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW> extends AsyncIteratorObject<
+    infer View,
+    unknown,
+    unknown
+  >
+    ? View
+    : never;
+
+/** A stream that hands what `first` answers and then stands open, as the host's follow does while nothing moves, until the window closes it. */
+function heldOpen(
+  first: Promise<FollowedView>,
+): AsyncIteratorObject<FollowedView, undefined, unknown> {
+  let handed = false;
+  const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
+  const closed = ended.promise;
+  const close = () => ended.resolve({ done: true, value: undefined });
+  const stream: AsyncIteratorObject<FollowedView, undefined, unknown> = {
+    next: async () => {
+      if (handed) return closed;
+      handed = true;
+      return { done: false, value: await first };
+    },
+    return: async () => {
+      close();
+      return { done: true, value: undefined };
+    },
+    [Symbol.asyncIterator]: () => stream,
+    [Symbol.asyncDispose]: async () => {
+      close();
+    },
+  };
+  return stream;
+}
+
+/**
+ * A follow of the automations a test does not answer itself, answered from
+ * the one-shot read it does answer: a workspace's list, or an automation's
+ * runs, pushed once and held open.
+ */
+function followedFromReads(
+  read: (scope: AutomationFollow) => Promise<FollowedView>,
+): (
+  scope: AutomationFollow,
+) => Promise<PortActResult<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW>> {
+  // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+  return (scope) =>
+    Promise.resolve(
+      heldOpen(read(scope)) as unknown as PortActResult<
+        typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
+      >,
+    );
+}
+
 /**
  * Installs an act port answering only the procedures given, each by its
- * kind, as a test's window calls them.
+ * kind, as a test's window calls them. A follow of the automations it does
+ * not answer is answered from the list's or the runs' read where it answers
+ * that.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
-  answeringPort = procedures;
+  const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
+  const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
+  const answered: Partial<FakeActPort> =
+    procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW] !== undefined ||
+    (list === undefined && runs === undefined)
+      ? procedures
+      : {
+          ...procedures,
+          [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: followedFromReads((scope) => {
+            const read =
+              scope.kind === AUTOMATION_FOLLOW.WORKSPACE
+                ? list?.({ workspaceId: scope.id })
+                : runs?.({ automationId: scope.id });
+            return read ?? Promise.reject(new Error("Not in this test."));
+          }),
+        };
+  answeringPort = answered;
   // SAFETY: a test's window calls only the procedures its test answers, and any other is undefined and throws where it is called.
-  installActPortClient(procedures as ActPortClient);
+  installActPortClient(answered as ActPortClient);
 }
 
 /** The procedures the fake act port answers now, for a test that answers one more beside them or puts them back. */
@@ -117,43 +185,65 @@ type PortAct = {
     : { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[PortActKind];
 
-/** One act a test's window sent, on `app:act` or on its act port. */
-export type AnyAct = Act | PortAct;
+/** One act a test's window sent on its act port, its payload typed by its kind. */
+export type AnyAct = PortAct;
 
-/** What a test answers any act with, in `app:act`'s outcome's shape, a port kind's value among them. */
-export type AnyActOutcome =
-  | ActOutcome
-  | {
-      readonly status: typeof ACT_OUTCOME_STATUS.DONE;
-      readonly value: ActResultFor<ActKind> | PortActResult<PortActKind>;
-    };
+/** How a test's switch answers an act: with the kind's value, refused in a sentence, or not at all. */
+export const FAKE_ANSWER = {
+  DONE: "done",
+  REFUSED: "refused",
+  /** A kind the switch does not answer, which the port rejects as a kind this build does not know. */
+  UNKNOWN_ACT: "unknown-act",
+} as const;
 
-let answeringActs: ((request: AnyAct) => Promise<AnyActOutcome>) | undefined;
+/** What a test's switch answers any act with: a kind's value, a refusal's sentence, or no answer. */
+export type FakeActAnswer =
+  | { readonly status: typeof FAKE_ANSWER.DONE; readonly value: PortActResult<PortActKind> }
+  | { readonly status: typeof FAKE_ANSWER.REFUSED; readonly reason: string }
+  | { readonly status: typeof FAKE_ANSWER.UNKNOWN_ACT };
+
+let answeringActs: ((request: AnyAct) => Promise<FakeActAnswer>) | undefined;
 
 /** The answer {@link fakeActs} installed last, for a test that answers a kind more over it. */
-export function fakeActsAnswer(): (request: AnyAct) => Promise<AnyActOutcome> {
+export function fakeActsAnswer(): (request: AnyAct) => Promise<FakeActAnswer> {
   const answer = answeringActs;
   if (answer === undefined) throw new Error("No acts are answered in this test yet.");
   return answer;
 }
 
 /**
- * Installs a bridge and an act port both answered by `calls.act`, as a test
- * whose one switch answers kinds on either side does: on the port, a done
- * outcome is the kind's bare value, a refusal is the port's refusal in its
- * sentence, and a kind the switch does not know rejects, as the bridge
- * answers each. The bridge's other calls are the rest of `calls`.
+ * Installs an act port answered by `calls.act`, as a test whose one switch
+ * answers every kind does: a done answer is the kind's bare value, a refusal
+ * is the port's refusal in its sentence, and a kind the switch does not know
+ * rejects. The bridge's calls are the rest of `calls`.
  */
 export function fakeActs(
-  calls: Omit<Partial<AppBridge>, "act"> & {
-    readonly act: (request: AnyAct) => Promise<AnyActOutcome>;
+  calls: Partial<AppBridge> & {
+    readonly act: (request: AnyAct) => Promise<FakeActAnswer>;
   },
 ): void {
-  const answer = calls.act;
+  const { act: answer, ...bridge } = calls;
   answeringActs = answer;
-  // SAFETY: the test's switch answers each `app:act` kind in that kind's own outcome.
-  fakeAppBridge({ ...calls, act: answer as AppBridge["act"] });
+  fakeAppBridge(bridge);
   const procedures: Partial<FakeActPort> = {};
+  /** One act answered by the switch: the kind's value, or the port's refusal or rejection. */
+  const settled = (kind: PortActKind, outcome: FakeActAnswer): PortActResult<PortActKind> => {
+    if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
+    if (outcome.status === FAKE_ANSWER.REFUSED) throw refusedOnPort(outcome.reason);
+    throw new Error(`Luke does not know the act ${kind}.`);
+  };
+  const answered = async (request: PortAct): Promise<PortActResult<PortActKind>> =>
+    settled(request.kind, await answer(request));
+  // A follow of the automations the switch does not answer, or refuses as one not in its test, is answered from its list's or runs' read.
+  const followed = followedFromReads(
+    (scope) =>
+      // SAFETY: a list's read answers a workspace's list, and a runs' read an automation's runs.
+      answered(
+        scope.kind === AUTOMATION_FOLLOW.WORKSPACE
+          ? { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_LIST, payload: { workspaceId: scope.id } }
+          : { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS, payload: { automationId: scope.id } },
+      ) as Promise<FollowedView>,
+  );
   // SAFETY: the contract's keys are exactly its kinds.
   for (const kind of Object.keys(actContract) as PortActKind[]) {
     // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
@@ -161,10 +251,10 @@ export function fakeActs(
       [kind]: async (payload: WireBoundaryInput) => {
         // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
+        if (request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW) return answered(request);
         const outcome = await answer(request);
-        if (outcome.status === ACT_OUTCOME_STATUS.DONE) return outcome.value;
-        if (outcome.status === ACT_OUTCOME_STATUS.REFUSED) throw refusedOnPort(outcome.reason);
-        throw new Error(`Luke does not know the act ${kind}.`);
+        if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
+        return followed(request.payload);
       },
     });
   }

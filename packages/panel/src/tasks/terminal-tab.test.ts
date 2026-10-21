@@ -11,9 +11,10 @@ import {
 } from "@luke/features/terminal-acts";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
-import { ACT_KIND, type Act, type ActKind } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   ACT_ERROR,
+  type PortActKind,
   type PortActPayload,
   type PortActResult,
   type TERMINAL_ACT_KIND,
@@ -30,11 +31,11 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
-import { TerminalCardFoot } from "./terminal-shells.js";
+import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 
 /**
@@ -89,8 +90,8 @@ type TerminalAct = {
   [Kind in TerminalKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[TerminalKind];
 
-/** Any act the tab sends, on `app:act` or on its act port. */
-type SentAct = Act | TerminalAct;
+/** Any act the tab sends on its act port. */
+type SentAct = AnyAct | TerminalAct;
 
 /** What main answers and posts, as the test stages it. */
 interface Main {
@@ -99,7 +100,7 @@ interface Main {
   /** The sandbox's list as `terminal.list` answers it, which a test may change. */
   listed: TerminalsAnswer;
   /** The kinds main refuses outright, as it does when the service cannot be reached. */
-  readonly down: Set<ActKind | TerminalKind>;
+  readonly down: Set<PortActKind | TerminalKind>;
   /** What `terminal.create` answers in place of a shell, where the sandbox refuses one. */
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.list` answers in place of the list, where the service refuses it. */
@@ -107,7 +108,7 @@ interface Main {
   /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
   /** The kinds whose answers are held back until the test lets them go. */
-  readonly holding: Set<ActKind | TerminalKind>;
+  readonly holding: Set<PortActKind | TerminalKind>;
   /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
@@ -758,7 +759,7 @@ test("a tab taken down with attaches out for two shells closes both ports, which
 });
 
 /** The payload of the last act of the kind the tab sent, as main received it. */
-function lastPayload(kind: ActKind | TerminalKind) {
+function lastPayload(kind: PortActKind | TerminalKind) {
   const request = main.sent.findLast((each) => each.kind === kind);
   assert.ok(request, `the tab sent ${kind}`);
   return "payload" in request ? request.payload : undefined;
@@ -953,9 +954,19 @@ test("the tab's card counts the agent's shells as the tab last read them", async
   assert.equal(foot, "Terminal in this agent’s sandbox · 2 shells");
 });
 
-test("the list's foot names the agent and where it stands", async () => {
+test("a terminal's row in the panel's + says how the sandbox stands, leaving whether the agent works to its glyph", async () => {
   const tab = await mount();
-  assert.equal(tab.container.querySelector(".terminal-shells-foot")?.textContent, "Working…");
+  const standing = renderToStaticMarkup(
+    onRegistry(tab.registry, createElement(TerminalStanding, { agent: AGENT })),
+  );
+  assert.equal(standing, "2 shells");
+});
+
+test("the list's foot names the agent, its glyph saying it works with no word repeating it", async () => {
+  const tab = await mount();
+  const foot = tab.container.querySelector(".terminal-shells-foot");
+  assert.equal(foot?.textContent, "Invite flow");
+  assert.ok(foot?.querySelector('[role="img"][aria-label="Working"]'));
 });
 
 test("a sandbox that stops under a connected shell is read again, and the list says it holds no shells", async () => {
@@ -966,7 +977,10 @@ test("a sandbox that stops under a connected shell is read again, and the list s
   port.say({ type: "state", state: "stopped" });
   await settle();
   assert.equal(tab.container.querySelector(".terminal-shells-none")?.textContent, "No shells.");
-  assert.equal(tab.container.querySelector(".terminal-shells-foot")?.textContent, "Working…");
+  assert.equal(
+    tab.container.querySelector(".terminal-shells-foot")?.textContent,
+    "Sandbox stopped",
+  );
   assert.equal(
     tab.container.querySelector<HTMLButtonElement>('button[aria-label="New shell"]')?.disabled,
     true,

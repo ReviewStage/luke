@@ -238,7 +238,7 @@ function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn
  * A coding agent's transcript, or one of its workers', as a copy reads it:
  * the first of the developer's messages is the brief, the plan or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
- * agent's call carried. The rest are turns: the developer's words, a chat
+ * agent's call carried; an agent started blank has none. The rest are turns: the developer's words, a chat
  * notice's under the member it tells of a message from, and the agent's
  * rows as its tab draws them, a line that reached a turn while it ran
  * between the turn's work before and after it, as the tab draws it.
@@ -254,9 +254,13 @@ export function agentTranscript(input: {
 }): CopiedTranscript {
   const { title, brief, task, chatOn } = input;
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
-  const first = messages.find(
-    (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
-  );
+  // An agent started blank was handed nothing, so its first line is copied as a turn of the developer's.
+  const first =
+    brief === CODING_AGENT_BRIEF.BLANK && task === undefined
+      ? undefined
+      : messages.find(
+          (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+        );
   const label =
     task !== undefined
       ? BRIEF_LABEL.SUBAGENT_TASK

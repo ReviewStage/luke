@@ -93,7 +93,6 @@ export function BreakdownChart({
                 position="right"
                 offset={8}
                 className="fill-(--luke-color-text-muted)"
-                fontSize={12}
               />
             </Bar>
           ))}

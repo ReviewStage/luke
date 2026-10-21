@@ -27,15 +27,17 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { taskWorkspace } from "../../github/workspace-repository.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
-import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
+import { providerModelOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { PLAN_SAVE_REFUSAL } from "../../tasks/plan-notes.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
+import { standingContext } from "../agent-runtime/standing-context.js";
+import { browserSessionOf } from "../browser/agent-browser.js";
 import { CHAT_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../coder-host/plan-edit.js";
+import { sessionsRouter } from "../coder-host/runtime-sessions.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { AGENT_CALLER } from "../coding-agent-tools.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
@@ -51,7 +53,7 @@ import {
 } from "./bounds.js";
 import {
   BRAIN_INSTRUCTIONS,
-  brainStandingContext,
+  type BrainToolServices,
   brainToolDeclarations,
   EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
@@ -199,11 +201,7 @@ export interface BrainHost extends HostAdmission {
     binding: HostedToolBinding,
     input: UnparsedWireValue,
     context: EveToolContext,
-  ): Effect.Effect<
-    WireRecord,
-    QueryError | Schema.SchemaError,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
-  >;
+  ): Effect.Effect<WireRecord, QueryError | Schema.SchemaError, BrainToolServices>;
   /**
    * The model one inference runs on and the effort it is asked for, as a
    * coding agent's step is told its own, the meter spent for the account
@@ -393,7 +391,11 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 {
                   // Composed to send no message at all: the deployment acting for the
                   // conversation's owner here cancels a turn and does nothing else.
-                  eve: eve<never>({ origin, caller: { secret, account: target.userId } }),
+                  eve: eve<never>({
+                    origin,
+                    caller: { secret, account: target.userId },
+                    mount: EVE_MOUNT.TASKS,
+                  }),
                   writer,
                   now: seams.now,
                   report: (message) => console.warn(message),
@@ -451,7 +453,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           task === undefined
             ? Option.none()
             : yield* readPlanCommentThreads(admitted.caller, task.task.id);
-        const text = brainStandingContext(
+        const text = standingContext(
           task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           chat,
@@ -501,22 +503,36 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const secret = seams.deploymentSecret();
         const origin = seams.eveOrigin();
         const eve = yield* eveSessionsComposer;
+        // Each coding agent is answered by the runtime its conversation runs on (`coder-host/runtime-sessions.ts`).
+        const route = yield* sessionsRouter;
         const coder =
           secret === undefined || origin === undefined
             ? undefined
-            : eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER });
+            : route(
+                eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER }),
+                caller,
+              );
         // A chat notice reaches an agent's session as the deployment acting for the account that
         // started it, each notice minted for that starter; nothing where the deployment reaches no eve.
         const eveFor = (starter: string) =>
           secret === undefined || origin === undefined
             ? undefined
-            : eve({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+            : route(
+                eve({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER }),
+                starter,
+              );
         return yield* runBrainTool(
           name,
           task === undefined
             ? undefined
             : {
                 task: { userId: caller, taskId: task.task.id },
+                // The browser in the root's sandbox, a worker's its parent's, and its tabs the task's.
+                browser: {
+                  browserSession: browserSessionOf(context.session),
+                  conversationId: standing.success.target.conversationId,
+                  openSandbox: () => context.getSandbox(),
+                },
                 // The repository as the row holds it now, so a task given one mid-conversation reads it on its next call.
                 repository: {
                   task: { userId: caller, taskId: task.task.id },
@@ -567,7 +583,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     model: (admitted) => modelFor(admitted),
 
-    relaysQuietly: foldedQuietly,
+    relaysQuietly: (event, state) => foldedQuietly(event, state, seams.now()),
 
     relay: (event, admitted, session, state, prompt, chat) =>
       Effect.gen(function* () {

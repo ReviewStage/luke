@@ -8,12 +8,19 @@
  * decide, and comes back as the panel's own answer. Nothing is held here.
  */
 
+import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
 import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
+  type TaskHistoryFollow,
+  type TaskHistoryFollowed,
+  type TaskPagesFollow,
+  type TaskPagesFollowed,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksBrowserTabsAnswer,
+  type TasksBrowserTabsParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -61,11 +68,12 @@ import {
   type TasksTreeParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
-import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
-import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
+import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
+import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /** What the task procedures are handed: the host, and the doors of the window's process they open or read. */
 export interface TasksProceduresDependencies {
@@ -96,11 +104,20 @@ export interface TasksProceduresDependencies {
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
     tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
     tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+    tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
     tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
     tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
+    /** A plan's pages followed at the host, their changes heard through `onTaskPagesChanged`. */
+    tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
+    tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
+    onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+    /** A plan's newest page of history followed at the host, its changes heard through `onTaskHistoryChanged`. */
+    tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+    tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
+    onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
     tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
@@ -115,12 +132,8 @@ export interface TasksProceduresDependencies {
   serviceBaseUrl: string;
   /** The task the panel has open, as the bridge's side holds the host's view of it. */
   activeTaskId: () => string | undefined;
-  /** Tells the voice window, which owns the call, that the task's microphone was pressed. */
-  talkAboutTask: (taskId: string) => void;
-  /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
-  voiceReady: () => boolean;
-  /** Whether a call is in progress, which a start leaves standing for the panel to ask about moving. */
-  callStanding: () => boolean;
+  /** Tells the voice window, which owns the call, that an agent's Call button was pressed. */
+  talkTo: (about: VoiceCallAbout) => void;
 }
 
 /** The refusal a window that draws no Tasks tab hears, or nothing for a panel. */
@@ -129,20 +142,12 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 }
 
 /**
- * The longest page whose source the procedure colours. Note that a longer
- * one is drawn plain rather than cut, as a transcript's long block is,
- * because colouring holds the host's thread for about a millisecond per
- * hundred characters.
+ * A page's HTML as its tab's source reads it: line by line, plain, since the
+ * panel draws it as every code is, through Pierre's diffs, which colours it
+ * (`@luke/panel`'s `whole-file.tsx`).
  */
-const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
-
-/** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
-function pageSourceLines(
-  html: string,
-  colourCode: TasksProceduresDependencies["colourCode"],
-): Effect.Effect<CodeLines> {
-  if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
-  return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
+function pageSourceLines(html: string): CodeLines {
+  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -150,8 +155,22 @@ function isServicePage(url: string, serviceBaseUrl: string): boolean {
   return URL.canParse(url) && new URL(url).origin === new URL(serviceBaseUrl).origin;
 }
 
+/**
+ * The admin dashboard's page on the service's own origin, or nothing where
+ * that origin is no http or https one, which the browser alone would open.
+ */
+function adminPage(serviceBaseUrl: string): string | undefined {
+  if (!URL.canParse(ADMIN_PAGE_PATH, serviceBaseUrl)) return undefined;
+  const page = new URL(ADMIN_PAGE_PATH, serviceBaseUrl).href;
+  return isWebAddress(page) && isServicePage(page, serviceBaseUrl) ? page : undefined;
+}
+
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
+  /** How many streams stand open of each plan's pages. */
+  const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
+  /** How many streams stand open of each plan's history. */
+  const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
   return {
     [TASKS_ACT_KIND.TASKS_REFRESH]: actPort[TASKS_ACT_KIND.TASKS_REFRESH].effect(function* ({
       context,
@@ -175,31 +194,15 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.tasksClose();
     }),
-    // Note that a started task opens its call at once, because pressing
-    // Start task is the developer's gesture and Luke opens a new task by
-    // greeting it; where the call would first have to ask for the
-    // microphone, the task's own microphone button asks instead, and where
-    // a call already stands the panel asks whether to end it first. A task
-    // started without planning opens no call, since skipping the call is
-    // what that start asked for, and nor does one started with an agent,
-    // which starts it without planning.
+    // Note that a started task opens no call: a call starts only from an
+    // agent's own Call button.
     [TASKS_ACT_KIND.TASKS_START]: actPort[TASKS_ACT_KIND.TASKS_START].effect(function* ({
       input,
       context,
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const calls = input.planning !== false && input.agent === undefined;
-      const answer = yield* host.tasksStart(input);
-      if (
-        calls &&
-        "planId" in answer &&
-        dependencies.voiceReady() &&
-        !dependencies.callStanding()
-      ) {
-        dependencies.talkAboutTask(answer.planId);
-      }
-      return answer;
+      return yield* host.tasksStart(input);
     }),
     [TASKS_ACT_KIND.TASKS_DELETE]: actPort[TASKS_ACT_KIND.TASKS_DELETE].effect(function* ({
       input,
@@ -316,6 +319,18 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       const { url } = page;
       yield* Effect.tryPromise({ try: () => openExternal(url), catch: () => errors.REFUSED() });
     }),
+    // The admin dashboard opens where the browser's own session is, rather
+    // than in a Browser tab, whose cookies are its own. The act carries no
+    // address: the host names the page on the service's origin.
+    [TASKS_ACT_KIND.ADMIN_OPEN]: actPort[TASKS_ACT_KIND.ADMIN_OPEN].effect(function* ({
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const url = adminPage(dependencies.serviceBaseUrl);
+      if (url === undefined) return yield* Effect.fail(errors.REFUSED());
+      yield* Effect.tryPromise({ try: () => openExternal(url), catch: () => errors.REFUSED() });
+    }),
     // Disconnecting asks the host, which asks the service under the Mac's
     // session; no page opens, so no browser account stands in for the Mac's.
     [TASKS_ACT_KIND.GITHUB_DISCONNECT]: actPort[TASKS_ACT_KIND.GITHUB_DISCONNECT].effect(
@@ -330,16 +345,19 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         );
       },
     ),
-    // The press names no task: the task is the one the host has open, read
-    // here, so the panel cannot open a call about a task it is not showing.
+    // The press names its agent and no task: the task is the one the host
+    // has open, read here, so the panel cannot open a call into an agent of
+    // a task it is not showing. That the agent is on it is checked as the
+    // call's session is created (`compose-live.ts`).
     [TASKS_ACT_KIND.TASKS_TALK]: actPort[TASKS_ACT_KIND.TASKS_TALK].effect(function* ({
+      input,
       context,
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const taskId = dependencies.activeTaskId();
       if (taskId === undefined) return yield* Effect.fail(errors.REFUSED());
-      dependencies.talkAboutTask(taskId);
+      dependencies.talkTo({ taskId, agentId: input.agentId });
     }),
     [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actPort[TASKS_ACT_KIND.TASKS_BOARD_SAVE].effect(function* ({
       input,
@@ -420,6 +438,15 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       if ("issue" in answer) return answer.issue;
       return yield* Effect.fail(errors.REFUSED());
     }),
+    // Likewise a task's Browser tabs: a service that did not answer is refused, never read as no tab.
+    [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TABS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const answer = yield* host.tasksBrowserTabs(input);
+        if ("tabs" in answer) return answer;
+        return yield* Effect.fail(errors.REFUSED());
+      },
+    ),
     [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOUR_CODE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -456,8 +483,44 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         const answer = yield* host.tasksPage(input);
         if (!("page" in answer)) return answer;
-        const lines = yield* pageSourceLines(answer.page.html, dependencies.colourCode);
+        const lines = pageSourceLines(answer.page.html);
         return { lines } satisfies TasksPageSourceAnswer;
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = followedStream(
+          {
+            keyOf: (scope: TaskPagesFollow) => scope.taskId,
+            follow: host.tasksPagesFollow,
+            unfollow: host.tasksPagesUnfollow,
+            onChanged: host.onTaskPagesChanged,
+            valueOf: (changed: TaskPagesFollowed, scope: TaskPagesFollow) =>
+              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+          },
+          openPages,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = followedStream(
+          {
+            keyOf: (scope: TaskHistoryFollow) => scope.taskId,
+            follow: host.tasksHistoryFollow,
+            unfollow: host.tasksHistoryUnfollow,
+            onChanged: host.onTaskHistoryChanged,
+            valueOf: (changed: TaskHistoryFollowed, scope: TaskHistoryFollow) =>
+              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+          },
+          openHistories,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
       },
     ),
     [TASKS_ACT_KIND.TASKS_PAGES]: actPort[TASKS_ACT_KIND.TASKS_PAGES].effect(function* ({

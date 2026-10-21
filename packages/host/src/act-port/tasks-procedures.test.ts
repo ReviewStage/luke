@@ -28,14 +28,17 @@ import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
+  type TaskHistoryFollowed,
+  type TaskPagesFollowed,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksPageSourceAnswer,
   type TasksStartAnswer,
 } from "@luke/features/tasks-view";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { vi } from "vitest";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import {
   ACT_ERROR,
@@ -46,6 +49,7 @@ import {
   TASKS_ACT_KIND,
 } from "../contract/index.js";
 import { highlightSnippet } from "../task-code.js";
+import type { ActSender } from "./base.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
@@ -57,6 +61,7 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 const CALL: ActSender = { ...PANEL, panel: false, call: true };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 const SERVICE = "https://luke.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
@@ -79,8 +84,9 @@ const REFUSAL = {
   [TASKS_ACT_KIND.GITHUB_OPEN]: "Could not open GitHub on this system.",
   [TASKS_ACT_KIND.WEB_OPEN]: "Could not open that link on this system.",
   [TASKS_ACT_KIND.GITHUB_CONNECT]: "Could not open GitHub's connection page on this system.",
+  [TASKS_ACT_KIND.ADMIN_OPEN]: "Could not open the admin dashboard on this system.",
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
-  [TASKS_ACT_KIND.TASKS_TALK]: "Could not talk about that task on this system.",
+  [TASKS_ACT_KIND.TASKS_TALK]: "Could not call that agent on this system.",
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
   [TASKS_ACT_KIND.TASKS_SET_STANDING]: "Could not change where that task stands on this system.",
   [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: "Could not read that task's earlier work on this system.",
@@ -92,6 +98,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_SKILLS]: "Could not read this repository's skills on this system.",
   [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: "Could not read that pull request on this system.",
   [TASKS_ACT_KIND.TASKS_ISSUE]: "Could not read that issue on this system.",
+  [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: "Could not read the task's Browser tabs.",
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: "Could not colour that code on this system.",
   [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that plan's history on this system.",
   [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
@@ -157,6 +164,21 @@ const ISSUE = {
 };
 const ISSUE_NONE = 8;
 
+/** A task whose service answers no Browser tabs list. */
+const TASK_UNANSWERED = "0c9e2f4a-5b6d-4e7f-8a9b-1c2d3e4f5a6b";
+
+/** One Browser tab in the task's Luke's browser. */
+const BROWSER_TAB = {
+  id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
+  agentId: null,
+  address: "https://example.com/sign-in",
+  title: "Sign in",
+  openedBy: { kind: "agent" },
+  driver: null,
+  createdAt: 1_000,
+  lastActedAt: 2_000,
+} as const;
+
 /** One ask of every task kind, with a payload its schema admits. */
 const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_REFRESH, payload: undefined },
@@ -182,8 +204,9 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay" } },
   { kind: TASKS_ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
   { kind: TASKS_ACT_KIND.GITHUB_CONNECT, payload: undefined },
+  { kind: TASKS_ACT_KIND.ADMIN_OPEN, payload: undefined },
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
-  { kind: TASKS_ACT_KIND.TASKS_TALK, payload: undefined },
+  { kind: TASKS_ACT_KIND.TASKS_TALK, payload: { agentId: AGENT_ID } },
   { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
   { kind: TASKS_ACT_KIND.TASKS_SET_STANDING, payload: { ...TASK, status: "done" } },
   { kind: TASKS_ACT_KIND.TASKS_WORK_EARLIER, payload: undefined },
@@ -197,6 +220,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_SKILLS, payload: PLAN },
   { kind: TASKS_ACT_KIND.TASKS_PULL_REQUEST, payload: { ...PLACE, number: PULL_REQUEST.number } },
   { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
+  { kind: TASKS_ACT_KIND.TASKS_BROWSER_TABS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_COLOUR_CODE, payload: { language: "ts", code: "const a = 1;" } },
   { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_REVISION, payload: { ...TASK, seq: 3 } },
@@ -217,10 +241,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
 interface Script {
   /** What a start answers. */
   start: TasksStartAnswer;
-  /** Whether a call could open now. */
-  voiceReady: boolean;
-  /** Whether a call is already in progress, about whichever task. */
-  callStanding: boolean;
   /** The task the host has open, if any. */
   activeTaskId: string | undefined;
   /** The page the host names to connect the account's own GitHub, or none. */
@@ -243,14 +263,17 @@ afterEach(() => {
  * A window's act port serving the task procedures alone, opened as the bridge opens one, over a fake host:
  * the window standing as `actor`, trusted or not.
  */
-function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
+function windowPort(
+  actor: ActSender,
+  options: { trusted?: boolean; serviceBaseUrl?: string } = {},
+) {
   const asked: string[] = [];
   const browsed: string[] = [];
-  const talked: string[] = [];
+  const talked: VoiceCallAbout[] = [];
+  const pagesListeners = new Set<(followed: TaskPagesFollowed) => void>();
+  const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
-    voiceReady: true,
-    callStanding: false,
     activeTaskId: TASK_ID,
     connectPage: CONNECT_PAGE,
     lastSignIn: false,
@@ -346,6 +369,12 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
         if (params.number === ISSUE_NONE) return { issue: null };
         return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
       }),
+    tasksBrowserTabs: (params) =>
+      ask(`browserTabs:${params.taskId}`, () =>
+        params.taskId === TASK_UNANSWERED
+          ? ({ failure: TASK_CALL_FAILURE.UNANSWERED } as const)
+          : { tabs: [BROWSER_TAB] },
+      ),
     tasksRevisions: (params) =>
       ask(`revisions:${params.taskId}:${params.before}`, () => ({ revisions: [] })),
     tasksRevision: (params) =>
@@ -374,6 +403,18 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`pages:${params.taskId}`, () => ({
         pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }],
       })),
+    tasksPagesFollow: (scope) => ask(`pages-follow:${scope.taskId}`, () => undefined),
+    tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${scope.taskId}`, () => undefined),
+    onTaskPagesChanged: (listener) => {
+      pagesListeners.add(listener);
+      return () => pagesListeners.delete(listener);
+    },
+    tasksHistoryFollow: (scope) => ask(`history-follow:${scope.taskId}`, () => undefined),
+    tasksHistoryUnfollow: (scope) => ask(`history-unfollow:${scope.taskId}`, () => undefined),
+    onTaskHistoryChanged: (listener) => {
+      historyListeners.add(listener);
+      return () => historyListeners.delete(listener);
+    },
   };
   const port = testActPort(
     tasksProcedures({
@@ -383,18 +424,24 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
         browsed.push(url);
         return Promise.resolve();
       },
-      serviceBaseUrl: SERVICE,
+      serviceBaseUrl: options.serviceBaseUrl ?? SERVICE,
       activeTaskId: () => script.activeTaskId,
-      talkAboutTask: (taskId) => {
-        talked.push(taskId);
+      talkTo: (about) => {
+        talked.push(about);
       },
-      voiceReady: () => script.voiceReady,
-      callStanding: () => script.callStanding,
     }),
   );
   ports.push(port);
   const client = port.as(actor, options);
-  return { client, asked, browsed, talked, script };
+  /** A plan's pages as the host tells them moved. */
+  const pagesMoved = (followed: TaskPagesFollowed) => {
+    for (const listener of pagesListeners) listener(followed);
+  };
+  /** A plan's newest page of history as the host tells it moved. */
+  const historyMoved = (followed: TaskHistoryFollowed) => {
+    for (const listener of historyListeners) listener(followed);
+  };
+  return { client, asked, browsed, talked, script, pagesMoved, historyMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -501,27 +548,21 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
   ]);
 });
 
-it("a started task opens its call, and one started without planning, with an agent, without voice ready, or over a standing call opens none", async () => {
+it("a started task opens no call, with an agent or without", async () => {
   const { client, talked, script } = windowPort(PANEL);
   script.start = { planId: TASK_ID };
   const start = (payload: AnyPayload) => settled(client, TASKS_ACT_KIND.TASKS_START, payload);
 
-  const planned = await start({ name: "Invitations" });
-  const unplanned = await start({ name: "Typo", planning: false });
+  const bare = await start({ name: "Typo", planning: false });
   const withAgent = await start({
     name: "Expiry",
     repository: "acme/relay",
     agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
   });
-  script.voiceReady = false;
-  const unready = await start({ name: "Quiet" });
-  script.voiceReady = true;
-  script.callStanding = true;
-  const overCall = await start({ name: "Busy" });
 
-  assert.deepEqual(planned, { answer: { planId: TASK_ID } });
-  for (const other of [unplanned, withAgent, unready, overCall]) assert.deepEqual(other, planned);
-  assert.deepEqual(talked, [TASK_ID]);
+  assert.deepEqual(bare, { answer: { planId: TASK_ID } });
+  assert.deepEqual(withAgent, bare);
+  assert.deepEqual(talked, []);
 });
 
 it("a key the host's answer carries beside what the kind's schema names reaches the window no more, the answer encoded by the kind's own schema", async () => {
@@ -543,17 +584,17 @@ it("a start the host could not make is answered with why, and opens no call", as
   assert.deepEqual(talked, []);
 });
 
-it("the microphone's press opens a call about the task the host has open, and is refused in its own words where none is open", async () => {
+it("an agent's Call press opens a call into it on the task the host has open, and is refused in its own words where none is open", async () => {
   const { client, talked, script } = windowPort(PANEL);
 
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, undefined), {
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
     answer: undefined,
   });
   script.activeTaskId = undefined;
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, undefined), {
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_TALK],
   });
-  assert.deepEqual(talked, [TASK_ID]);
+  assert.deepEqual(talked, [{ taskId: TASK_ID, agentId: AGENT_ID }]);
 });
 
 it("a web link opens an http or https address in the browser, and no other scheme nor an address past the cap", async () => {
@@ -615,6 +656,33 @@ it("Connect GitHub opens the page the host named in the browser, Disconnect asks
   ]);
 });
 
+it("the admin dashboard opens the service's own page in the browser, and an address a window hands in is refused with nothing opened", async () => {
+  const { client, asked, browsed } = windowPort(PANEL);
+
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
+    answer: undefined,
+  });
+  for (const url of ["https://evil.test/admin", "file:///etc/passwd", `${SERVICE}/admin`]) {
+    assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, { url }), {
+      refused: REFUSAL[TASKS_ACT_KIND.ADMIN_OPEN],
+    });
+  }
+
+  assert.deepEqual(browsed, [`${SERVICE}/admin`]);
+  assert.deepEqual(asked, []);
+});
+
+it("the admin dashboard is refused, and nothing opens, where the service's origin is no web address", async () => {
+  for (const serviceBaseUrl of ["file:///srv/luke", "luke-evil://service", "not an address"]) {
+    const { client, browsed } = windowPort(PANEL, { serviceBaseUrl });
+
+    assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
+      refused: REFUSAL[TASKS_ACT_KIND.ADMIN_OPEN],
+    });
+    assert.deepEqual(browsed, []);
+  }
+});
+
 it("a GitHub page the host names off the service's own origin is refused and nothing opens", async () => {
   const { client, browsed, script } = windowPort(PANEL);
 
@@ -645,7 +713,7 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
   assert.deepEqual(asked, []);
 });
 
-it("a payload carrying a key its kind's schema does not name is refused, as app:act refused it, and the host is not asked", async () => {
+it("a payload carrying a key its kind's schema does not name is refused, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(
@@ -724,13 +792,13 @@ it("a fenced block is coloured for a panel, its lines answered as the highlighte
   assert.ok(line.some((run) => run.color !== undefined));
 });
 
-it("a page's source is read through the host and coloured as HTML for a panel, plain past the bound, and its silence answered", async () => {
+it("a page's source is read through the host for a panel, line by line and plain, since the panel colours it, and its silence answered", async () => {
   const { client, asked, script } = windowPort(PANEL);
   const source = () => settled(client, TASKS_ACT_KIND.TASKS_PAGE_SOURCE, PAGE);
   const long = `<p>${"a".repeat(70_000)}</p>`;
 
   const unanswered = await source();
-  script.pageHtml = "<h1>Invites</h1>\n<p>sent</p>";
+  script.pageHtml = "<h1>Invites</h1>\n\n<p>sent</p>";
   const read = await source();
   script.pageHtml = long;
   const plain = await source();
@@ -739,12 +807,7 @@ it("a page's source is read through the host and coloured as HTML for a panel, p
   // SAFETY: the page-source procedure answers a page source, which the assertion below reads.
   const answer = ("answer" in read ? read.answer : undefined) as TasksPageSourceAnswer | undefined;
   assert.ok(answer !== undefined && "lines" in answer);
-  const { lines } = answer;
-  assert.deepEqual(
-    lines.map((line) => line.map((run) => run.text).join("")),
-    ["<h1>Invites</h1>", "<p>sent</p>"],
-  );
-  assert.ok(lines[0]?.some((run) => run.color !== undefined));
+  assert.deepEqual(answer.lines, [[{ text: "<h1>Invites</h1>" }], [], [{ text: "<p>sent</p>" }]]);
   assert.deepEqual(plain, { answer: { lines: [[{ text: long }]] } });
   assert.deepEqual(asked, ["page:page-funnel:2", "page:page-funnel:2", "page:page-funnel:2"]);
 });
@@ -829,6 +892,17 @@ it("an issue is answered to a panel as the host read it, or as none, and a servi
   ]);
 });
 
+it("a task's Browser tabs are answered to a panel as the host read them, and a service that did not answer is refused in the kind's own words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const ask = (taskId: string) => settled(client, TASKS_ACT_KIND.TASKS_BROWSER_TABS, { taskId });
+
+  assert.deepEqual(await ask(TASK_ID), { answer: { tabs: [BROWSER_TAB] } });
+  assert.deepEqual(await ask(TASK_UNANSWERED), {
+    refused: REFUSAL[TASKS_ACT_KIND.TASKS_BROWSER_TABS],
+  });
+  assert.deepEqual(asked, [`browserTabs:${TASK_ID}`, `browserTabs:${TASK_UNANSWERED}`]);
+});
+
 it("a content act's payload carrying a key its schema does not name, or past its bound, is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
@@ -859,4 +933,52 @@ it("a content act's payload carrying a key its schema does not name, or past its
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_SET_STANDING],
   });
   assert.deepEqual(asked, []);
+});
+
+it("a plan's pages are followed at the host once for every stream a panel holds open, each change reaches the streams of that plan, a late stream hears the last at once, and the last one closed lets them go", async () => {
+  const { client, asked, pagesMoved } = windowPort(PANEL);
+  const funnel = { id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 };
+
+  const one = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
+  const other = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
+  const heardOne = one.next();
+  const heardOther = other.next();
+  await vi.waitFor(() => assert.deepEqual(asked, [`pages-follow:${TASK_ID}`]));
+
+  pagesMoved({ taskId: "another-task", view: { pages: [] } });
+  pagesMoved({ taskId: TASK_ID, view: { pages: [funnel] } });
+  assert.deepEqual(await heardOne, { done: false, value: { pages: [funnel] } });
+  assert.deepEqual(await heardOther, { done: false, value: { pages: [funnel] } });
+  // A stream opened on pages already followed is told them as they last stood, and follows nothing more.
+  const late = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
+  assert.deepEqual(await late.next(), { done: false, value: { pages: [funnel] } });
+  await late.return?.(undefined);
+
+  await one.return?.(undefined);
+  await vi.waitFor(() => assert.equal(asked.length, 1, "the other stream still holds it"));
+  await other.return?.(undefined);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [`pages-follow:${TASK_ID}`, `pages-unfollow:${TASK_ID}`]),
+  );
+});
+
+it("the voice window is refused a plan's pages, and the host follows nothing", async () => {
+  const { client, asked } = windowPort(VOICE);
+  await assert.rejects(client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK));
+  assert.deepEqual(asked, []);
+});
+
+it("a plan's newest page of history is streamed to a panel as the host tells it, and let go as the stream closes", async () => {
+  const { client, asked, historyMoved } = windowPort(PANEL);
+  const stream = await client[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW](TASK);
+  const heard = stream.next();
+  await vi.waitFor(() => assert.deepEqual(asked, [`history-follow:${TASK_ID}`]));
+
+  historyMoved({ taskId: "another-task", view: { revisions: [] } });
+  historyMoved({ taskId: TASK_ID, view: { revisions: [], earlier: 3 } });
+  assert.deepEqual(await heard, { done: false, value: { revisions: [], earlier: 3 } });
+  await stream.return?.(undefined);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [`history-follow:${TASK_ID}`, `history-unfollow:${TASK_ID}`]),
+  );
 });

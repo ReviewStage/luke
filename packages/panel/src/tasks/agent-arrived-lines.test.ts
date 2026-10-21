@@ -2,10 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
@@ -14,7 +10,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -23,7 +19,7 @@ import { afterEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -124,24 +120,17 @@ async function drawnTab(
   messages: readonly CodingAgentMessage[],
   status: CodingAgentStatus,
 ): Promise<HTMLElement> {
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
   });
-  // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [agentOf(status)],
     me: DEAN.userId,
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({ messages: [...messages], cursor: "9:0", status, title: null });
-    },
+    transcripts: pushedTranscripts(() => [
+      { messages: [...messages], cursor: "9:0", status, title: null },
+    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -197,12 +186,7 @@ test("in a finished turn, a line GitHub sent while it ran splits its fold, the s
   const task = "line: task";
   const github = "line: github";
 
-  assert.deepEqual(drawnOrder(container), [
-    task,
-    "fold: 2 tool calls",
-    github,
-    "fold: 1 tool call",
-  ]);
+  assert.deepEqual(drawnOrder(container), [task, "fold: 2 tool calls", github, "call: c"]);
 
   openEveryFold(container);
   assert.deepEqual(drawnOrder(container), [
@@ -211,7 +195,6 @@ test("in a finished turn, a line GitHub sent while it ran splits its fold, the s
     "call: a",
     "call: b",
     github,
-    "fold: 1 tool call",
     "call: c",
   ]);
 });

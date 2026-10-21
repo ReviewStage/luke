@@ -8,8 +8,9 @@ import type { BuildCommit } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, Equal, type Scope, Stream, SubscriptionRef } from "effect";
-import type { AppState } from "../app-state.js";
+import { type AppState, type AppStateSnapshot, NO_ACCESS } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -39,6 +40,8 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  * slices, dropped where it says nothing new, and one write of the resulting
  * document into the ref per applied patch. Nothing else may hold a copy of a
  * slice — a reader takes a snapshot, which is the document as it stands.
+ * A slice that moved keeps the identity of every part of it that did not, so
+ * a reader holding a part that said nothing new still holds the same object.
  *
  * The document itself is a `SubscriptionRef`, so its own `changes` Stream is
  * the one subscription a production caller forks to reach the windows.
@@ -68,11 +71,12 @@ export class AppStateStore {
 
   update(patch: AppStatePatch): void {
     const previous = this.snapshot();
-    // Note that `Equal.equals` remembers its answer per pair of objects, which
-    // holds because a slice is replaced whole and never mutated in place.
-    const moved = patchEntries(patch).filter(
-      ([slice, value]) => !Equal.equals(previous[slice], value),
-    );
+    // Note that a slice kept whole is one that says nothing new, which is the
+    // one walk that both decides that and shares what did not move.
+    const moved = patchEntries(patch).flatMap(([slice, value]) => {
+      const kept = keepIdentity(previous[slice], value);
+      return kept === previous[slice] ? [] : [[slice, kept] as const];
+    });
     if (moved.length === 0) return;
     const next: AppState = {
       ...previous,
@@ -141,6 +145,7 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
     run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
     settings: boot.settings,
     account: boot.account,
+    access: boot.access,
     voice: held.voice,
     sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
   };
@@ -165,6 +170,72 @@ export function windowAppState<State extends Pick<AppState, "tasks">>(
   window: { readonly voice: boolean; readonly call: boolean },
 ): State {
   return window.voice || window.call ? voiceWindowState(held) : held;
+}
+
+/** Which window a document is handed to, as far as what it draws goes. */
+interface WindowRole {
+  readonly voice: boolean;
+  readonly call: boolean;
+}
+
+/**
+ * One slice as a window draws it. The voice and call windows draw the tasks
+ * as `voiceWindowState` leaves them; and the voice window draws no voice view,
+ * because that view is the one it reports itself (`reportVoiceView`), so a
+ * view it sent is never handed back to it.
+ */
+function drawnSlice(snapshot: AppStateSnapshot, slice: keyof AppStateSnapshot, window: WindowRole) {
+  if (slice === "tasks" && (window.voice || window.call)) return voiceWindowState(snapshot).tasks;
+  if (slice === "voice" && window.voice) {
+    const { view: _view, ...drawn } = snapshot.voice;
+    return drawn;
+  }
+  return snapshot[slice];
+}
+
+/**
+ * Whether a window last handed `sent` has anything new to draw in `next`: a
+ * slice it draws, or its own facts. The version alone is not news, since a
+ * reader keeps any delivery at least as new as the one it holds.
+ */
+function drawnMoved(sent: AppStateSnapshot, next: AppStateSnapshot, window: WindowRole): boolean {
+  // SAFETY: `Object.keys` of a snapshot names its own slices, the window's facts, and its version.
+  const slices = Object.keys(next) as (keyof AppStateSnapshot)[];
+  return slices.some(
+    (slice) =>
+      slice !== "version" &&
+      !Equal.equals(drawnSlice(sent, slice, window), drawnSlice(next, slice, window)),
+  );
+}
+
+/**
+ * The document as each window was last handed it, so a window is handed it
+ * again only when a slice it draws, or its own facts, moved: the voice window
+ * is not told of the view it just reported, and neither it nor the call
+ * window of the task turns' work, which they are never sent. Note that a
+ * window is held weakly, by the platform's handle on it, so a window that
+ * goes takes its entry with it; and one that reloads reads the document on
+ * its first read, so the entry its old page left skips nothing it needs.
+ */
+export class WindowAppStates<Window extends object> {
+  readonly #sent = new WeakMap<Window, AppStateSnapshot>();
+
+  /**
+   * Hands `send` the window's own reading of `snapshot`, as `windowAppState`
+   * projects it, unless nothing it draws moved since the last one it took;
+   * `send` answers whether the window took it, which one with no stream open
+   * does not.
+   */
+  offer(
+    window: Window,
+    role: WindowRole,
+    snapshot: AppStateSnapshot,
+    send: (shown: AppStateSnapshot) => boolean,
+  ): void {
+    const sent = this.#sent.get(window);
+    if (sent !== undefined && !drawnMoved(sent, snapshot, role)) return;
+    if (send(windowAppState(snapshot, role))) this.#sent.set(window, snapshot);
+  }
 }
 
 /**
@@ -218,9 +289,9 @@ export function initialAppState(
       agentTraceEnabled: false,
     },
     account: { status: ACCOUNT_STATUS.SIGNED_OUT },
+    access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },

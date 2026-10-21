@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import type { FeedbackSubmission } from "@luke/features/feedback";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/voice/audio";
 import { Effect } from "effect";
@@ -12,8 +12,8 @@ import { windowSurfaceProcedures } from "./window-surface";
 /**
  * What a window asks of the system it is drawn on, called on the act port as
  * a window calls it: the microphone asked for and counted, its route probed
- * afresh, the panel focused and a file saved from a panel alone, words
- * copied, a mail and the notification settings opened, the test
+ * afresh, the panel focused and a file saved from a panel alone, words and
+ * a picture copied, a mail and the notification settings opened, the test
  * notification posted, and feedback carried. A sender this build does not
  * trust, a key a payload does not name, and a payload sent to a kind that
  * takes none are each refused in the kind's own words. Synthetic values
@@ -35,6 +35,10 @@ const SUBMISSION = {
   message: "The panel is lovely.",
   images: [],
 } satisfies FeedbackSubmission;
+
+/** A picture's bytes in base64, synthetic; the system draws one, and refuses `UNDRAWN_PNG`. */
+const PNG = "iVBORw0KGgo=";
+const UNDRAWN_PNG = "AAAA";
 
 /** Every act port a fixture opened, closed once its test is done. */
 const ports: TestActPort<WebContents>[] = [];
@@ -70,6 +74,10 @@ function fixture() {
       },
       testNotification: () => heard.push("test notification"),
       copyText: (words) => heard.push(`copy:${words}`),
+      copyImage: (png) => {
+        heard.push(`copy image:${png}`);
+        return png !== UNDRAWN_PNG;
+      },
       saveFile: async (sender, name, text) => {
         heard.push(`save:${sender === panelContents ? "panel" : "other"}:${name}:${text}`);
         return true;
@@ -144,6 +152,19 @@ it("words are copied, a mail and the settings opened, a notification posted, and
     "test notification",
     "feedback:The panel is lovely.",
   ]);
+});
+
+it("a picture is copied as its PNG, and one the system draws nothing of, or bytes that are not base64, are refused", async () => {
+  const { port, panel, heard } = fixture();
+  const refused = { refused: "Could not copy that picture to the clipboard on this system." };
+
+  assert.deepEqual(await port.call(panel, KIND.WINDOW_COPY_IMAGE, { png: PNG }), {
+    answer: undefined,
+  });
+  assert.deepEqual(await port.call(panel, KIND.WINDOW_COPY_IMAGE, { png: UNDRAWN_PNG }), refused);
+  assert.deepEqual(await port.call(panel, KIND.WINDOW_COPY_IMAGE, { png: "not base64!" }), refused);
+  assert.deepEqual(await port.call(panel, KIND.WINDOW_COPY_IMAGE, { png: "" }), refused);
+  assert.deepEqual(heard, [`copy image:${PNG}`, `copy image:${UNDRAWN_PNG}`]);
 });
 
 it("a sender this build does not trust is refused in each kind's own words", async () => {

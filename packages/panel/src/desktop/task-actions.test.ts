@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -275,7 +275,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
 });
 
 /** The open task's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
-function sharedTab(me: string, tab: MainTab = MAIN_TAB.CALL): TasksControl {
+function sharedTab(me: string, tab: MainTab | undefined = undefined): TasksControl {
   const base = tasksControl();
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -283,7 +283,7 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.CALL): TasksControl {
     tasks: [SHARED_TASK, OTHER],
     activeTaskId: SHARED_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: SHARED_TASK },
-    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.CALL, MAIN_TAB.CHAT], tab },
+    mainTabs: { ...base.mainTabs, tabs: tab === undefined ? [] : [tab], tab },
   });
 }
 
@@ -353,8 +353,8 @@ test("a sidebar task someone else created wears its creator's face before its ti
   assert.deepEqual(faces(OTHER), [[], undefined]);
 });
 
-test("Start and the task's ⋯ stand in the toolbar on the Call tab alone", () => {
-  const drawn = (tab: MainTab) => {
+test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
+  const drawn = (tab: MainTab | undefined) => {
     const container = mount(
       createElement(DesktopTasks, {
         summary: UNPINNED_SUMMARY,
@@ -370,8 +370,7 @@ test("Start and the task's ⋯ stand in the toolbar on the Call tab alone", () =
     return shown;
   };
 
-  assert.deepEqual(drawn(MAIN_TAB.CALL), ["Start a coding agent", "Task actions"]);
-  assert.deepEqual(drawn(MAIN_TAB.CHAT), []);
+  assert.deepEqual(drawn(undefined), ["Start a coding agent", "Task actions"]);
 });
 
 /** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
@@ -452,9 +451,7 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   return copied;
 }
@@ -585,8 +582,6 @@ test("a task's card says you of the reader's own task outside a member directory
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." }),
   });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>

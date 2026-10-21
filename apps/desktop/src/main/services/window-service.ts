@@ -12,10 +12,10 @@ import type {
   FailedRunToast,
   InboxItemToast,
 } from "@luke/host/agent-notices";
-import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
+import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
-import { type AppStateStore, voiceWindowGone, voiceWindowState } from "@luke/host/client";
+import { type AppStateStore, voiceWindowGone, WindowAppStates } from "@luke/host/client";
 import { PUSH, type PushName, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
@@ -35,14 +35,13 @@ import {
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
-import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
 import { VoiceWindow } from "../window/voice-window";
 import { windowPushes } from "../window/window-pushes";
-import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
+import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
 
@@ -61,7 +60,7 @@ export interface WindowServiceDependencies {
    * Whether the launch this start belongs to still stands. False from the
    * moment a Quit is asked for, which is what every wait below re-checks: a
    * start suspended on one of its own awaits must not resume into opening a
-   * window and re-claiming keys the teardown has already given back.
+   * window the teardown has already closed.
    */
   launchStanding: () => boolean;
 }
@@ -71,7 +70,6 @@ export interface WindowService extends DesktopService {
   readonly voiceWindow: VoiceWindow;
   /** The floating call window, shown while a call stands and no Luke window has the keyboard. */
   readonly callWindow: CallWindow;
-  readonly hotkeys: HotkeyRegistrar;
   /**
    * One `app:state` per window, each composed with that window's own facts.
    * The one place the document becomes a push, so what a window is told and
@@ -134,13 +132,12 @@ export interface WindowService extends DesktopService {
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
-  reapplyTalkHotkey: () => void;
   recycleVoiceWindow: () => void;
 }
 
 /**
  * Everything this process draws or claims from the machine on the windows'
- * behalf: the panel, the hidden voice window, the call window, the keys, the Dock, the login
+ * behalf: the panel, the hidden voice window, the call window, the Dock, the login
  * item, the media permissions, the scheme a plan's pages are drawn from, and
  * the display and power changes the panel answers.
  * It is the one concern that opens a window, and it opens none until `start`.
@@ -206,7 +203,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       config.report(`Voice window abandoned: ${reason}`);
     },
   });
-  const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
+  const voiceWindowWanted = runMode.takesFocus || runMode.sendsNetwork;
   const callWindow = new CallWindow({
     runMode,
     preloadPath,
@@ -226,14 +223,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const withPanelWindows = Effect.provideService(PanelWindows, {
     standing: () => panels.windows(),
   });
+  /** The stored zoom, applied to the panels only when it moved. */
+  const steerZoom = zoomSteer();
   const applyAppearance = (): Effect.Effect<void> =>
     Effect.suspend(() => {
       const stored = state.snapshot().settings?.stored;
       return Effect.andThen(
         applyThemePreference(stored?.theme).pipe(withNativeTheme),
-        applyZoomPreference(stored?.zoom).pipe(withPanelWindows),
+        steerZoom(stored?.zoom).pipe(withPanelWindows),
       );
     });
+  /** The document as each window was last handed it, so one is handed it again only when something it draws moved. */
+  const windowStates = new WindowAppStates<WebContents>();
 
   function raiseVoiceWindow(): void {
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
@@ -244,8 +245,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     sender: WebContents,
     push: Name,
     payload: PushPayload<Name>,
-  ): void {
-    windowPushes.push(sender, push, payload);
+  ): boolean {
+    return windowPushes.push(sender, push, payload);
   }
 
   function broadcast<Name extends PushName>(
@@ -266,15 +267,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function publishAppState(): void {
     const held = state.snapshot();
-    const send = (sender: WebContents, shown: typeof held) => {
-      const snapshot: AppStateSnapshot = { ...shown, window: windowFactsFor(sender) };
-      sendTo(sender, PUSH.APP_STATE, snapshot);
+    const send = (sender: WebContents, role: { voice: boolean; call: boolean }) => {
+      const snapshot: AppStateSnapshot = { ...held, window: windowFactsFor(sender) };
+      windowStates.offer(sender, role, snapshot, (shown) => sendTo(sender, PUSH.APP_STATE, shown));
     };
-    for (const sender of panels.senders()) send(sender, held);
+    for (const sender of panels.senders()) send(sender, { voice: false, call: false });
     const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
+    if (voice && !voice.isDestroyed()) send(voice.webContents, { voice: true, call: false });
     const call = callWindow.current();
-    if (call) send(call.webContents, voiceWindowState(held));
+    if (call) send(call.webContents, { voice: false, call: true });
     // The call window follows the document it draws, so it stands, goes, and
     // grows for the avatar on the same version every window is told.
     callPresence.voiceChanged(held.voice);
@@ -377,32 +378,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     }, delayMs);
     pendingWaits.add(wait);
   }
-  const hotkeys = new HotkeyRegistrar({
-    // Note that a named development instance claims no system-wide key,
-    // because it runs beside the plain one and two Lukes cannot share a chord:
-    // whichever launched first would take it from the other.
-    registersGlobalKeys: runMode.registersGlobalKeys && config.instance === undefined,
-    // A voice stands only when the host says one does.
-    hasCredentials: () => operator.voiceAvailable(),
-    host: {
-      voiceHost: () => voiceWindow.current(),
-      // The task open in the panel is what a press with no call opens one
-      // about, whether or not the panel still shows it; a standing call takes
-      // the press whatever task is open, and with neither the key opens nothing.
-      talkTaskId: () => state.snapshot().tasks.activeTaskId,
-      hotkeyChanged: (rank) => {
-        const current = state.snapshot().hotkeys;
-        const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;
-        const stop = rank === HOTKEY_RANK.STOP ? hotkeys.stop : current.stop;
-        const nextHotkeys: AppHotkeysSlice = {
-          talkHeld: rank === HOTKEY_RANK.TALK ? hotkeys.held : current.talkHeld,
-        };
-        if (talk !== undefined) nextHotkeys.talk = talk;
-        if (stop !== undefined) nextHotkeys.stop = stop;
-        state.update({ hotkeys: nextHotkeys });
-      },
-    },
-  });
   function applyLoginItem(openAtLogin: boolean): void {
     if (config.packaged) app.setLoginItemSettings({ openAtLogin });
   }
@@ -468,7 +443,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels,
     voiceWindow,
     callWindow,
-    hotkeys,
     publishAppState,
     applyAppearance,
     windowFactsFor,
@@ -491,7 +465,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       return url === rendererUrl || url === voiceUrl || url === callUrl;
     },
     applyLoginItem,
-    reapplyTalkHotkey: () => void hotkeys.reapply(HOTKEY_RANK.TALK),
     recycleVoiceWindow: () => {
       if (!voiceWindow.current()) return;
       voiceWindow.close();
@@ -525,10 +498,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // macOS asks only once, and a switch turned on later would otherwise
       // leave its first notification to ask, and be refused.
       if (runMode.observesProviders) askForNotifications();
-      hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
-      hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
-      await hotkeys.reapply(HOTKEY_RANK.TALK);
-      if (!launchStanding()) return;
       // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone.
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
         run(pageResponse(request.url, operator.host.tasksPage)),
@@ -584,7 +553,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       for (const wait of pendingWaits) clearTimeout(wait);
       pendingWaits.clear();
       await run(Scope.close(appearanceScope, Exit.void));
-      hotkeys.release();
       if (session.defaultSession.protocol.isProtocolHandled(PAGE_SCHEME)) {
         session.defaultSession.protocol.unhandle(PAGE_SCHEME);
       }

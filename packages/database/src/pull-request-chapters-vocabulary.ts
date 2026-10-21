@@ -14,8 +14,8 @@ export type PullRequestChaptersStatus =
 
 /**
  * Why a generation failed: the diff was too large to send, the model took
- * too long, the model declined, or what it answered could not be read as
- * chapters even after repair. The generator adds a kind here where it meets
+ * too long, the model declined, what it answered could not be read as
+ * chapters even after repair, or something else failed while it ran. The generator adds a kind here where it meets
  * a failure none of these names; the column is plain text, so a new kind
  * needs no migration.
  */
@@ -24,6 +24,8 @@ export const PULL_REQUEST_CHAPTERS_FAILURE = {
   TIMEOUT: "timeout",
   MODEL_REFUSED: "model_refused",
   INVALID_ANSWER: "invalid_answer",
+  /** Something other than the generation itself went wrong while it ran; nothing more is kept of what. */
+  UNEXPECTED: "unexpected",
 } as const;
 
 export type PullRequestChaptersFailure =

@@ -7,10 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { MAIN_TAB } from "./use-main-tabs.js";
 import {
-  inColumn,
-  isPinnable,
   type OpenTask,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -77,6 +74,44 @@ function launch(stood: Stood) {
     },
   };
 }
+
+test("the Chat stands opened on a task with no channel yet and once its channel is held, never while Chat is off, and again as it was left once Chat is back on", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ chat }: { chat: boolean | undefined }) {
+    control = useSidePanel(
+      undefined,
+      { id: TASK, holds: { ...usedTask(TASK).holds, [SIDE_PANEL_TAB.CHAT]: chat } },
+      [],
+      [],
+      [],
+      [],
+      [],
+    );
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (chat: boolean | undefined) =>
+    act(() => root.render(createElement(Probe, { chat })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  // Chat on and no channel yet: the Chat stands only once opened, on its empty state.
+  render(undefined);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "no channel opens no Chat by itself");
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CHAT));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(false);
+  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat off draws no Chat tab");
+  assert.notEqual(panel().tab, SIDE_PANEL_TAB.CHAT);
+  render(true);
+  assert.ok(panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat back on draws it again");
+});
 
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
@@ -321,6 +356,52 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
   assert.deepEqual(second.control().browsers, []);
 });
 
+test("a Browser tab an agent opened is chosen on the open plan, only held on another, and goes when the agent closes it", () => {
+  fakeActPortAnswering(() => Promise.resolve(undefined));
+  const panel = launch({ task: TASK, taskAgents: [] });
+  const here = { browserId: "agent-tab-here", taskId: TASK, address: "http://localhost:3000/" };
+  const there = {
+    browserId: "agent-tab-there",
+    taskId: OTHER_TASK,
+    address: "https://example.com/",
+  };
+
+  act(() => panel.control().onAgentBrowser(here));
+  act(() => panel.control().onAgentBrowser(there));
+  act(() => panel.control().onAgentBrowser(here));
+
+  assert.deepEqual(panel.control().browsers, [
+    { tab: { browser: here.browserId }, task: TASK, address: here.address },
+  ]);
+  assert.deepEqual(panel.control().tab, { browser: here.browserId }, "chosen on the open plan");
+  assert.equal(panel.control().open, true);
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().browsers, [
+    { tab: { browser: there.browserId }, task: OTHER_TASK, address: there.address },
+  ]);
+
+  act(() => panel.control().onBrowserGone(there.browserId));
+  assert.deepEqual(panel.control().browsers, []);
+});
+
+test("a chosen Browser tab an agent closes gives way to the tab viewed before it, as a tab's own close does", () => {
+  fakeActPortAnswering(() => Promise.resolve(undefined));
+  const panel = launch({ task: TASK, taskAgents: [] });
+  const first = { browserId: "agent-tab-first", taskId: TASK, address: "http://localhost:3000/" };
+  const second = { browserId: "agent-tab-second", taskId: TASK, address: "https://example.com/" };
+  act(() => panel.control().onAgentBrowser(first));
+  act(() => panel.control().onAgentBrowser(second));
+  assert.deepEqual(panel.control().tab, { browser: second.browserId });
+
+  act(() => panel.control().onBrowserGone(second.browserId));
+
+  assert.deepEqual(panel.control().tab, { browser: first.browserId });
+  assert.deepEqual(
+    panel.control().browsers.map((each) => each.tab.browser),
+    [first.browserId],
+  );
+});
+
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
   const sent: SentPortAct[] = [];
   // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
@@ -414,19 +495,29 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
     SIDE_PANEL_TAB.PLAN,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
+    SIDE_PANEL_TAB.CHAT,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
 });
 
 /** Mounts the panel over a task holding its plan and, where `inbox` says, an Inbox it may draw, answering the control. */
-function inboxPanel(inbox: { task: string; held: boolean }) {
+function inboxPanel(inbox: { task: string; held: boolean }, room: ShellRoom = SHELL_ROOM.WIDE) {
   let control: SidePanelControl | undefined;
   function Probe({ held }: { held: { task: string; held: boolean } }) {
-    control = useSidePanel(undefined, {
-      id: held.task,
-      holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
-    });
+    control = useSidePanel(
+      undefined,
+      {
+        id: held.task,
+        holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
+      },
+      undefined,
+      [],
+      [],
+      [],
+      undefined,
+      room,
+    );
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -461,6 +552,23 @@ test("a task's Inbox stands only once an item the developer has not seen waits, 
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.INBOX, "a newer item opens it again");
 });
 
+test("in a narrow room an Inbox item not seen opens the Inbox's tab at the strip's end without choosing it, so the plan the panel stood on, or the column it stood shut over, stays", () => {
+  const panel = inboxPanel({ task: TASK, held: true }, SHELL_ROOM.NARROW);
+  assert.deepEqual(
+    { open: panel.control().open, tab: panel.control().tab },
+    { open: true, tab: SIDE_PANEL_TAB.PLAN },
+  );
+  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN, "the plan stays chosen");
+
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel.control().onSetOpen(false));
+  act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
+  assert.equal(panel.control().open, false, "a newer item leaves the panel shut");
+});
+
 test("a task that may draw no Inbox, holding no agent and nothing waiting, draws none, though an item read on it was not seen", () => {
   const panel = inboxPanel({ task: TASK, held: false });
   act(() => panel.control().onInboxRead(TASK, ["item-1"]));
@@ -469,7 +577,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
 });
 
-test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin opening the Call in the task's column", () => {
+test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin let go too", () => {
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({
@@ -484,14 +592,17 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.COMMENTS],
+    [
+      SIDE_PANEL_TAB.PLAN,
+      SIDE_PANEL_TAB.BOARD,
+      SIDE_PANEL_TAB.CODE,
+      SIDE_PANEL_TAB.COMMENTS,
+      SIDE_PANEL_TAB.CHAT,
+    ],
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
-  assert.deepEqual(
-    panel.control().pins.map(({ tab }) => [tab, isPinnable(tab) && inColumn(tab)]),
-    [[MAIN_TAB.CALL, true]],
-  );
+  assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
 test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {
@@ -517,4 +628,30 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   room = SHELL_ROOM.WIDE;
   render();
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, false, false]);
+});
+
+test("the Inbox with nothing chosen has no task, so the panel left open shows over it in no room, neither full screen on a phone nor empty beside it", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ at, task }: { at: ShellRoom; task: OpenTask }) {
+    control = useSidePanel(undefined, task, [], [], [], [], [], at);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const now = () => control ?? assert.fail("the panel is held");
+  const render = (at: ShellRoom, task: OpenTask) =>
+    act(() => root.render(createElement(Probe, { at, task })));
+  // The panel stands open on a plan, and is kept open for the next launch.
+  render(SHELL_ROOM.NARROW, usedTask(TASK));
+  assert.equal(now().open, true);
+  assert.equal(JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").open, true);
+
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    render(room, { id: undefined, holds: {}, bare: true });
+    assert.deepEqual(
+      [now().open, now().fullScreen, now().fullScreenOnly],
+      [false, false, false],
+      `the ${room} room shows the Inbox with no panel over it`,
+    );
+  }
 });

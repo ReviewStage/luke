@@ -1,4 +1,5 @@
 import { childTitlesByCall } from "@luke/database/models/child-titles";
+import { listCodingAgentLines } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import {
   listJournals,
@@ -10,14 +11,16 @@ import {
   turnsBefore,
 } from "@luke/database/models/message-reads";
 import { conversationOwnerOf } from "@luke/database/models/recorded-session";
-import { readTask, type TaskStoreEffect } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   TASK_WORK_BOUNDS,
   type TaskShownCode,
   type TaskWorkAnswer,
 } from "@luke/features/tasks-view";
+import type { ToolSet } from "ai";
 import { Effect, Option } from "effect";
 import { BRAIN_DELEGATION_TOOLS } from "../agents/brain-host/brain.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { isStoredToolPart, storedToolName } from "../core.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { subagentRecordsByCall } from "./child-models.js";
@@ -31,7 +34,7 @@ import {
 } from "./task-work.js";
 
 /**
- * task-work-store.ts -- a task's Work tab read back from the record, a page of turns at a time, and every code Luke showed on it.
+ * task-work-store.ts -- a task's Work tab read back from the record, a page of turns at a time, and every code Luke and the task's agents showed on it.
  *
  * Every brain turn runs in the conversation the task names, and the
  * relay journals each as eve runs it, so the task's work is that
@@ -42,7 +45,10 @@ import {
  * read from the rows the turn holds. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
- * and no secret file, is read back. The task is read under the account
+ * and no secret file, is read back; beside it, every answered `show_code`
+ * call of each agent on the task, archived ones included, read from that
+ * agent's own conversation under the member who started it, typed turns
+ * and spoken ones alike, each named by its agent. The task is read under the account
  * first, so a task of a workspace the account is not in reads as no task,
  * exactly as in `task-store.ts`; its conversation is then read under the
  * member who opened it, whose conversation it is, so every member reads the
@@ -57,18 +63,25 @@ import {
 export const brainDelegationJournalsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
 ) {
-  const rows = yield* brainDelegationRowsOf(userId, conversationId);
+  const rows = yield* brainDelegationRowsOf(userId, conversationId, tools);
   return rows.map((row) => row.message);
 });
 
-/** The rows of the conversation's journals that delegate to the worker, as `brainDelegationJournalsOf` reads them, each with the turn it is the journal of. */
+/**
+ * The rows of the conversation's journals that delegate to the worker, as
+ * `brainDelegationJournalsOf` reads them, each with the turn it is the
+ * journal of: read under the brain's tools, or under the tools given for a
+ * conversation another backend runs, such as an agent's a call speaks into.
+ */
 export const brainDelegationRowsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
 ) {
   const reads = yield* Effect.forEach([...BRAIN_DELEGATION_TOOLS], (name) =>
-    listJournalsCalling(userId, conversationId, HOSTED_TOOL_SET, name),
+    listJournalsCalling(userId, conversationId, tools, name),
   );
   return reads
     .flatMap((read) => (read.ok ? read.value : []))
@@ -101,8 +114,8 @@ export const turnJournalOf = Effect.fnUntraced(function* (userId: string, turn: 
   return { turn, message, subagents, titles, records };
 });
 
-/** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first. */
-function shownCodeIn(journals: readonly StoredMessageRecord[]): TaskShownCode[] {
+/** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first, each under the agent named where an agent's journals are read. */
+function shownCodeIn(journals: readonly StoredMessageRecord[], agentId?: string): TaskShownCode[] {
   return journals.flatMap((journal) =>
     journal.message.parts.filter(isStoredToolPart).flatMap((part) => {
       const code = storedToolName(part) === SHOW_CODE_TOOL.name ? shownCodeOf(part) : undefined;
@@ -113,6 +126,7 @@ function shownCodeIn(journals: readonly StoredMessageRecord[]): TaskShownCode[] 
               callId: part.toolCallId,
               turnId: journal.clientId,
               shownAt: journal.createdAt.getTime(),
+              ...(agentId === undefined ? undefined : { agentId }),
               code,
             },
           ];
@@ -121,7 +135,7 @@ function shownCodeIn(journals: readonly StoredMessageRecord[]): TaskShownCode[] 
 }
 
 /** Every code shown in the conversation; none where a journal holding a call of it does not read. */
-const allShownCode = Effect.fnUntraced(function* (userId: string, conversationId: string) {
+const brainShownCode = Effect.fnUntraced(function* (userId: string, conversationId: string) {
   const read = yield* listJournalsCalling(
     userId,
     conversationId,
@@ -129,6 +143,38 @@ const allShownCode = Effect.fnUntraced(function* (userId: string, conversationId
     SHOW_CODE_TOOL.name,
   );
   return read.ok ? shownCodeIn(read.value) : [];
+});
+
+/**
+ * Every code the task's agents showed, archived agents' included, each read
+ * from the agent's own conversation under the member who started it; an
+ * agent whose journals do not read shows none. The agents are listed under
+ * the account, so a task the account does not reach has none.
+ */
+const agentsShownCode = Effect.fnUntraced(function* (userId: string, taskId: string) {
+  const agents = yield* listCodingAgentLines(userId, taskId, { includeArchived: true });
+  const read = yield* Effect.forEach(agents, (agent) =>
+    Effect.map(
+      listJournalsCalling(agent.userId, agent.conversationId, CODER_TOOL_SET, SHOW_CODE_TOOL.name),
+      (journals) => (journals.ok ? shownCodeIn(journals.value, agent.id) : []),
+    ),
+  );
+  return read.flat();
+});
+
+/**
+ * Every code shown on the task, oldest first: Luke's in the task's own
+ * conversation, read under `opener` where one was opened, and every agent's.
+ * Note that the sort is stable, so the calls of one turn keep their order.
+ */
+const allShownCode = Effect.fnUntraced(function* (
+  userId: string,
+  taskId: string,
+  brain: { readonly opener: string; readonly conversationId: string } | undefined,
+) {
+  const luke = brain === undefined ? [] : yield* brainShownCode(brain.opener, brain.conversationId);
+  const agents = yield* agentsShownCode(userId, taskId);
+  return [...luke, ...agents].sort((one, other) => one.shownAt - other.shownAt);
 });
 
 /**
@@ -146,14 +192,15 @@ export function readTaskWork(
   before: string | undefined,
 ): TaskStoreEffect<Option.Option<TaskWorkAnswer>> {
   return Effect.gen(function* () {
-    const task = yield* readTask(userId, taskId);
+    const task = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(task)) return Option.none();
     const { conversationId } = task.value;
     const newest = before === undefined;
     const owner =
       conversationId === undefined ? Option.none() : yield* conversationOwnerOf(conversationId);
     if (conversationId === undefined || Option.isNone(owner)) {
-      return Option.some({ turns: [], ...(newest ? { code: [] } : undefined) });
+      const code = newest ? yield* allShownCode(userId, taskId, undefined) : undefined;
+      return Option.some({ turns: [], ...(code === undefined ? undefined : { code }) });
     }
     const opener = owner.value;
     const page = yield* turnsBefore(opener, conversationId, TASK_WORK_BOUNDS.TURNS, before);
@@ -164,7 +211,9 @@ export function readTaskWork(
       conversationId,
       journaled.map((each) => each.turn.id),
     );
-    const code = newest ? yield* allShownCode(opener, conversationId) : undefined;
+    const code = newest
+      ? yield* allShownCode(userId, taskId, { opener, conversationId })
+      : undefined;
     const oldest = page.turns[0];
     return Option.some({
       turns: journaled.map((each) =>
@@ -183,18 +232,21 @@ export function readTaskWork(
   });
 }
 
-/** Every code shown on the task, oldest first, as the Code tab draws it, read under the member who opened the task's conversation; nothing where the account reaches no such task, and none for a task whose brain never ran. */
+/** Every code shown on the task, oldest first, as the Code tab draws it: Luke's, read under the member who opened the task's conversation, and every agent's on the task; nothing where the account reaches no such task. */
 export function readTaskCode(
   userId: string,
   taskId: string,
 ): TaskStoreEffect<Option.Option<{ readonly code: readonly TaskShownCode[] }>> {
   return Effect.gen(function* () {
-    const task = yield* readTask(userId, taskId);
+    const task = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(task)) return Option.none();
     const { conversationId } = task.value;
     const owner =
       conversationId === undefined ? Option.none() : yield* conversationOwnerOf(conversationId);
-    if (conversationId === undefined || Option.isNone(owner)) return Option.some({ code: [] });
-    return Option.some({ code: yield* allShownCode(owner.value, conversationId) });
+    const brain =
+      conversationId === undefined || Option.isNone(owner)
+        ? undefined
+        : { opener: owner.value, conversationId };
+    return Option.some({ code: yield* allShownCode(userId, taskId, brain) });
   });
 }

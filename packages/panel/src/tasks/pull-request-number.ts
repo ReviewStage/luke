@@ -1,4 +1,6 @@
+import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import { createContext, useContext } from "react";
+import type { CodingAgentsControl } from "./use-coding-agents.js";
 
 /**
  * pull-request-number.ts -- which pull request a Pull request tab shows, where it names one by its number rather than following its agent's branch.
@@ -58,4 +60,18 @@ export function withPullRequestTab<V>(
   if (ofAgent.size === 0) next.delete(tab.changes);
   else next.set(tab.changes, ofAgent);
   return next;
+}
+
+/**
+ * The pull request a Pull request tab shows, as the task's agents last read
+ * it: the one it names by its number, kept apart (`numberedPullRequests`),
+ * else its agent's own; none before it is read.
+ */
+export function pullRequestOfTab(
+  control: Pick<CodingAgentsControl, "pullRequests" | "numberedPullRequests">,
+  tab: { readonly changes: string; readonly number?: number | undefined },
+): CodingAgentPullRequest | undefined {
+  return tab.number === undefined
+    ? control.pullRequests.get(tab.changes)
+    : ofPullRequestTab(control.numberedPullRequests, tab);
 }

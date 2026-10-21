@@ -43,6 +43,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
@@ -201,7 +202,7 @@ function AgentRow({
       title={subject.name}
       meta={
         <span className="home-row-meta">
-          <span className="home-row-context">{task.name}</span>
+          <FadingWords className="home-row-context" words={task.name} />
           {agent.at === undefined ? null : <RelativeTime at={agent.at} now={now} />}
         </span>
       }
@@ -355,9 +356,10 @@ function AutomationRow({
       title={automation.name}
       meta={
         <span className="home-row-meta">
-          <span className="home-row-context">
-            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          </span>
+          <FadingWords
+            className="home-row-context"
+            words={automationTriggerText(automation.trigger, automation.repositories ?? [])}
+          />
         </span>
       }
       onPress={onOpen}
@@ -429,7 +431,7 @@ function PersonColumn({
   const left = former?.find((each) => each.userId === userId);
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
-  // The sidebar's own view, so their tasks are listed there as its Created by lists them.
+  // The sidebar's own view, so their tasks are listed there as its Created by lists them, whoever they are assigned to.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
   const archive = useArchivedView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
@@ -437,7 +439,7 @@ function PersonColumn({
   // Note that the list is turned back from the archived tasks, because the page lists their open ones.
   const showTasks = () => {
     archive.onShown(false);
-    taskView.onCreatedBy(userId);
+    taskView.onCreatedByAlone(userId);
   };
   const page = personPage(userId, listed);
   const you = userId === tasks.me;
@@ -489,9 +491,9 @@ function PersonColumn({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">
+            <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={name}>
               {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
-            </h1>
+            </FadingWords>
           </div>
           <PersonActions
             tasks={tasks}

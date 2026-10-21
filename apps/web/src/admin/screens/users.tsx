@@ -1,8 +1,10 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 import type { AdminUserList, AdminUserListRow } from "@luke/service/admin/admin-users";
 import {
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   type AdminMetricsWindow,
+  type AdminUsersQuery,
 } from "@luke/service/admin/http";
 import {
   COLLECTION_STATE,
@@ -19,21 +21,20 @@ import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { SignInMethodsChart } from "../charts/signups-chart";
-import { SectionHeading } from "../charts/stat-card";
-import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
+import { AdminSection } from "../charts/stat-card";
+import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
 import {
-  FAVORITE_PATH,
   SEARCH_DEBOUNCE_MS,
   searchFromLocation,
   searchHref,
   searchTerm,
-  USERS_PATH,
-  windowedReadPath,
+  usersReadQuery,
 } from "../routing";
 import {
+  ADMIN_READ,
   type AdminReader,
   type AdminWriter,
   adminReadFailure,
@@ -46,21 +47,21 @@ const USERS_ERROR = "The users endpoint did not answer.";
 /** What the roster says when no account answers the search. */
 const USERS_EMPTY = "No account matches.";
 
-// SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
-const readUserList: AdminReader<AdminUserList> = async (response) =>
-  (await response.json()) as AdminUserList;
+/** The roster, as the admin users procedure answers it. */
+const readUserList =
+  (query: AdminUsersQuery): AdminReader<AdminUserList> =>
+  async (signal) =>
+    // SAFETY: the admin users procedure answers an AdminUserList (`@luke/service/admin/admin-users`), which the contract cannot name.
+    (await browserClient.admin.users(query, { signal })) as AdminUserList;
 
-/** One favorite intent as the endpoint's PUT or DELETE; a response that is not ok did not land. */
+/** One favorite intent as the star's PUT or DELETE; a refusal did not land. */
 const writeFavorite: AdminWriter = async (id, favorite, signal) => {
-  const response = await fetch(
-    `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
-    {
-      method: favorite ? "PUT" : "DELETE",
-      headers: { accept: "application/json" },
-      signal,
-    },
+  const input = { query: { [ADMIN_USER_ID_PARAM]: id } };
+  const write = favorite ? browserClient.admin.favorite : browserClient.admin.unfavorite;
+  return write(input, { signal }).then(
+    () => true,
+    () => false,
   );
-  return response.ok;
 };
 
 /**
@@ -123,9 +124,10 @@ export function UsersScreen({
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  const asked = usersReadQuery(hideAdmins, windowDays, searchTerm(query));
   const { state, refreshing, reload, withdraw, revise } = useAdminRead(
-    windowedReadPath(USERS_PATH, hideAdmins, windowDays, searchTerm(query)),
-    readUserList,
+    { procedure: ADMIN_READ.USERS, query: asked },
+    readUserList(asked),
     USERS_ERROR,
     { debounceMs: SEARCH_DEBOUNCE_MS },
   );
@@ -145,7 +147,7 @@ export function UsersScreen({
   const page = (
     content: Pick<
       React.ComponentProps<typeof AdminCollectionPage>,
-      "filters" | "state" | "empty" | "children"
+      "filters" | "state" | "empty" | "error" | "children"
     >,
   ) =>
     frame(
@@ -157,8 +159,6 @@ export function UsersScreen({
             <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
           </>
         }
-        account={account}
-        onSignOut={signOut}
         loadingLabel="Loading…"
         {...content}
       />,
@@ -183,13 +183,17 @@ export function UsersScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
     case "error":
-      return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, USERS_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
-      );
+      return page({
+        filters: search,
+        state: COLLECTION_STATE.ERROR,
+        error: (
+          <AdminErrorState
+            detail={adminReadFailure(state, USERS_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        ),
+      });
     case "ready": {
       const list = state.value;
       // The service searches the whole roster once the debounce settles; until
@@ -210,10 +214,9 @@ export function UsersScreen({
       // Note that the methods describe every account the scope keeps, so a
       // search that narrows the rows, or finds none, leaves the chart standing.
       const signInMethods = (
-        <>
-          <SectionHeading>Sign-in methods</SectionHeading>
+        <AdminSection title="Sign-in methods">
           <SignInMethodsChart methods={list.signIn.methods} totalAccounts={list.signIn.accounts} />
-        </>
+        </AdminSection>
       );
 
       return page({
@@ -231,26 +234,30 @@ export function UsersScreen({
         state: rows.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY,
         empty: refreshed(
           <>
-            <EmptyState icon={<SearchIcon />}>{USERS_EMPTY}</EmptyState>
-            {truncatedTo === undefined ? null : (
-              <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
-            )}
+            <AdminSection>
+              <EmptyState icon={<SearchIcon />}>{USERS_EMPTY}</EmptyState>
+              {truncatedTo === undefined ? null : (
+                <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+              )}
+            </AdminSection>
             {signInMethods}
           </>,
         ),
         children: refreshed(
           <>
-            <AccountsTable
-              rows={rows}
-              windowDays={list.windowDays}
-              emptyText={USERS_EMPTY}
-              minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
-              onOpen={onOpenAccount}
-              detailColumns={ROSTER_DETAIL_COLUMNS}
-              sortable
-              favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
-            />
-            <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            <AdminSection>
+              <AccountsTable
+                rows={rows}
+                windowDays={list.windowDays}
+                emptyText={USERS_EMPTY}
+                minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
+                onOpen={onOpenAccount}
+                detailColumns={ROSTER_DETAIL_COLUMNS}
+                sortable
+                favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
+              />
+              <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            </AdminSection>
             {signInMethods}
           </>,
         ),

@@ -9,27 +9,29 @@ import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { organization, user } from "../../schemas/auth.js";
+import { user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { issue } from "../../schemas/issue.js";
 import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
 import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
-import { createIssue } from "../issue-store.js";
 import {
+  assignUnassignedTask,
   beginTaskWork,
   createTask,
   createTaskOnce,
   deleteTask,
   listTasks,
   nameUntitledTask,
+  openTaskConversation,
   readTask,
+  readTaskHeader,
   readTaskWorkspace,
   TaskArchived,
+  TaskAssigneeNotMember,
   updateTask,
 } from "../task-store.js";
 import { voiceSessionRecord } from "../voice-session-record.js";
@@ -61,7 +63,7 @@ const openSharedTask = Effect.gen(function* () {
   const workspace = yield* openWorkspace(dean);
   yield* joinWorkspace(workspace, charles);
   const { id: taskId } = yield* createTask(dean, { ...SHARED_TASK, organizationId: workspace });
-  return { dean, charles, taskId };
+  return { dean, charles, taskId, workspace };
 });
 
 /** The plan's line in the account's list, archived ones among the rest, failing the test where it has none. */
@@ -337,80 +339,6 @@ it.layer(getTestDB())("a plan's brief", (it) => {
   );
 });
 
-/** An issue Dean files in the workspace, failing the test where it is not filed. */
-const fileIssue = (userId: string, organizationId: string, title: string) =>
-  Effect.map(
-    createIssue(userId, { organizationId, title, description: "Steps to reproduce." }),
-    (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")),
-  );
-
-it.layer(getTestDB())("a plan started from an issue", (it) => {
-  it.effect("names its issue to every member of the workspace, and to no account outside it", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const charles = yield* openAccount;
-      const outsider = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      yield* joinWorkspace(organizationId, charles);
-      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
-      const [workspace] = yield* Database.use((db) =>
-        db.select().from(organization).where(eq(organization.id, organizationId)),
-      );
-
-      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
-
-      assert.equal(started.issueId, filed.id);
-      assert.equal((yield* listedTask(charles, started.id)).issueId, filed.id);
-      assert.deepEqual(Option.getOrUndefined(yield* readTask(charles, started.id))?.issue, {
-        id: filed.id,
-        number: filed.number,
-        title: "Invites expire too soon",
-        description: "Steps to reproduce.",
-        workspaceName: workspace?.name,
-        workspaceSlug: workspace?.slug,
-      });
-      const outside = yield* listTasks(outsider, { includeArchived: true });
-      assert.equal(
-        outside.some(({ id }) => id === started.id),
-        false,
-      );
-      assert.equal(Option.isNone(yield* readTask(outsider, started.id)), true);
-    }),
-  );
-
-  it.effect("lets its issue go once it moves to another workspace", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      const elsewhere = yield* openWorkspace(dean);
-      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
-      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
-
-      const renamed = yield* updateTask(dean, started.id, { name: "Invites", organizationId });
-      assert.equal(Option.getOrUndefined(renamed)?.issueId, filed.id);
-      const moved = yield* updateTask(dean, started.id, { organizationId: elsewhere });
-
-      assert.equal(Option.getOrUndefined(moved)?.issueId, undefined);
-      assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
-    }),
-  );
-
-  it.effect("lets its issue go once the issue is deleted, and stands", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
-      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
-
-      yield* Database.use((db) => db.delete(issue).where(eq(issue.id, filed.id)));
-
-      const listed = yield* listedTask(dean, started.id);
-      assert.equal(listed.issueId, undefined);
-      assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
-    }),
-  );
-});
-
 it.layer(getTestDB())("a plan's workspace", (it) => {
   it.effect(
     "names the workspace the plan stands in to every member, follows a move, and names none to an account outside it",
@@ -429,6 +357,44 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         yield* updateTask(dean, taskId, { organizationId: elsewhere });
         assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(elsewhere));
         assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a plan's header names where it stands and whose it is to every member, follows its archive and its conversation, and names nothing to an account outside it or for a plan that is none",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const stranger = yield* openAccount;
+        const workspace = Option.getOrThrow(yield* readTaskWorkspace(dean, taskId));
+        const started = {
+          workspaceId: workspace,
+          ownerId: dean,
+          name: SHARED_TASK.name,
+          repository: null,
+          archived: false,
+          conversationId: undefined,
+        };
+
+        assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
+        assert.deepEqual(yield* readTaskHeader(charles, taskId), Option.some(started));
+        assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
+        assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
+
+        const { conversationId } = Option.getOrThrow(yield* openTaskConversation(charles, taskId));
+        yield* updateTask(dean, taskId, { archived: true });
+        const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
+        assert.deepEqual(header, { ...started, archived: true, conversationId });
+        // The header agrees with the whole read on everything it answers.
+        const whole = Option.getOrThrow(yield* readTask(charles, taskId));
+        assert.deepEqual(header, {
+          workspaceId: whole.task.workspaceId,
+          ownerId: whole.ownerId,
+          name: whole.task.name,
+          repository: whole.task.repository,
+          archived: whole.task.archivedAt !== undefined,
+          conversationId: whole.conversationId,
+        });
       }),
   );
 });
@@ -733,6 +699,155 @@ it.layer(getTestDB())("a task's status and priority", (it) => {
         status: TASK_STATUS.DONE,
         priority: TASK_PRIORITY.URGENT,
       });
+    }),
+  );
+});
+
+/** Who the task is assigned to, by id, as the account reads it in the list and opened alike, which must agree. */
+const assigneeReadBy = (userId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const listed = (yield* listedTask(userId, taskId)).assignee?.userId;
+    const opened = yield* readTask(userId, taskId);
+    assert.equal(Option.getOrUndefined(opened)?.task.assignee?.userId, listed);
+    return listed;
+  });
+
+it.layer(getTestDB())("a task's assignee", (it) => {
+  it.effect("starts with no one, or the member the start names, named as their account is", () =>
+    Effect.gen(function* () {
+      const { dean, charles, workspace: organizationId } = yield* openSharedTask;
+
+      const plain = yield* createTask(dean, { organizationId });
+      const assigned = yield* createTask(dean, { organizationId, assigneeId: charles });
+      const once = yield* createTaskOnce(dean, {
+        organizationId,
+        id: randomUUID(),
+        text: "",
+        assigneeId: charles,
+      });
+
+      assert.equal(plain.assignee, undefined);
+      assert.deepEqual(assigned.assignee, { userId: charles, name: "Test User" });
+      assert.equal(Option.getOrUndefined(once)?.assignee?.userId, charles);
+      assert.equal(yield* assigneeReadBy(charles, assigned.id), charles);
+    }),
+  );
+
+  it.effect("refuses a start that names someone who is no member of the workspace", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const outsider = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+
+      const refused = yield* Effect.result(
+        createTask(dean, { organizationId, name: "Refused", assigneeId: outsider }),
+      );
+      const refusedOnce = yield* Effect.result(
+        createTaskOnce(dean, { organizationId, id: randomUUID(), text: "", assigneeId: outsider }),
+      );
+
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskAssigneeNotMember);
+      assert.ok(
+        Result.isFailure(refusedOnce) && refusedOnce.failure instanceof TaskAssigneeNotMember,
+      );
+      assert.deepEqual(yield* listTasks(dean), []);
+    }),
+  );
+
+  it.effect("changes for every member, clears with null, and refuses an outsider as assignee", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      const outsider = yield* openAccount;
+
+      yield* updateTask(charles, taskId, { assigneeId: dean });
+      assert.equal(yield* assigneeReadBy(charles, taskId), dean);
+
+      const refused = yield* Effect.result(updateTask(dean, taskId, { assigneeId: outsider }));
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskAssigneeNotMember);
+      assert.equal(yield* assigneeReadBy(dean, taskId), dean);
+      assert.equal(
+        Option.isNone(yield* updateTask(outsider, taskId, { assigneeId: outsider })),
+        true,
+      );
+
+      yield* updateTask(dean, taskId, { assigneeId: null });
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+    }),
+  );
+
+  it.effect("is refused while the task is archived, unless the same change brings it back", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      yield* updateTask(dean, taskId, { archived: true });
+
+      const refused = yield* Effect.result(updateTask(dean, taskId, { assigneeId: charles }));
+      yield* updateTask(dean, taskId, { archived: false, assigneeId: charles });
+
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskArchived);
+      assert.equal(yield* assigneeReadBy(dean, taskId), charles);
+    }),
+  );
+
+  it.effect("goes unassigned when the task moves where its assignee is no member", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      const initech = yield* openWorkspace(dean);
+      const shared = yield* openWorkspace(dean);
+      yield* joinWorkspace(shared, charles);
+      const staying = yield* createTask(dean, { organizationId: initech, assigneeId: dean });
+      yield* updateTask(dean, taskId, { assigneeId: charles });
+
+      yield* updateTask(dean, staying.id, { organizationId: shared });
+      yield* updateTask(dean, taskId, { organizationId: initech });
+
+      assert.equal(yield* assigneeReadBy(dean, staying.id), dean);
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+      const refused = yield* Effect.result(
+        updateTask(dean, staying.id, { organizationId: initech, assigneeId: charles }),
+      );
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskAssigneeNotMember);
+    }),
+  );
+
+  it.effect("lets a former member's tasks of that workspace go, and no other workspace's", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId, workspace } = yield* openSharedTask;
+      const elsewhere = yield* openWorkspace(dean);
+      yield* joinWorkspace(elsewhere, charles);
+      const other = yield* createTask(dean, { organizationId: elsewhere, assigneeId: charles });
+      yield* updateTask(dean, taskId, { assigneeId: charles });
+
+      // The member's row is deleted as the plugin deletes it, whichever write takes them out.
+      yield* leaveWorkspace(workspace, charles);
+
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+      assert.equal(yield* assigneeReadBy(dean, other.id), charles);
+    }),
+  );
+
+  it.effect("goes unassigned, and the task stands, when the assignee's account is deleted", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      yield* updateTask(dean, taskId, { assigneeId: charles });
+
+      yield* Database.use((db) => db.delete(user).where(eq(user.id, charles)));
+
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+    }),
+  );
+
+  it.effect("is the starter of an agent on a task no one is assigned to, and only then", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId, workspace } = yield* openSharedTask;
+      const outsider = yield* openAccount;
+      const taken = yield* createTask(dean, { organizationId: workspace, assigneeId: dean });
+
+      assert.equal(yield* assignUnassignedTask(outsider, taskId), false);
+      assert.equal(yield* assignUnassignedTask(charles, taskId), true);
+      assert.equal(yield* assignUnassignedTask(dean, taskId), false);
+      assert.equal(yield* assignUnassignedTask(charles, taken.id), false);
+      assert.equal(yield* assigneeReadBy(dean, taskId), charles);
+      assert.equal(yield* assigneeReadBy(dean, taken.id), dean);
     }),
   );
 });

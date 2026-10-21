@@ -22,7 +22,8 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
-import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
+import { barTopRadius } from "./bar-radius";
+import { ChartEmpty, ChartFrame, ChartTrend, LEGEND, LEGEND_ENTRY } from "./chart-frame";
 
 const ACTIVITY_TITLE = "Activity by feature per day";
 
@@ -49,13 +50,10 @@ const ACTIVITY_CHART = {
 
 const FEATURES = Object.values(ACTIVITY_FEATURE);
 
-/** The top band rounds its corners, as a single series' bar does; the rest stand square. */
-const TOP_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
-
 /** One band's swatch and name, in the legend under the plot. */
 function LegendEntry({ feature }: { feature: ActivityFeature }): React.JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className={LEGEND_ENTRY}>
       <span
         aria-hidden="true"
         className="inline-block size-2.5 rounded-sm"
@@ -68,7 +66,7 @@ function LegendEntry({ feature }: { feature: ActivityFeature }): React.JSX.Eleme
 
 function ActivityLegend(): React.JSX.Element {
   return (
-    <span className="flex flex-wrap gap-x-4 gap-y-1">
+    <span className={LEGEND}>
       {FEATURES.map((feature) => (
         <LegendEntry key={feature} feature={feature} />
       ))}
@@ -143,7 +141,7 @@ export function ActivityChart({
               dataKey={feature}
               stackId="activity"
               fill={ACTIVITY_CHART[feature].color}
-              radius={index === FEATURES.length - 1 ? TOP_RADIUS : 0}
+              radius={index === FEATURES.length - 1 ? barTopRadius() : 0}
             >
               {daily.map((point) => (
                 <Cell

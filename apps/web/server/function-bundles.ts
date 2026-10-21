@@ -3,8 +3,14 @@ import { builtinModules } from "node:module";
 import { join, posix, relative, sep } from "node:path";
 import { Schema } from "effect";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
+import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
-import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-layout.js";
+import {
+  FUNCTION_BUNDLE_DIRECTORY,
+  ORPC_ROUTE_MODULE,
+  routeSourcePath,
+  webFunctions,
+} from "./function-layout.js";
 
 /**
  * How the functions become bundles, declared once so the build script and the
@@ -83,12 +89,17 @@ function packageNameOf(specifier: string): string {
     : (specifier.split("/")[0] ?? specifier);
 }
 
+/** One member's import: a route file's default export, or the hosted oRPC route by its name. */
+function routeImport(web: string, route: string, index: number): string {
+  if (route === ORPC_ROUTE_KEY) {
+    return `import { orpcRoute as route${index} } from ${JSON.stringify(join(web, ORPC_ROUTE_MODULE))};`;
+  }
+  return `import route${index} from ${JSON.stringify(join(web, routeSourcePath(route)))};`;
+}
+
 /** The generated entry of a grouped function: every member route, keyed for the dispatcher. */
 function dispatcherSource(web: string, definition: FunctionDefinition): string {
-  const imports = definition.routes.map(
-    (route, index) =>
-      `import route${index} from ${JSON.stringify(join(web, routeSourcePath(route)))};`,
-  );
+  const imports = definition.routes.map((route, index) => routeImport(web, route, index));
   const entries = definition.routes.map(
     (route, index) => `[${JSON.stringify(route)}, route${index}]`,
   );
@@ -203,13 +214,6 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
   };
 }
 
-type MetafileImport = Metafile["inputs"][string]["imports"][number];
-
-/** The specifier a module wrote, whether esbuild inlined what it resolved to or left it external. */
-function importSpecifier(imported: MetafileImport): string {
-  return imported.original ?? imported.path;
-}
-
 /** The bundle's file under `dist-functions/`, POSIX-separated, whatever the metafile's output path was relative to. */
 function bundleKey(web: string, outputPath: string): string {
   const fromWeb = relative(join(web, FUNCTION_BUNDLE_DIRECTORY), join(web, outputPath));
@@ -291,40 +295,16 @@ export function externalsDrift(
   return drift;
 }
 
-/**
- * The import chain from a bundle's entry to the first module that imports
- * the specifier, as the metafile's input paths: what makes a drift fixable
- * rather than merely true, since the offending edge is the last step and the
- * module that carried it into the bundle is the one before. Empty when the
- * bundle does not import it.
- */
-export function importChain(
+/** The bundles, by their output path, whose inputs include the module given, by its absolute path. */
+export function bundlesReaching(
   metafile: Metafile,
-  outputPath: string,
-  specifier: string,
-): readonly string[] {
-  const output = metafile.outputs[outputPath];
-  if (output?.entryPoint === undefined) return [];
-  const inBundle = new Set(Object.keys(output.inputs));
-  const parent = new Map<string, string | undefined>([[output.entryPoint, undefined]]);
-  const queue = [output.entryPoint];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (current === undefined) break;
-    const input = metafile.inputs[current];
-    if (input === undefined) continue;
-    if (input.imports.some((imported) => importSpecifier(imported) === specifier)) {
-      const chain: string[] = [];
-      for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
-        chain.unshift(at);
-      }
-      return chain;
-    }
-    for (const imported of input.imports) {
-      if (imported.external || !inBundle.has(imported.path) || parent.has(imported.path)) continue;
-      parent.set(imported.path, current);
-      queue.push(imported.path);
-    }
-  }
-  return [];
+  web: string,
+  module: string,
+): ReadonlySet<string> {
+  const input = relative(web, module);
+  return new Set(
+    Object.entries(metafile.outputs)
+      .filter(([, output]) => input in output.inputs)
+      .map(([path]) => path),
+  );
 }

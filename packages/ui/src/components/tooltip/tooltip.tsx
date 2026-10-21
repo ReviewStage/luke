@@ -25,7 +25,9 @@ import { visibleViewport } from "../../visible-viewport.js";
  * portal still bubbles them through the tree it was drawn from, and a card
  * hung from a mark inside a row's button would otherwise press the row. Its
  * words are the app's, so a card is left out of a session recording whole,
- * by the recorder's fixed `ph-no-capture` class.
+ * by the recorder's fixed `ph-no-capture` class. A finger has no hover, so
+ * its touch arriving on a card, or lifting off it, tells the app nothing of
+ * a pointer resting there; its press still does.
  */
 
 /** The gap between a control and its hint, and the hint's least distance from the window's edge, in CSS pixels. */
@@ -195,7 +197,7 @@ export function TooltipCard({
 }: TooltipBase & {
   /** Whether it hangs beside its control rather than under it. */
   beside?: boolean;
-  /** The pointer arriving on the card, or leaving it. */
+  /** The pointer arriving on the card, or leaving it; never a finger's touch. */
   onHover?: (over: boolean) => void;
   /** A press begun on the card. */
   onPress?: () => void;
@@ -212,8 +214,12 @@ export function TooltipCard({
       role="tooltip"
       className="luke-tooltip luke-tooltip-card ph-no-capture"
       {...hintMarks(base, at)}
-      onPointerEnter={() => onHover?.(true)}
-      onPointerLeave={() => onHover?.(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") onHover?.(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType !== "touch") onHover?.(false);
+      }}
       onPointerDown={(event) => {
         event.stopPropagation();
         onPress?.();

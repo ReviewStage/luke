@@ -10,8 +10,9 @@ import mermaid, { type MermaidConfig } from "mermaid";
 /**
  * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, imported by the panel (`@luke/ui/diagram-contract`).
  *
- * The panel's policy is `style-src 'self'` (`../index.html`), and Mermaid's
- * SVG carries its theme in a `<style>` element, which the policy refuses:
+ * The panel's policy is `style-src 'self'` (the desktop's
+ * `renderer/index.html` and the web's `vercel.json`), and Mermaid's SVG
+ * carries its theme in a `<style>` element, which the policy refuses:
  * put in the page, every node draws black. So the SVG is drawn as an
  * `<img>` from a `data:` address instead, a document of its own whose style
  * applies inside it. Mermaid measures each label in the page as it lays the

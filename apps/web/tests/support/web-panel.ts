@@ -7,7 +7,6 @@ import { once } from "node:events";
 import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { initialAppState } from "@luke/host/client";
@@ -18,6 +17,7 @@ import { installAppPlatform } from "@luke/panel/app-platform";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
+import { loadTasksFixture } from "@luke/panel/tasks/tasks-fixture-loader";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@luke/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -102,7 +102,6 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
   return {
     ...quiet,
     requestAppState: () => Promise.resolve(state),
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "fixture" }),
   } as unknown as AppBridge;
 }
 
@@ -122,6 +121,8 @@ export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void 
 
 /** The panel drawn in the tab once its state is read, as the web root draws it. */
 export async function drawPanel() {
+  // A fixture run's window is drawn once its synthetic tasks have landed; they land before this one draws.
+  await loadTasksFixture();
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);
@@ -136,13 +137,18 @@ export async function drawPanel() {
     [...element.querySelectorAll("button")].findLast(
       (one) => one.getAttribute("aria-label") === label,
     );
+  const click = (label: string) => {
+    const button = buttonOf(label);
+    assert.ok(button !== undefined, `a ${label} button stands`);
+    button.click();
+  };
   return {
     shows: (label: string) => element.querySelector(`[aria-label="${label}"]`) !== null,
     offers: (label: string) => buttonOf(label) !== undefined,
+    /** Presses `label` without waiting on what follows: for a press that moves the browser, inside `travel`, which waits for it to land. */
+    click,
     press: async (label: string) => {
-      const button = buttonOf(label);
-      assert.ok(button !== undefined, `a ${label} button stands`);
-      await act(async () => button.click());
+      await act(async () => click(label));
       await settle();
     },
   };

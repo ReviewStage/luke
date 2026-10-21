@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
@@ -51,18 +52,18 @@ import { PATH_COPY_WORDS } from "./file-menu.js";
  * further once answered, so J and K keep their meaning everywhere else in
  * the window (the Inbox's next and previous item, `@luke/settings/shortcuts`), an
  * Escape with no file stood on reaches the window's layers, and the tab's ⌘F
- * is never one of them. The file stood on is outlined in the list and named
- * in the bar; with none stood on, the bar names the file at the top of the
- * list, and a key starts from it.
+ * is never one of them. The file stood on is outlined in the list, marked in
+ * the tree and its strip, and what the bar's ⋯ copies; with none stood on,
+ * the file at the top of the list is, and a key starts from it.
  *
  * A file's fold is the one the developer chose for it, else its default:
  * folded where it `startsCollapsed`, or where the member marked it viewed,
  * as stage-cli folds a viewed file. So a file that starts collapsed and is
  * opened stays open, Collapse all and Expand all fold exactly the files the
  * filter keeps, and marking a file viewed folds it, or unmarking opens it,
- * whatever was chosen for it before. A file the filter leaves out, chosen where every
- * changed file is listed, as the bar's crumbs list them, clears the filter
- * and is scrolled to once the list holds it.
+ * whatever was chosen for it before. A file the filter leaves out, asked
+ * for where every changed file is reached, as a chapter's key change asks
+ * for one, clears the filter and is scrolled to once the list holds it.
  */
 
 /** The fold keys' chords, for the hints of the controls that do the same. */
@@ -90,12 +91,17 @@ export const LIST_WORDS = {
   VIEWED: "Viewed",
   MARK_VIEWED: "Mark as viewed",
   UNMARK_VIEWED: "Mark as not viewed",
+  /** How many files there are, said where the marks are not read. */
+  filesOf: (files: number) => `${files} ${files === 1 ? "file" : "files"}`,
   /** How far through the files the member is, as GitHub counts it. */
-  viewedOf: (viewed: number, files: number) => `${viewed} / ${files} viewed`,
+  viewedOf: (viewed: number, files: number) =>
+    `${viewed} / ${files} ${files === 1 ? "file" : "files"} viewed`,
+  /** Every file viewed. */
+  allViewed: (files: number) => (files === 1 ? "1 file viewed" : `All ${files} files viewed`),
 } as const;
 
 /** Whether the press landed in something taking typing, which keeps its letters. */
-function typingInto(target: EventTarget | null): boolean {
+export function typingInto(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || target.matches("input, textarea, select");
 }
@@ -163,10 +169,10 @@ export interface ChangesList {
   readonly toggleAll: () => void;
   /** The file the keys stand on, outlined; none until a key or a choice stands on one. */
   readonly standing: string | undefined;
-  /** The file the bar names: the one stood on, else the one at the top of the list. */
+  /** The file the tree marks and the bar's ⋯ acts on: the one stood on, else the one at the top of the list. */
   readonly current: string | undefined;
   readonly onTopFile: (path: string) => void;
-  /** Stands on a file and scrolls the list to it, as a choice in the tree or a crumb does. */
+  /** Stands on a file and scrolls the list to it, as a choice in the tree does. */
   readonly go: (path: string) => void;
   /** Stands on a file without scrolling, as a press on its header does. */
   readonly stand: (path: string) => void;
@@ -197,10 +203,10 @@ export function useChangesList(
   const [standing, setStanding] = useState<string | undefined>(undefined);
   const [top, setTop] = useState<string | undefined>(undefined);
   // Note that the file at the top is kept as the list scrolls but drawn only
-  // while no file is stood on, because the bar names the one stood on then,
+  // while no file is stood on, because the tree marks the one stood on then,
   // and a draw of the whole view for each file scrolled past is the cost.
   const latestTop = useRef(top);
-  // The file stood on among those the filter keeps, which the bar names; set below once the filter is read.
+  // The file stood on among those the filter keeps, which the tree marks; set below once the filter is read.
   const standingNow = useRef<string | undefined>(undefined);
   const onTopFile = useCallback((path: string) => {
     latestTop.current = path;
@@ -297,7 +303,7 @@ export function useChangesList(
     choose(kept.map((file) => file.path));
     setChosen((was) => foldedAs(was, kept, !allCollapsed));
   }, [choose]);
-  // A file the filter leaves out is chosen in the tree's crumbs, which list every changed file: the filter is cleared, and the list scrolled to it once it holds it again.
+  // A file the filter leaves out is asked for, as a chapter's key change asks: the filter is cleared, and the list scrolled to it once it holds it again.
   const [revealing, setRevealing] = useState<string | undefined>(undefined);
   const go = useCallback(
     (path: string) => {
@@ -427,7 +433,10 @@ function pointerOver(): PointerEvent {
  * the pointer or the keyboard comes to the header, because a list of
  * hundreds of files would otherwise mount two for every one of them up
  * front. Mounting them draws the fold anew, so where the keyboard's arrival
- * on the fold is what mounted them, the fold takes the focus back.
+ * on the fold is what mounted them, the fold takes the focus back. A finger
+ * finds them mounted from the start, and its arrival mounts nothing, because
+ * iOS plays a tap's arrival as a hover and spends the tap on what that draws
+ * anew: the fold would only fold on a second tap.
  */
 export function FileHead({
   file,
@@ -450,7 +459,7 @@ export function FileHead({
   onStand: () => void;
 }): React.JSX.Element {
   const copy = useCopyToast();
-  const [near, setNear] = useState(false);
+  const [near, setNear] = useState(coarsePointerNow);
   // The header's hinted parts, in order: its fold, its letter, the path it moved from, and its path.
   const parts = useRef<(HTMLElement | null)[]>([]);
   const partAt = (at: number) => (element: HTMLElement | null) => {
@@ -522,7 +531,7 @@ export function FileHead({
       data-collapsed={collapsed ? "" : undefined}
       onPointerDown={onStand}
       onPointerEnter={(event) => {
-        if (near) return;
+        if (near || event.pointerType === "touch") return;
         arrived.current = { focused: -1, over: partOf(event.target) };
         setNear(true);
       }}

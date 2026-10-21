@@ -11,6 +11,14 @@ import type { BrowserWindow } from "electron";
 export function hardenedWebPreferences(input: {
   preloadPath: string;
   runMode: RunMode;
+  /**
+   * Whether Chromium may throttle the page while its window is hidden,
+   * minimized, or covered. A window kept unthrottled holds its timers,
+   * animation frames, and session recorder at full rate while nobody sees
+   * it, so only a window that runs real-time work hidden says no: the voice
+   * window, whose page plays the live call's audio.
+   */
+  backgroundThrottling: boolean;
 }): Electron.WebPreferences {
   return {
     preload: input.preloadPath,
@@ -19,7 +27,7 @@ export function hardenedWebPreferences(input: {
     sandbox: true,
     webSecurity: true,
     devTools: input.runMode.takesFocus,
-    backgroundThrottling: false,
+    backgroundThrottling: input.backgroundThrottling,
     // Luke's voice plays in the hidden voice window, which never sees a user
     // gesture of its own. Playback must not answer to a gesture requirement,
     // so the policy is asserted rather than left to Chromium's default.

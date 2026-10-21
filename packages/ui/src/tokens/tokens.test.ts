@@ -115,6 +115,37 @@ test("every palette sets the same colours", () => {
   assert.deepEqual(webDark, desktop);
 });
 
+/** The colours a chip's own face is drawn in, which no ground behind it may show through. */
+const CHIP_FACE = [
+  "--luke-color-chip",
+  "--luke-color-chip-hover",
+  "--luke-color-chip-selected",
+  "--luke-color-chip-edge",
+  "--luke-color-chip-edge-strong",
+] as const;
+
+/** The palettes' rules, by the selector each is written under. */
+const PALETTES = [
+  '[data-luke-profile="desktop"]',
+  '[data-luke-profile="web"], [data-luke-profile="web"][data-luke-theme="light"]',
+  '[data-luke-profile="web"][data-luke-theme="dark"]',
+] as const;
+
+/** Whether a value is an opaque colour: one `#rrggbb`, or a `light-dark()` pair of them. */
+function isOpaque(value: string): boolean {
+  return /^(#[0-9a-f]{6}|light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\))$/i.test(value);
+}
+
+test("a chip's face is opaque in every palette, so no ground shows through it", () => {
+  for (const selector of PALETTES) {
+    const palette = ruleOf("palettes", selector).values;
+    for (const name of CHIP_FACE) {
+      const value = palette.get(name) ?? "";
+      assert.ok(isOpaque(value), `${selector}'s ${name} is ${value || "unset"}`);
+    }
+  }
+});
+
 test("the web's dark accent ink reads at AA on every dark ground it stands on", () => {
   const dark = ruleOf("palettes", '[data-luke-profile="web"][data-luke-theme="dark"]').values;
   const ink = dark.get("--luke-color-accent-text") ?? "";

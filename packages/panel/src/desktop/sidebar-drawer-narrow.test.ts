@@ -3,9 +3,6 @@
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -19,7 +16,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them, and an empty Pinned, a place to drag a first pin that a phone cannot drag to, stands nowhere; beside the work the rows stand put over the tasks and the empty Pinned stays.
+ * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them, and an empty Pinned, a place to drag a first pin that a finger cannot drag to, stands nowhere under a finger; beside the work the rows stand put over the tasks, and under a mouse the empty Pinned stays whatever the room.
  */
 
 const WORKSPACE: Workspace = {
@@ -31,20 +28,23 @@ const WORKSPACE: Workspace = {
 
 const roots: Root[] = [];
 
-beforeEach(() => {
-  window.localStorage.clear();
+/** Answers the device's pointer as a finger's where `coarse`, else as a mouse's. */
+function pointer(coarse: boolean): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: () => ({
-      matches: false,
+    value: (query: string) => ({
+      matches: coarse && query === "(pointer: coarse)",
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
-  handState(experimentsOn(EXPERIMENT.SECTIONS));
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  pointer(false);
+  fakeAppBridge({});
+  handState({});
 });
 
 afterEach(() => {
@@ -101,17 +101,29 @@ function scrolled(sidebar: HTMLElement) {
   return { home: scroller.contains(home), tasks: scroller.contains(list) };
 }
 
-test("in a phone's drawer the pages' rows scroll with the tasks, and an empty Pinned stands nowhere", async () => {
+/** Whether the sidebar draws Pinned. */
+function pinnedStands(sidebar: HTMLElement): boolean {
+  return sidebar.querySelector('nav[aria-label="Pinned"]') !== null;
+}
+
+test("in a phone's drawer under a finger the pages' rows scroll with the tasks, and an empty Pinned stands nowhere", async () => {
+  pointer(true);
   const sidebar = await mountIn(SHELL_ROOM.NARROW);
 
   assert.deepEqual(scrolled(sidebar), { home: true, tasks: true });
-  assert.equal(sidebar.querySelector('nav[aria-label="Pinned"]'), null);
+  assert.equal(pinnedStands(sidebar), false);
+});
+
+test("a narrow window worked by a mouse, which can drag a first pin, keeps the empty Pinned", async () => {
+  const sidebar = await mountIn(SHELL_ROOM.NARROW);
+
+  assert.equal(pinnedStands(sidebar), true);
 });
 
 test("beside the work the pages' rows stand put over the tasks' scroller, and an empty Pinned waits for a first pin", async () => {
   const sidebar = await mountIn(SHELL_ROOM.WIDE);
 
   assert.deepEqual(scrolled(sidebar), { home: false, tasks: true });
-  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"]'), "Pinned stands");
+  assert.equal(pinnedStands(sidebar), true, "Pinned stands");
   assert.match(sidebar.textContent ?? "", /Drag tasks here to pin them/u);
 });

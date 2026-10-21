@@ -1,12 +1,16 @@
 import {
+  chatGptSignInAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
+  githubTokenAnswerViewSchema,
+  githubTokenSaveParamsSchema,
   planTemplateAnswerViewSchema,
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionParamsSchema,
   planTemplateRevisionsAnswerViewSchema,
   planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
+  providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
@@ -19,9 +23,9 @@ import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";
  * account-asks.ts -- the account's own asks of the host from Settings and a dictating box, as procedures.
  *
  * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused, as `app:act` refused it.
+ * with no payload and one sent anything is refused.
  * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port, as the issue acts' do.
+ * row's value into what crosses the port, as the agent acts' do.
  */
 export const accountAskActsContract = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: actProcedure(
@@ -39,6 +43,36 @@ export const accountAskActsContract = {
   )
     .input(exactInput(providerKeyRemoveParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]: actProcedure(
+    "Could not change your plan's default on this system.",
+  )
+    .input(exactInput(providerKeyForAgentsParamsSchema))
+    .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actProcedure(
+    "Could not sign in with ChatGPT on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(chatGptSignInAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actProcedure(
+    "Could not cancel the ChatGPT sign-in on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actProcedure(
+    "Could not read your GitHub token on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE]: actProcedure(
+    "Could not save your GitHub token on this system.",
+  )
+    .input(exactInput(githubTokenSaveParamsSchema))
+    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE]: actProcedure(
+    "Could not remove your GitHub token on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actProcedure(
     "Could not read your plan template on this system.",
   )

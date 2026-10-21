@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { createIssue } from "@luke/database/models/issue-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
+import { planRevision } from "@luke/database/schemas/plan-revision";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
@@ -69,7 +69,10 @@ import {
   taskTranscriptAnswerSchema,
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
-import { EVE_RESET_OUTCOME, type EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
+import {
+  type AgentSessions,
+  EVE_RESET_OUTCOME,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { messagesProcedures } from "@luke/service/agents/messages-procedures";
 import {
   requestUserId,
@@ -106,7 +109,7 @@ import {
 import { added } from "@luke/service/testing/task-contents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -123,7 +126,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { DISPATCH_QUERY } from "../server/function-dispatch.js";
+import { DISPATCH_QUERY, ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
 import { dispatched } from "./support/platform-landing";
 
 /**
@@ -154,6 +157,9 @@ const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
 const CODE = (taskId: string) => `${ONE_TASK(taskId)}/code`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
 const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
+const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
+/** A window of a file the File tab asks for. */
+const README_WINDOW = { path: "README.md", first: "1", last: "10" } as const;
 const PAGES = (taskId: string) => `${ONE_TASK(taskId)}/pages`;
 const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
 const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
@@ -207,7 +213,7 @@ function deploymentFor(account: string): string {
  */
 function retiringEve() {
   const retired: (readonly [string, string])[] = [];
-  const asked = (caller: string): EveSessions => ({
+  const asked = (caller: string): AgentSessions => ({
     open: () => Effect.die(new Error("a task's delete opens no session")),
     send: () => Effect.die(new Error("a task's delete sends no message")),
     cancel: () => Effect.die(new Error("a task with no agent has no turn to cancel")),
@@ -285,29 +291,6 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
 /** The flattened paths the old group still serves, which a request names as the rewrite hands them to it. */
 const GROUP_PATHS: ReadonlySet<string> = new Set([MESSAGES, SUBAGENT_MESSAGES]);
 
-/** The route keys the hosted oRPC router answers, as `tasks-procedures.ts` and `task-files-procedures.ts` serve them. */
-const TASK_ROUTES = [
-  "plans",
-  "plans/plan",
-  "plans/board",
-  "plans/edit",
-  "plans/revisions",
-  "plans/revision",
-  "plans/restore",
-  "plans/transcript",
-  "plans/work",
-  "plans/stop",
-  "plans/code",
-  "plans/file",
-  "plans/tree",
-  "plans/skills",
-  "plans/attachments",
-  "plans/pages",
-  "plans/page",
-  "plans/issues",
-  "plans/issue",
-] as const;
-
 /**
  * The routes over the test's own database and the GitHub given, answering
  * one request: a plan's own routes as a client sends them, landed by the
@@ -376,7 +359,7 @@ const answer = (
         return dispatched(request, new Map([[landedAs, { fetch: (each) => flattened(each) }]]));
       }
       if (GROUP_PATHS.has(new URL(request.url).pathname)) return flattened(request);
-      return dispatched(request, new Map(TASK_ROUTES.map((route) => [route, tasksRoute])));
+      return dispatched(request, new Map([[ORPC_ROUTE_KEY, tasksRoute]]));
     });
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
@@ -854,6 +837,63 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
+  it.effect(
+    "a plan starts assigned to the member its start names, a PATCH assigns it to another member or to no one, and an assignee who is no member is refused as an invalid request",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const shared = yield* openWorkspace(owner);
+        yield* joinWorkspace(shared, other);
+        const stranger = `user-${randomUUID()}`;
+        const db = yield* Database;
+        yield* db
+          .insert(user)
+          .values({ id: stranger, name: "Stranger", email: `${stranger}@luke.test` });
+        const start = (body: WireBoundaryInput) =>
+          ask(request(TASKS, owner, { method: "POST", body }));
+
+        const assigned = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* start({ ...RELAY, workspaceId: shared, assigneeId: other }),
+        ).plan;
+        assert.deepEqual(assigned.assignee, { userId: other, name: "Test User" });
+        assert.deepEqual(
+          yield* start({ ...RELAY, workspaceId: shared, assigneeId: stranger }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+
+        const patch = (body: WireBoundaryInput) =>
+          ask(request(ONE_TASK(assigned.id), other, { method: "PATCH", body }));
+        const reassigned = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* patch({ assigneeId: owner }),
+        ).plan;
+        assert.equal(reassigned.assignee?.userId, owner);
+        assert.deepEqual(
+          yield* patch({ assigneeId: stranger }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const unassigned = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* patch({ assigneeId: null }),
+        ).plan;
+        assert.equal(unassigned.assignee, undefined);
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner)),
+        ).plans;
+        assert.deepEqual(
+          listed.map((task) => task.assignee),
+          [undefined],
+          "nothing was started for the stranger",
+        );
+      }),
+  );
+
   it.effect("another account's plan answers as none on every route", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts();
@@ -877,7 +917,70 @@ it.layer(getTestDB())("the plan routes", (it) => {
         yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
         notFound,
       );
+      // The reads that need only where the plan stands, not its document, refuse it as the open does, and a plan that is none alike.
+      for (const id of [taskId, randomUUID()]) {
+        const bearer = id === taskId ? other : owner;
+        for (const read of [
+          request(WORK(id), bearer),
+          request(ISSUES(id), bearer),
+          request(FILE(id), bearer, { query: README_WINDOW }),
+          request(TREE(id), bearer),
+          request(SKILLS(id), bearer),
+        ]) {
+          assert.deepEqual(yield* ask(read), notFound, read.url);
+        }
+      }
+      assert.deepEqual(
+        yield* ask(request(STOP(randomUUID()), owner, { method: "POST" })),
+        notFound,
+      );
     }),
+  );
+
+  it.effect(
+    "a plan's reads that need only where it stands answer while its history holds a revision this build cannot read, which the open, reading who wrote each section, cannot",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        const now = yield* DateTime.nowAsDate;
+        // A revision a later build wrote, by a kind of writer this build has no name for.
+        yield* Database.use((db) =>
+          db.insert(planRevision).values({
+            taskId,
+            seq: 1_000,
+            actor: sql`'a-later-writer'`,
+            document: DEFAULT_PLAN_TEMPLATE,
+            changes: 1,
+            startedAt: now,
+            at: now,
+          }),
+        );
+
+        assert.deepEqual(
+          yield* ask(request(ONE_TASK(taskId), owner)),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        for (const read of [
+          request(MESSAGES, owner, { id: taskId }),
+          request(CODE(taskId), owner),
+          request(WORK(taskId), owner),
+          request(ISSUES(taskId), owner),
+          request(FILE(taskId), owner, { query: README_WINDOW }),
+          request(TREE(taskId), owner),
+          request(SKILLS(taskId), owner),
+          request(STOP(taskId), owner, { method: "POST" }),
+        ]) {
+          const answered = yield* ask(read);
+          assert.equal(
+            answered.status,
+            HOSTED_HTTP_STATUS.OK,
+            `${read.url} ${JSON.stringify(answered.body)}`,
+          );
+        }
+      }),
   );
 
   it.effect("stopping Luke on a plan he never worked on stops nothing, and only a POST stops", () =>
@@ -968,7 +1071,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan never planned on reads as an empty conversation on the agent tab's wire, and as no code shown",
+    "a plan never planned on reads as an empty conversation on the agent tab's wire, in one look as much as held, and as no code shown",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -992,6 +1095,20 @@ it.layer(getTestDB())("the plan routes", (it) => {
           )).status,
           HOSTED_HTTP_STATUS.BAD_REQUEST,
         );
+        // One look past a cursor is the only read `hold` names, and `none` the only word it takes.
+        const look = yield* ask(
+          request(MESSAGES, owner, { id: taskId, query: { after: page.cursor, hold: "none" } }),
+        );
+        assert.deepEqual(
+          readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, look).messages,
+          [],
+        );
+        for (const query of [{ hold: "none" }, { after: page.cursor, hold: "forever" }]) {
+          assert.equal(
+            (yield* ask(request(MESSAGES, owner, { id: taskId, query }))).status,
+            HOSTED_HTTP_STATUS.BAD_REQUEST,
+          );
+        }
       }),
   );
 
@@ -1540,41 +1657,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a start from an issue of the workspace names it, and one from an issue of a workspace the account is not in, or of another workspace of its own, is refused and starts no plan",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, ask } = yield* openAccounts();
-        const workspaceId = yield* openWorkspace(owner);
-        const elsewhere = yield* openWorkspace(owner);
-        const theirs = yield* openWorkspace(other);
-        const filed = (userId: string, organizationId: string) =>
-          Effect.map(createIssue(userId, { organizationId, title: "Invites expire" }), (made) =>
-            Option.getOrElse(made, () => assert.fail("the issue was not filed")),
-          );
-        const mine = yield* filed(owner, workspaceId);
-        const another = yield* filed(owner, elsewhere);
-        const outside = yield* filed(other, theirs);
-        const start = (issueId: string) =>
-          ask(request(TASKS, owner, { method: "POST", body: { ...RELAY, workspaceId, issueId } }));
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-
-        assert.deepEqual(yield* start(outside.id), notFound);
-        assert.deepEqual(yield* start(another.id), notFound);
-        assert.deepEqual(yield* ask(request(TASKS, owner)), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { plans: [], planlessAgents: [] },
-        });
-        const started = readAnswer(
-          taskAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* start(mine.id),
-        );
-        assert.equal(started.plan.issueId, mine.id);
-      }),
-  );
-
-  it.effect(
-    "a start that names an account, or a repository in no shape GitHub spells, is refused",
+    "a start that names an account, a workspace issue Luke no longer keeps, or a repository in no shape GitHub spells, is refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -1583,6 +1666,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ask(request(TASKS, owner, { method: "POST", body }));
 
         const naming = yield* start({ ...RELAY, userId: other });
+        const issued = yield* start({ ...RELAY, issueId: "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60" });
         const shaped = yield* start({
           name: RELAY.name,
           repository: { owner: "acme", name: "relay" },
@@ -1590,7 +1674,10 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const pathed = yield* start({ name: RELAY.name, repository: "acme/../relay" });
         const bare = yield* start({ name: RELAY.name, repository: "relay" });
 
-        assert.deepEqual([naming, shaped, pathed, bare], [invalid, invalid, invalid, invalid]);
+        assert.deepEqual(
+          [naming, issued, shaped, pathed, bare],
+          [invalid, invalid, invalid, invalid, invalid],
+        );
         assert.deepEqual(yield* ask(request(TASKS, owner)), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { plans: [], planlessAgents: [] },

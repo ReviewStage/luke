@@ -12,13 +12,24 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
 
 const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
 
-/** A neutral customer-facing answer when the hosted emergency brake refuses a session. */
+const NATIVE_AGENT_CALL_NOTE = "This agent runs in Claude Code or Codex and can't take calls yet.";
+
+/**
+ * A plain customer-facing answer when the service refuses a session for a
+ * reason the developer can read: the hosted emergency brake, or a call into
+ * an agent that runs natively, which takes no call yet.
+ */
 export function hostedVoiceUnavailableNote(
   diagnostics: LiveDiagnostics | undefined,
 ): string | undefined {
-  return diagnostics?.lastOutcome === LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED
-    ? HOSTED_VOICE_UNAVAILABLE_NOTE
-    : undefined;
+  switch (diagnostics?.lastOutcome) {
+    case LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED:
+      return HOSTED_VOICE_UNAVAILABLE_NOTE;
+    case LIVE_SESSION_OUTCOME.NATIVE_AGENT_NOT_HERE:
+      return NATIVE_AGENT_CALL_NOTE;
+    default:
+      return undefined;
+  }
 }
 
 /** Why Luke can speak but not listen: the system's grant is still missing. */

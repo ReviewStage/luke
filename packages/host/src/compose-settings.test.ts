@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
-import { GATEWAY_EVENT, type GatewayEventKind } from "@luke/gateway";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayEventKind,
+} from "@luke/gateway";
 import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { THEME } from "@luke/settings";
+import { SETTINGS_RESET_SCOPE, THEME } from "@luke/settings";
 import { isRecord, type WireValue } from "@luke/wire";
 import { ConfigProvider, Effect, Layer, Queue, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -190,6 +195,31 @@ it.effect(
       Queue.offerUnsafe(signal, undefined);
 
       assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
+);
+
+it.effect(
+  "a reset whose kept fields name anything but settings is refused, and the group stands as it was",
+  () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-reset-");
+      const { settings } = yield* tabOver(stateRoot, Layer.empty);
+      yield* settings.store.set("theme", THEME.DARK);
+      const reset = settings.methods[GATEWAY_METHOD.SETTINGS_RESET];
+      assert.ok(reset, "the concern answers a reset");
+      const context = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
+
+      for (const kept of [["zoom", "teleport"], "zoom"]) {
+        const refused: { readonly message: string } = yield* Effect.flip(
+          reset({ scope: SETTINGS_RESET_SCOPE.APPEARANCE, kept }, context),
+        );
+        assert.equal(refused.message, "kept must name settings");
+      }
+
+      assert.equal((yield* settings.store.snapshot()).stored.theme, THEME.DARK);
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),
