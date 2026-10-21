@@ -5,7 +5,7 @@ import {
   type PageFindAsk,
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
-import type { PageLine } from "@luke/features/page-wire";
+import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
@@ -348,12 +348,13 @@ function SourceMenu({ read }: { read: SourceRead | undefined }): React.JSX.Eleme
  * the page is drawn, and in the lines while its source is.
  */
 export function PagePane({
-  taskId,
+  place,
   page,
   readSource,
   findActive,
 }: {
-  taskId: string;
+  /** The plan the page stands on, or the agent on no task that showed it. */
+  place: PagePlace;
   page: PageLine;
   readSource: ReadPageSource;
   /** Whether the panel holds the window's keys, so the tab's find answers ⌘F. */
@@ -379,7 +380,7 @@ export function PagePane({
     <FindScope
       className="page-view-find"
       active={findActive}
-      subject={{ task: taskId, tab: { page: page.id } }}
+      subject={{ task: pagePlaceId(place), tab: { page: page.id } }}
     >
       <div className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
@@ -450,7 +451,7 @@ export function PagePane({
           <PageFrame
             key={reloads}
             title={page.title}
-            src={appPlatform().pageFrameUrl({ taskId: taskId, pageId: page.id, version })}
+            src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version })}
           />
         )}
       </div>

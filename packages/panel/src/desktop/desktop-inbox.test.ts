@@ -403,7 +403,9 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { pages: taskPages.get(request.payload.taskId) ?? [] },
+          value: {
+            pages: "taskId" in request.payload ? (taskPages.get(request.payload.taskId) ?? []) : [],
+          },
         });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {

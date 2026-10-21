@@ -27,6 +27,8 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -220,7 +222,7 @@ beforeEach(() => {
   earlier = 0;
   openedOnGitHub = [];
   copied = [];
-  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
   workspace = [];
   gitHub = new Map();
   fakeActs({
@@ -607,6 +609,125 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     [],
     "no task's kind is offered",
   );
+});
+
+/** A page the agent showed on itself, working on no task. */
+const FUNNEL: PageLine = {
+  id: "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b",
+  title: "Flaky funnel",
+  version: 2,
+  at: 5,
+  shownBy: { kind: PAGE_SHOWER.AGENT, agentId: AGENT_ID },
+};
+
+/** The page over the window's own side panel, holding the pages the agent showed on itself as the window does. */
+function PagesPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: {} },
+    agents,
+    [],
+    [],
+    [FUNNEL.id],
+    agents,
+  );
+  drawnPanel = sidePanel;
+  const base = tasksControl({});
+  return createElement(DesktopAgentPage, {
+    tasks: {
+      ...base,
+      sidePanel,
+      agentView: { ...base.agentView, agentId: AGENT_ID, pages: [FUNNEL] },
+    },
+    agentId: AGENT_ID,
+  });
+}
+
+test("the panel beside an agent's page offers the pages the agent showed on itself under its +, and one picked opens in a page tab drawn from the agent's own address, as a task's opens beside its plan", async () => {
+  localStorage.clear();
+  installScrollIntoView();
+  transcript = {
+    messages: [
+      {
+        id: "brief",
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: "Chart the flakes." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PagesPage))));
+  await settle();
+  act(() => drawnPanel?.onToggle());
+  await settle();
+
+  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the panel shows");
+  const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  assert.deepEqual(
+    [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
+    ["Pages", "Terminal"],
+  );
+  const row =
+    [...well.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
+      (each.textContent ?? "").includes(FUNNEL.title),
+    ) ?? assert.fail("the empty panel offers the agent's page");
+  act(() => row.click());
+  await settle();
+
+  assert.ok(
+    [...panel.querySelectorAll("[role='tab']")].some((tab) =>
+      (tab.textContent ?? "").includes(FUNNEL.title),
+    ),
+    "the page's tab stands in the panel",
+  );
+  assert.equal(
+    panel.querySelector<HTMLIFrameElement>(".page-view iframe")?.getAttribute("src"),
+    `luke-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
+  );
+});
+
+test("the row of a page the agent showed opens it in the panel beside the agent's page", async () => {
+  transcript = {
+    messages: [
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-show_page",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { title: FUNNEL.title, path: "funnel.html" },
+            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const chosen: unknown[] = [];
+  const tasks = tasksControl({});
+  const page = mount({
+    ...tasks,
+    sidePanel: { ...tasks.sidePanel, onChoose: (tab) => chosen.push(tab) },
+  });
+  await settle();
+
+  const row =
+    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
+      (each.textContent ?? "").includes(FUNNEL.title),
+    ) ?? assert.fail("the call's row names the page it showed");
+  act(() => row.click());
+
+  assert.deepEqual(chosen, [{ page: FUNNEL.id }]);
 });
 
 /** The page drawn over the window's own side panel, held by the agent. */

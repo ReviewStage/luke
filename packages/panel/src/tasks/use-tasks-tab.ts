@@ -312,6 +312,8 @@ interface InboxViewControl {
 interface AgentViewControl {
   /** The agent whose page stands, none while none does. */
   readonly agentId: string | undefined;
+  /** The pages that agent showed on itself, working on no task, each by its newest version; none until read. */
+  readonly pages?: readonly PageLine[] | undefined;
   readonly onOpen: (agentId: string) => void;
   readonly onClose: () => void;
 }
@@ -1615,7 +1617,17 @@ export function useTasksTab(input: {
     inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
   const inboxAgent =
     inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
-  const inboxPages = useInboxPages(inboxView === undefined ? undefined : inboxTask);
+  const inboxPages = useInboxPages(
+    inboxView === undefined || inboxTask === undefined ? undefined : { taskId: inboxTask },
+  );
+  // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
+  const agentPages = useInboxPages(
+    inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
+  );
+  const agentPageIds = useMemo(
+    () => (agentPages.pages ?? NO_PAGES).map((page) => page.id),
+    [agentPages.pages],
+  );
   const inboxPageIds = useMemo(
     () => (inboxPages.pages ?? NO_PAGES).map((page) => page.id),
     [inboxPages.pages],
@@ -1658,7 +1670,7 @@ export function useTasksTab(input: {
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
     inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
-    inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
+    inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : agentPageIds,
     // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by (`use-inbox-task-agents.ts`).
     inboxView !== undefined
       ? inboxAgent === undefined
@@ -3011,6 +3023,12 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.PAGE:
+        // A page of an agent on no task opens on that agent's page, in its panel.
+        if ("agentId" in place) {
+          standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
+          sidePanel.onShow(place.agentId, { page: place.pageId });
+          return;
+        }
         linkPanelTab(place.planId, { page: place.pageId });
         return;
       // A turn of Luke's own work on the task is drawn nowhere now, so its link opens the task's plan.
@@ -3594,6 +3612,7 @@ export function useTasksTab(input: {
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {
       agentId: agentView?.agentId,
+      pages: agentPages.pages,
       onOpen: guard((agentId: string) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AGENT, agentId });

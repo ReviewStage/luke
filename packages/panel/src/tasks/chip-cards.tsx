@@ -1,4 +1,5 @@
 import { sectionAnchors } from "@luke/features/mention-link";
+import type { PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
@@ -146,20 +147,21 @@ export function VersionChipCard({
 
 /** A page's card, its tab's, previewing it, where the page is one of the open plan's, the only ones the window holds; else `fallback`. */
 export function PageChipCard({
-  taskId,
+  place,
   pageId,
   fallback,
 }: {
-  /** The plan the link names the page on. */
-  taskId: string;
+  /** The plan the link names the page on, or the agent on no task. */
+  place: PagePlace;
   pageId: string;
   fallback: ReactNode;
 }): ReactNode {
   const tasks = useAppSlice(APP_SLICE.TASKS);
-  const page =
-    tasks?.activeTaskId === taskId ? tasks.pages?.find((each) => each.id === pageId) : undefined;
+  // Note that the window holds an agent's own pages beside its page alone, so a chip of one hangs its own card.
+  const held = "taskId" in place && tasks?.activeTaskId === place.taskId ? tasks.pages : undefined;
+  const page = held?.find((each) => each.id === pageId);
   if (page === undefined) return fallback;
-  return <PageCard taskId={taskId} page={page} />;
+  return <PageCard place={place} page={page} />;
 }
 
 /** The workspace a link was written under, by its slug, or its id where it has none, as the account holds it; none where it holds no such workspace. */

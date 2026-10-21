@@ -67,7 +67,8 @@ export function inboxPanelTarget(
   const link = readLink(href);
   if (link !== undefined) {
     const at = link.place;
-    if (at.kind === LINK_PLACE.PAGE && at.planId === place.taskId) {
+    // A page of an agent on no task is opened on the agent's own page, by the window.
+    if (at.kind === LINK_PLACE.PAGE && "planId" in at && at.planId === place.taskId) {
       return { kind: INBOX_PANEL_TARGET.PAGE, pageId: at.pageId };
     }
     if (at.kind === LINK_PLACE.CHANGES && at.planId === place.taskId) {
