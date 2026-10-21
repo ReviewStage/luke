@@ -1579,7 +1579,11 @@ export function useTasksTab(input: {
   const cloudTaskId =
     inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
   const cloudListed = useCloudBrowserTabs(cloudTaskId, useExperiment(EXPERIMENT.BROWSER));
-  const cloudBrowsers = useMemo(() => cloudListed?.map((each) => each.id), [cloudListed]);
+  // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
+  const cloudBrowsers = useMemo(
+    () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
+    [cloudTaskId, cloudListed],
+  );
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined

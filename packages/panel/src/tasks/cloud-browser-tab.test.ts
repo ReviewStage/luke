@@ -201,3 +201,66 @@ test("a cloud Browser tab's pane waits quietly for the page, draws it once a fra
     [{ type: BROWSER_LIVE_CLIENT.TAKE_OVER }, { type: BROWSER_LIVE_CLIENT.HAND_BACK }],
   );
 });
+
+test("while the member drives, a paste reaches the page as text, Control-V and ⌘V leave the paste to the window, and the wheel scrolls the page alone", async () => {
+  const sent: { type: string }[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  draw(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: "Luke",
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  const canvas = document.querySelector("canvas");
+  assert.ok(canvas);
+  const wheel = () => {
+    const event = new WheelEvent("wheel", { deltaY: 40, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  assert.equal(wheel(), false, "watching, the wheel is the panel's");
+
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({
+        type: BROWSER_LIVE_SERVER.DRIVER,
+        driver: { userId: "user-dean", heldUntil: 60_000 },
+        yours: true,
+      }),
+    ),
+  );
+  await settle();
+  const keyDown = (init: KeyboardEventInit) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    act(() => {
+      canvas.dispatchEvent(event);
+    });
+    return event.defaultPrevented;
+  };
+  assert.equal(keyDown({ key: "v", code: "KeyV", ctrlKey: true }), false);
+  assert.equal(keyDown({ key: "v", code: "KeyV", metaKey: true }), false);
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  Object.assign(paste, { clipboardData: { getData: () => "hello" } });
+  act(() => {
+    canvas.dispatchEvent(paste);
+  });
+  assert.equal(wheel(), true, "driving, the wheel is the page's alone");
+
+  assert.deepEqual(
+    sent.filter(
+      (message) =>
+        message.type === BROWSER_LIVE_CLIENT.KEY || message.type === BROWSER_LIVE_CLIENT.TEXT,
+    ),
+    [{ type: BROWSER_LIVE_CLIENT.TEXT, text: "hello" }],
+  );
+});

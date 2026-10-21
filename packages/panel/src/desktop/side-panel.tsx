@@ -2093,8 +2093,9 @@ export function SidePanel({
   const browserPages = useBrowserPages(browsing);
   // The task's agents' cloud Browser tabs stand while the experiment is on,
   // on every platform, since the page draws them from the service and needs
-  // nothing of main's; never beside the Inbox, which borrows its task's panel.
-  const cloudListed = useCloudBrowserTabs(taskId, browserOn && holder !== SIDE_PANEL_HOLDER.INBOX);
+  // nothing of main's; on a task's own panel alone, never an agent's page's or
+  // the Inbox's, which borrows its task's panel.
+  const cloudListed = useCloudBrowserTabs(taskId, browserOn && holder === SIDE_PANEL_HOLDER.TASK);
   const cloudBrowsers = useMemo(
     () =>
       cloudListed === undefined || cloudListed.length === 0

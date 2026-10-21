@@ -216,6 +216,19 @@ export function CloudBrowserPane({
   }, [live, size.width, size.height]);
 
   const yours = view.driver?.yours === true;
+  // A wheel over the page the member drives scrolls the page alone, never the panel around it;
+  // React's own wheel listener is passive, so the default is refused on one of the canvas's own.
+  const driving = useRef(yours);
+  driving.current = yours;
+  useEffect(() => {
+    const element = canvas.current;
+    if (element === null) return;
+    const refuse = (event: globalThis.WheelEvent) => {
+      if (driving.current) event.preventDefault();
+    };
+    element.addEventListener("wheel", refuse, { passive: false });
+    return () => element.removeEventListener("wheel", refuse);
+  }, []);
   const at = (event: MouseEvent | WheelEvent) => {
     const box = event.currentTarget.getBoundingClientRect();
     return {
@@ -264,8 +277,10 @@ export function CloudBrowserPane({
         alt: event.altKey,
         control: event.ctrlKey,
       };
-      // A Command chord the window answers is left to it; ⌘V arrives as the paste it is.
-      if (event.metaKey && (chordIsWindows(chord) || event.key.toLowerCase() === "v")) return;
+      // A Command chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
+      if (event.metaKey && chordIsWindows(chord)) return;
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "v")
+        return;
       event.preventDefault();
       const edit = event.metaKey && PAGE_EDIT_KEYS.has(event.key.toLowerCase());
       const modifiers = edit
