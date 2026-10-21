@@ -2,6 +2,7 @@ import { useAtom } from "@effect/atom-react";
 import { type GitHubIssuePick, isOutsideAuthor } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { BADGE_TONE, Badge, CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
@@ -84,7 +85,7 @@ const ISSUE_WORDS = {
   OUTSIDE_HINT: "Opened by someone outside the repository",
   GRANT_DETAIL: "Grant access",
   LINKED: "Linked",
-  FULL: "As many as a task links",
+  FULL: `At most ${TASK_BOUNDS.MAX_ISSUES} issues`,
 } as const;
 
 /** The GitHub section's heading, for the repository it lists. */

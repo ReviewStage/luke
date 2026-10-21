@@ -52,7 +52,7 @@ export const PENDING_WORDS = {
 /** What Delete asks before it takes a pending comment out of the review. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this pending comment?",
-  body: "It is taken out of your pending review. This can't be undone.",
+  body: "This can't be undone.",
   verb: "Delete comment",
   running: "Deleting",
 };

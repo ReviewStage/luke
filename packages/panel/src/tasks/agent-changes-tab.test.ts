@@ -1016,7 +1016,7 @@ test("a read that stopped short of every file offers no patch, and says why", as
   const [copy, download] = menuItems();
   for (const item of [copy, download]) {
     assert.equal(item?.getAttribute("aria-disabled") ?? String(item?.disabled), "true");
-    assert.match(item?.textContent ?? "", /Only the first files were read/u);
+    assert.match(item?.textContent ?? "", /This pull request has more files than were read/u);
   }
 });
 
