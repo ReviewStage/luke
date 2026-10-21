@@ -70,14 +70,13 @@ import { BRAIN_HOST_HEADER, type BRAIN_HOST_TURN, type BrainHostTurn } from "./b
  */
 
 /**
- * Where an eve service's routes stand under its origin: the brain's
- * at eve's own `/eve`, and the coding-agent service's at the named mount
- * `/eve/coder`, which the deployment's rewrite carries into that service and
- * whose own route transform turns back into `/eve/v1/*` before the door
- * reads it (`door.ts` spells the paths the door sees).
+ * Where the eve service's routes stand under its origin: the coding-agent
+ * service's at the named mount `/eve/coder`, which the deployment's rewrite
+ * carries into that service and whose own route transform turns back into
+ * `/eve/v1/*` before the door reads it (`door.ts` spells the paths the door
+ * sees).
  */
 export const EVE_MOUNT = {
-  TASKS: "/eve",
   CODER: "/eve/coder",
 } as const;
 
@@ -229,6 +228,10 @@ export const PLAN_REFUSAL = {
   SIGNED_OUT: "signed_out",
   UNREADABLE: "unreadable",
   UNREACHABLE: "unreachable",
+  /** The plan's usage limit refused its last turn and has not reset. */
+  LIMIT_REACHED: "limit_reached",
+  /** The provider said the account is not eligible to run on its plan. */
+  INELIGIBLE: "ineligible",
 } as const;
 
 export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
@@ -236,7 +239,7 @@ export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
 /**
  * Why a coding agent's native runtime did not take a call, where that is
  * why it failed: its conversation runs on a native harness that this
- * function has no way to launch or write to (the eve apps', until P11b), or
+ * function has no way to launch or write to, nor to relay to one that can, or
  * whose sandbox image is still being prepared. eve never answers one;
  * nothing falls through to eve in its place.
  */

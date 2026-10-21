@@ -983,7 +983,6 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   const [plus] = panelEntries({
     panel: sidePanel,
     kinds: [],
-    workers: [],
     files: shownFiles([showing]),
   });
   assert.ok(plus, 'the "+" offers the file');

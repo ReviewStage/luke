@@ -23,8 +23,8 @@
  * say so, and nothing after it runs, so the agent waits for the tab to be
  * handed back or asks; what ran before it stands. After it runs, the store
  * follows what the browser now holds: a tab opened or acted on is written
- * with its address and title, a tab closed is dropped, and a `list` makes
- * the store the browser's own pages.
+ * with its address and title, a `list` writes every page the browser
+ * holds, and only a tab the agent closed is dropped.
  *
  * A browser that cannot be reached answers `not-run` and why, never a throw.
  * A screenshot reaches the model as an image (`browserModelOutput`) and is
@@ -65,7 +65,7 @@ import {
 } from "@luke/features/mac-command-wire";
 import { EXCESS_KEYS, isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
-import { Clock, Effect, Result, Schema } from "effect";
+import { Clock, Duration, Effect, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
@@ -114,7 +114,8 @@ export const BROWSER_TOOL = {
     "screenshot to see the page, take a snapshot to read it as text with a ref beside each " +
     "element, read its console, or close it. Take a snapshot for the refs before you click or " +
     "type on an element. An action that leaves out its tab acts on the tab the action before " +
-    "it acted on, so open and go on in one call. While the developer drives a tab, actions on " +
+    "it acted on in the same call only, so open and go on in one call; a new call names its " +
+    "tab. While the developer drives a tab, actions on " +
     "it are refused until they hand it back: wait, or ask them. Answers each step that ran and " +
     "the tabs it acted on as they now stand, or `not-run` and why, such as the browser not " +
     "being reachable or the Mac not listening.",
@@ -136,6 +137,22 @@ export type BrowserToolResult =
         readonly tabs: readonly ShownTab[];
       })
   | { readonly status: typeof BROWSER_TOOL_STATUS.NOT_RUN; readonly reason: string };
+
+/** The address of a page that holds nothing: Chromium's own first page, which a call never sees. */
+const BLANK_ADDRESS = "about:blank";
+
+/** The actions that may move a tab's page, whose title is settled before the call ends. */
+const MOVING_ACTIONS: ReadonlySet<string> = new Set([
+  BROWSER_AGENT_ACTION.OPEN,
+  BROWSER_AGENT_ACTION.NAVIGATE,
+  BROWSER_AGENT_ACTION.BACK,
+  BROWSER_AGENT_ACTION.FORWARD,
+  BROWSER_AGENT_ACTION.CLICK,
+  BROWSER_AGENT_ACTION.KEY,
+]);
+
+/** How long, in all, a call's end waits on the pages it moved to finish loading, so their titles are kept as they settled. */
+const TITLE_SETTLE_MS = 5_000;
 
 /** Why a call ran nothing, or an action was refused, in words the model can act on. */
 export const BROWSER_TOOL_REFUSAL = {
@@ -230,11 +247,16 @@ function shownTab(page: PageTarget): ShownTab {
   };
 }
 
-/** The tabs the steps acted on, in the order first acted on, a closed one left out. */
+/** The tabs the steps acted on, every tab a list named among them, in the order first acted on, a closed one left out. */
 function tabsActedOn(steps: readonly BrowserAgentStep[]): readonly string[] {
   const acted: string[] = [];
   for (const step of steps) {
-    if (step.status !== BROWSER_STEP_STATUS.DONE || !("tab" in step)) continue;
+    if (step.status !== BROWSER_STEP_STATUS.DONE) continue;
+    if (step.action === BROWSER_AGENT_ACTION.LIST) {
+      for (const { tab } of step.tabs) if (!acted.includes(tab)) acted.push(tab);
+      continue;
+    }
+    if (!("tab" in step)) continue;
     const at = acted.indexOf(step.tab);
     if (step.action === BROWSER_AGENT_ACTION.CLOSE) {
       if (at >= 0) acted.splice(at, 1);
@@ -246,10 +268,28 @@ function tabsActedOn(steps: readonly BrowserAgentStep[]): readonly string[] {
 }
 
 /**
+ * The tabs whose page the steps may have moved, an open's, a navigation's, a
+ * click's, or a key's, and that still stand: the ones whose title may not
+ * have settled yet as the call ends.
+ */
+function tabsMoved(steps: readonly BrowserAgentStep[]): readonly string[] {
+  const moved = new Set<string>();
+  for (const step of steps) {
+    if (step.status !== BROWSER_STEP_STATUS.DONE || !("tab" in step)) continue;
+    if (step.action === BROWSER_AGENT_ACTION.CLOSE) moved.delete(step.tab);
+    else if (MOVING_ACTIONS.has(step.action)) moved.add(step.tab);
+  }
+  return [...moved];
+}
+
+/**
  * Keeps the store in step with what the browser now holds once a call ran:
- * every tab acted on written with its page as it stands, a tab closed
- * dropped, and after a `list`, every page the browser holds written and
- * every tab it no longer holds dropped.
+ * every tab acted on written with its page as it stands, and after a
+ * `list`, every page the browser holds; a tab the agent closed is dropped.
+ * Note that a kept tab the browser does not hold is never dropped here,
+ * because it is one the connection could not reopen just now
+ * (`restore-tabs.ts`), which the next connection tries again; only the
+ * agent's own `close` ends a tab.
  */
 function keepTabs(
   conversationId: string,
@@ -278,9 +318,7 @@ function keepTabs(
       });
     }
     const rows = yield* listAgentBrowserTabs(conversationId);
-    const gone = rows.filter((row) =>
-      listed ? !held.has(row.targetId) : closed.has(row.targetId) && !held.has(row.targetId),
-    );
+    const gone = rows.filter((row) => closed.has(row.targetId) && !held.has(row.targetId));
     for (const row of gone) yield* closeBrowserTab(conversationId, row.id);
   });
 }
@@ -290,10 +328,92 @@ function sandboxBrowser(call: BrowserCall) {
   return connectRestoring(call.browserSession, call.conversationId);
 }
 
+/**
+ * The browser as a call sees it: without the blank page Chromium starts
+ * with, so that page is never listed, kept, or reopened. Note that it is
+ * told apart as a blank page the store does not keep and this call did not
+ * open, since the browser marks no page as its first, and that a tab this
+ * call opened may still read as blank before its address commits.
+ */
+function withoutStartPage(cdp: CdpSession, kept: ReadonlySet<string>): CdpSession {
+  const opened = new Set<string>();
+  return {
+    ...cdp,
+    pages: Effect.map(cdp.pages, (pages) =>
+      pages.filter(
+        (page) =>
+          page.url !== BLANK_ADDRESS || kept.has(page.targetId) || opened.has(page.targetId),
+      ),
+    ),
+    openPage: (url) =>
+      Effect.tap(cdp.openPage(url), (targetId) => Effect.sync(() => opened.add(targetId))),
+  };
+}
+
+/**
+ * Waits, within `TITLE_SETTLE_MS` in all, for each page the steps moved to
+ * finish loading, so the title kept for it is its page's own rather than the
+ * address Chromium shows while it loads; a page that does not is kept as it
+ * then stands.
+ */
+function settleTitles(cdp: CdpSession, steps: readonly BrowserAgentStep[]) {
+  const moved = tabsMoved(steps);
+  const waits = moved.map((tab) =>
+    runBrowserActions(cdp, [
+      { action: BROWSER_AGENT_ACTION.WAIT, tab, timeoutMs: TITLE_SETTLE_MS },
+    ]),
+  );
+  return Effect.all(waits, { concurrency: "unbounded", discard: true }).pipe(
+    Effect.timeout(Duration.millis(TITLE_SETTLE_MS)),
+    Effect.ignore,
+  );
+}
+
+/**
+ * The steps with each tab a `list` named titled as its page settled
+ * (`settleTitles`), where the call moved it before that list and never
+ * after, and it still stands at the address listed: so a step never names a
+ * tab by the title it showed while loading where the result's `tabs` names
+ * it by its own, and a list before a later move keeps what it saw.
+ */
+function withSettledTitles(
+  steps: readonly BrowserAgentStep[],
+  byId: ReadonlyMap<string, PageTarget>,
+): readonly BrowserAgentStep[] {
+  // Each tab still standing that the call moved, by the step that last moved it.
+  const lastMoved = new Map<string, number>();
+  for (const tab of tabsMoved(steps)) {
+    lastMoved.set(
+      tab,
+      steps.findLastIndex(
+        (step) =>
+          step.status === BROWSER_STEP_STATUS.DONE &&
+          "tab" in step &&
+          step.tab === tab &&
+          MOVING_ACTIONS.has(step.action),
+      ),
+    );
+  }
+  return steps.map((step, at) => {
+    if (step.action !== BROWSER_AGENT_ACTION.LIST || step.status !== BROWSER_STEP_STATUS.DONE) {
+      return step;
+    }
+    const tabs = step.tabs.map((listed) => {
+      const page = byId.get(listed.tab);
+      const moved = lastMoved.get(listed.tab);
+      if (moved === undefined || moved > at || page === undefined) return listed;
+      const settled = shownTab(page);
+      return settled.url === listed.url ? { ...listed, title: settled.title } : listed;
+    });
+    return { ...step, tabs };
+  });
+}
+
 /** Runs the actions on the browser, the store kept in step after; a failure to keep it is logged and leaves the run as it ran. */
 function runOn(cdp: CdpSession, call: BrowserCall, actions: readonly BrowserAgentAction[]) {
   return Effect.gen(function* () {
     const run = yield* runBrowserActions(cdp, actions);
+    yield* settleTitles(cdp, run.steps);
     const pages = yield* Effect.result(cdp.pages);
     const held = Result.isSuccess(pages) ? pages.success : [];
     if (Result.isSuccess(pages)) {
@@ -307,7 +427,7 @@ function runOn(cdp: CdpSession, call: BrowserCall, actions: readonly BrowserAgen
       const page = byId.get(tab);
       return page === undefined ? [] : [shownTab(page)];
     });
-    return { run, tabs };
+    return { run: { ...run, steps: withSettledTitles(run.steps, byId) }, tabs };
   });
 }
 
@@ -334,10 +454,11 @@ function onSandbox(call: BrowserCall, actions: readonly BrowserAgentAction[]) {
           const now = new Date(yield* Clock.currentTimeMillis);
           const refused = firstDriven(actions, drivenTabs(rows, now));
           const runnable = refused === undefined ? actions : actions.slice(0, refused.index);
+          const kept = new Set(rows.map((row) => row.targetId));
           const outcome =
             runnable.length === 0
               ? { run: { steps: [], skipped: 0 }, tabs: [] }
-              : yield* runOn(cdp, call, runnable);
+              : yield* runOn(withoutStartPage(cdp, kept), call, runnable);
           return { ...outcome, refused, runnable };
         }),
       ),

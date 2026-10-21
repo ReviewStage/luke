@@ -7,6 +7,7 @@ import {
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
+  readCodingAgentRouting,
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
@@ -23,7 +24,7 @@ import {
   STORE_WRITE_REFUSAL,
   type StoreWriter,
 } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -54,6 +55,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentStatusOf } from "./status.js";
 
@@ -235,6 +237,12 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
 
+/** The runtime the agent's conversation runs on, eve where none is recorded. */
+const runtimeOf = (userId: string, agent: CodingAgent) =>
+  Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+    Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
+  );
+
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: AgentSessions<EveTypedTurn>,
@@ -357,7 +365,20 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
       : mentionedServers(line.serverWords ?? line.text, task?.task.repository ?? null);
-  const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
+  // Note that a native agent's servers are written just after its harness takes the words rather than
+  // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
+  // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock
+  // on it until the hand-over gave up. Its runner's first events take them under the conversation's lock,
+  // which waits for this transaction all the same, so the turn they are for still finds them.
+  const native = isNativeRuntime(yield* hostedStoreOrUnavailable(runtimeOf(userId, agent)));
+  const handing = native
+    ? Effect.flatMap(handOver, (taken) =>
+        taken
+          ? dispatchMentioningServers(userId, agent.id, servers, Effect.succeed(true))
+          : Effect.succeed(false),
+      )
+    : dispatchMentioningServers(userId, agent.id, servers, handOver);
+  const dispatch = handing.pipe(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(

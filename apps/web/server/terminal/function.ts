@@ -1,6 +1,6 @@
 import { authDeployment } from "@luke/service/auth/auth-deployment";
-import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
-import { browserLiveDependencies, browserLiveUserId } from "@luke/service/browser-live/production";
+import { resolveRelayUserId } from "@luke/service/auth/bearer";
+import { browserLiveDependencies } from "@luke/service/browser-live/production";
 import {
   type BrowserLiveServer,
   browserLiveServer,
@@ -25,7 +25,9 @@ import { runWeb } from "../runtime.js";
  * instance whose runtime cannot be built stands none, and its server keeps
  * refusing every upgrade with 503; either way what ended the relay is
  * reported to Sentry. The two relays share this edge because they stand on
- * the same terms, each a function of its own all the same.
+ * the same terms, each a function of its own all the same: the desktop's
+ * bearer with no `Origin`, or a page of the deployment's own origins by its
+ * session cookie (`http/relay-upgrade.ts`).
  */
 
 let standingTerminal: TerminalRelayServer | undefined;
@@ -40,7 +42,8 @@ function standTerminal(relay: TerminalRelayServer): void {
         const dependencies = yield* relayDependencies;
         yield* standTerminalRelay({
           server: relay,
-          resolveUserId: (authorization) => userIdForAuthorization(authorization, hostedUserInfo),
+          ownOrigins: new Set(authDeployment(process.env).ownOrigins),
+          resolveUserId: resolveRelayUserId,
           dependencies,
         });
         return yield* Effect.never;
@@ -58,7 +61,7 @@ function standBrowser(live: BrowserLiveServer): void {
         yield* standBrowserLive({
           server: live,
           ownOrigins: new Set(authDeployment(process.env).ownOrigins),
-          resolveUserId: browserLiveUserId,
+          resolveUserId: resolveRelayUserId,
           dependencies,
         });
         return yield* Effect.never;

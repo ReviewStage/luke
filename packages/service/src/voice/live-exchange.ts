@@ -7,11 +7,12 @@ import {
   voiceWriter,
 } from "@luke/database/models/voice-writer";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import type { TaskActivity, TaskShownCode, TaskWorkTurn } from "@luke/features/tasks-view";
+import type { TaskActivity, TaskShownCode } from "@luke/features/tasks-view";
 import { serialQueue } from "@luke/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   type AdoptableSession,
+  type LiveBrain,
   LiveSessionService,
   type LiveSessionStatus,
   type LiveSessionTrace,
@@ -21,15 +22,15 @@ import type { WebSocket } from "ws";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { AgentSessions } from "../agents/brain-host/eve-sessions.js";
 import type { CallBackend } from "./call-backend.js";
-import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
+import { hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
- * one task call, in the task's conversation whichever member of its
- * workspace opened it: the brain answered in process through the ask door under
- * the eve client the caller composed for the account, and the record over the
+ * one call into an agent, in the agent's conversation whichever member of
+ * its workspace started it: the agent answered in process through the ask
+ * door under the eve client the caller composed for the account, and the record over the
  * voice writer with the sideband observed so the writer sees each event once
  * ahead of the service. The writers, the ask record, and the reads all stand
  * on the ambient client, so they hold one client over one database. The
@@ -54,11 +55,11 @@ export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake: it owns the voice row, is metered, and the deployment acts for it at eve's door. */
   readonly accountId: string;
   readonly liveSessionId: string;
-  /** The conversation the spoken asks and the record land in: the task's, or the agent's the call names, under the member who opened it, whoever is calling. */
+  /** The conversation the spoken asks and the record land in: the agent's the call names, under the member who started it, whoever is calling. */
   readonly conversation: ConversationTarget;
-  /** Who answers the call's asks in that conversation: the task's brain, or the agent (`call-backend.ts`). */
+  /** Who answers the call's asks in that conversation: the agent (`call-backend.ts`). */
   readonly backend: CallBackend;
-  /** The developer's time zone, which every spoken ask hands the brain's turn; none reads UTC. */
+  /** The developer's time zone, which every spoken ask hands the agent's turn; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The store writer, which the voice writer writes through. */
   readonly writer: StoreWriter;
@@ -74,8 +75,6 @@ export interface HostedLiveExchangeOptions {
   readonly onActivity?: (activity: TaskActivity) => void;
   /** Code Luke is about to talk about, with its lines, told as he starts to speak; a task call's device is shown it. */
   readonly onCode?: (shown: TaskShownCode) => void;
-  /** Each brain turn's work, told whole on each change; a task call's device is shown it. */
-  readonly onWork?: (work: TaskWorkTurn) => void;
   /** The developer said they are done and Luke is saying goodbye; a task call's device hangs up once it has played. */
   readonly onCallEnding?: () => void;
   /** Each hand-off the session traces, ids and words left out; the service writes it to its log. */
@@ -86,11 +85,11 @@ export interface HostedLiveExchangeOptions {
 export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
-  /** The task the call is bound to, whose conversation its asks and its record land in where it names no agent. */
+  /** The task the call is bound to. */
   readonly taskId: string;
-  /** The agent of the task the call speaks into, whose conversation its asks and its record land in instead; none for a call about the task alone. */
-  readonly agentId?: string | undefined;
-  /** The developer's time zone as the connection's opening frame named it, which the brain's turns read the day in; none reads UTC. */
+  /** The agent of the task the call speaks into, whose conversation its asks and its record land in. */
+  readonly agentId: string;
+  /** The developer's time zone as the connection's opening frame named it, which the agent's turns read the day in; none reads UTC. */
   readonly timeZone?: string | undefined;
   /** The socket the service attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
@@ -100,8 +99,6 @@ export interface AttachedSession {
   readonly onActivity?: ((activity: TaskActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
   readonly onCode?: ((shown: TaskShownCode) => void) | undefined;
-  /** The device's door for each brain turn's work on the call; absent where the route sends it nothing of its own. */
-  readonly onWork?: ((work: TaskWorkTurn) => void) | undefined;
   /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
   readonly onCallEnding?: (() => void) | undefined;
   /** The service's door for each hand-off the session traces; absent where the route logs none. */
@@ -141,7 +138,7 @@ export interface HostedLiveExchange {
    * close; an exchange never told closes it.
    */
   endAs(ending: ExchangeEnding): void;
-  readonly brain: HostedLiveBrain;
+  readonly brain: LiveBrain;
   readonly store: HostedStore;
   /**
    * Runs a session the service created for the device: the record observes
@@ -228,11 +225,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       notes: false,
     });
   };
-
-  if (options.onWork !== undefined) {
-    const unshown = brain.onWork(options.onWork);
-    yield* Effect.addFinalizer(() => Effect.sync(unshown));
-  }
 
   /** The sideband with the record listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {

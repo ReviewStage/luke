@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type {
-  TaskActivityFrame,
-  TaskCallEndingFrame,
-  TaskCodeFrame,
-  TaskWorkFrame,
-} from "@luke/features";
+import type { TaskActivityFrame, TaskCallEndingFrame, TaskCodeFrame } from "@luke/features";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
 import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@luke/live";
 import type { WireRecord } from "@luke/wire";
@@ -110,10 +105,6 @@ interface Fixture {
   code: TaskCodeFrame[];
   /** The service's code frame, as the source's door would deliver it. */
   tellCode(code: TaskCodeFrame): void;
-  /** Every work frame the holder told its caller, in order. */
-  work: TaskWorkFrame[];
-  /** The service's work frame, as the source's door would deliver it. */
-  tellWork(work: TaskWorkFrame): void;
   /** The service's word that Luke is ending the call, as the source's door would deliver it. */
   tellEnding(ending: TaskCallEndingFrame): void;
   /** Every task whose call the holder told its caller ended, in order. */
@@ -137,8 +128,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     let activityListener: ((activity: TaskActivityFrame) => void) | undefined;
     const code: TaskCodeFrame[] = [];
     let codeListener: ((code: TaskCodeFrame) => void) | undefined;
-    const work: TaskWorkFrame[] = [];
-    let workListener: ((work: TaskWorkFrame) => void) | undefined;
     let endingListener: ((ending: TaskCallEndingFrame) => void) | undefined;
     const callsEnded: string[] = [];
     const typed: string[] = [];
@@ -179,9 +168,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   onTaskCode: (listener: (code: TaskCodeFrame) => void) => {
                     codeListener = listener;
                   },
-                  onTaskWork: (listener: (work: TaskWorkFrame) => void) => {
-                    workListener = listener;
-                  },
                   onTaskCallEnding: (listener: (ending: TaskCallEndingFrame) => void) => {
                     endingListener = listener;
                   },
@@ -204,9 +190,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       onTaskCode: (frame) => {
         code.push(frame);
-      },
-      onTaskWork: (frame) => {
-        work.push(frame);
       },
       onTaskCallEnded: (taskId) => {
         callsEnded.push(taskId);
@@ -241,10 +224,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       code,
       tellCode: (frame) => {
         codeListener?.(frame);
-      },
-      work,
-      tellWork: (frame) => {
-        workListener?.(frame);
       },
       tellEnding: (frame) => {
         endingListener?.(frame);

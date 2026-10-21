@@ -25,8 +25,7 @@
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
  * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox and Chat, a
- * draft agent's tab and the "+" row that opens one, the "+" row that starts a
- * voice chat, an agent the window holds
+ * draft agent's tab and the "+" row that opens one, an agent the window holds
  * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
@@ -34,7 +33,6 @@ export const TAB_WORDS = {
   INBOX: "Inbox",
   CHAT: "Chat",
   NEW_AGENT: "New agent",
-  NEW_VOICE_CHAT: "New voice chat",
   CODING_AGENT: "Coding agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",

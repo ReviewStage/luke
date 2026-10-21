@@ -18,7 +18,6 @@ export * from "./inbox.js";
 export * from "./inbox-item-read.js";
 export * from "./inbox-message.js";
 export * from "./integration.js";
-export * from "./issue.js";
 export * from "./mac-command.js";
 export * from "./personal-workspace.js";
 export * from "./plan-comment.js";

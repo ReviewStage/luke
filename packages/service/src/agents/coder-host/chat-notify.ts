@@ -80,16 +80,14 @@ import { steerCodingAgent } from "./steer.js";
  * for is held for the agent's next read. A post sent again under its key
  * is told again: the notice's key and the one outstanding notice keep that
  * from steering anyone twice, and it finishes a telling the first send did
- * not. A plan's planner and a person are handed to doors of
- * their own: a person is told through their window's account-wide read
- * (`tellPerson`), and the planner's holds the message until Luke's report
- * turn fills it. A notice names who said it by their mention link, and
+ * not. A person is handed to a door of their own, told through their
+ * window's account-wide read (`tellPerson`). A notice names who said it by their mention link, and
  * hands the words as they were written, every link in them whole
  * (`chat-names.ts`). What each member came to is the
  * receipt the poster reads, each member by its mention link: told, held,
  * left, and the labels of the links that named no one. A name marked
- * `@public` is what the coder's tools, Luke's planner, the window's route,
- * and its announcements read as they land.
+ * `@public` is what the coder's tools, the window's route, and its
+ * announcements read as they land.
  */
 
 /**
@@ -130,12 +128,8 @@ export interface ChatNotice {
   readonly fromName: string;
 }
 
-/** How Luke and a person are told, each a door its own chain fills. */
+/** How a person is told, a door its own chain fills. */
 export interface ChatNoticeDoors {
-  readonly luke: (
-    member: ChatMemberRow,
-    notice: ChatNotice,
-  ) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
   readonly human: (
     member: ChatMemberRow,
     notice: ChatNotice,
@@ -145,8 +139,8 @@ export interface ChatNoticeDoors {
 /** A door that holds the message for the member's next read. */
 const hold = () => Effect.succeed(NOTICE_OUTCOME.HELD);
 
-/** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
-export const HELD_DOORS: ChatNoticeDoors = { luke: hold, human: hold };
+/** The doors before the window's announcement fills them: each holds the message for the member's next read. */
+export const HELD_DOORS: ChatNoticeDoors = { human: hold };
 
 /**
  * How a person is told: their member stamped with the message's place, one
@@ -172,8 +166,8 @@ function tellPerson(
   );
 }
 
-/** The doors a post is told through until Luke's report turn fills Luke's: a person told through their window, Luke held for his next read. */
-export const CHAT_DOORS: ChatNoticeDoors = { luke: hold, human: tellPerson };
+/** The doors a post is told through: a person told through their window. */
+export const CHAT_DOORS: ChatNoticeDoors = { human: tellPerson };
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
@@ -210,8 +204,8 @@ const GONE_REFUSALS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * What sent a notice, as the row keeps it: a person by their account, Luke
- * for a planner, and an agent by its name, its title or else its model's id
+ * What sent a notice, as the row keeps it: a person by their account, and
+ * an agent by its name, its title or else its model's id
  * as `message_agent` names one, and, where the member still names one the
  * poster reaches, its agent and the model it runs on as it posts, which its
  * line's mark is drawn by for good.
@@ -220,9 +214,6 @@ function senderOf(userId: string, from: ChatMemberRow, name: string) {
   return Effect.gen(function* () {
     if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
       return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId } satisfies LineSender;
-    }
-    if (from.kind === MEMBER_KIND.LUKE) {
-      return { kind: MESSAGE_SENDER.LUKE } satisfies LineSender;
     }
     const agent =
       from.agentId === null
@@ -240,7 +231,6 @@ function senderOf(userId: string, from: ChatMemberRow, name: string) {
 /** The message author each kind of member speaks as, on the notice's row. */
 const AUTHOR_OF_KIND = {
   [MEMBER_KIND.AGENT]: MESSAGE_AUTHOR.AGENT,
-  [MEMBER_KIND.LUKE]: MESSAGE_AUTHOR.LUKE,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
@@ -273,7 +263,6 @@ const PARAGRAPH_BREAK = "\n\n";
 
 /** What a sender is called where their name holds nothing to call them by, by their kind. */
 const BLANK_NAME = {
-  [MEMBER_KIND.LUKE]: CHAT_MEMBER_LABEL.LUKE,
   [MEMBER_KIND.AGENT]: CHAT_MEMBER_LABEL.FORMER_AGENT,
   [MEMBER_KIND.HUMAN]: CHAT_MEMBER_LABEL.FORMER_PERSON,
 } as const satisfies Record<MemberKind, string>;
@@ -458,11 +447,6 @@ export function tellMessage(
       switch (member.kind) {
         case MEMBER_KIND.AGENT:
           return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
-        case MEMBER_KIND.LUKE:
-          return Effect.map(telling.doors.luke(member, notice), (outcome) => ({
-            member,
-            outcome,
-          }));
         case MEMBER_KIND.HUMAN:
           return Effect.map(telling.doors.human(member, notice), (outcome) => ({
             member,

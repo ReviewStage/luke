@@ -9,7 +9,6 @@
  */
 
 import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
-import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
@@ -34,7 +33,6 @@ import {
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksIssueParams,
-  type TasksMessagesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -96,9 +94,6 @@ export interface TasksProceduresDependencies {
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
     tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
-    tasksWorkEarlier(): Effect.Effect<void>;
-    tasksConversationEarlier(): Effect.Effect<void>;
-    tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
     tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
     tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
@@ -373,26 +368,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksSetStanding(input);
       },
     ),
-    [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: actPort[TASKS_ACT_KIND.TASKS_WORK_EARLIER].effect(
-      function* ({ context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        yield* host.tasksWorkEarlier();
-      },
-    ),
-    [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]: actPort[
-      TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.tasksConversationEarlier();
-    }),
-    [TASKS_ACT_KIND.TASKS_MESSAGES]: actPort[TASKS_ACT_KIND.TASKS_MESSAGES].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.tasksMessages(input);
-    }),
     [TASKS_ACT_KIND.TASKS_FILE]: actPort[TASKS_ACT_KIND.TASKS_FILE].effect(function* ({
       input,
       context,

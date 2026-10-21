@@ -1,12 +1,17 @@
 /**
- * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake Luke: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns, every notification out in order, and the launch's end at the turn's.
+ * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake Luke: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
  */
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { type Cause, Deferred, Effect, Fiber, Layer, Logger, Queue, Stream } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import { askCodexToken } from "./codex-token.js";
+import type { RunnerSelf } from "./launch.js";
 import {
   CODEX_EFFORT,
+  CODEX_TOKEN_COMMAND,
   type CodexConfig,
   IMAGE_MEDIA_TYPE,
   INPUT_LINE,
@@ -24,6 +29,7 @@ import {
   received,
   recordedExchanges,
   type Script,
+  type Spawned,
   withReplyText,
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
@@ -113,6 +119,7 @@ function launch(
   scripts: readonly Script[],
   luke: ReturnType<typeof makeFakeLuke>,
   env: Record<string, string> = ENV,
+  extra: { readonly self?: RunnerSelf; readonly http?: Layer.Layer<HttpClient.HttpClient> } = {},
 ) {
   return Effect.gen(function* () {
     const server = fakeAppServer(scripts);
@@ -123,10 +130,15 @@ function launch(
     });
     const stdin = yield* Queue.unbounded<string, Cause.Done>();
     const write = (line: CodexConfig | InputLine) => Queue.offer(stdin, JSON.stringify(line));
-    const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env }).pipe(
+    const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env, self: extra.self }).pipe(
       Effect.scoped,
       Effect.provide(
-        Layer.mergeAll(server.layer, luke.layer, claude.layer, Logger.layer([recorder])),
+        Layer.mergeAll(
+          server.layer,
+          extra.http ?? luke.layer,
+          claude.layer,
+          Logger.layer([recorder]),
+        ),
       ),
       Effect.forkScoped,
     );
@@ -203,6 +215,7 @@ it.effect(
         'approval_policy="never"',
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",
+        `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
         'shell_environment_policy.exclude=["ACCESS_TOKEN", "LUKE_RUNNER_TOKEN"]',
@@ -470,5 +483,150 @@ it.effect("never starts app-server without the plan's token", () =>
       reason: RUNNER_END.FAILED,
       detail: "ACCESS_TOKEN is not set",
     });
+  }),
+);
+
+const TOKEN_URL = "https://luke.test/api/agents/runner-token";
+const SELF: RunnerSelf = {
+  executable: "/usr/local/bin/node",
+  script: "/opt/luke/agent-runner.mjs",
+};
+const PROVIDER = "model_providers.openai_chatgpt_plan";
+
+/** The value of the `-c` override `key` a process was started with, where it has one. */
+function override(process: Spawned | undefined, key: string): string | undefined {
+  const prefix = `${key}=`;
+  return process?.args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
+}
+
+/**
+ * Luke's token route as the runner's token command reaches it: each ask under
+ * the runner's bearer answers the next fresh token, `plan-token-1`, `-2`, ….
+ */
+function fakeTokenRoute() {
+  const bearers: (string | null)[] = [];
+  let issued = 0;
+  const respond = async (_url: string, init: RequestInit) => {
+    bearers.push(new Headers(init.headers).get("authorization"));
+    issued += 1;
+    return Response.json({ accessToken: `plan-token-${issued}` });
+  };
+  return { bearers, respond };
+}
+
+/**
+ * Codex's provider `auth` as app-server runs it: the command and its args read
+ * from the process's argv, run with the process's own environment (here the
+ * command's body, the runner's `askCodexToken`, in place of a child), and
+ * its stdout the bearer app-server sends.
+ */
+function runTokenCommand(process: Spawned, http: Layer.Layer<HttpClient.HttpClient>) {
+  const command = JSON.parse(override(process, `${PROVIDER}.auth.command`) ?? "null");
+  const args: string[] = JSON.parse(override(process, `${PROVIDER}.auth.args`) ?? "[]");
+  assert.equal(command, SELF.executable);
+  assert.deepEqual(args.slice(0, 2), [SELF.script, CODEX_TOKEN_COMMAND]);
+  return askCodexToken(args[2] ?? "", process.env).pipe(Effect.provide(http), Effect.orDie);
+}
+
+it.effect(
+  "on the plan, app-server takes its token from the runner's command, which a 401 mid-turn runs again, and the turn goes on to complete",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const route = fakeTokenRoute();
+      const http = fakeHttpClientLayer((url, init) =>
+        url === TOKEN_URL ? route.respond(url, init) : luke.respond(url, init),
+      );
+      // What app-server sent OpenAI as its bearer, request by request.
+      const sentToOpenAi: string[] = [];
+      const turn: Exchange = {
+        ...RESUMED_TURN,
+        beforeReply: (process) =>
+          Effect.gen(function* () {
+            // The turn's first request goes out on the command's token.
+            sentToOpenAi.push(yield* runTokenCommand(process, http));
+            // An hour on, OpenAI answers 401: app-server runs the command again and retries.
+            sentToOpenAi.push(yield* runTokenCommand(process, http));
+          }),
+      };
+      const { spawned, write, run, logged } = yield* launch(
+        [{ exchanges: [...RESUME, turn] }],
+        luke,
+        { ...ENV, [RUNNER_ENV.CODEX_TOKEN]: "a-launch-token-the-plan-never-uses" },
+        { self: SELF, http },
+      );
+      yield* write({ ...CONFIG, threadId: THREAD, tokenUrl: TOKEN_URL });
+      // A token line on the plan is withheld and restarts nothing.
+      yield* write({ type: INPUT_LINE.TOKEN, accessToken: REFRESHED_TOKEN });
+      yield* write(message("What exact line did you first write to PROBE.md?"));
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.equal(spawned.length, 1);
+      const [process] = spawned;
+      assert.deepEqual(process?.unexpected, []);
+      assert.deepEqual(sentToOpenAi, ["plan-token-1", "plan-token-2"]);
+      assert.deepEqual(route.bearers, [`Bearer ${BEARER}`, `Bearer ${BEARER}`]);
+      assert.deepEqual(kinds(luke.applied).slice(-2), ["turn/completed", RUNNER_EVENT.END]);
+      assert.deepEqual(luke.applied.at(-1)?.message, {
+        type: RUNNER_EVENT.END,
+        reason: RUNNER_END.TURN_ENDED,
+      });
+
+      // The provider runs the command in place of reading ACCESS_TOKEN, which app-server is not handed.
+      assert.equal(override(process, `${PROVIDER}.env_key`), undefined);
+      assert.equal(override(process, `${PROVIDER}.auth.timeout_ms`), "30000");
+      assert.equal(override(process, `${PROVIDER}.auth.refresh_interval_ms`), "300000");
+      assert.deepEqual(JSON.parse(override(process, `${PROVIDER}.auth.args`) ?? "[]"), [
+        SELF.script,
+        CODEX_TOKEN_COMMAND,
+        TOKEN_URL,
+      ]);
+      assert.equal(process?.env[RUNNER_ENV.CODEX_TOKEN], undefined);
+      // The command inherits the bearer; no command the agent runs does.
+      assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
+      assert.equal(
+        override(process, "shell_environment_policy.exclude"),
+        '["ACCESS_TOKEN", "LUKE_RUNNER_TOKEN"]',
+      );
+      assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
+
+      // What the command printed went to app-server alone: never argv, an event, or a log.
+      const posted = luke.bodies.join("\n");
+      for (const secret of ["plan-token-1", "plan-token-2", REFRESHED_TOKEN, BEARER]) {
+        assert.ok(!posted.includes(secret));
+        assert.ok(!logged.some((line) => line.includes(secret)));
+        assert.ok(!process?.args.some((arg) => arg.includes(secret)));
+      }
+    }),
+);
+
+it.effect("the token command says only Luke's status when Luke refuses it, never the bearer", () =>
+  Effect.gen(function* () {
+    const http = fakeHttpClientLayer(async () => new Response(null, { status: 409 }));
+    const refused = yield* askCodexToken(TOKEN_URL, ENV).pipe(Effect.provide(http), Effect.flip);
+    assert.equal(refused.detail, "Luke refused the token: 409");
+
+    const unset = yield* askCodexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
+    assert.equal(unset.detail, "LUKE_RUNNER_TOKEN is not set");
+
+    const unreachable = fakeHttpClientLayer(async () => {
+      throw new Error(`connection reset for ${BEARER}`);
+    });
+    const failed = yield* askCodexToken(TOKEN_URL, ENV).pipe(
+      Effect.provide(unreachable),
+      Effect.flip,
+    );
+    assert.equal(failed.detail, "Luke did not answer");
+  }),
+);
+
+it.effect("never starts app-server on the plan when it does not know its own bundle", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const { spawned, write, run } = yield* launch([WORKFLOW], luke);
+    yield* write({ ...CONFIG, tokenUrl: TOKEN_URL });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
+    assert.deepEqual(spawned, []);
   }),
 );

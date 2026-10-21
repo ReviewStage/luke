@@ -136,6 +136,8 @@ const KEY_STATUS_LABEL = {
   [PROVIDER_KEY_STATUS.QUOTA_EXCEEDED]: "quota exceeded",
   [PROVIDER_KEY_STATUS.UNREADABLE]: "unreadable",
   [PROVIDER_KEY_STATUS.UNVERIFIED]: "unverified",
+  [PROVIDER_KEY_STATUS.LIMIT_REACHED]: "limit reached",
+  [PROVIDER_KEY_STATUS.INELIGIBLE]: "ineligible",
 } as const;
 
 /** One broken thing, by its kind and status alone. */

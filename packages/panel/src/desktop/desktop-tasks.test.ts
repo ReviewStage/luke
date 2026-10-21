@@ -106,9 +106,11 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("a task whose column shows no tab offers a new voice chat and a new agent beside its plan, and a platform with no voice offers the agent alone", () => {
-  const drawn = (onNewVoiceChat: (() => void) | undefined) =>
-    renderToStaticMarkup(
+test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
+  const DRAFT_ID = "draft-1";
+  const drawn = (calls: TasksControl["calls"]) => {
+    const page = document.createElement("div");
+    page.innerHTML = renderToStaticMarkup(
       createElement(DesktopTasks, {
         summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
@@ -116,22 +118,46 @@ test("a task whose column shows no tab offers a new voice chat and a new agent b
           page: TASKS_PAGE.DOCUMENT,
           activeTaskId: TASK.id,
           region: { kind: DOCUMENT_REGION.READY, task: TASK },
-          mainTabs: { ...tasksControl().mainTabs, tabs: [], tab: undefined },
-          onNewVoiceChat,
+          mainTabs: {
+            ...tasksControl().mainTabs,
+            tabs: [{ draft: DRAFT_ID }],
+            tab: { draft: DRAFT_ID },
+          },
+          calls,
+          agents: codingAgentsControl({
+            agentIds: [],
+            draft: {
+              id: DRAFT_ID,
+              prompt: "",
+              attachments: [],
+              choice: undefined,
+              disabledServers: [],
+            },
+            startCall: () => Promise.resolve({ agentId: "agent-1" }),
+          }),
         }),
       }),
     );
-  const pane = (markup: string) => {
-    const page = document.createElement("div");
-    page.innerHTML = markup;
-    return [...page.querySelectorAll(".desktop-no-agent button")].map((each) => each.textContent);
+    return page;
   };
-  assert.deepEqual(pane(drawn(() => undefined)), ["New voice chat", "New agent"]);
-  assert.deepEqual(pane(drawn(undefined)), ["New agent"]);
+  const voiced = drawn({ onPress: () => undefined });
+  assert.ok(
+    voiced.querySelector(".desktop-agent .agent-composer"),
+    "the draft's composer is drawn",
+  );
+  assert.equal(voiced.querySelector(".desktop-no-agent"), null);
+  assert.equal(
+    [...voiced.querySelectorAll("button")].some((each) =>
+      /voice chat/u.test(each.textContent ?? ""),
+    ),
+    false,
+  );
+  assert.ok(voiced.querySelector(".agent-call-button button"), "and Call in it");
+  assert.equal(drawn(undefined).querySelector(".agent-call-button"), null, "the web's offers none");
 });
 
-/** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
-function codeTab(shownCode: readonly never[] | undefined, workFailed = false): HTMLElement {
+/** The Code tab as the task's page draws it over the code the task holds, and whether its code read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -142,7 +168,7 @@ function codeTab(shownCode: readonly never[] | undefined, workFailed = false): H
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
         sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
         shownCode,
-        workFailed,
+        codeFailed,
       }),
     }),
   );
@@ -166,7 +192,7 @@ test("the Code tab waits while the task's code is unread, and says there is none
   assert.equal(none.querySelector("[role=status]"), null);
 });
 
-test("the Code tab whose work read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
   let retries = 0;
   const container = document.createElement("div");
   document.body.append(container);
@@ -182,8 +208,8 @@ test("the Code tab whose work read did not land says so with Retry while it hold
           region: { kind: DOCUMENT_REGION.READY, task: TASK },
           sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
           shownCode: undefined,
-          workFailed: true,
-          onRetryWork: () => {
+          codeFailed: true,
+          onRetryCode: () => {
             retries += 1;
           },
         }),

@@ -44,7 +44,9 @@ import { CALL_CONTROL_LABEL } from "./tasks-parts.js";
  * on or off where video is offered, and End call, the one red control, so
  * the composer is the one place the call is steered from. No line says
  * whether Luke is listening or thinking: the controls and the tab's live
- * mark say a call is up, and the transcript says what is said. A platform
+ * mark say a call is up, and the transcript says what is said. A draft's
+ * composer offers the same Call (`draft-agent-tab.tsx`), which starts its
+ * agent and opens a call into it as it lands. A platform
  * with no voice, the web's, hands the tab no doors, and the tab draws
  * neither. The tab around them is left out of the screen recording
  * (`agent-tab.tsx`). An agent on a provider's own harness, Claude Code or
@@ -158,6 +160,38 @@ function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | 
 }
 
 /**
+ * Call at rest, the waveform: for the agent `subject` names, or a draft's
+ * key, which no call speaks into, so its look is Call's or the
+ * microphone's ask. Unavailable where the voice or the microphone cannot
+ * take a call, or while `busy`.
+ */
+export function CallButton({
+  subject,
+  archived,
+  busy = false,
+  onPress,
+}: {
+  subject: string;
+  archived: boolean;
+  busy?: boolean | undefined;
+  onPress: () => void;
+}): React.JSX.Element {
+  const { button } = useCallButton(subject, archived);
+  return (
+    <span className="agent-call-button">
+      <Tooltip label={button.label}>
+        <IconButton
+          icon={<WaveformIcon />}
+          label={button.label}
+          disabled={busy || button.press === MICROPHONE_PRESS.NONE}
+          onClick={onPress}
+        />
+      </Tooltip>
+    </span>
+  );
+}
+
+/**
  * The call's place in an agent's composer row, beside Send. At rest it is
  * Call, the waveform. On a call into the agent it is the call: the speaker
  * and the microphone, each struck through and tinted while muted, Video on
@@ -181,16 +215,7 @@ export function AgentCallControls({
   const { view, button } = useCallButton(agentId, archived);
   if (!onCallInto(view, agentId)) {
     return (
-      <span className="agent-call-button">
-        <Tooltip label={button.label}>
-          <IconButton
-            icon={<WaveformIcon />}
-            label={button.label}
-            disabled={button.press === MICROPHONE_PRESS.NONE}
-            onClick={() => doors.onPress(agentId)}
-          />
-        </Tooltip>
-      </span>
+      <CallButton subject={agentId} archived={archived} onPress={() => doors.onPress(agentId)} />
     );
   }
   // The speaker and the end are the voice window's to carry out: it plays Luke and holds the call.

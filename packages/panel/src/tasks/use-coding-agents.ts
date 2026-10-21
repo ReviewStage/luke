@@ -20,6 +20,7 @@ import {
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
+  hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
@@ -284,12 +285,16 @@ export interface CodingAgentsControl {
     onPress: (choice?: ModelChoice) => void;
   };
   /**
-   * A new voice chat: an agent started blank on the account's default, which
-   * needs no repository, its tab opened as a Start's is; answers the agent
-   * once it stands, or nothing where it did not start, which a toast says.
-   * Present exactly while the open task is not archived.
+   * A draft's Call: starts the draft's agent for a call to open into, on
+   * eve whatever the account's routing would choose. A draft holding words
+   * or files starts on them under its own key, as a send does, marked
+   * `call`; an empty one starts blank under a key of the press's own, which
+   * needs no repository. Either runs on the draft's chips, lets the draft go
+   * once it lands, and opens the agent's tab as a Start's does. Answers the
+   * agent, or why it did not start. Present exactly while the open task is
+   * not archived.
    */
-  startVoiceChat: (() => Promise<string | undefined>) | undefined;
+  startCall: ((draft: AgentDraft) => Promise<DraftCallStart>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
@@ -404,6 +409,9 @@ export interface AgentDraft {
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
   readonly refused?: Failure | undefined;
 }
+
+/** What a draft's Call answers: the agent it started, for the call to open into, or why it did not start. */
+export type DraftCallStart = { readonly agentId: string } | { readonly failure: Failure };
 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
 type DraftChoices = Pick<
@@ -779,18 +787,36 @@ export function useCodingAgents(input: {
     });
   };
 
-  // Note that every press mints its own key: a voice chat is a new agent each
-  // time it is asked for, and one whose start did not answer is said in a
-  // toast rather than asked again.
-  const startVoiceChat = async (): Promise<string | undefined> => {
-    if (taskId === undefined || archived) return undefined;
-    const answer = await askStart(taskId, { idempotencyKey: mintKey(), blank: true });
-    if ("failure" in answer) {
-      failed(startFailureNote(answer, taskId).text);
-      return undefined;
+  // Note that an empty draft's press mints its own key, because a blank
+  // agent is a new one each time it is asked for, while words go under the
+  // draft's key, so a Call asked again opens the agent the first started.
+  const startCall = async (held: AgentDraft): Promise<DraftCallStart> => {
+    if (taskId === undefined)
+      return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
+    if (archived) return { failure: { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED } };
+    const prompt = held.prompt.trim();
+    const { choice, attachments, disabledServers } = held;
+    const words = hasWordsOrFiles(prompt, attachments);
+    if (words && repository === null) {
+      return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
     }
+    const answer = await askStart(taskId, {
+      ...(words
+        ? {
+            idempotencyKey: held.id,
+            prompt,
+            ...(attachments.length === 0 ? undefined : { attachments }),
+            call: true,
+          }
+        : { idempotencyKey: mintKey(), blank: true }),
+      ...(disabledServers.length === 0 ? undefined : { disabledServers }),
+      ...(choice === undefined ? undefined : choiceRequest(choice)),
+    });
+    if ("failure" in answer) return { failure: startFailureNote(answer, taskId) };
+    withDraft(taskId, undefined);
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === held.id);
     landed(taskId, answer.agent);
-    return answer.agent.id;
+    return { agentId: answer.agent.id };
   };
 
   // Note that a press carries the key its agent's last press minted while the
@@ -1469,7 +1495,7 @@ export function useCodingAgents(input: {
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       onPress: pressStart,
     },
-    startVoiceChat: taskId !== undefined && !archived ? startVoiceChat : undefined,
+    startCall: taskId !== undefined && !archived ? startCall : undefined,
     onStop,
     onMessage,
     onChoose,

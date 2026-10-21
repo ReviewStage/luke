@@ -95,7 +95,7 @@ import { contentActionGroups, useTabViews } from "./strip-tabs.js";
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers the agent's own actions, the very ones its
  * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Open terminal and Run, Copy link, the
+ * title into its name's field, Open terminal, Copy link, the
  * transcript's two copies, and Archive agent, so an agent with no task is
  * acted on as a task's is; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
@@ -139,7 +139,7 @@ function AgentPageHeading({
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenOnMac">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
 }): React.JSX.Element {
   const label = agentTabLabel(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals });
@@ -290,7 +290,7 @@ export function DesktopAgentPage({
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
-  // Open terminal, Run, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
+  // Open terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
   const terminalDoors = useAgentTerminalDoors(sidePanel, agentRepository, () =>
     setFocus(COLUMN.SIDE),
   );
@@ -372,17 +372,11 @@ export function DesktopAgentPage({
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,
-    workRows: [],
     held: views.held,
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
     shownCode: [],
   });
-  // An agent's workers are its delegations, read through its own transcript, so the panel's plan's work is none.
-  const work = {
-    conversation: undefined,
-    readWorker: control.readTranscript,
-  };
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
     if (agentRepository === undefined) return;
@@ -497,7 +491,6 @@ export function DesktopAgentPage({
                           shownCode={undefined}
                           codeFailed={undefined}
                           pages={undefined}
-                          work={work}
                           agents={control}
                           openAgents={openAgents}
                           shownAgent={shown ? agentId : undefined}

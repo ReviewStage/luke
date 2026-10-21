@@ -112,7 +112,7 @@ export const REOPEN_THREAD_TOOL = {
 } as const;
 
 /** The four tools, in the order an agent is offered them. */
-export const COMMENT_TOOLS = [
+const COMMENT_TOOLS = [
   READ_COMMENTS_TOOL,
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,

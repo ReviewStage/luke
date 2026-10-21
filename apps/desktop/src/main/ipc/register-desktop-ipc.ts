@@ -7,7 +7,11 @@ import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
-import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
+import {
+  createActPortHandler,
+  type PlatformActProcedures,
+  terminalProcedures,
+} from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
 import { macBrowserTabsOver } from "@luke/host/mac-browser-tabs";
@@ -31,8 +35,8 @@ import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserProcedures } from "./browser-acts";
 import { browserLiveProcedures } from "./browser-live-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
+import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
-import { terminalProcedures, whenPageGone } from "./terminal-acts";
 import { updateProcedures } from "./update-acts";
 import { voiceRuntimeProcedures, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceProcedures, windowSurfaceReports } from "./window-surface";
@@ -156,7 +160,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
       start: startMacTerminal,
     }),
-    ...terminalProcedures({
+    ...terminalProcedures<WebContents>({
       host: operator.host,
       ports: {
         open: (sender, ticket) => {
@@ -172,7 +176,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         whenGone: whenPageGone,
       },
       createId: randomUUID,
-      run,
+      fork: (effect) => void run(effect),
     }),
     ...updateProcedures({ updates }),
     ...voiceRuntimeProcedures(voiceRuntime),

@@ -34,7 +34,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
   leaveWorkspace,
@@ -97,6 +97,7 @@ import {
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
 import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
@@ -121,6 +122,7 @@ import {
   coderChannelInput,
 } from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
+import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
 import { STEER_OUTCOME } from "./steer.js";
@@ -1001,11 +1003,18 @@ test("start_agent takes a payer for its one agent, which an account the plan is 
   assert.deepEqual(
     await call(
       CODER_TOOL.START_AGENT,
-      { prompt: "Pay for it.", payer: "chatgpt_plan" },
-      "call-gpt",
+      { prompt: "Pay for it.", payer: "gemini_plan" },
+      "call-unknown",
     ),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.UNREADABLE },
   );
+
+  const onChatGpt = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt: "Pay for this one on ChatGPT.", payer: "chatgpt_plan" },
+    "call-gpt",
+  );
+  assert.equal(onChatGpt.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onChatGpt));
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
@@ -2539,6 +2548,55 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   );
   const read = await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id));
   assert.equal(Option.getOrThrow(read).archivedAt, null);
+});
+
+test("message_agent and stop_agent reach a teammate's Claude Code agent through the web's relay, as an eve app's tools reach one, acting for its starter and the caller, and eve hears nothing of it", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const started = await database.run(
+    createCodingAgent(agents.teammates.userId, {
+      ...AGENT_CHOICE,
+      idempotencyKey: randomUUID(),
+      taskId: tasks.billing,
+      planSnapshot: "# Billing",
+      prompt: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+    }),
+  );
+  assert.ok(Option.isSome(started));
+  const native: StartedAgent = {
+    userId: agents.teammates.userId,
+    conversationId: started.value.agent.conversationId,
+    id: started.value.agent.id,
+    sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
+  };
+  assert.equal(
+    await database.run(claimRuntimeSession(native, native.sessionId, new Date(NOW))),
+    true,
+  );
+  const eve = await fakeCoderEve(workspaceId);
+  const relay = await database.run(nativeRelayFake());
+  const call = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    Layer.merge(eve.services, relay.layer),
+  );
+
+  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: native.id, text: NOTE });
+  assert.equal(sent.delivery, STEER_OUTCOME.SENT, JSON.stringify(sent));
+  await turnOn(native, false);
+  const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: native.id }, "call-2");
+  assert.equal(stopped.stopped, true, JSON.stringify(stopped));
+
+  assert.deepEqual(
+    relay.heard.map(({ call, runtime, account, names }) => [call, runtime, account, names]),
+    [
+      ["send", "claude_code", native.userId, native.sessionId],
+      ["cancel", "claude_code", agents.caller.userId, `${native.sessionId}:turn_0`],
+    ],
+  );
+  assert.deepEqual(eve.sent, []);
+  await relay.dispose();
 });
 
 test("stop_agent stops a teammate's running agent on another task by eve's cancel of its turn, which the list then reads as cancelled, and answers a call run again as stopped with no second cancel", async () => {

@@ -1,4 +1,4 @@
-import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
+import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
@@ -432,7 +432,9 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * agent nothing at all, neither the plan nor a prompt, so it names no
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
- * none. A `payer` is who the developer picked to pay for this one agent,
+ * none. A Start `call` is one a Call opens a call into as it lands, from a
+ * draft's composer: it runs on eve whatever the account's routing would
+ * choose, as a blank one does, since a call reaches eve alone. A `payer` is who the developer picked to pay for this one agent,
  * where Start offered the choice: its plan, which runs the provider's own
  * harness, or the API key or Luke's key, which run on eve; with none the
  * account's default decides, and the service honours a pick only where
@@ -449,6 +451,7 @@ export const codingAgentStartRequestFields = {
   from: EffectSchema.optionalKey(codingAgentStartFromSchema),
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
+  call: EffectSchema.optionalKey(EffectSchema.Boolean),
   payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
 };
 
@@ -1602,7 +1605,7 @@ export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
  */
-export const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
 });
@@ -1646,7 +1649,7 @@ const recordedChoice = EffectSchema.String.check(
  * absent where the row recorded none and from a service older than it; the
  * tokens and the ending, too, until the turn has ended.
  */
-export const turnRecordFields = {
+const turnRecordFields = {
   /** The catalog id of the model the turn ran on, such as `openai/gpt-6.1-sol`. */
   model: EffectSchema.optionalKey(recordedChoice),
   effort: EffectSchema.optionalKey(recordedChoice),
@@ -1980,34 +1983,15 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
 
 export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
 
-/** Whether two JSON values, as a page decodes them, say the same. */
-function sameJson(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return (
-      Array.isArray(a) &&
-      Array.isArray(b) &&
-      a.length === b.length &&
-      a.every((each, index) => sameJson(each, b[index]))
-    );
-  }
-  const theirs = new Map(Object.entries(b));
-  const ours = Object.entries(a);
-  return (
-    ours.length === theirs.size &&
-    ours.every(([key, value]) => theirs.has(key) && sameJson(value, theirs.get(key)))
-  );
-}
-
 /**
  * A page of an agent's messages joined to the ones held: a message heard
  * again that says something new replaces the one held under its id, in
  * place, and a new one joins at the end, so a journal that grows in place is
- * redrawn where it stands. A message heard again as it was held is kept as
- * held, and a page that changes nothing answers what was held, because a
- * transcript followed afresh is heard again whole, and what draws a message
- * by its identity then draws only what changed. The agent's tab and the
+ * redrawn where it stands. A message heard again keeps every part of it that
+ * is unchanged, the whole message where nothing is (`keepIdentity`), and a
+ * page that changes nothing answers what was held, because a transcript
+ * followed afresh is heard again whole, and what draws a message by its
+ * identity then draws only what changed. The agent's tab and the
  * host's read of a task's conversation join pages the same way, so both
  * draw one transcript from the same answers.
  */
@@ -2019,7 +2003,7 @@ export function applyMessagesPage(
   const heard = new Map(page.map((message) => [message.id, message]));
   const joined = held.map((message) => {
     const again = heard.get(message.id);
-    return again === undefined || sameJson(message, again) ? message : again;
+    return again === undefined ? message : keepIdentity(message, again);
   });
   const known = new Set(held.map((message) => message.id));
   const appended = page.filter((message) => !known.has(message.id));

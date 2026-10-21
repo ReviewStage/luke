@@ -46,7 +46,7 @@ import {
 import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
-import { type LaunchContext, type LaunchOutcome, RunnerFailed } from "./launch.js";
+import { type LaunchContext, type LaunchOutcome, RunnerFailed, type RunnerSelf } from "./launch.js";
 import {
   type ClaudeCodeConfig,
   EFFORT,
@@ -95,6 +95,8 @@ type InFlight = Omit<RunnerWaiting, "type">;
 export interface RunnerInput {
   readonly lines: Stream.Stream<string>;
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** The runner's own bundle as a command, which Codex runs for its token. */
+  readonly self?: RunnerSelf | undefined;
 }
 
 const decodeConfig = Schema.decodeUnknownEffect(Schema.fromJsonString(RunnerConfigSchema));
@@ -131,6 +133,11 @@ function queryOptions(
       failIfUnavailable: true,
       autoAllowBashIfSandboxed: true,
       allowUnsandboxedCommands: false,
+      // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
+      // kernel refuses bubblewrap a fresh /proc and every command failed; the
+      // host /proc is bound instead, where another process's environ, the
+      // CLI's and its token included, is still refused, as under Codex.
+      enableWeakerNestedSandbox: true,
       network: { allowedDomains: [...config.allowedDomains] },
       credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     },
@@ -405,7 +412,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     firstSequence: config.firstSequence,
     secrets,
   });
-  const context = { lines, env: input.env, bearer, sink };
+  const context = { lines, env: input.env, bearer, sink, self: input.self };
   const { end, failure } =
     config.harness === RUNNER_HARNESS.CODEX
       ? yield* runCodex({ ...context, config })

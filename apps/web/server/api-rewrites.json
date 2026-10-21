@@ -40,8 +40,16 @@
     "dest": "/api/default.js?route=account/integrations/connected"
   },
   {
+    "src": "/api/agents/native-sessions",
+    "dest": "/api/default.js?route=agents/native-sessions"
+  },
+  {
     "src": "/api/agents/runner-events",
     "dest": "/api/default.js?route=agents/runner-events"
+  },
+  {
+    "src": "/api/agents/runner-token",
+    "dest": "/api/default.js?route=agents/runner-token"
   },
   {
     "src": "/api/github/install",

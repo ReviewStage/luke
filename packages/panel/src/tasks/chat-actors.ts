@@ -1,5 +1,5 @@
 import { type ChatAnswer, MEMBER_KIND } from "@luke/features/chat-wire";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR, personActor } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, personActor } from "@luke/ui/actor-model";
 import { type ChatNames, chatWho } from "@luke/ui/chat-model";
 import { useMemberDirectory } from "../member-directory.js";
 import { providerOf } from "./coding-agent-model.js";
@@ -29,8 +29,6 @@ export function useChatActor(
     const who = chatWho(chat, names, memberId);
     const member = who.member;
     switch (member?.kind) {
-      case MEMBER_KIND.LUKE:
-        return LUKE_ACTOR;
       case MEMBER_KIND.AGENT: {
         // Note that the read names every agent's plan; the summaries' few stand in for a read from before it did.
         const taskId =

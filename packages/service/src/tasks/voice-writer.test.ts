@@ -20,8 +20,8 @@ import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@luke/live";
 import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { heard, said } from "../testing/live-events.js";
-import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 
 /**
  * The voice writer over the real migrations on PGlite, fed a synthetic Live
@@ -37,7 +37,7 @@ const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
-const store = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
+const store = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 const record = voiceSessionRecord(() => NOW);
 
 let liveSessions = 0;

@@ -1,7 +1,8 @@
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { type CodingAgentTranscriptKey, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
+import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
@@ -142,6 +143,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links.js";
+import { ChatGptPlanLabel } from "./plan-label.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
@@ -2037,6 +2039,14 @@ function AgentTabView({
             skills={skills}
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
+            payer={
+              agent.runtime === CODING_AGENT_RUNTIME.CODEX ? (
+                <ChatGptPlanLabel
+                  starter={readerId !== undefined && agent.startedBy?.userId === readerId}
+                  status={agent.status}
+                />
+              ) : undefined
+            }
             call={
               call === undefined ? undefined : (
                 <AgentCallControls
@@ -2322,13 +2332,10 @@ export function AgentSubagentTab({
   onStatus,
   onHeld,
   sender,
-  transcriptKey,
 }: {
   agentId: string;
   callId: string;
   task: string;
-  /** The transcript the tab follows, where it is a task's planning worker's rather than the agent's worker's under `agentId` and `callId`. */
-  transcriptKey?: CodingAgentTranscriptKey | undefined;
   /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
   status: CodingAgentStatus;
@@ -2340,7 +2347,7 @@ export function AgentSubagentTab({
   onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const transcript = useAgentTranscript({
-    transcript: transcriptKey ?? { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
+    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
     shown,
     follower: control.transcripts,
     onStatus: (_agentId, next) => onStatus(next.status),

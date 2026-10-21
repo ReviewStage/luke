@@ -17,6 +17,16 @@ import type { RunnerEnd } from "./protocol.js";
 /** Why a launch could not run at all, before or after its harness. */
 export class RunnerFailed extends Data.TaggedError("RunnerFailed")<{ readonly detail: string }> {}
 
+/**
+ * How to start the runner's own bundle again, as a command its harness runs:
+ * Node's executable and the bundle's path, as the process was started with.
+ * Codex's launch runs it as app-server's token command (`codex-token.ts`).
+ */
+export interface RunnerSelf {
+  readonly executable: string;
+  readonly script: string;
+}
+
 /** What a harness's launch is handed. */
 export interface LaunchContext<Config> {
   readonly config: Config;
@@ -25,6 +35,8 @@ export interface LaunchContext<Config> {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly bearer: Redacted.Redacted;
   readonly sink: EventSink;
+  /** The runner's own bundle as a command; none where the runner was not started from one, as in a test that names none. */
+  readonly self?: RunnerSelf | undefined;
 }
 
 /** Why a launch ended, and the harness's failure where it failed, for the last event. */

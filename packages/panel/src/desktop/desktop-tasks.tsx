@@ -5,20 +5,17 @@ import type { TaskStanding } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BUTTON_VARIANT,
   Button,
-  CallIcon,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  PlusIcon,
   SKELETON_SHAPE,
   Skeleton,
 } from "@luke/ui";
 import { chatNames } from "@luke/ui/chat-model";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
-import { agentOfTab, followedAgent, sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
@@ -84,7 +81,6 @@ import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/u
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { workRowsOf } from "../tasks/work-model.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
@@ -133,7 +129,9 @@ import {
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
  * showing its transcript and its composer at the document's measure, and
- * the draft agent's. Start and the ⋯ menu are the task's, not an agent's,
+ * the draft agent's. A task with no agent's tab to show shows a new
+ * agent's draft (`use-main-tabs.ts`), whose composer starts an agent on
+ * what is typed, or a voice chat from its Call. Start and the ⋯ menu are the task's, not an agent's,
  * so only the plan's own tab draws them, while their chords (Copy plan,
  * Archive, Permanently delete) answer on every tab; the call bar is the
  * task's too, and stands on every tab: a call is about the task whichever
@@ -180,35 +178,6 @@ function Toolbar({
       {heading}
       {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
     </header>
-  );
-}
-
-/**
- * The column with no tab to show: the plan stands in the side panel beside
- * it, and the column offers the two ways to put an agent to work on the
- * task, a new voice chat, where the window has a voice, and a new agent.
- * An archived task offers neither.
- */
-function NoAgentPane({
-  onNewVoiceChat,
-  onNewAgent,
-}: {
-  onNewVoiceChat: (() => void) | undefined;
-  onNewAgent: (() => void) | undefined;
-}): React.JSX.Element {
-  return (
-    <section className="desktop-no-agent">
-      {onNewVoiceChat === undefined ? null : (
-        <Button variant={BUTTON_VARIANT.PRIMARY} icon={<CallIcon />} onClick={onNewVoiceChat}>
-          {TAB_WORDS.NEW_VOICE_CHAT}
-        </Button>
-      )}
-      {onNewAgent === undefined ? null : (
-        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />} onClick={onNewAgent}>
-          {TAB_WORDS.NEW_AGENT}
-        </Button>
-      )}
-    </section>
   );
 }
 
@@ -500,7 +469,7 @@ function PlanDocument({
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Open terminal and Run open an agent's terminals as on every surface that draws it (`agent-actions.tsx`).
+  // Open terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(
     tasks.sidePanel,
     region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
@@ -711,7 +680,6 @@ function PlanDocument({
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const listedCard = listedOpen ?? opened;
-  const conversation = tasks.work.conversation;
   const sideTab = sidePanel.tab;
   const { shownCode } = tasks;
   const cards = useMemo(
@@ -720,7 +688,6 @@ function PlanDocument({
         ? undefined
         : taskCards({
             agents,
-            workRows: workRowsOf(conversation),
             held: views.held,
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
@@ -731,7 +698,7 @@ function PlanDocument({
               card: taskCardOf(tasks, listedCard, now),
             },
           }),
-    [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
+    [agents, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
   );
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
   // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
@@ -949,8 +916,6 @@ function PlanDocument({
                             keys={tasks.shown && !sideFocused}
                             shown={tasks.shown}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
-                            onOpenOnMac={terminalDoors.onOpenOnMac}
-                            onNewVoiceChat={tasks.onNewVoiceChat}
                             calling={calling}
                           />
                         }
@@ -992,10 +957,7 @@ function PlanDocument({
                                 onChoose={chooseRepository}
                                 openRequest={menuRequest}
                               />
-                              <StartAgentButton
-                                control={agents}
-                                onNewVoiceChat={tasks.onNewVoiceChat}
-                              />
+                              <StartAgentButton control={agents} />
                             </>
                           )}
                           {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. */}
@@ -1015,16 +977,6 @@ function PlanDocument({
                           subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
                         >
                           {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-                          {tab === undefined ? (
-                            <NoAgentPane
-                              onNewVoiceChat={archived ? undefined : tasks.onNewVoiceChat}
-                              onNewAgent={
-                                archived
-                                  ? undefined
-                                  : () => openColumnTab({ draft: agents.onNewDraft() })
-                              }
-                            />
-                          ) : null}
                           {tab === undefined ? null : (
                             <CallCaptions.Provider value={captions}>
                               <AgentPane
@@ -1067,9 +1019,8 @@ function PlanDocument({
                         repository={task.repository}
                         board={tasks.board}
                         shownCode={tasks.shownCode}
-                        codeFailed={tasks.workFailed ? { onRetry: tasks.onRetryWork } : undefined}
+                        codeFailed={tasks.codeFailed ? { onRetry: tasks.onRetryCode } : undefined}
                         pages={tasks.pages}
-                        work={tasks.work}
                         agents={agents}
                         openAgents={mainTabs.openAgents}
                         shownAgent={followedAgent(mainTabs.tab, {

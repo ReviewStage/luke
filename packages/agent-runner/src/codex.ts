@@ -33,15 +33,23 @@
  * with none, while one running is let finish. App-server exiting, or Luke
  * refusing the events, ends it as `failed`.
  *
- * Tokens. App-server reads the plan's access token from its environment once,
- * as it starts, so a refreshed token (a token line) is taken by restarting
- * app-server with it and resuming the thread, which OpenAI documents as the
- * renewal. The restart happens only between turns: just before the next
- * `turn/start` this launch sends, never during a turn. Every token the launch
- * holds is withheld from every event it posts.
+ * Tokens. Where the config names a `tokenUrl` (a launch on the ChatGPT
+ * plan), app-server takes its token from a command, Codex's provider `auth`:
+ * the runner's own bundle as `codex-token` (`codex-token.ts`), which asks
+ * Luke for it under the runner's bearer. Codex keeps what the command printed
+ * for the refresh interval, and runs it again past that and after a 401, so a
+ * turn outlives any one token, and no token sits in app-server's
+ * environment. Where it names none (test mode's API key), app-server reads
+ * `ACCESS_TOKEN` from its environment once, as it starts, so a refreshed
+ * token (a token line) is taken by restarting app-server with it and
+ * resuming the thread, which OpenAI documents as the renewal; the restart
+ * happens only between turns, just before the next `turn/start`. Every token
+ * the launch is handed is withheld from every event it posts; one the
+ * command prints reaches app-server alone.
  */
 
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { Effect, Exit, Option, Queue, Redacted, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
@@ -51,9 +59,10 @@ import {
   spawnAppServer,
 } from "./app-server.js";
 import type { ThreadStartParams, TurnStatus, UserInput } from "./codex-protocol/v2/index.js";
-import type { LaunchContext, LaunchOutcome } from "./launch.js";
+import type { LaunchContext, LaunchOutcome, RunnerSelf } from "./launch.js";
 import {
   CODEX_EFFORT,
+  CODEX_TOKEN_COMMAND,
   type CodexConfig,
   type CodexEffort,
   type ContentBlock,
@@ -73,6 +82,16 @@ const CHATGPT_PROVIDER = {
   ID: "openai_chatgpt_plan",
   NAME: "ChatGPT plan",
   BASE_URL: "https://api.openai.com/v1",
+} as const;
+
+/**
+ * How app-server runs the token command: given long enough for a cold Luke
+ * and a renewal at OpenAI behind it, and run again once what it printed is
+ * five minutes old, well inside the margin Luke's route answers a token with.
+ */
+const TOKEN_COMMAND = {
+  TIMEOUT_MS: 30_000,
+  REFRESH_INTERVAL_MS: 300_000,
 } as const;
 
 /** The name the Luke MCP server is registered under in Codex's config. */
@@ -157,22 +176,52 @@ function toml(value: string): string {
   return JSON.stringify(value);
 }
 
+/** Where the token command is run from: the runner's bundle, asked for the token at `tokenUrl`. */
+interface TokenCommand {
+  readonly self: RunnerSelf;
+  readonly tokenUrl: string;
+}
+
 /**
- * App-server's argv: the documented ChatGPT-plan provider, the Luke MCP
+ * How the provider is handed its token: from the runner's token command,
+ * where there is one, or read from `ACCESS_TOKEN` (the documented `env_key`)
+ * otherwise. Codex takes one or the other, never both.
+ */
+function providerAuth(provider: string, command: TokenCommand | undefined) {
+  if (command === undefined)
+    return [[`${provider}.env_key`, toml(RUNNER_ENV.CODEX_TOKEN)]] as const;
+  const args = [command.self.script, CODEX_TOKEN_COMMAND, command.tokenUrl].map(toml).join(", ");
+  return [
+    [`${provider}.auth.command`, toml(command.self.executable)],
+    [`${provider}.auth.args`, `[${args}]`],
+    [`${provider}.auth.timeout_ms`, String(TOKEN_COMMAND.TIMEOUT_MS)],
+    [`${provider}.auth.refresh_interval_ms`, String(TOKEN_COMMAND.REFRESH_INTERVAL_MS)],
+  ] as const;
+}
+
+/**
+ * App-server's argv: the documented ChatGPT-plan provider, its token from the
+ * runner's token command or `ACCESS_TOKEN` (`providerAuth`), the Luke MCP
  * server with its bearer read from the environment and its tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found), the sandbox with network on, and commands
- * inheriting the core variables without the token or the bearer. Nothing in
- * argv is secret.
+ * every MCP call, as P16 found), the sandbox with network on and the
+ * checkout's `.git` writable, and commands inheriting the core variables
+ * without the token or the bearer. Nothing in argv is secret.
+ *
+ * Note that workspace-write keeps `.git` read-only under every writable root
+ * (openai/codex#15505), and with `never` nothing escalates, so without its
+ * own writable root an agent could not commit. Granting `.git` itself keeps
+ * the sandbox on: commands still never see the token, and app-server's own
+ * git calls run with hooks and fsmonitor disabled.
  */
-function appServerArgs(config: CodexConfig): string[] {
+function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): string[] {
   const provider = `model_providers.${CHATGPT_PROVIDER.ID}`;
   const mcp = `mcp_servers.${MCP_SERVER}`;
   const overrides: (readonly [string, string])[] = [
     ["model_provider", toml(CHATGPT_PROVIDER.ID)],
     [`${provider}.name`, toml(CHATGPT_PROVIDER.NAME)],
     [`${provider}.base_url`, toml(CHATGPT_PROVIDER.BASE_URL)],
-    [`${provider}.env_key`, toml(RUNNER_ENV.CODEX_TOKEN)],
+    ...providerAuth(provider, command),
     [`${provider}.wire_api`, toml("responses")],
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
@@ -182,6 +231,7 @@ function appServerArgs(config: CodexConfig): string[] {
     ["approval_policy", toml("never")],
     ["sandbox_mode", toml("workspace-write")],
     ["sandbox_workspace_write.network_access", "true"],
+    ["sandbox_workspace_write.writable_roots", `[${toml(join(config.cwd, ".git"))}]`],
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
     [
@@ -221,7 +271,9 @@ interface CodexLaunch {
   waiting: Outgoing[];
   /** Luke's lines this launch has said app-server took, each said once. */
   readonly accepted: Set<string>;
-  /** A refreshed token, taken by a restart before the next turn starts. */
+  /** The token command app-server runs, where it takes no token from its environment. */
+  readonly tokenCommand: TokenCommand | undefined;
+  /** A refreshed token, taken by a restart before the next turn starts, where app-server reads `ACCESS_TOKEN`. */
   nextToken: string | undefined;
   model: string;
   effort: CodexEffort | undefined;
@@ -275,8 +327,8 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
  * otherwise. Answers the server, its scope, and the thread's id.
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
-  launch: Pick<CodexLaunch, "context" | "signals" | "model">,
-  token: string,
+  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "tokenCommand">,
+  token: string | undefined,
   threadId: string | undefined,
 ) {
   const { config, env } = launch.context;
@@ -287,9 +339,10 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
-      args: appServerArgs(config),
+      args: appServerArgs(config, launch.tokenCommand),
       cwd: config.cwd,
-      // Note that Claude Code's token, were it set, is no business of Codex's.
+      // Note that Claude Code's token, were it set, is no business of Codex's,
+      // and that with a token command no token is in app-server's environment.
       env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined, [RUNNER_ENV.CODEX_TOKEN]: token },
     },
     listenerFor(seen),
@@ -445,7 +498,8 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
     }
     case INPUT_LINE.TOKEN: {
       yield* launch.context.sink.withhold(Redacted.make(value.accessToken));
-      launch.nextToken = value.accessToken;
+      // A launch on the token command renews through it, and restarts for nothing.
+      if (launch.tokenCommand === undefined) launch.nextToken = value.accessToken;
       return undefined;
     }
   }
@@ -514,6 +568,13 @@ function takeSignal(
   }
 }
 
+/** The token command a launch's app-server runs: where the config names a token URL and the runner knows its own bundle. */
+function commandOf(context: LaunchContext<CodexConfig>): TokenCommand | undefined {
+  const { tokenUrl } = context.config;
+  if (tokenUrl === undefined || context.self === undefined) return undefined;
+  return { self: context.self, tokenUrl };
+}
+
 /**
  * One Codex launch, from its config to the moment app-server is ended.
  * Answers why it ended, and the failure where it failed.
@@ -522,17 +583,22 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   context: LaunchContext<CodexConfig>,
 ) {
   const { config, sink } = context;
-  const token = context.env[RUNNER_ENV.CODEX_TOKEN];
-  if (token === undefined || token === "") {
+  const tokenCommand = commandOf(context);
+  if (config.tokenUrl !== undefined && tokenCommand === undefined) {
+    return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
+  }
+  const envToken = context.env[RUNNER_ENV.CODEX_TOKEN];
+  if (tokenCommand === undefined && (envToken === undefined || envToken === "")) {
     return ended(RUNNER_END.FAILED, `${RUNNER_ENV.CODEX_TOKEN} is not set`);
   }
+  const token = tokenCommand === undefined ? envToken : undefined;
   const signals = yield* Queue.unbounded<Signal>();
   yield* sink.undelivered.pipe(
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
     Effect.forkScoped,
   );
   const opened = yield* openAppServer(
-    { context, signals, model: config.model },
+    { context, signals, model: config.model, tokenCommand },
     token,
     config.threadId,
   ).pipe(Effect.result);
@@ -547,6 +613,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     sent: new Map(),
     waiting: [],
     accepted: new Set(),
+    tokenCommand,
     nextToken: undefined,
     model: config.model,
     effort: config.effort,

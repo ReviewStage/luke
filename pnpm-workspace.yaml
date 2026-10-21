@@ -31,8 +31,8 @@ catalog:
 # it is the compiler alone, held to TypeScript 6 because each needs the compiler
 # API that the native 7 does not ship: `apps/web`, whose
 # `server/api-callers.ts` walks its routes through it, and the root, whose
-# discarded-effect check does (`scripts/lib/discarded-effect.mjs`). `apps/luke`
-# and `apps/dev` call `tsc` alone, so they typecheck on the catalog's 7. `@types/node` used to be pinned here
+# discarded-effect check does (`scripts/lib/discarded-effect.mjs`). `apps/dev`
+# calls `tsc` alone, so they typecheck on the catalog's 7. `@types/node` used to be pinned here
 # too, at 22.x, on the stated ground that it matched Vercel's own runtime; it
 # did not, because `apps/web`'s `engines.node` says 24.x and that is what Vercel
 # takes the runtime from. The pin bought no safety either, since every

@@ -32,18 +32,18 @@ const literal = (value: string) => sql.raw(`'${value}'`);
 /**
  * chat.ts -- a workspace's chat: its members and its channels.
  *
- * A member is one person, coding agent, or plan's planner of a workspace,
- * minted once and kept, and named by what it stands for: a person by their
- * account, an agent by its coding agent, and a planner by its plan, each
- * written as the app's mention link of it. Exactly one of the three ids stands, by kind: a person
- * goes with their account, while an agent or a plan deleted leaves its
- * member standing with no id, so the messages it wrote still name it.
+ * A member is one person or coding agent of a workspace, minted once and
+ * kept, and named by what it stands for: a person by their account and an
+ * agent by its coding agent, each written as the app's mention link of it.
+ * Exactly one of the two ids stands, by kind: a person goes with their
+ * account, while an agent deleted leaves its member standing with no id, so
+ * the messages it wrote still name it.
  * `read_seq` is how far through the workspace's chat sequence the member
  * has read in every channel, the floor each channel's own cursor in
  * `chat_read` starts from, and `notice_seq` the sequence of the one notice
  * it was told and has not read past, in the channel `notice_channel_id`
  * names, null when none is outstanding. `left_at` is when an archived agent
- * or plan stopped hearing.
+ * stopped hearing.
  *
  * A channel is the workspace's general one, a plan's own, a topic one a
  * member opened, or a DM, which names its two members in uuid order so one
@@ -84,8 +84,6 @@ export const chatMember = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     /** The coding agent, on an agent's member; null once the agent is deleted. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
-    /** The task, on its Luke's member; null once the task is deleted. */
-    taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /**
      * Retired: nothing reads or writes a member's handle, since members are
      * named by their mention links. A new row takes a random default, so a
@@ -104,30 +102,26 @@ export const chatMember = pgTable(
       onDelete: "set null",
     }),
     joinedAt: timestamptz("joined_at").notNull(),
-    /** When the member stopped hearing, an archived agent or plan; null while it hears. */
+    /** When the member stopped hearing, an archived agent; null while it hears. */
     leftAt: timestamptz("left_at"),
   },
   (table) => [
     // Retired with the handle, and dropped with it.
-    uniqueIndex("chat_member_organization_handle")
-      .on(table.organizationId, table.handle)
-      .where(sql`${table.kind} <> ${literal(MEMBER_KIND.LUKE)}`),
+    uniqueIndex("chat_member_organization_handle").on(table.organizationId, table.handle),
     uniqueIndex("chat_member_organization_kind_ordinal").on(
       table.organizationId,
       table.kind,
       table.ordinal,
     ),
-    // One member per person per workspace, per agent, and per plan.
+    // One member per person per workspace, and per agent.
     uniqueIndex("chat_member_organization_user")
       .on(table.organizationId, table.userId)
       .where(sql`${table.userId} is not null`),
     uniqueIndex("chat_member_agent").on(table.agentId).where(sql`${table.agentId} is not null`),
-    uniqueIndex("chat_member_task").on(table.taskId).where(sql`${table.taskId} is not null`),
     check(
       "chat_member_id_of_kind",
       sql`(${table.kind} = ${literal(MEMBER_KIND.HUMAN)}) = (${table.userId} is not null)
-        and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})
-        and (${table.taskId} is null or ${table.kind} = ${literal(MEMBER_KIND.LUKE)})`,
+        and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})`,
     ),
   ],
 );

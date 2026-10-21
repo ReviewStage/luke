@@ -19,12 +19,12 @@ import { ACTION_RESULT_STATUS } from "../core.js";
 import { OPEN_THREADS_MARKER, openThreadsText, runCommentTool } from "./comment-tools.js";
 
 /**
- * The comment tools Luke and the coding agents share, over a real dialect:
- * the open threads read with what they are on and every comment by its
- * writer, a reply written under Luke beside a teammate's, a resolved thread
- * read only when asked for and taking no reply until reopened, a thread of
- * another plan named as none, and the open threads handed to Luke as one
- * line each. Synthetic accounts and plans.
+ * The coding agents' comment tools, over a real dialect: the open threads
+ * read with what they are on and every comment by its writer, a reply
+ * written under its writer beside a teammate's, a resolved thread read only
+ * when asked for and taking no reply until reopened, a thread of another
+ * plan named as none, and the open threads handed to an agent as one line
+ * each. Synthetic accounts and plans.
  */
 
 const PLAN_TEXT = "## Approach\n\nAdmins can withdraw an invite from the members page.\n";
@@ -63,31 +63,35 @@ const openThreadedTask = Effect.gen(function* () {
   return { owner, taskId, thread: started.answer.thread };
 });
 
-/** A call made as Luke on the owner's turn. */
-const asLuke = (owner: string, taskId: string) => ({
+/** A call made as the owner. */
+const asOwner = (owner: string, taskId: string) => ({
   taskId,
-  writer: { actor: PLAN_COMMENT_ACTOR.LUKE, userId: owner } as const,
+  writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: owner } as const,
 });
 
 it.layer(getTestDB())("the comment tools", (it) => {
   it.effect(
-    "the open threads read with their words and comments, Luke's reply written as his, and a resolved thread read only when asked for",
+    "the open threads read with their words and comments, a reply written as its writer's, and a resolved thread read only when asked for",
     () =>
       Effect.gen(function* () {
         const { owner, taskId, thread } = yield* openThreadedTask;
-        const luke = asLuke(owner, taskId);
+        const writer = asOwner(owner, taskId);
 
         const replied = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
-          luke,
+          writer,
           unparsedWire({ thread: thread.id, words: "Not in v1; the page does not exist yet." }),
         );
-        const read = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, luke, unparsedWire({}));
-        yield* runCommentTool(AGENT_TOOL.RESOLVE_THREAD, luke, unparsedWire({ thread: thread.id }));
-        const openAfter = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, luke, unparsedWire({}));
+        const read = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, writer, unparsedWire({}));
+        yield* runCommentTool(
+          AGENT_TOOL.RESOLVE_THREAD,
+          writer,
+          unparsedWire({ thread: thread.id }),
+        );
+        const openAfter = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, writer, unparsedWire({}));
         const resolved = yield* runCommentTool(
           AGENT_TOOL.READ_COMMENTS,
-          luke,
+          writer,
           unparsedWire({ status: PLAN_COMMENT_STATUS.RESOLVED }),
         );
 
@@ -103,7 +107,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
               comments: [
                 { by: "Charles Pan", at: new Date(0).toISOString(), words: "Is this in v1?" },
                 {
-                  by: "Luke",
+                  by: "Dean Stratakos",
                   at: new Date(0).toISOString(),
                   words: "Not in v1; the page does not exist yet.",
                 },
@@ -124,23 +128,31 @@ it.layer(getTestDB())("the comment tools", (it) => {
       Effect.gen(function* () {
         const { owner, taskId, thread } = yield* openThreadedTask;
         const other = yield* openThreadedTask;
-        const luke = asLuke(owner, taskId);
-        yield* runCommentTool(AGENT_TOOL.RESOLVE_THREAD, luke, unparsedWire({ thread: thread.id }));
+        const writer = asOwner(owner, taskId);
+        yield* runCommentTool(
+          AGENT_TOOL.RESOLVE_THREAD,
+          writer,
+          unparsedWire({ thread: thread.id }),
+        );
 
         const refused = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
-          luke,
+          writer,
           unparsedWire({ thread: thread.id, words: "Still here." }),
         );
-        yield* runCommentTool(AGENT_TOOL.REOPEN_THREAD, luke, unparsedWire({ thread: thread.id }));
+        yield* runCommentTool(
+          AGENT_TOOL.REOPEN_THREAD,
+          writer,
+          unparsedWire({ thread: thread.id }),
+        );
         const taken = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
-          luke,
+          writer,
           unparsedWire({ thread: thread.id, words: "Still here." }),
         );
         const elsewhere = yield* runCommentTool(
           AGENT_TOOL.RESOLVE_THREAD,
-          luke,
+          writer,
           unparsedWire({ thread: other.thread.id }),
         );
 
@@ -151,7 +163,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
   );
 });
 
-it("the open threads are handed to Luke as one line each behind their marker, and nothing where none is open", () => {
+it("the open threads are handed to an agent as one line each behind their marker, and nothing where none is open", () => {
   const thread: PlanCommentThread = {
     id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
     scope: PLAN_COMMENT_SCOPE.WORDS,

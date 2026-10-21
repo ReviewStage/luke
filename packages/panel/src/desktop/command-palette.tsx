@@ -129,10 +129,9 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { workRowsOf } from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
-import { changesOffers, panelEntries, taskWorkers } from "./side-panel.js";
+import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
@@ -334,20 +333,6 @@ interface PaletteSection {
 const KEYWORD_SCORE = Number.MIN_VALUE;
 
 /**
- * The least of cmdk's scores the palette counts as a match. An abbreviation
- * of a row's words ("tgsb" for Toggle sidebar) scores above it, and letters
- * scattered through unrelated words ("palette" in Permanently delete task)
- * a tenth of it.
- */
-const LEAST_SCORE = 0.01;
-
-/** cmdk's own score of the words for the query, nothing under the least the palette counts. */
-function fuzzyScore(words: string, query: string): number {
-  const score = defaultFilter(words, query);
-  return score < LEAST_SCORE ? 0 : score;
-}
-
-/**
  * How well a row answers the query: cmdk's own score over its short words,
  * else the least score where every word of the query is in its keywords.
  * Note that the keywords are not scored by cmdk, because its scoring is
@@ -355,7 +340,7 @@ function fuzzyScore(words: string, query: string): number {
  * letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
-  const score = fuzzyScore(row.terms.join(" "), query);
+  const score = defaultFilter(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
 }
@@ -370,7 +355,7 @@ function pathScore(path: string, query: string): number {
   for (const letter of query.toLowerCase()) {
     if (letter.trim() !== "" && !lowered.includes(letter)) return 0;
   }
-  return fuzzyScore(path, query);
+  return defaultFilter(path, query);
 }
 
 /**
@@ -633,12 +618,11 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 
 /**
  * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
- * then its subagents and its agents' Changes tabs, as the side panel's "+"
- * lists them, then its archived agents (`archivedAgentRows`), each in its
- * row's look and words, found by its row's words, and beside the task's
- * name; none while no task is open. An agent opens as
- * its notification's click opens it, the Inbox the same way, and a
- * subagent's or a Changes tab as the "+" opens it, the version history
+ * then its agents' Changes tabs, as the side panel's "+" lists them, then
+ * its archived agents (`archivedAgentRows`), each in its row's look and
+ * words, found by its row's words, and beside the task's name; none while
+ * no task is open. An agent opens as its notification's click opens it, the
+ * Inbox the same way, and a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
 function agentRows(
@@ -649,20 +633,18 @@ function agentRows(
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
-  const workers = taskWorkers(workRowsOf(tasks.work.conversation));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
   const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
-  // Note that the plan's workers open in its own panel alone, and its Changes
-  // too in the Inbox's beside an item of the plan, which draws its pull requests.
+  // Note that the plan's Changes open in its own panel, and in the Inbox's
+  // beside an item of the plan, which draws its pull requests.
   const subagents = opensTaskItems(tasks)
     ? panelEntries({
         panel: tasks.sidePanel,
         kinds: [],
-        workers: holdsTaskPanel(tasks) ? workers : [],
         files: [],
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
@@ -950,7 +932,7 @@ function creatorExplains(row: PaletteRow, query: string, tokens: readonly string
   if (creator === undefined || tokens.length === 0) return false;
   if (matchRanges(creator, tokens).length > 0) return true;
   const others = row.terms.filter((term) => term !== creator).join(" ");
-  return fuzzyScore(others, query) === 0;
+  return defaultFilter(others, query) === 0;
 }
 
 function PaletteItem({

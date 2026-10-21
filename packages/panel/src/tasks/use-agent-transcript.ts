@@ -3,7 +3,6 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentTranscriptKey,
-  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
@@ -76,14 +75,9 @@ export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) =
   };
 };
 
-/** The agent's or task's id a transcript is under. */
-function ownerOf(transcript: CodingAgentTranscriptKey): string {
-  return transcript.kind === TRANSCRIPT_KIND.AGENT ? transcript.agentId : transcript.taskId;
-}
-
 /** Whether two keys name the same transcript. */
 function sameTranscript(one: CodingAgentTranscriptKey, other: CodingAgentTranscriptKey): boolean {
-  return one.kind === other.kind && ownerOf(one) === ownerOf(other) && one.callId === other.callId;
+  return one.agentId === other.agentId && one.callId === other.callId;
 }
 
 /** What the tab draws of the transcript. */
@@ -243,7 +237,7 @@ export function useAgentTranscript(input: {
 
   useEffect(() => {
     if (!shown) return;
-    const agentId = ownerOf(transcript);
+    const { agentId } = transcript;
     return latest.current.follower(transcript, (page) => {
       setHeld((was) => (sameTranscript(was.transcript, transcript) ? joined(was, page) : was));
       if ("failure" in page) return;

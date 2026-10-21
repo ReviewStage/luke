@@ -150,8 +150,11 @@ class TranscriptStreamKey extends Data.Class<{
 }> {}
 
 function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStreamKey {
-  const owner = transcript.kind === TRANSCRIPT_KIND.AGENT ? transcript.agentId : transcript.taskId;
-  return new TranscriptStreamKey({ kind: transcript.kind, owner, callId: transcript.callId });
+  return new TranscriptStreamKey({
+    kind: transcript.kind,
+    owner: transcript.agentId,
+    callId: transcript.callId,
+  });
 }
 
 /**

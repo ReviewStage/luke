@@ -81,17 +81,44 @@ const PLAIN = new Set([
   "Input.insertText",
 ]);
 
+/** The blank page Chromium starts with, which no one opened. */
+const START_PAGE: PageTarget = { targetId: "start-page", url: "about:blank", title: "about:blank" };
+
+/** The title a page's own document gives it, once it has loaded. */
+const titleAt = (url: string) => `Page at ${url}`;
+
 /**
- * A fake Chromium whose pages move as a real one's do: a navigation changes
- * the tab's address and title, a page opens and closes, and every command it
- * is sent is recorded.
+ * A fake Chromium whose pages move as a real one's do: a page opens titled
+ * with its address, as Chromium titles one while it loads, and takes its own
+ * title once it has loaded, after as many reads of its state as `loadAsks`
+ * says; a page at the address `unopenable` names will not open; a navigation changes the tab's address and title, a page closes, and
+ * every command it is sent is recorded.
  */
-function browser(pages: readonly PageTarget[] = []) {
+function browser(
+  pages: readonly PageTarget[] = [],
+  // Note that `unopenable` is read at each open, so a suite may let the page open later.
+  options: { readonly loadAsks?: number; readonly unopenable?: string | undefined } = {},
+) {
   return Effect.gen(function* () {
     const held: PageTarget[] = [...pages];
     const sent: FakeCdpCommand[] = [];
     let opened = 0;
     const sessions = new Map<string, string>();
+    // How many more reads of its state each page still loading answers that it loads.
+    const loading = new Map<string, number>();
+    const readyState = (targetId: string) => {
+      const left = loading.get(targetId);
+      if (left === undefined) return "complete";
+      if (left > 0) {
+        loading.set(targetId, left - 1);
+        return "loading";
+      }
+      loading.delete(targetId);
+      const at = held.findIndex((page) => page.targetId === targetId);
+      const page = held[at];
+      if (page !== undefined) held.splice(at, 1, { ...page, title: titleAt(page.url) });
+      return "complete";
+    };
     const answer = (command: FakeCdpCommand): FakeCdpAnswer | undefined => {
       sent.push(command);
       const { params } = command;
@@ -99,9 +126,13 @@ function browser(pages: readonly PageTarget[] = []) {
         case "Target.getTargets":
           return { result: { targetInfos: held.map((page) => ({ ...page, type: "page" })) } };
         case "Target.createTarget": {
+          if (params.url === options.unopenable) {
+            return { error: { code: -32000, message: "Failed to open a new tab" } };
+          }
           opened += 1;
           const targetId = `tab-${opened}`;
-          held.push({ targetId, url: String(params.url), title: "New tab" });
+          held.push({ targetId, url: String(params.url), title: String(params.url) });
+          loading.set(targetId, options.loadAsks ?? 0);
           return { result: { targetId } };
         }
         case "Target.closeTarget": {
@@ -121,7 +152,7 @@ function browser(pages: readonly PageTarget[] = []) {
             held.splice(held.indexOf(page), 1, {
               ...page,
               url: String(params.url),
-              title: `Page at ${String(params.url)}`,
+              title: titleAt(String(params.url)),
             });
           }
           return { result: { frameId: "frame-1" } };
@@ -129,7 +160,13 @@ function browser(pages: readonly PageTarget[] = []) {
         case "Page.getLayoutMetrics":
           return { result: LAYOUT };
         case "Runtime.evaluate":
-          return { result: { result: { value: 1 } } };
+          return params.expression === "document.readyState"
+            ? {
+                result: {
+                  result: { value: readyState(sessions.get(command.sessionId ?? "") ?? "") },
+                },
+              }
+            : { result: { result: { value: 1 } } };
         case "Page.captureScreenshot":
           return { result: { data: JPEG } };
         default:
@@ -137,7 +174,7 @@ function browser(pages: readonly PageTarget[] = []) {
       }
     };
     const peer = yield* fakeCdpPeer({ answer });
-    return { peer, sent };
+    return { peer, sent, held };
   });
 }
 
@@ -160,7 +197,7 @@ const openConversation = Effect.gen(function* () {
   const [row] = yield* Database.use((db) =>
     db
       .insert(conversations)
-      .values({ userId: id, kind: CONVERSATION_KIND.TASK })
+      .values({ userId: id, kind: CONVERSATION_KIND.CODING_AGENT })
       .returning({ id: conversations.id }),
   );
   assert.ok(row);
@@ -233,36 +270,50 @@ it.layer(getTestDB())("the browser tool", (it) => {
 
         assert.deepEqual(closed.tabs, []);
         assert.deepEqual(yield* keptTabs(conversationId), []);
+        // A tab the agent closed never comes back, however the browser is reached next.
+        const listed = ran(
+          yield* call(conversationId, { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] }, layer),
+        );
+        assert.deepEqual(listed.tabs, []);
+        assert.deepEqual(yield* keptTabs(conversationId), []);
       }),
   );
 
   it.effect(
-    "a list makes the kept tabs the browser's own: a page it holds is kept, a tab it lost is dropped",
+    "a list keeps every page the browser holds, and a lost tab that would not reopen just now stays kept until the next call reopens it",
     () =>
       Effect.gen(function* () {
         const { conversationId } = yield* openConversation;
         yield* upsertBrowserTab({
           conversationId,
-          targetId: "tab-gone",
-          address: "https://gone.test/",
-          title: "Gone",
+          targetId: "tab-lost",
+          address: "https://lost.test/",
+          title: "Lost",
           openedBy: { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
         });
-        const { peer } = yield* browser([
-          { targetId: "tab-held", url: "https://held.test/", title: "Held" },
-        ]);
-
-        ran(
-          yield* call(
-            conversationId,
-            { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] },
-            yield* runningBrowser(peer),
-          ),
+        const refusing = { unopenable: "https://lost.test/" as string | undefined };
+        const { peer, held: pages } = yield* browser(
+          [{ targetId: "tab-held", url: "https://held.test/", title: "Held" }],
+          refusing,
         );
+        const layer = yield* runningBrowser(peer);
+        const list = { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] };
 
-        assert.deepEqual(yield* keptTabs(conversationId), [
-          { targetId: "tab-held", address: "https://held.test/", title: "Held" },
+        ran(yield* call(conversationId, list, layer));
+        const afterRefusal = yield* keptTabs(conversationId);
+        refusing.unopenable = undefined;
+        ran(yield* call(conversationId, list, layer));
+
+        assert.deepEqual(afterRefusal.map(({ targetId }) => targetId).sort(), [
+          "tab-held",
+          "tab-lost",
         ]);
+        assert.deepEqual((yield* keptTabs(conversationId)).map(({ address }) => address).sort(), [
+          "https://held.test/",
+          "https://lost.test/",
+        ]);
+        const held = new Set(pages.map(({ targetId }) => targetId));
+        assert.ok((yield* keptTabs(conversationId)).every(({ targetId }) => held.has(targetId)));
       }),
   );
 
@@ -397,6 +448,160 @@ it.layer(getTestDB())("the browser tool", (it) => {
   );
 
   it.effect(
+    "a browser another call started afresh still reopens every kept tab, and a list after it keeps them",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        for (const [targetId, address] of [
+          ["before-1", "https://shop.test/cart"],
+          ["before-2", "http://localhost:3000/admin"],
+        ] as const) {
+          yield* upsertBrowserTab({
+            conversationId,
+            targetId,
+            address,
+            title: "Kept",
+            openedBy: { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
+          });
+        }
+        const kept = yield* listAgentBrowserTabs(conversationId);
+        // The sandbox resumed and a live view's connection started the browser, then went before it
+        // reopened anything: the browser holds only the blank page it starts with.
+        const { peer, held: pages } = yield* browser([START_PAGE]);
+        const layer = yield* runningBrowser(peer);
+
+        const listed = ran(
+          yield* call(conversationId, { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] }, layer),
+        );
+
+        const step = listed.steps[0];
+        assert.ok(step?.action === BROWSER_AGENT_ACTION.LIST && step.status === "done");
+        assert.deepEqual(step.tabs.map(({ url }) => url).sort(), [
+          "http://localhost:3000/admin",
+          "https://shop.test/cart",
+        ]);
+        const reopened = yield* listAgentBrowserTabs(conversationId);
+        assert.deepEqual(reopened.map(({ id }) => id).sort(), kept.map(({ id }) => id).sort());
+        const held = new Set(pages.map((page) => page.targetId));
+        assert.ok(reopened.every((row) => held.has(row.targetId)));
+      }),
+  );
+
+  it.effect(
+    "the blank page Chromium starts with is never listed or kept, and a list's tabs are the result's",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const { peer } = yield* browser([START_PAGE]);
+        const layer = yield* runningBrowser(peer);
+
+        const opened = ran(
+          yield* call(
+            conversationId,
+            {
+              actions: [
+                { action: BROWSER_AGENT_ACTION.OPEN, url: "https://shop.test/" },
+                { action: BROWSER_AGENT_ACTION.OPEN, url: "http://localhost:3000/" },
+              ],
+            },
+            layer,
+          ),
+        );
+        const listed = ran(
+          yield* call(conversationId, { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] }, layer),
+        );
+
+        const expected = [
+          { tab: "tab-1", url: "https://shop.test/", title: titleAt("https://shop.test/") },
+          {
+            tab: "tab-2",
+            url: "http://localhost:3000/",
+            title: titleAt("http://localhost:3000/"),
+          },
+        ];
+        assert.deepEqual(opened.tabs, expected);
+        assert.deepEqual(listed.steps, [
+          { action: BROWSER_AGENT_ACTION.LIST, status: BROWSER_STEP_STATUS.DONE, tabs: expected },
+        ]);
+        assert.deepEqual(listed.tabs, expected, "a list's tabs are the result's tabs too");
+        assert.deepEqual((yield* keptTabs(conversationId)).map(({ targetId }) => targetId).sort(), [
+          "tab-1",
+          "tab-2",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a tab is kept, listed, and shown with the title its page settles on, not the address it shows while it loads",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const { peer, sent } = yield* browser([], { loadAsks: 2 });
+        const url = "https://shop.test/login";
+        const asked = () =>
+          sent.filter((command) => command.params.expression === "document.readyState").length;
+
+        const pending = yield* Effect.forkChild(
+          call(
+            conversationId,
+            {
+              actions: [
+                { action: BROWSER_AGENT_ACTION.OPEN, url },
+                { action: BROWSER_AGENT_ACTION.LIST },
+              ],
+            },
+            agentBrowserTestLayer(peer, SESSION),
+          ),
+        );
+        // The page loads over its next reads of its state, each a poll later.
+        for (let reads = 1; reads <= 3; reads += 1) {
+          while (asked() < reads) yield* Effect.yieldNow;
+          yield* TestClock.adjust("250 millis");
+        }
+        const opened = ran(yield* Fiber.join(pending));
+
+        assert.deepEqual(opened.tabs, [{ tab: "tab-1", url, title: titleAt(url) }]);
+        assert.deepEqual(opened.steps.at(-1), {
+          action: BROWSER_AGENT_ACTION.LIST,
+          status: BROWSER_STEP_STATUS.DONE,
+          tabs: [{ tab: "tab-1", url, title: titleAt(url) }],
+        });
+        assert.deepEqual(yield* keptTabs(conversationId), [
+          { targetId: "tab-1", address: url, title: titleAt(url) },
+        ]);
+      }),
+  );
+
+  it.effect("a list before a later action on its tab keeps the title it saw", () =>
+    Effect.gen(function* () {
+      const { conversationId } = yield* openConversation;
+      const { peer } = yield* browser();
+      const url = "https://shop.test/inbox";
+
+      const result = ran(
+        yield* call(
+          conversationId,
+          {
+            actions: [
+              { action: BROWSER_AGENT_ACTION.OPEN, url },
+              { action: BROWSER_AGENT_ACTION.LIST },
+              { action: BROWSER_AGENT_ACTION.CLICK, x: 10, y: 10 },
+            ],
+          },
+          agentBrowserTestLayer(peer, SESSION),
+        ),
+      );
+
+      assert.deepEqual(result.steps[1], {
+        action: BROWSER_AGENT_ACTION.LIST,
+        status: BROWSER_STEP_STATUS.DONE,
+        tabs: [{ tab: "tab-1", url, title: url }],
+      });
+      assert.deepEqual(result.tabs, [{ tab: "tab-1", url, title: titleAt(url) }]);
+    }),
+  );
+
+  it.effect(
     "a screenshot reaches the model as an image and is left out of the stored conversation",
     () =>
       Effect.gen(function* () {
@@ -470,7 +675,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
         ).pipe(Effect.provide(unopened));
 
         assert.deepEqual(ran(first).tabs, [
-          { tab: "tab-1", url: "http://localhost:3000/", title: "New tab" },
+          { tab: "tab-1", url: "http://localhost:3000/", title: titleAt("http://localhost:3000/") },
         ]);
         assert.deepEqual(refused, {
           status: BROWSER_TOOL_STATUS.NOT_RUN,
@@ -761,7 +966,7 @@ it.layer(getTestDB())("the browser tool on the developer's Mac", (it) => {
         ).pipe(Effect.provide(agentBrowserTestLayer(peer, SESSION)));
 
         assert.deepEqual(ran(result).tabs, [
-          { tab: "tab-1", url: "http://localhost:3000/", title: "New tab" },
+          { tab: "tab-1", url: "http://localhost:3000/", title: titleAt("http://localhost:3000/") },
         ]);
         assert.equal(yield* macCommandsWaiting(userId, since, MAC_KINDS), false);
       }),

@@ -20,6 +20,7 @@ import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-s
 import {
   listProviderKeyRows,
   saveProviderKey,
+  setPlanStatus,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -53,11 +54,13 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Codex, against a fake of Vercel Sandbox's
- * REST API and of OpenAI's token endpoint, over a real store: the runner
- * launched in its Codex mode on the account's ChatGPT access token, renewed
- * first where too little of it is left, with the token and the bearer in its
- * environment alone; a renewed token handed to a running runner as a token
- * line ahead of the next message, and only then; a stop and a reset; a
+ * REST API and of OpenAI's token endpoint, over a real store: on the plan,
+ * the runner launched naming Luke's token route and handed no token, the
+ * account's token renewed first where less than forty-five minutes are left;
+ * without the route, the runner launched on the account's ChatGPT access
+ * token, with the token and the bearer in its environment alone, and a
+ * renewed token handed to a running runner as a token line ahead of the
+ * next message, and only then; a stop and a reset; a
  * relaunch on Codex's thread after the sandbox stopped; and a sign-in OpenAI
  * signed out, or none at all, failing the launch with that refusal and
  * opening nothing. Synthetic accounts, tokens, and snapshot ids throughout.
@@ -72,6 +75,7 @@ const KEK = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const ISSUED_CLIENT = "oaiapp_test_client";
 const THREAD = "019a0b1c-2d3e-7f40-8a5b-6c7d8e9f0a1b";
 const TEST_KEY = "sk-proj-fixture-test-mode-key";
+const TOKEN_URL = "https://luke.test/api/agents/runner-token";
 const MINUTE = 60 * 1000;
 
 function ring(): KeyRing {
@@ -188,6 +192,7 @@ function sessionsFor(
   userId: string,
   sequence: { next: number } = { next: 0 },
   testApiKey?: string,
+  tokenUrl?: string,
 ) {
   const options: CodexSessionsOptions = {
     userId,
@@ -196,6 +201,7 @@ function sessionsFor(
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
     testApiKey: testApiKey === undefined ? undefined : Redacted.make(testApiKey),
+    tokenUrl,
     run: (effect) => Effect.runPromise(effect),
   };
   return codexSessions(options);
@@ -290,15 +296,15 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "a token with less than fifteen minutes left is renewed before the launch, which runs on the renewed one",
+    "a token with less than forty-five minutes left is renewed before the launch, which runs on the renewed one",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const openai = openAi();
         const { userId, agent } = yield* openAgent;
-        // Past the store's own ten-minute margin, but short of the launch's fifteen.
-        yield* signIn(userId, 12);
+        // Past the store's own ten-minute margin, and past the old launch margin of fifteen, but short of forty-five.
+        yield* signIn(userId, 40);
         const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
 
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
@@ -499,12 +505,106 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
       }),
   );
 
+  it.effect(
+    "a plan whose limit a turn reached refuses the launch by name until the reset it named, then launches; an account OpenAI said is not eligible refuses by name; neither starts a runner while refused",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const { userId, agent } = yield* openAgent;
+        yield* signIn(userId, 60);
+        const now = yield* DateTime.nowAsDate;
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          PROVIDER_KEY_STATUS.LIMIT_REACHED,
+          new Date(now.getTime() + 30 * 60_000),
+          now,
+          now,
+        );
+        const limited = runnerSandboxApi();
+        const limitedSessions = yield* sessionsFor(userId).pipe(Effect.provide(services(limited)));
+        assert.deepEqual(yield* limitedSessions.open(message(agent, "Go.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+        });
+        assert.deepEqual(limited.commands, []);
+
+        yield* TestClock.adjust("31 minutes");
+        const reset = runnerSandboxApi();
+        const resetSessions = yield* sessionsFor(userId).pipe(
+          Effect.provide(services(reset, openAi())),
+        );
+        const reopened = yield* resetSessions.open(message(agent, "Go."));
+        assert.equal(reopened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.notDeepEqual(reset.commands, []);
+
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          PROVIDER_KEY_STATUS.INELIGIBLE,
+          undefined,
+          yield* DateTime.nowAsDate,
+          yield* DateTime.nowAsDate,
+        );
+        const ineligible = runnerSandboxApi();
+        const ineligibleSessions = yield* sessionsFor(userId).pipe(
+          Effect.provide(services(ineligible)),
+        );
+        assert.deepEqual(yield* ineligibleSessions.open(message(agent, "Go on.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.INELIGIBLE,
+        });
+        assert.deepEqual(ineligible.commands, []);
+      }),
+  );
+
+  it.effect(
+    "on the plan, the launch names the token route and hands the runner no token, a token with fifty minutes left goes as it stands, and no message goes behind a token line",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const openai = openAi();
+        const { userId, agent } = yield* openAgent;
+        yield* signIn(userId, 50);
+        const sessions = yield* sessionsFor(userId, { next: 0 }, undefined, TOKEN_URL).pipe(
+          Effect.provide(services(api, openai)),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(openai.state.renewals, 0);
+        // Ten minutes on, forty are left: renewed ahead of the message, and handed on nowhere.
+        yield* TestClock.adjust("10 minutes");
+        yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        assert.equal(openai.state.renewals, 1);
+
+        const [command] = api.commands;
+        assert.equal(command?.env[RUNNER_ENV.CODEX_TOKEN], undefined);
+        assert.equal(command?.env.CODEX_HOME, "/home/agent/.codex");
+        const lines = linesOf(command) as [CodexConfig, ...InputLine[]];
+        assert.equal(lines[0].tokenUrl, TOKEN_URL);
+        assert.equal(
+          lines.some((each) => "type" in each && each.type === INPUT_LINE.TOKEN),
+          false,
+        );
+        const visible = JSON.stringify([command, api.sandboxes]);
+        for (const secret of ["access-0", "access-1", "refresh-1"]) {
+          assert.equal(visible.includes(secret), false, "a token handed to the runner");
+        }
+      }),
+  );
+
   it.effect("a launch in test mode runs on the OpenAI key given, and hands on no token line", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = runnerSandboxApi();
       const { userId, agent } = yield* openAgent;
-      const sessions = yield* sessionsFor(userId, { next: 0 }, TEST_KEY).pipe(
+      const sessions = yield* sessionsFor(userId, { next: 0 }, TEST_KEY, TOKEN_URL).pipe(
         Effect.provide(services(api)),
       );
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
@@ -515,6 +615,8 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
       const [command] = api.commands;
       assert.equal(command?.env[RUNNER_ENV.CODEX_TOKEN], TEST_KEY);
+      // The key does not age, so the route is not named.
+      assert.equal((linesOf(command)[0] as CodexConfig).tokenUrl, undefined);
       const lines = linesOf(command) as InputLine[];
       assert.equal(
         lines.some((each) => each.type === INPUT_LINE.TOKEN),

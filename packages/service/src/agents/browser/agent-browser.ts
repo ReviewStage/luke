@@ -22,6 +22,9 @@
  * When the browser cannot be reached, the failure says why: no sandbox yet,
  * Vercel unavailable, a sandbox that would not resume, an image without the
  * browser, a browser that would not start, or a bridge that never came up.
+ * A bridge that did not come up, as one may not on a browser just started,
+ * is tried again on a fresh PTY a couple of times within a short window,
+ * and how each attempt failed is logged by its kind alone.
  */
 
 import {
@@ -47,7 +50,7 @@ import {
   Result,
   Schedule,
   Schema,
-  type Scope,
+  Scope,
   Stream,
 } from "effect";
 import type { HttpClient } from "effect/http";
@@ -74,6 +77,14 @@ const AGENT_BROWSER = {
   RESUME_TRIES: 30,
   /** How long the bridge may take to say it is ready once its PTY is open. */
   READY_TIMEOUT: Duration.seconds(15),
+  /**
+   * A bridge that did not come up is tried again on a fresh PTY this many
+   * times, this far apart, while the first failure is no older than the
+   * window, so a browser that is down still answers within a bridge's bound.
+   */
+  BRIDGE_RETRIES: 2,
+  BRIDGE_RETRY_SPACING: Duration.seconds(1),
+  BRIDGE_RETRY_WINDOW: Duration.seconds(10),
   /** How long a command waits on its answer. */
   COMMAND_TIMEOUT: Duration.seconds(30),
   /** The most events a subscriber that falls behind is owed; past it the oldest give way. */
@@ -174,6 +185,14 @@ const PagesSchema = Schema.Struct({
 
 const CreatedSchema = Schema.Struct({ targetId: Schema.String });
 
+/** How a bridge did not come up, as its failure is logged: nothing a page holds. */
+const BRIDGE_FAILURE = {
+  NO_PTY: "the PTY did not open",
+  REFUSED: "the bridge could not reach the browser",
+  NOT_READY: "the bridge did not say it was ready in time",
+  CLOSED: "the bridge ended before it was ready",
+} as const;
+
 /** The PTY server's exit frame: the bridge ended. */
 const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema.Int });
 
@@ -193,6 +212,15 @@ const unreachable = (reason: BrowserUnreachableReason, status?: number) =>
 
 const sandboxUnavailable = (error: SandboxUnavailable) =>
   unreachable(BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE, error.status);
+
+/** The bridge did not come up, logged by how; the failure every caller sees is the same. */
+function bridgeFailed(how: string, word?: string) {
+  const said = word === undefined ? "" : ` (${word})`;
+  return Effect.andThen(
+    Effect.logWarning(`The browser bridge did not come up: ${how}${said}`),
+    Effect.fail(unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED)),
+  );
+}
 
 /** The PTY's output as the lines the bridge wrote, ending where the bridge exits; a text frame that is not its exit is output sent as text. */
 function linesOf(frames: Stream.Stream<RelayFrame>): Stream.Stream<string> {
@@ -233,7 +261,11 @@ function cdpSessionOver(
     >();
     const nextId = yield* Ref.make(0);
     const closed = yield* Ref.make(false);
-    const ready = yield* Deferred.make<void, BrowserUnreachable>();
+    // How the bridge did not come up, where it did not, and its own word for why.
+    const ready = yield* Deferred.make<
+      void,
+      { readonly how: string; readonly word?: string | undefined }
+    >();
     // Each event the browser sent, and `null` once as the connection ends.
     const events = yield* PubSub.sliding<CdpEvent | null>(AGENT_BROWSER.EVENT_BACKLOG);
 
@@ -253,7 +285,7 @@ function cdpSessionOver(
         if ("bridge" in value) {
           return value.bridge === BRIDGE_WORD.READY
             ? Deferred.succeed(ready, undefined)
-            : Deferred.fail(ready, unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED));
+            : Deferred.fail(ready, { how: BRIDGE_FAILURE.REFUSED, word: value.reason });
         }
         if ("id" in value) {
           const method = waiting.get(value.id)?.method ?? "";
@@ -281,7 +313,7 @@ function cdpSessionOver(
     // The connection's end: what waits fails as closed, and every event stream ends.
     const end = Effect.gen(function* () {
       yield* Ref.set(closed, true);
-      yield* Deferred.fail(ready, unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED));
+      yield* Deferred.fail(ready, { how: BRIDGE_FAILURE.CLOSED });
       for (const [id, { method }] of [...waiting]) {
         yield* settle(id, Exit.fail(new CdpFailure({ kind: CDP_FAILURE.CLOSED, method })));
       }
@@ -294,8 +326,11 @@ function cdpSessionOver(
     yield* Deferred.await(ready).pipe(
       Effect.timeoutOrElse({
         duration: AGENT_BROWSER.READY_TIMEOUT,
-        orElse: () => Effect.fail(unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED)),
+        orElse: () => Effect.fail({ how: BRIDGE_FAILURE.NOT_READY }),
       }),
+      Effect.catch((failure: { readonly how: string; readonly word?: string | undefined }) =>
+        bridgeFailed(failure.how, failure.word),
+      ),
     );
 
     const send = (command: CdpCommand): Effect.Effect<UnparsedWireValue, CdpFailure> =>
@@ -350,6 +385,23 @@ function cdpSessionOver(
       closePage: (targetId) =>
         Effect.asVoid(send({ method: "Target.closeTarget", params: { targetId } })),
     };
+  });
+}
+
+/**
+ * The effect in a scope of its own under the caller's, closed at once where
+ * it fails, so a bridge that did not come up holds no PTY open while it is
+ * tried again; one that succeeds stands for the caller's scope.
+ */
+function ownScope<A, E>(
+  effect: Effect.Effect<A, E, Scope.Scope>,
+): Effect.Effect<A, E, Scope.Scope> {
+  return Effect.gen(function* () {
+    const child = yield* Scope.fork(yield* Effect.scope);
+    return yield* effect.pipe(
+      Scope.provide(child),
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
+    );
   });
 }
 
@@ -421,29 +473,43 @@ export function agentBrowserOver(
   return {
     ensure,
     connect: (sessionId) =>
-      Effect.gen(function* () {
-        const { sandboxSessionId } = yield* ensure(sessionId);
-        // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
-        const shell = yield* api
-          .openInteractive(sandboxSessionId)
-          .pipe(Effect.mapError(sandboxUnavailable));
-        const socket = yield* pty
-          .connect(shell)
-          .pipe(Effect.mapError(() => unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED)));
-        const bridge = browserBridge();
-        yield* socket.send({
-          text: JSON.stringify({
-            type: "start",
-            command: bridge.command,
-            args: bridge.args,
-            env: AGENT_BROWSER.PTY.ENV,
-            cwd: AGENT_BROWSER.PTY.CWD,
-            cols: AGENT_BROWSER.PTY.COLS,
-            rows: AGENT_BROWSER.PTY.ROWS,
-          }),
-        });
-        return yield* cdpSessionOver(socket);
-      }),
+      ownScope(
+        Effect.gen(function* () {
+          const { sandboxSessionId } = yield* ensure(sessionId);
+          // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
+          const shell = yield* api
+            .openInteractive(sandboxSessionId)
+            .pipe(Effect.mapError(sandboxUnavailable));
+          const socket = yield* pty
+            .connect(shell)
+            .pipe(Effect.catch(() => bridgeFailed(BRIDGE_FAILURE.NO_PTY)));
+          const bridge = browserBridge();
+          yield* socket.send({
+            text: JSON.stringify({
+              type: "start",
+              command: bridge.command,
+              args: bridge.args,
+              env: AGENT_BROWSER.PTY.ENV,
+              cwd: AGENT_BROWSER.PTY.CWD,
+              cols: AGENT_BROWSER.PTY.COLS,
+              rows: AGENT_BROWSER.PTY.ROWS,
+            }),
+          });
+          return yield* cdpSessionOver(socket);
+        }),
+      ).pipe(
+        // Note that a bridge that did not come up is tried again from the start, the browser made sure
+        // of again too, since a browser just started may not take its first connection, and one that
+        // went is started anew; any other failure, the sandbox's own, answers at once.
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.spaced(AGENT_BROWSER.BRIDGE_RETRY_SPACING),
+            Schedule.recurs(AGENT_BROWSER.BRIDGE_RETRIES),
+            Schedule.during(AGENT_BROWSER.BRIDGE_RETRY_WINDOW),
+          ]),
+          while: (failure) => failure.reason === BROWSER_UNREACHABLE.BRIDGE_FAILED,
+        }),
+      ),
   };
 }
 

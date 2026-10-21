@@ -826,7 +826,7 @@ test("in the Comments tab a thread's quote shows its words in the plan, and a de
   assert.equal(documentsShown.length, 2);
 });
 
-test("a comment's field offers Luke first among the agents, with no Send to beside it", async () => {
+test("a comment's field offers no Luke among the agents, since no task has one, and no Send to beside it", async () => {
   installEditorLayout();
   const { container } = drawn("page", THREADS, () => true, PLAN, undefined, PAGE_MENTIONS);
   act(() =>
@@ -844,7 +844,10 @@ test("a comment's field offers Luke first among the agents, with no Send to besi
   const rows = [...document.querySelectorAll<HTMLElement>('[role="option"]')].map(
     (row) => row.textContent ?? "",
   );
-  assert.ok(rows[0]?.startsWith("Luke"), `Luke leads the list: ${rows.join(" | ")}`);
+  assert.ok(
+    rows.every((row) => !row.startsWith("Luke")),
+    `no Luke is offered: ${rows.join(" | ")}`,
+  );
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
 

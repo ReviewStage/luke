@@ -19,11 +19,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * its own, as an editor draws its files, so an agent's transcript, its calls,
  * and its composer take the room the task is worked in. What supports them,
  * the plan's document and the task's Inbox among it, stands in the side panel
- * (`use-side-panel.ts`). A column with no tab standing shows the plan: the
- * side panel on its Plan tab, beside an empty pane that offers a new voice
- * chat or a new agent. The agents' tabs stand one per agent in the order
+ * (`use-side-panel.ts`). The agents' tabs stand one per agent in the order
  * started, and a draft agent's, opened from the column's "+", after them
- * while the open task holds the draft.
+ * while the open task holds the draft. A task none of whose tabs viewed
+ * still stands shows its strip's last once its agents are read, and one
+ * with no tab standing at all opens a draft (`use-tasks-tab.ts`), so a task
+ * with no agent, or whose last tab closed, lands in a new agent's composer;
+ * while its agents are on their way, the column is empty beside the plan.
  *
  * An agent's tab closes as an editor's does, which closes the view and
  * leaves the agent running, and the "+" opens it again; the agents whose
@@ -32,11 +34,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * and closing it lets the draft go, which is its owner's to do. Closing the
  * chosen tab chooses the one viewed before it on that task that still
  * stands, and only where none does its neighbour (`replacementOf`), so a
- * column whose last tab closes is back on the plan.
+ * column whose last tab closes is back on a draft.
  *
  * The tab chosen is each task's own: the latest it viewed that still
- * stands, none where none does. So opening a task from the sidebar shows it
- * as the developer left it, the agent they were reading or the plan, and an
+ * stands, the strip's last where none does. So opening a task from the
+ * sidebar shows it as the developer left it, and an
  * agent a notification, a pin, or a Start names is shown by viewing it on
  * its task. An agent's tab stands only once the task's agents are read and
  * hold it, so the column never shows an agent its strip draws no tab for: a
@@ -200,7 +202,7 @@ const NO_TABS: readonly MainTab[] = [];
 export interface MainTabsControl {
   /** The column's tabs in the strip's order: the open agents', the draft's, and the Chat where open, in the task's order. */
   tabs: readonly MainTab[];
-  /** The tab shown; none where no tab stands or none was viewed that still does, which shows the plan. */
+  /** The tab shown; none where no tab stands, which leaves the column empty beside the plan. */
   tab: MainTab | undefined;
   /** The task's agents whose tabs are open, in the order started; nothing while the agents are unread. */
   openAgents: readonly string[] | undefined;
@@ -273,10 +275,18 @@ function stands(held: HeldState, drawn: DrawnTabs, tab: MainTab): boolean {
   return stripOf(held, drawn).some((each) => sameTab(each, tab));
 }
 
-/** The tab shown on the task: the latest it viewed that still stands, else none, which is the plan. */
+/**
+ * The tab shown on the task: the latest it viewed that still stands, else,
+ * once its agents are read, the strip's last, an agent's or the draft's,
+ * else none. Note that a fallback is not counted viewed until it is chosen,
+ * and waits on the agents' read, so a task opened on an agent it viewed
+ * never shows another first.
+ */
 function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
-  return recent.findLast((tab) => stands(held, drawn, tab));
+  const viewed = recent.findLast((tab) => stands(held, drawn, tab));
+  if (viewed !== undefined || drawn.agents === undefined) return viewed;
+  return stripOf(held, drawn).at(-1);
 }
 
 /** The state with the tabs viewed on the task, in the order given, as its latest. */

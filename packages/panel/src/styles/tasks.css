@@ -2870,6 +2870,7 @@
   display: flex;
   flex: none;
   align-items: center;
+  gap: var(--luke-space-8);
   margin-inline-start: auto;
 }
 
@@ -7950,4 +7951,15 @@ button.picture-frame {
 .tool-sent-note {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+}
+
+/* Who pays for an agent, under its box (`plan-label.tsx`): "Using ChatGPT
+   plan · Manage usage", or in the attention colour why the plan cannot
+   serve it, set in from the card's edge as the box's note is. */
+.agent-composer-payer {
+  padding-left: var(--luke-space-4);
+}
+
+.agent-plan-label[data-state="attention"] {
+  color: var(--luke-color-attention);
 }

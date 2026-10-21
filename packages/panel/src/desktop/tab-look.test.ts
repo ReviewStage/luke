@@ -10,7 +10,6 @@ import {
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
-import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -23,7 +22,6 @@ import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { conversationOf, worker, workerCall, workTurn } from "../testing/task-work.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -109,13 +107,6 @@ const FUNNEL: PageLine = {
   at: 1_800_000_000_000,
 };
 
-/** A brain's worker still at work, on a model whose harness Luke knows. */
-const READER = worker("w", "Read the invite emails.", {
-  state: TASK_WORK_STATE.RUNNING,
-  model: "anthropic/claude-sonnet-5",
-  title: "Invite emails",
-});
-
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -137,10 +128,9 @@ async function settle(): Promise<void> {
 
 /**
  * The task open on its own tab, a working agent's tab and a draft's beside
- * it, and the side panel open with a working subagent's tab, the done
- * agent's Changes tab, the working agent's Terminal tab, and a page's tab.
+ * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
-async function mount(onNewVoiceChat?: () => void): Promise<HTMLElement> {
+async function mount(): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -160,19 +150,11 @@ async function mount(onNewVoiceChat?: () => void): Promise<HTMLElement> {
       ...base.sidePanel,
       open: true,
       tab: SIDE_PANEL_TAB.CODE,
-      subagents: [{ subagent: READER.callId }],
       changes: [{ changes: DONE.id }],
       terminals: [{ terminal: WORKING.id }],
       pages: [{ page: FUNNEL.id }],
     },
     pages: [FUNNEL],
-    onNewVoiceChat,
-    work: {
-      ...base.work,
-      conversation: conversationOf([
-        workTurn(TASK_WORK_STATE.RUNNING, [workerCall(READER)], { workers: [READER] }),
-      ]),
-    },
     agents: codingAgentsControl({
       agents: [WORKING, DONE],
       agentIds: [WORKING.id, DONE.id],
@@ -250,32 +232,26 @@ test("the column's + offers a working agent and the draft in the look their tabs
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
-test("the column's + offers New voice chat, then New agent, then each agent, where the window has a voice, and New agent first where it has none", async () => {
-  const order = (column: Element | null) => {
-    assert.ok(column, "the task's column's strip");
-    return [...rowLooks(column).keys()];
-  };
-  const voiced = order((await mount(() => undefined)).querySelector(".main-tabs"));
-  assert.deepEqual(voiced.slice(0, 2), [TAB_WORDS.NEW_VOICE_CHAT, TAB_WORDS.NEW_AGENT]);
-  assert.ok(voiced.indexOf(WORKING.title ?? "") > 1, "the agents stand after the two starts");
-  act(() => roots.pop()?.unmount());
-  document.body.innerHTML = "";
-
-  const voiceless = order((await mount()).querySelector(".main-tabs"));
-  assert.equal(voiceless.includes(TAB_WORDS.NEW_VOICE_CHAT), false);
-  assert.equal(voiceless[0], TAB_WORDS.NEW_AGENT);
+test("the column's + offers New agent, then each agent, and no New voice chat, which a draft's Call starts", async () => {
+  const column = (await mount()).querySelector(".main-tabs");
+  assert.ok(column, "the task's column's strip");
+  const rows = [...rowLooks(column).keys()];
+  assert.equal(rows[0], TAB_WORDS.NEW_AGENT);
+  assert.ok(rows.indexOf(WORKING.title ?? "") > 0, "the agents stand after New agent");
+  assert.equal(
+    rows.some((row) => row?.includes("voice chat")),
+    false,
+  );
 });
 
-test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", async () => {
+test("the side panel's + offers an agent's Pull request in the look its tab wears, named by its number and title rather than its agent's name", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   const tabs = tabLooks(panel);
   const rows = rowLooks(panel);
-  for (const name of [READER.title, "#42 Expire invitations"]) {
-    assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
-    assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
-  }
-  assert.match(tabs.get(READER.title ?? "")?.glyph ?? "", /data-state="working"/u);
+  const name = "#42 Expire invitations";
+  assert.ok(tabs.has(name), `the strip has a tab named ${name}`);
+  assert.deepEqual(rows.get(name), tabs.get(name), `${name} looks the same in the +`);
   assert.match(
     tabs.get("#42 Expire invitations")?.glyph ?? "",
     /data-pull-request-state="open"/u,

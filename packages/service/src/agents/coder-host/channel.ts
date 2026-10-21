@@ -102,8 +102,7 @@ const UPLOAD_POLICY = {
  * the opening is minted the same way, so the agent's session runs as the
  * developer whether the developer or Luke started it. The spoken ask is
  * the voice function's, handed to eve for the account it resolved at its
- * own handshake, as the brain's channel takes it
- * (`brain-host/channel.ts`): it opens an agent's session, or follows one
+ * own handshake: it opens an agent's session, or follows one
  * up, as a spoken turn, or joins the agent's turn under way
  * (`CODER_DEPLOYMENT_PRESENCE`). A caller of another role adds its row here
  * and nowhere else.

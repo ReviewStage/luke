@@ -574,8 +574,6 @@ function MentionCommentText({
     // Note that the list rises over the card, since the cards under it in the margin would stand over it.
     side: MENTION_MENU_SIDE.ABOVE,
     onChoose: (mention) => editor.current?.chooseMention(mention),
-    // Luke is offered with the agents, whom a comment's mention sends its thread.
-    luke: true,
   });
   return (
     <ComposerField

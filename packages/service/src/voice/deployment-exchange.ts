@@ -10,7 +10,7 @@ import {
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../agents/brain-host/eve-sessions.js";
-import { CALL_BACKEND, type CallBackend } from "./call-backend.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
 
@@ -27,14 +27,10 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
  * fake eve behind the same door. Its eve sends a spoken ask and nothing else
- * by its type, under the brain's mount for a call about a task and under the
- * coding agents' for a call into an agent. The brain's door admits a typed ask from anything that holds
- * the deployment's secret, so what keeps the deployment's typed asks to a
- * comment's is the code: no code path but the comment hand-over
- * (`tasks/comment-ask.ts`) sends one.
+ * by its type, under the coding agents' mount, into the agent the call names.
  */
 
-/** The one kind of turn the voice function asks Luke for. */
+/** The one kind of turn the voice function asks an agent for. */
 type SpokenTurn = typeof BRAIN_HOST_TURN.SPOKEN;
 
 interface DeploymentExchangeSeams {
@@ -110,14 +106,9 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
   const compose = Effect.gen(function* () {
     const { deploymentSecret, origin } = yield* configuredSeams(seams);
     // The writer's composition probes every declared output schema, so a warm
-    // instance pays that walk once rather than once per session. A call about
-    // a task writes into the task's conversation, whose rows name the brain's
-    // tools, and a call into an agent into the agent's, whose rows name the
-    // agent's, so each is held to its own backend's set as that backend's is.
-    const taskWriter = yield* storeWriter({ tools: CALL_BACKEND.TASK.tools });
-    const agentWriter = yield* storeWriter({ tools: CALL_BACKEND.AGENT.tools });
-    const writer = (backend: CallBackend) =>
-      backend === CALL_BACKEND.AGENT ? agentWriter : taskWriter;
+    // instance pays that walk once rather than once per session; its rows name
+    // the agent's tools, so it is held to the agent's set.
+    const writer = yield* storeWriter({ tools: CALL_BACKEND.tools });
     // eve's client is composed once per instance too, over the client the seam names; a test's
     // fake eve stands in its place and composes none.
     const eve =

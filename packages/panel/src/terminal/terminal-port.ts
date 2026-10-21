@@ -1,11 +1,14 @@
 /**
- * terminal-port.ts -- the ports main posts for attached shells, as the page receives them from the preload.
+ * terminal-port.ts -- the ports the host posts for attached shells, as the page receives them: from the desktop's preload, or from the host in a browser tab.
  *
- * A `MessagePort` cannot cross the context bridge, so the preload hands each
- * one into the page with `window.postMessage`, the way Electron hands a port
- * to an isolated world, under the terminal channel and the ticket naming the
- * shell it carries. A message from any other source — a page's frame, a
- * script posting to this window — is no port of main's and is ignored.
+ * Either way the port reaches the page as this window's own message, under
+ * the terminal channel and the ticket naming the shell it carries. On the
+ * desktop a `MessagePort` cannot cross the context bridge, so the preload
+ * hands each one in with `window.postMessage`, the way Electron hands a port
+ * to an isolated world; in a browser tab the host runs in the page and posts
+ * each one to its own window (`apps/web`'s `web-host.ts`). A message from
+ * any other source, a page's frame or another window's script, is no
+ * host's port and is ignored.
  */
 
 import {
@@ -24,7 +27,7 @@ export function onTerminalPort(
   callback: (ticket: TerminalPortTicket, port: MessagePort) => void,
 ): () => void {
   const listener = (event: MessageEvent) => {
-    // Only the preload, posting to its own window, hands a port in.
+    // Only this window's own post hands a port in: the desktop's preload's, or the tab's host's.
     if (event.source !== window) return;
     const message = unparsedWire(event.data);
     if (!isRecord(message) || message.channel !== TERMINAL_PORT_CHANNEL) return;

@@ -7,7 +7,6 @@ import {
   type BridgeMethod,
   type BridgeResultFor,
 } from "@luke/host/bridge";
-import { windowAppState } from "@luke/host/client";
 import type { Context } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 
@@ -42,7 +41,7 @@ export interface BridgeHostDependencies {
   /** The desktop runtime's own services, which every act port procedure's effect runs on. */
   services: Context.Context<never>;
   reports: ReportHandlers;
-  /** The document as one window stands, which is the answer to its own bootstrap read, the voice and call windows' without the task's work (`voiceWindowState`). */
+  /** The document as one window stands, which is the answer to its own bootstrap read. */
   snapshotFor: (sender: WebContents) => Promise<AppStateSnapshot>;
 }
 
@@ -82,8 +81,7 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
 
   ipcMain.handle(BRIDGE.requestAppState.channel, async (event) => {
     if (!trustedSender(event)) throw new Error("Invalid bridge request");
-    // The voice and call windows read the document as `app:state` sends it them, without the task's work, from their first read on.
-    return windowAppState(await snapshotFor(event.sender), senderOf(event.sender));
+    return snapshotFor(event.sender);
   });
 
   // SAFETY: `reports` is keyed by ReportMethod; Object.keys erases those literal keys.

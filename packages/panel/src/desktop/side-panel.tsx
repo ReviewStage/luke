@@ -1,10 +1,8 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import type { Board } from "@luke/features/board-wire";
 import type { BrowserPage } from "@luke/features/browser-acts";
-import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
-  type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -12,7 +10,7 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -75,7 +73,7 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { SpinnerRegion } from "../spinner.js";
-import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph.js";
+import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -116,7 +114,6 @@ import {
   readWholeTranscript,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { TranscriptReader } from "../tasks/use-agent-transcript.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
@@ -137,20 +134,10 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
-import {
-  type TaskConversation,
-  type WorkTurnRow,
-  type WorkWorkerBlock,
-  workerCallIds,
-  workerChoice,
-  workerJob,
-  workerOf,
-  workFailed,
-  workRowsOf,
-} from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import type { MenuAction } from "./action-menu.js";
+import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
@@ -218,7 +205,7 @@ const UNREAD_CODE_LINE = "The code could not be read.";
  */
 const NO_CODE_CALLS: readonly CodeFeedCallSource[] = [];
 
-/** The task's work read that did not land, and its retry, which the Code tab offers while it holds no code. */
+/** The task's code read that did not land, and its retry, which the Code tab offers while it holds no code. */
 interface CodeFailed {
   readonly onRetry: () => void;
 }
@@ -337,9 +324,11 @@ export function useColumnFocus(): ColumnFocus {
   return { onArea, focus, setFocus };
 }
 
+/** No worker's tab stands but a delegated one's, which its agent's open tab keeps (`drawsSubagent`). */
+const NO_SUBAGENTS: readonly string[] = [];
+
 /** The "+" menu's sections after the fixed kinds, which the task's summary lists under the same headings. */
 export const ADD_SECTION = {
-  SUBAGENTS: "Subagents",
   FILES: "Files",
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
@@ -492,11 +481,9 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
  * What the panel may open, as its "+" menu offers it, the task's summary
  * lists it (`task-summary.tsx`), and ⌘K finds it: the fixed kinds given,
  * every one for the "+" and those the task has used for the summary; then,
- * under Subagents, each subagent the task's work holds; then, under Files,
- * each file Luke showed on the task, by name with its folder beside it.
- * Each row wears its tab's own look (`tab-look.tsx`): a subagent its
- * model's mark wearing where the worker stands, and a file as every place
- * names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
+ * under Files, each file an agent showed on the task, by name with its
+ * folder beside it. Each row wears its tab's own look (`tab-look.tsx`): a
+ * file as every place names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
  * that tab rather than opening another, as a browser's tab search does, so
  * no row says it is open; a file not open opens through the panel's one
  * door for a file on the newest snippet of it. Then, under Pull requests,
@@ -509,7 +496,6 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
-  workers: readonly WorkWorkerBlock[];
   files: readonly ShownFile[];
   /** The agents' Changes tabs on offer; none where the caller offers none. */
   changes?: readonly ChangesOffer[];
@@ -525,23 +511,10 @@ export function panelEntries(input: {
   /** The task the panel stands beside, whose name and status the Plan's row wears; none where the caller does not know it. */
   plan?: PlanStanding | undefined;
 }): AddEntry[] {
-  const { panel, workers, files, changes = [], pages = [] } = input;
+  const { panel, files, changes = [], pages = [] } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind, input.plan),
     onPick: () => panel.onChoose(kind),
-  }));
-  const subagentRows = workers.map((worker) => ({
-    row: {
-      id: worker.call.id,
-      ...tabLook({
-        kind: TAB_KIND.SUBAGENT,
-        name: worker.session?.title ?? workerJob(worker.call),
-        model: workerChoice(worker)?.model,
-        state: workerStanding(worker).state,
-      }),
-      section: ADD_SECTION.SUBAGENTS,
-    },
-    onPick: () => panel.onChoose({ subagent: worker.call.id }),
   }));
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
@@ -606,23 +579,7 @@ export function panelEntries(input: {
             onPick: onNewBrowser,
           },
         ];
-  return [
-    ...kinds,
-    ...subagentRows,
-    ...fileRows,
-    ...changesRows,
-    ...pageRows,
-    ...terminalRows,
-    ...browserRows,
-  ];
-}
-
-/** Every subagent the task's work holds, with where its session stands, in the order started. */
-export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWorkerBlock[] {
-  return workerCallIds(workRows).flatMap((callId) => {
-    const worker = workerOf(workRows, callId);
-    return worker === undefined ? [] : [worker];
-  });
+  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
@@ -668,10 +625,9 @@ interface DrawnTab {
  * The tabs the strip draws, in their kinds' order: the open fixed tabs, the
  * subagents, the files, and the agents' changes. A delegated worker's
  * transcript is read whole from the service for a copy, since its tab
- * holds it only while shown; a brain's worker's is the session the task's
- * work already holds. A subagent's tab hangs a card on hover, previewing
- * its latest step from what its tab last held (`heldLatest`) or the task's
- * work holds, and never reading the service for it. A page's tab hangs the
+ * holds it only while shown. A subagent's tab hangs a card on hover,
+ * previewing its latest step from what its tab last held (`heldLatest`),
+ * and never reading the service for it. A page's tab hangs the
  * page's card, a preview of its newest version under its title
  * (`page-card.tsx`).
  */
@@ -696,8 +652,6 @@ function stripTabs(input: {
   repository: string | null;
   held: HeldTranscripts;
   copied: TranscriptCopier;
-  /** Reads a brain's worker's whole session for a copy, the task standing in the agent's place. */
-  readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
   /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
@@ -712,7 +666,7 @@ function stripTabs(input: {
   inboxDrafted: boolean;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, readWorker, onOpenAgent, shownAgent, taskId } = input;
+  const { repository, copied, onOpenAgent, shownAgent, taskId } = input;
   const { browsers, browserPages, cloudBrowsers } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
@@ -739,23 +693,16 @@ function stripTabs(input: {
     close: () => panel.onClose(tab),
   }));
   const subagentTabs = subagents.map((drawn) => {
-    const { tab, label, untitled, state, worker } = drawn;
-    const { delegation } = tab;
-    const choices = delegation && delegationChoices(delegation, tab.subagent, agents, held);
-    const model =
-      delegation === undefined
-        ? worker && workerChoice(worker)?.model
-        : (choices?.delegated?.model ?? choices?.own?.model);
+    const { tab, label, untitled, state, delegation } = drawn;
+    const choices = delegationChoices(delegation, tab.subagent, agents, held);
+    const model = choices.delegated?.model ?? choices.own?.model;
     const readCard = subagentCardReading(drawn, agents, held, chosen(tab));
-    const task = delegation?.task ?? worker?.task ?? "";
+    const { task } = delegation;
     const read = () =>
-      (delegation === undefined
-        ? readWorker(tab.subagent)
-        : readWholeTranscript(agents.readTranscript, {
-            agentId: delegation.agent,
-            callId: tab.subagent,
-          })
-      ).then((messages) =>
+      readWholeTranscript(agents.readTranscript, {
+        agentId: delegation.agent,
+        callId: tab.subagent,
+      }).then((messages) =>
         messages === undefined
           ? undefined
           : agentTranscript({
@@ -931,7 +878,6 @@ function PanelTabs({
   repository,
   offers,
   held,
-  readWorker,
   actionsSlot,
   handed,
   onOpenAgent,
@@ -973,8 +919,6 @@ function PanelTabs({
   offers: readonly AddEntry[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
-  /** Reads a brain's worker's session past a cursor, the task standing in the agent's place. */
-  readWorker: TranscriptReader;
   /** The bar's slot the chosen tab's ⋯ stands in. */
   actionsSlot: HTMLElement | null;
   /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
@@ -1005,7 +949,6 @@ function PanelTabs({
     repository,
     held,
     copied,
-    readWorker: (callId) => readWholeTranscript(readWorker, { agentId: taskId, callId }),
     onOpenAgent,
     shownAgent,
     taskId,
@@ -1108,136 +1051,53 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
   );
 }
 
-/** What Luke's own brain ran on the open task, whose workers a subagent's tab reads. */
-interface SidePanelWork {
-  conversation: TaskConversation;
-  /** Reads a brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
-  readWorker: TranscriptReader;
-}
-
 /** An open page tab the task draws, with the page as the plan lists it. */
 interface DrawnPage {
   tab: PageStripTab;
   line: PageLine;
 }
 
-/** An open subagent tab the task draws: its tab, what the strip calls it, where its glyph says it stands, and the brain's worker's block where it is one. */
+/** An open subagent tab the task draws: its tab, the delegation that started it, what the strip calls it, and where its glyph says it stands. */
 interface DrawnSubagent {
   tab: SubagentStripTab;
+  delegation: NonNullable<SubagentStripTab["delegation"]>;
   /** Its title, or its task's first line until it has one. */
   label: string;
   untitled: boolean;
   state: GlyphState;
   /** What its hint says of where it stands, as its own tab's transcript says it. */
   stateWords: string | undefined;
-  worker: WorkWorkerBlock | undefined;
 }
 
 /**
- * Where a brain's worker stands as its tab wears it: working while its
- * call still moves, failed where its session's own task failed, as an
- * agent's failed turn is, even where the brain answered the call
- * and went on, and at rest once it ended otherwise. Note that a
- * worker whose call ended without answering and whose task recorded no
- * failure is said to have stopped, because that is a worker the developer
- * stopped or whose task call ended under it, as its own transcript's
- * end line says (`plan-work.tsx`), and no failure of its own.
- */
-function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | "stateWords"> {
-  let state: GlyphState = GLYPH_STATE.REST;
-  if (worker.call.running) state = GLYPH_STATE.WORKING;
-  else if (workFailed(worker.session?.record)) state = GLYPH_STATE.FAILED;
-  return {
-    state,
-    stateWords: glyphStateWords(state, worker.call.state === TASK_WORK_STATE.FAILED),
-  };
-}
-
-/**
- * What a brain's worker's card says: where it stands and when it last
- * moved, the model it ran on, and its latest step, from the session the
- * task's work holds. Its tab's card and its row's in the task's summary both
- * say it. A worker the work no longer holds says nothing, as its tab is
- * then not drawn (`drawnSubagents`).
- */
-export function workerCardReading(
-  worker: WorkWorkerBlock | undefined,
-  held: HeldTranscripts,
-  chosen = false,
-): CardReading {
-  const { state, stateWords } =
-    worker === undefined
-      ? { state: GLYPH_STATE.REST, stateWords: undefined }
-      : workerStanding(worker);
-  const writing = state === GLYPH_STATE.WORKING;
-  // Its session is what its own tab last read, as a delegated worker's is.
-  const drawn = worker === undefined ? undefined : held.workers.get(worker.call.id);
-  const messages = heldLatest(drawn, { writing, runStartedAt: drawn?.runStartedAt }, chosen);
-  return {
-    corner: cardCorner({
-      writing,
-      startedAt: worker?.session?.startedAt ?? drawn?.runStartedAt,
-      movedAt: lastFinished(messages),
-      state: stateWords,
-    }),
-    choice: worker && workerChoice(worker),
-    tile:
-      worker &&
-      subagentActor(
-        workerChoice(worker)?.model,
-        state,
-        worker.session?.title ?? workerJob(worker.call),
-      ),
-    transcript:
-      worker &&
-      messages &&
-      agentTranscript({
-        title: worker.session?.title ?? workerJob(worker.call),
-        messages,
-        brief: undefined,
-        task: worker.task,
-        // A worker's own lines carry no chat notice, which reaches the agent's turn alone.
-        chatOn: false,
-      }),
-  };
-}
-
-/**
- * A subagent as its tab draws it, `status` saying where a delegated worker
- * stands; nothing for a brain's worker the work no longer holds.
+ * A subagent as its tab draws it, `status` saying where the delegated
+ * worker stands; nothing for a tab no delegation started, which a task's
+ * own Luke's worker was.
  */
 function drawnSubagent(
   tab: SubagentStripTab,
-  workRows: readonly WorkTurnRow[],
   status: CodingAgentStatus,
   held: HeldTranscripts,
 ): DrawnSubagent | undefined {
   const { delegation, subagent } = tab;
-  if (delegation !== undefined) {
-    // Its own page says its title, and its agent's pages say every worker's.
-    const title =
-      held.workers.get(subagent)?.title ??
-      held.agents.get(delegation.agent)?.subagentTitles.get(subagent);
-    return {
-      tab,
-      label: title ?? cardTitle(delegation.task),
-      untitled: title === undefined,
-      state: agentGlyphState(status),
-      stateWords: agentStateWords(status),
-      worker: undefined,
-    };
-  }
-  const worker = workerOf(workRows, subagent);
-  if (worker === undefined) return undefined;
-  const title = worker.session?.title;
-  const label = title ?? workerJob(worker.call);
-  return { tab, label, untitled: title === undefined, ...workerStanding(worker), worker };
+  if (delegation === undefined) return undefined;
+  // Its own page says its title, and its agent's pages say every worker's.
+  const title =
+    held.workers.get(subagent)?.title ??
+    held.agents.get(delegation.agent)?.subagentTitles.get(subagent);
+  return {
+    tab,
+    delegation,
+    label: title ?? cardTitle(delegation.task),
+    untitled: title === undefined,
+    state: agentGlyphState(status),
+    stateWords: agentStateWords(status),
+  };
 }
 
-/** The open subagent tabs the task draws now (`drawsSubagent`), in the strip's order: each brain's worker the work still holds, and each delegated worker whose agent's tab is open. */
+/** The open subagent tabs the task draws now (`drawsSubagent`), in the strip's order: each delegated worker whose agent's tab is open. */
 function drawnSubagents(
   tabs: readonly SubagentStripTab[],
-  workRows: readonly WorkTurnRow[],
   standings: WorkerStandings,
   held: HeldTranscripts,
   drawn: Pick<DrawnTabs, "agents" | "subagents">,
@@ -1245,7 +1105,7 @@ function drawnSubagents(
   return tabs.flatMap((tab): DrawnSubagent[] => {
     if (!drawsSubagent(tab, drawn)) return [];
     const status = standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING;
-    const subagent = drawnSubagent(tab, workRows, status, held);
+    const subagent = drawnSubagent(tab, status, held);
     return subagent === undefined ? [] : [subagent];
   });
 }
@@ -1277,9 +1137,8 @@ function delegationChoices(
 
 /**
  * What a subagent's card says, its tab's and its row's in a transcript
- * alike: a brain's worker's from the session the task's work holds
- * (`workerCardReading`), a delegated worker's from what its own tab last
- * held, its pair as the call that started it says it. A worker runs one
+ * alike: from what its own tab last held, its pair as the call that started
+ * it says it. A worker runs one
  * turn, so the run its tab last read is its run for good.
  */
 function subagentCardReading(
@@ -1288,10 +1147,8 @@ function subagentCardReading(
   held: HeldTranscripts,
   chosen: boolean,
 ): () => CardReading {
-  const { tab, label, state, stateWords, worker } = drawn;
-  const { delegation } = tab;
+  const { tab, delegation, label, state, stateWords } = drawn;
   return () => {
-    if (delegation === undefined) return workerCardReading(worker, held, chosen);
     const running = state === GLYPH_STATE.WORKING;
     const own = held.workers.get(tab.subagent);
     const messages = heldLatest(own, { writing: running, runStartedAt: own?.runStartedAt }, chosen);
@@ -1338,7 +1195,7 @@ function seekCall(callId: string): void {
   });
 }
 
-/** What a transcript's rows hang, by where they stand: the Call tab's, whose workers are the task's own, and an agent's transcript's, whose workers are its delegations. */
+/** What a transcript's rows hang, by where they stand: a call's, and an agent's transcript's, whose workers are its delegations. */
 export interface TaskCards {
   readonly call: TranscriptCards;
   readonly agent: (agentId: string) => TranscriptCards;
@@ -1350,14 +1207,13 @@ export interface TaskCards {
  * the file's, with Luke's note on the lines (`file-ref.tsx`), and a
  * subagent's row its worker's, read as its tab reads its own, `chosen`
  * telling whether that tab is the one shown, whose transcript follows the
- * run. A worker the plan's work no longer holds hangs none. An agent's
+ * run. A call's own rows name no worker, and hang none for one. An agent's
  * transcript also names the task whose plan it was handed, by `task`, and
  * every transcript names an agent a call is about by its tab's tile and
  * name, by `agent`.
  */
 export function taskCards(input: {
   agents: CodingAgentsControl;
-  workRows: readonly WorkTurnRow[];
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
@@ -1365,7 +1221,7 @@ export function taskCards(input: {
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
-  const { agents, workRows, held, chosen, shownCode, task } = input;
+  const { agents, held, chosen, shownCode, task } = input;
   const target = (opened: ToolTarget) => {
     if (opened.kind === TOOL_TARGET.SHOWN_CODE) {
       const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
@@ -1391,35 +1247,23 @@ export function taskCards(input: {
       />
     );
   return {
-    call: {
-      target,
-      agent,
-      worker: ({ callId, status }) =>
-        card(drawnSubagent({ subagent: callId }, workRows, status, held)),
-    },
+    call: { target, agent, worker: () => undefined },
     agent: (agentId) => ({
       target,
       agent,
       task,
       worker: ({ callId, task, status }) =>
         card(
-          drawnSubagent(
-            { subagent: callId, delegation: { agent: agentId, task } },
-            workRows,
-            status,
-            held,
-          ),
+          drawnSubagent({ subagent: callId, delegation: { agent: agentId, task } }, status, held),
         ),
     }),
   };
 }
 
-/** Where a brain's worker stands, as its tab's working line reads it: running while it moves, failed where it failed, and done otherwise. */
-function workerStatus(worker: WorkWorkerBlock): CodingAgentStatus {
-  if (worker.call.running) return CODING_AGENT_STATUS.RUNNING;
-  return worker.call.state === TASK_WORK_STATE.FAILED
-    ? CODING_AGENT_STATUS.FAILED
-    : CODING_AGENT_STATUS.COMPLETED;
+/** An agent on the task as its tab names it, which heads the code it showed and its notes on it; none for an agent the task does not list. */
+function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
+  const agent = agents.agents?.find((each) => each.id === agentId);
+  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
 }
 
 /** What the chosen tab shows. */
@@ -1432,8 +1276,6 @@ function TabContent({
   codeFailed,
   files,
   pages,
-  work,
-  workRows,
   agents,
   standings,
   shown,
@@ -1457,6 +1299,7 @@ function TabContent({
   inbox,
   chat,
   onTabActions,
+  onRunOnMac,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1464,15 +1307,12 @@ function TabContent({
   repository: string | null;
   board: Board | undefined;
   shownCode: readonly TaskCodeShowing[] | undefined;
-  /** The task's work read that did not land, where the last did not. */
+  /** The task's code read that did not land, where the last did not. */
   codeFailed: CodeFailed | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
-  work: SidePanelWork;
-  /** The task's work as rows, which a subagent's tab reads its session from. */
-  workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
   standings: WorkerStandings;
   /** Whether the panel is on screen, so a subagent's tab knows to follow its transcript. */
@@ -1517,6 +1357,8 @@ function TabContent({
   chat: React.ReactNode;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
+  /** Runs an agent's branch in a terminal of this Mac in this panel, which its Pull request tab's Run offers; none where no repository is known or the platform has no Mac terminal. */
+  onRunOnMac: ((agentId: string) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const directory = useMemberDirectory();
@@ -1599,6 +1441,12 @@ function TabContent({
             view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
             onView={(view) => onPullRequestView(tab, view)}
             onActions={(actions) => onTabActions(tab, actions)}
+            // Note that Run reads the agent's own branch, so a tab naming another pull request by its number offers none.
+            onRun={
+              onRunOnMac === undefined || tab.number !== undefined
+                ? undefined
+                : () => onRunOnMac(tab.changes)
+            }
           />
         </Suspense>
       </PullRequestsOnGitHub>
@@ -1634,6 +1482,7 @@ function TabContent({
             onStep: (step) => onFileHistory(file.path, step),
           }}
           onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
+          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
         />
       </Fragment>
     );
@@ -1666,27 +1515,8 @@ function TabContent({
         />
       );
     }
-    const worker = workerOf(workRows, tab.subagent);
-    // The tab stands for a subagent the work no longer holds only until the
-    // panel moves back to the board, a render away.
-    return worker === undefined ? (
-      <SpinnerRegion label="Loading subagent" />
-    ) : (
-      <AgentSubagentTab
-        key={tab.subagent}
-        agentId={taskId}
-        callId={tab.subagent}
-        task={worker.task}
-        status={workerStatus(worker)}
-        control={agents}
-        // A brain's worker's tab is an agent's worker's own, following its session under the task.
-        transcriptKey={{ kind: TRANSCRIPT_KIND.TASK_WORKER, taskId, callId: tab.subagent }}
-        shown={shown}
-        // Where a brain's worker stands is the plan's pages' to say, beside its call.
-        onStatus={() => undefined}
-        onHeld={onWorkerHeld}
-      />
-    );
+    // A tab no delegation started, a task's own Luke's worker's, stands only until the panel moves back to the board, a render away.
+    return <SpinnerRegion label="Loading subagent" />;
   }
   switch (tab) {
     case SIDE_PANEL_TAB.PLAN:
@@ -1720,10 +1550,7 @@ function TabContent({
           shown={shownCode}
           calls={NO_CODE_CALLS}
           taskId={taskId}
-          agentLabel={(agentId) => {
-            const agent = agents.agents?.find((each) => each.id === agentId);
-            return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
-          }}
+          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
           onOpenFile={onOpenFile}
         />
       );
@@ -1950,7 +1777,6 @@ export function SidePanel({
   shownCode,
   codeFailed,
   pages,
-  work,
   agents,
   openAgents,
   shownAgent,
@@ -1975,11 +1801,10 @@ export function SidePanel({
   board: Board | undefined;
   /** Every code Luke showed on the task, oldest first. */
   shownCode: readonly TaskCodeShowing[] | undefined;
-  /** The task's work read that did not land, where the last did not; none where the panel reads no task's code. */
+  /** The task's code read that did not land, where the last did not; none where the panel reads no task's code. */
   codeFailed: CodeFailed | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
-  work: SidePanelWork;
   agents: CodingAgentsControl;
   /** The task's agents whose tabs stand open in the task's column, whose workers' tabs stand here; nothing while unread. */
   openAgents: readonly string[] | undefined;
@@ -2065,15 +1890,11 @@ export function SidePanel({
     () => ({ open: shellsOpen, onToggle: () => setShellsOpen((was) => !was) }),
     [shellsOpen],
   );
-  // Every subagent the task's work holds, and those with a tab open, each
-  // with its session, in the order started and the strip's order; a
-  // delegated worker's tab stands while its agent's does.
-  const workRows = workRowsOf(work.conversation);
-  const workers = taskWorkers(workRows);
+  // The subagents with a tab open, in the strip's order: a delegated worker's tab stands while its agent's does.
   const { held: drawnTranscripts, standings } = views;
-  const subagents = drawnSubagents(panel.subagents, workRows, standings, drawnTranscripts, {
+  const subagents = drawnSubagents(panel.subagents, standings, drawnTranscripts, {
     agents: openAgents,
-    subagents: workers.map((worker) => worker.call.id),
+    subagents: NO_SUBAGENTS,
   });
   // The file tabs of files shown on the task or browsed to on it, in the strip's order.
   const offered = shownFiles(shownCode ?? []);
@@ -2150,6 +1971,8 @@ export function SidePanel({
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  // A Pull request tab's Run opens the agent's branch on this Mac in this panel, which already holds the keys.
+  const macTerminalDoors = useAgentTerminalDoors(panel, repository, noFocusMove);
   // The Inbox is offered only on a task holding an agent, an archived one among them, since only an agent posts.
   const inboxOffered =
     (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
@@ -2161,7 +1984,6 @@ export function SidePanel({
         (kind !== SIDE_PANEL_TAB.INBOX || inboxOffered) &&
         (kind !== SIDE_PANEL_TAB.CHAT || chat !== undefined),
     ),
-    workers,
     files: offered,
     changes: changesOffers(agents, changes),
     pages: taskPages,
@@ -2209,7 +2031,6 @@ export function SidePanel({
           repository={repository}
           offers={offers}
           held={drawnTranscripts}
-          readWorker={work.readWorker}
           actionsSlot={actionsSlot}
           handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
@@ -2272,8 +2093,6 @@ export function SidePanel({
             codeFailed={codeFailed}
             files={files}
             pages={taskPages}
-            work={work}
-            workRows={workRows}
             agents={agents}
             standings={standings}
             shown={keys}
@@ -2297,6 +2116,7 @@ export function SidePanel({
             inbox={inbox?.body}
             chat={chat}
             onTabActions={handTabActions}
+            onRunOnMac={macTerminalDoors.onOpenOnMac}
           />
         </FindScope>
       )}

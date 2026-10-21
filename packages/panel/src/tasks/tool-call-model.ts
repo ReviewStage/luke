@@ -742,13 +742,6 @@ function knownToolView(
   }
 }
 
-/** A repository command's answer as the brain's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
-function repositoryOutput(output: WireValue): ToolBlock {
-  const reason = stringAt(output, "reason");
-  if (stringAt(output, "status") === "not-run" && reason !== undefined) return textBlock(reason);
-  return commandOutput(output);
-}
-
 /** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
 function shownLines(input: WireValue | undefined): string {
   const path = stringAt(input, "path") ?? "";
@@ -894,17 +887,6 @@ function tasksToolView(
   jobs: WorkerJobs | undefined,
 ): ToolCallView | undefined {
   switch (tool) {
-    case AGENT_TOOL.RUN_IN_REPOSITORY: {
-      const command = stringAt(input, "command") ?? "";
-      const description = commandDescription(stringAt(input, "description"));
-      return {
-        kind: CALL_KIND.COMMAND,
-        subject: command,
-        ...(description === undefined ? undefined : { description }),
-        input: { kind: TOOL_BLOCK.COMMAND, text: command },
-        output: output === undefined ? undefined : repositoryOutput(output),
-      };
-    }
     case AGENT_TOOL.SHOW_CODE:
       return {
         ...namedCall(CALL_KIND.SHOW_CODE, input, output, undefined),

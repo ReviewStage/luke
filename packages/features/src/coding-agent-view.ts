@@ -119,6 +119,10 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
   /** The agent runs on its starter's plan, whose provider did not answer; the same call a little later may be taken. */
   AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
+  /** The agent runs on its starter's plan, whose usage limit is reached until it resets. */
+  AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
+  /** The agent runs on its starter's plan, which its provider said is not eligible to run it. */
+  AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -312,29 +316,17 @@ export const codingAgentMessagesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentMessagesAnswerView = typeof codingAgentMessagesAnswerViewSchema.Type;
 
-/** Whose transcript a window follows: a coding agent's, or a worker's of it, or a task's planning worker's. */
+/** Whose transcript a window follows: a coding agent's, or a worker's of it. */
 export const TRANSCRIPT_KIND = {
   AGENT: "agent",
-  TASK_WORKER: "taskWorker",
 } as const;
 
-/**
- * One transcript as a window follows it: an agent's own, or one of its
- * workers' by the delegation call that started it; or a task's planning
- * worker's by the call that started it.
- */
-export const codingAgentTranscriptKeySchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(TRANSCRIPT_KIND.AGENT),
-    agentId: EffectSchema.NonEmptyString,
-    callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
-  }),
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(TRANSCRIPT_KIND.TASK_WORKER),
-    taskId: EffectSchema.NonEmptyString,
-    callId: codingAgentCallIdSchema,
-  }),
-]);
+/** One transcript as a window follows it: an agent's own, or one of its workers' by the delegation call that started it. */
+export const codingAgentTranscriptKeySchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(TRANSCRIPT_KIND.AGENT),
+  agentId: EffectSchema.NonEmptyString,
+  callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
+});
 
 export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Type;
 

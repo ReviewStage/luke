@@ -11,9 +11,9 @@
  * keeps that bundle free of it.
  *
  * Who reaches a conversation is decided here too, for the same bundle: the
- * account that opened it, and every member of the workspace of the task or
- * the coding agent that names it, or that names its parent, one hop up, which
- * is a subagent's session. The row's own `user_id` stays the opener's, the
+ * account that opened it, and every member of the workspace of the coding
+ * agent that names it, or that names its parent, one hop up, which is a
+ * subagent's session. The row's own `user_id` stays the opener's, the
  * address every message, turn, and ask of it is written under.
  */
 
@@ -37,16 +37,13 @@ import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { conversations } from "../schemas/storage.js";
-import { task } from "../schemas/task.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
-import { agentReachableBy, taskReachableBy } from "./workspace-store.js";
+import { agentReachableBy } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 const StandingSessionSchema = Schema.Struct({
   runtimeSessionId: Schema.NullOr(Schema.String),
 });
-
-const OwnerRowSchema = Schema.Struct({ userId: Schema.String });
 
 const ClaimSchema = Schema.Struct({
   userId: Schema.String,
@@ -73,33 +70,17 @@ const findStandingSession = SqlSchema.findOneOption({
     ),
 });
 
-const findConversationOwner = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: OwnerRowSchema,
-  execute: (conversationId) =>
-    Database.use((db) =>
-      db
-        .select({ userId: conversations.userId })
-        .from(conversations)
-        .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
-    ),
-});
-
 /** The conversation a child conversation was delegated from, read beside the child. */
 const parentConversation = alias(conversations, "parent_conversation");
 
-/** The condition that a task or a coding agent, whichever workspace holds it, names this conversation as its own. */
+/** The condition that a coding agent, whichever workspace holds it, names this conversation as its own. */
 function namedByWork(conversationId: SQLWrapper): SQL {
-  const byTask = exists(
-    queryBuilder.select({ one: task.id }).from(task).where(eq(task.conversationId, conversationId)),
-  );
-  const byAgent = exists(
+  return exists(
     queryBuilder
       .select({ one: codingAgent.id })
       .from(codingAgent)
       .where(eq(codingAgent.conversationId, conversationId)),
   );
-  return sql`(${byTask} or ${byAgent})`;
 }
 
 /** The condition that the conversation the row was delegated from still stands. */
@@ -117,32 +98,28 @@ function parentStands(): SQL {
   );
 }
 
-/** The condition that a task or a coding agent the account reaches through its workspace names this conversation as its own. */
-function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL | undefined {
-  return or(
-    exists(
-      queryBuilder
-        .select({ one: task.id })
-        .from(task)
-        .where(and(eq(task.conversationId, conversationId), taskReachableBy(userId))),
-    ),
-    exists(
-      queryBuilder
-        .select({ one: codingAgent.id })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
-    ),
+/** The condition that a coding agent the account reaches through its workspace names this conversation as its own. */
+function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
+  return exists(
+    queryBuilder
+      .select({ one: codingAgent.id })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
   );
 }
 
 /**
  * The condition that the account reaches the standing conversation row a
  * statement reads: the conversation, or the standing one it was delegated
- * from, is a task's or a coding agent's in a workspace the account is a
- * member of; or it is the account's own and no task or agent names it or
- * its parent. Note that a conversation work names is reached through the
- * workspace alone, even by the member who opened it, because a member who
- * leaves the workspace leaves its tasks' conversations with it.
+ * from, is a coding agent's in a workspace the account is a member of; or
+ * it is the account's own and no agent names it or its parent. Note that a
+ * conversation an agent names is reached through the workspace alone, even
+ * by the member who opened it, because a member who leaves the workspace
+ * leaves its agents' conversations with it. A task's own Luke's
+ * conversation, and every worker's delegated from one, is reached by no
+ * one: the migration that dropped his data stamped each of them deleted
+ * (`20261021105816_per_task_luke_data_drop`), and a stamped row is reached
+ * by no one.
  */
 function reachableConversation(userId: string): SQL | undefined {
   return and(
@@ -280,7 +257,7 @@ export function standingSessionsOf(
 /**
  * The eve sessions the standing conversations named run in, whichever
  * member opened each: only for ids a gate already read, such as a shared
- * task's conversations as its delete gathers them.
+ * task's agents' conversations as its delete gathers them.
  */
 export function standingSessionsNamed(
   conversationIds: readonly string[],
@@ -295,16 +272,6 @@ export function recordedRuntimeSession(
 ): Effect.Effect<string | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(findStandingSession(target), (row) =>
     Option.isSome(row) ? (row.value.runtimeSessionId ?? undefined) : undefined,
-  );
-}
-
-/** The account a standing conversation belongs to, which is whom its messages and turns are addressed under; nothing for a cleared or missing one. */
-export function conversationOwnerOf(
-  conversationId: string,
-): Effect.Effect<Option.Option<string>, QueryError | Schema.SchemaError, DatabaseServices> {
-  return Effect.map(
-    findConversationOwner(conversationId),
-    Option.map((row) => row.userId),
   );
 }
 

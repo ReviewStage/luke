@@ -401,6 +401,11 @@ function useStackGlide(): React.RefObject<HTMLOListElement | null> {
   useLayoutEffect(() => {
     const root = list.current;
     if (root === null) return;
+    // Note that an empty stack, as it stands nearly always, reads nothing: reading the tokens or a box lays out the whole window, and the stack is drawn again with everything around it.
+    if (root.children.length === 0) {
+      if (drawn.current.size > 0) drawn.current = new Map();
+      return;
+    }
     const style = getComputedStyle(root);
     const duration = Number.parseFloat(style.getPropertyValue("--duration-fast")) || 0;
     const easing = style.getPropertyValue("--spring-fast").trim();

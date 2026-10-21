@@ -43,12 +43,15 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SHOWN_AT = 1_760_000_000_000;
+const AGENT_ID = "3f1c9e2a-6b7d-4e8f-a1b2-c3d4e5f60718";
+const AGENT_NAME = "Invite emails";
 const NOTE = "A used invite is refused here.";
 
-/** Lines 12–15 of a file, Luke pointing at 13–14 with a note. */
+/** Lines 12–15 of a file, an agent of the task pointing at 13–14 with a note. */
 const SHOWING: TaskCodeShowing = {
   callId: "show-1",
   turnId: "turn-1",
+  agentId: AGENT_ID,
   shownAt: SHOWN_AT,
   code: {
     ref: { path: "src/invites/accept.ts", startLine: 13, endLine: 14 },
@@ -108,7 +111,13 @@ async function draw(element: ReactElement, opened: ReadLink[] = []): Promise<HTM
 
 /** The Code tab holding the showings given. */
 function codeTab(shown: readonly TaskCodeShowing[] = [SHOWING]): ReactElement {
-  return createElement(CodePane, { shown, calls: [], taskId: TASK_ID, onOpenFile: () => {} });
+  return createElement(CodePane, {
+    shown,
+    calls: [],
+    taskId: TASK_ID,
+    onOpenFile: () => {},
+    agentLabel: (agentId: string) => (agentId === AGENT_ID ? AGENT_NAME : undefined),
+  });
 }
 
 /** The shadow root Pierre drew a card's lines in. */
@@ -137,7 +146,7 @@ test("a card's lines are drawn numbered from where they sit in the file, the lin
   assert.deepEqual(litLines(container), [13, 14]);
 });
 
-test("Luke's note stands under the last line he pointed at, and the card no longer says it above the lines", async () => {
+test("an agent's note stands under the last line it pointed at, headed by the agent's name, and the card no longer says it above the lines", async () => {
   const container = await draw(codeTab());
   const note = container.querySelector(".code-snippet .file-note");
   assert.ok(note, "the note is drawn in the diff's own element");
@@ -146,7 +155,7 @@ test("Luke's note stands under the last line he pointed at, and the card no long
     "annotation-additions-14",
   );
   assert.ok(drawnRoot(container).querySelector('slot[name="annotation-additions-14"]'));
-  assert.match(note.querySelector(".annotation-card-head")?.textContent ?? "", /^Luke/u);
+  assert.match(note.querySelector(".annotation-card-head")?.textContent ?? "", /^Invite emails/u);
   assert.equal((container.textContent ?? "").split(NOTE).length - 1, 1, "the note is said once");
 });
 
@@ -171,7 +180,7 @@ test("a note on a file shown from its top stands under the card's last line, and
   assert.deepEqual(litLines(container), []);
 });
 
-test("a note's ⋯ opens the turn that showed the lines and copies its link", async () => {
+test("a note's ⋯ opens the agent's turn that showed the lines and copies its link", async () => {
   const opened: ReadLink[] = [];
   const copied: string[] = [];
   fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
@@ -189,10 +198,12 @@ test("a note's ⋯ opens the turn that showed the lines and copies its link", as
   press("View in conversation");
   assert.deepEqual(
     opened.map((link) => link.place),
-    [{ kind: LINK_PLACE.TURN, planId: TASK_ID, at: SHOWN_AT }],
+    [{ kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: AGENT_ID, messageId: "turn-1" }],
   );
   press("Copy link");
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${TASK_ID}/work/${SHOWN_AT}`]);
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}/message/turn-1`,
+  ]);
 });
 
 test("a press on the note's head folds it to its head alone", async () => {
@@ -212,7 +223,7 @@ test("with Minimize inline comments on, the note is a chip on its line until the
   const container = await draw(codeTab());
   const chip = container.querySelector<HTMLElement>(".code-snippet .diff-thread-chip");
   assert.ok(chip, "the chip stands in the note's place");
-  assert.equal(chip.getAttribute("aria-label"), "Luke's note on lines 13–14, show");
+  assert.equal(chip.getAttribute("aria-label"), "Invite emails's note on lines 13–14, show");
   assert.equal(
     chip.closest(".diff-note")?.parentElement?.getAttribute("slot"),
     "annotation-additions-14",
@@ -223,7 +234,7 @@ test("with Minimize inline comments on, the note is a chip on its line until the
   assert.equal(chip.closest("details")?.hasAttribute("open"), true, "the chip shows the note");
   assert.equal(
     container.querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
-    "Luke's note on lines 13–14, hide",
+    "Invite emails's note on lines 13–14, hide",
   );
 });
 

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  attachTaskConversation,
   createTask,
   deleteTask,
   listTasks,
@@ -12,8 +11,6 @@ import {
   updateTask,
 } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
-import { conversations } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   getTestDB,
   joinWorkspace,
@@ -87,17 +84,6 @@ const openUser = Effect.gen(function* () {
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
-
-const openConversation = (userId: string) =>
-  Effect.map(
-    Database.use((db) =>
-      db
-        .insert(conversations)
-        .values({ userId, kind: CONVERSATION_KIND.MAIN })
-        .returning({ id: conversations.id }),
-    ),
-    (rows) => rows[0]?.id ?? assert.fail("the conversation insert returned no row"),
-  );
 
 /** The binding the service builds for a task: its account and its id. */
 function bound(userId: string, taskId: string): PlanDocumentBinding {
@@ -416,25 +402,5 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       });
       assert.deepEqual(yield* resumedDocument(userId, taskId), before);
     }),
-  );
-
-  it.effect(
-    "a plan takes no other account's conversation, and no one attaches to another's plan",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const other = yield* openUser;
-        const { id: taskId } = yield* startTask(owner, RELAY_TASK);
-        const othersConversation = yield* openConversation(other);
-        const ownConversation = yield* openConversation(owner);
-
-        assert.equal(yield* attachTaskConversation(owner, taskId, othersConversation), false);
-        assert.equal(yield* attachTaskConversation(other, taskId, othersConversation), false);
-        assert.equal(yield* attachTaskConversation(other, taskId, ownConversation), false);
-        assert.deepEqual(
-          Option.map(yield* readTask(owner, taskId), (stored) => stored.conversationId),
-          Option.some(undefined),
-        );
-      }),
   );
 });

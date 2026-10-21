@@ -408,6 +408,10 @@ const SHARED_FAILURE_NOTE = {
     "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
     "The plan's provider didn't answer. Try again in a moment.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
+    "The plan paying for this agent has reached its usage limit. It waits until the limit resets.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+    "The plan paying for this agent isn't eligible to run it.",
 } as const;
 
 /** What a Start, or a message, says while the agent's image is still being prepared and the panel asks again. */
@@ -521,6 +525,8 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -685,6 +691,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -723,6 +731,8 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
   }
 }

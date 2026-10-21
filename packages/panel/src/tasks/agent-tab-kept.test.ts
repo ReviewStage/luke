@@ -206,7 +206,6 @@ function runningTab() {
   const cardsOf = (control: ReturnType<typeof controlOf>, task?: BriefTask) =>
     taskCards({
       agents: control,
-      workRows: [],
       held: NOTHING_HELD,
       chosen: () => false,
       shownCode: [],

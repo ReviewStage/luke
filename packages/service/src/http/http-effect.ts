@@ -47,6 +47,8 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -111,12 +113,16 @@ export const HOSTED_REFUSAL = {
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
   AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
-  /** The agent runs on a native harness this function cannot reach (the eve apps', until P11b); nothing was written, and nothing fell through to eve. */
+  /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },
   /** The agent runs on its starter's plan, whose provider did not answer; nothing was written, and the same request later may be taken. */
   AGENT_PLAN_UNREACHABLE: { error: HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE },
+  /** The agent runs on its starter's plan, whose usage limit is reached until it resets; nothing was written, and nothing turned to another payer. */
+  AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
+  /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
+  AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
   /** The task is archived, so it takes nothing until it is brought back; nothing was written. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */

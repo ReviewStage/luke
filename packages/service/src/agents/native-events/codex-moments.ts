@@ -2,7 +2,13 @@ import { CODEX_LUKE_MCP_SERVER, CODEX_TOOL } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
-import { NATIVE_MOMENT, type NativeHeld, type NativeMoment } from "./native-moments.js";
+import {
+  NATIVE_MOMENT,
+  type NativeHeld,
+  type NativeMoment,
+  PLAN_STATUS,
+  type PlanStatus,
+} from "./native-moments.js";
 import {
   FAILURE_CHARS,
   PICTURE_STAND_IN,
@@ -23,7 +29,9 @@ import {
  * as it completes; a reasoning item's summary is the step's reasoning; the
  * turn's plan is its todo list, one call for each time Codex sets it.
  * `turn/completed` ends one model turn, failed where Codex says so, with
- * the plan's refusals named by OpenAI's own codes; the thread's running
+ * the plan's refusals named by OpenAI's own codes, and says how it found
+ * the plan: it ran, or which of its refusals it met; a limit reached says
+ * when it resets where Codex heard it; the thread's running
  * token total meters the turn; a compaction stamps the agent; and a new
  * thread is the session a relaunch resumes. Codex sends a subagent's work
  * on a thread of its own, which its subagent call stands for, so anything
@@ -45,6 +53,7 @@ const NOTIFICATION = {
   PLAN_UPDATED: "turn/plan/updated",
   TOKEN_USAGE: "thread/tokenUsage/updated",
   COMPACTED: "thread/compacted",
+  RATE_LIMITS: "account/rateLimits/updated",
 } as const;
 
 /** The item types read here, as app-server's `ThreadItem` spells them. */
@@ -64,6 +73,24 @@ const FAILED_STATUSES: ReadonlySet<string> = new Set(["failed", "declined", "int
 
 /** A turn's status that says it failed, as `TurnStatus` spells it. */
 const TURN_FAILED = "failed";
+
+/** A turn's status that says it ran to its end, as `TurnStatus` spells it: the plan answered. */
+const TURN_COMPLETED = "completed";
+
+/**
+ * The words of a failed turn that say how OpenAI found the plan, as P22
+ * records them: Codex's `codexErrorInfo` word or a part of one of OpenAI's
+ * codes. The first of these a failure holds names its status, so an account
+ * not eligible is said before a sign-in refused, and that before a limit.
+ */
+const PLAN_REFUSAL_WORDS: readonly {
+  readonly status: PlanStatus;
+  readonly words: readonly string[];
+}[] = [
+  { status: PLAN_STATUS.INELIGIBLE, words: ["user_not_eligible"] },
+  { status: PLAN_STATUS.INVALID, words: ["unauthorized", "invalid_user"] },
+  { status: PLAN_STATUS.LIMIT_REACHED, words: ["usageLimitExceeded", "usage_limit"] },
+];
 
 /** The codes OpenAI answers a ChatGPT plan's refusal with, such as `subscription_sharing_usage_limit_exceeded`. */
 const PLAN_REFUSAL_CODE = /\b(?:subscription_sharing|chatpass_v2)_[a-z_]+\b/g;
@@ -181,6 +208,22 @@ const readTurnCompleted = Schema.decodeUnknownOption(
     }),
   }),
 );
+
+const RATE_LIMIT_WINDOW = Schema.NullOr(
+  Schema.Struct({ usedPercent: Schema.Number, resetsAt: Schema.NullOr(Schema.Number) }),
+);
+const readRateLimits = Schema.decodeUnknownOption(
+  Schema.Struct({
+    rateLimits: Schema.Struct({
+      primary: Schema.optionalKey(RATE_LIMIT_WINDOW),
+      secondary: Schema.optionalKey(RATE_LIMIT_WINDOW),
+      rateLimitReachedType: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    }),
+  }),
+);
+
+/** The share of a window's usage that is all of it. */
+const WINDOW_SPENT_PERCENT = 100;
 
 /** One call as it starts: its id, the name the transcript stores it under, and what it was asked. */
 interface Call {
@@ -431,7 +474,11 @@ function errorInfoWords(info: unknown): readonly string[] {
 function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   const read = readTurnCompleted(params);
   if (Option.isNone(read) || read.value.turn.status !== TURN_FAILED) {
-    return [{ kind: NATIVE_MOMENT.RESULT }];
+    const ran = Option.isSome(read) && read.value.turn.status === TURN_COMPLETED;
+    return [
+      { kind: NATIVE_MOMENT.RESULT },
+      ...(ran ? [{ kind: NATIVE_MOMENT.PLAN, status: PLAN_STATUS.VERIFIED } as const] : []),
+    ];
   }
   const error = read.value.turn.error ?? undefined;
   const said = [error?.message ?? "", error?.additionalDetails ?? ""].join(" ");
@@ -440,7 +487,45 @@ function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   const info = errorInfoWords(error?.codexErrorInfo).map((word) => redactCredentials(word));
   const words = [...info, ...codes];
   const failure = words.length === 0 ? "turn_failed" : words.join(" ");
-  return [{ kind: NATIVE_MOMENT.RESULT, failure: failure.slice(0, FAILURE_CHARS) }];
+  const plan = PLAN_REFUSAL_WORDS.find((each) =>
+    each.words.some((part) => words.some((word) => word.includes(part))),
+  );
+  return [
+    { kind: NATIVE_MOMENT.RESULT, failure: failure.slice(0, FAILURE_CHARS) },
+    ...(plan === undefined ? [] : [{ kind: NATIVE_MOMENT.PLAN, status: plan.status } as const]),
+  ];
+}
+
+/**
+ * The plan's limits as Codex last heard them, read only where one is
+ * reached, with the latest reset among the windows spent. Note that a
+ * rolling update may leave out what it does not know, so one that names no
+ * reached limit lifts nothing: the turn's end clears the limit instead.
+ */
+function rateLimitMoments(params: unknown): readonly NativeMoment[] {
+  const read = readRateLimits(params);
+  if (Option.isNone(read)) return [];
+  const { primary, secondary, rateLimitReachedType } = read.value.rateLimits;
+  const spent = [primary, secondary].filter(
+    (window) => window != null && window.usedPercent >= WINDOW_SPENT_PERCENT,
+  );
+  const reached = rateLimitReachedType ?? (spent.length > 0 ? "rate_limit_reached" : undefined);
+  if (reached === undefined) return [];
+  // Note that Codex counts a window's reset in seconds since the epoch.
+  const resets = spent.flatMap((window) =>
+    window?.resetsAt == null ? [] : [window.resetsAt * 1000],
+  );
+  const resetsAt = resets.length === 0 ? undefined : Math.max(...resets);
+  const words = [reached];
+  if (resetsAt !== undefined) words.push(`resets ${new Date(resetsAt).toISOString()}`);
+  return [
+    {
+      kind: NATIVE_MOMENT.RATE_LIMIT,
+      refused: true,
+      detail: words.join(" "),
+      ...(resetsAt !== undefined ? { resetsAt } : undefined),
+    },
+  ];
 }
 
 /** Whether a notification is of a thread other than the session's: a subagent's, which its call stands for. */
@@ -497,6 +582,8 @@ export function codexMoments(message: WireValue, held: NativeHeld): readonly Nat
       return [{ kind: NATIVE_MOMENT.COMPACTED }];
     case NOTIFICATION.TURN_COMPLETED:
       return turnCompletedMoments(params);
+    case NOTIFICATION.RATE_LIMITS:
+      return rateLimitMoments(params);
     default:
       return [];
   }

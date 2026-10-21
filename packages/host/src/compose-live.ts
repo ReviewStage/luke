@@ -1,10 +1,4 @@
-import {
-  AVATAR_STOP_REASON,
-  type PlanDraftFrame,
-  type TaskActivityFrame,
-  type TaskCodeFrame,
-  type TaskWorkFrame,
-} from "@luke/features";
+import { AVATAR_STOP_REASON, type TaskActivityFrame, type TaskCodeFrame } from "@luke/features";
 import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@luke/features/analytics";
 import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
@@ -48,14 +42,10 @@ export interface LiveDependencies {
   activeTaskId: () => string | undefined;
   /** The task an agent is on as the service reads it now; none for one archived or out of reach (`CodingAgentsComposer.agentTaskOf`). */
   agentTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
-  /** Where a draft of the open task goes as the service's notetaker writes it during a task's call. */
-  showPlanDraft: (draft: PlanDraftFrame) => void;
   /** Where the service's word of what each part of Luke is doing on a task's call goes, and the call's end clearing it. */
   showTaskActivity: (activity: TaskActivityFrame) => void;
   /** Where code Luke puts on screen during a task's call goes. */
   showTaskCode: (code: TaskCodeFrame) => void;
-  /** Where each brain turn's work during a task's call goes. */
-  showTaskWork: (work: TaskWorkFrame) => void;
   /** Where a task's call's end goes, so the code it put on screen is cleared with it. */
   taskCallEnded: (taskId: string) => void;
 }
@@ -110,12 +100,9 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         session_source: PRODUCT_VOICE_SESSION_SOURCE.HOSTED,
       });
     },
-    // The task a call is writing, as the service's notetaker drafts it.
-    onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
     // What each part of Luke is doing on the call, as the service says it.
     onTaskActivity: (activity) => dependencies.showTaskActivity(activity),
     onTaskCode: (code) => dependencies.showTaskCode(code),
-    onTaskWork: (work) => dependencies.showTaskWork(work),
     onTaskCallEnded: (taskId) => dependencies.taskCallEnded(taskId),
   });
 

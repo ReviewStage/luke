@@ -10,7 +10,6 @@
  */
 
 import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
-import { codingAgentMessagesAnswerViewSchema } from "@luke/features/coding-agent-view";
 import {
   codeLinesSchema,
   type TasksPagesAnswer,
@@ -31,7 +30,6 @@ import {
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
-  tasksMessagesParamsSchema,
   tasksMoveAnswerSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
@@ -172,21 +170,6 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksSetStandingParamsSchema))
     .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: actProcedure(
-    "Could not read that task's earlier work on this system.",
-  )
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]: actProcedure(
-    "Could not read that task's earlier conversation on this system.",
-  )
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_MESSAGES]: actProcedure(
-    "Could not read that task's conversation on this system.",
-  )
-    .input(exactInput(tasksMessagesParamsSchema))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerViewSchema)),
   [TASKS_ACT_KIND.TASKS_FILE]: actProcedure("Could not read that file on this system.")
     .input(exactInput(tasksFileParamsSchema))
     .output(EffectSchema.flip(tasksFileAnswerSchema)),

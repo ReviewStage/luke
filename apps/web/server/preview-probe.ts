@@ -14,7 +14,7 @@ import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
  * nothing in CI could see what Vercel had built: the Framework Preset and
  * `vercel.json`'s `services` key must agree, and only a deployment shows
  * whether they did. A deployment distinguishes the states — a services build
- * serves eve at `/eve/v1/health` and every `/api/` function; the single-app
+ * serves eve at `/eve/coder/v1/health` and every `/api/` function; the single-app
  * build answers `NOT_FOUND` for eve; a preset without the key fails to build
  * at all — so this sends one the requests a hand probe would make: every
  * `/api/` path a client in the repository spells (`api-callers.ts` derives the
@@ -66,11 +66,12 @@ const METHOD_BY_DOOR = {
 
 const SITE_ROOT_PATH = "/";
 /**
- * eve's own `EVE_HEALTH_ROUTE_PATH`, which the package keeps off its public
- * exports; `vercel.json`'s `/eve/v1/(.*)` rewrite is what lands it on the
- * eve service, so its answer is the eve service being served.
+ * eve's own `EVE_HEALTH_ROUTE_PATH` under the eve service's mount, which the
+ * package keeps off its public exports; `vercel.json`'s `/eve/coder/v1/(.*)`
+ * rewrite lands it on the eve service, whose route sets it back to eve's own
+ * path, so its answer is the eve service being served.
  */
-const EVE_HEALTH_PATH = "/eve/v1/health";
+const EVE_HEALTH_PATH = "/eve/coder/v1/health";
 
 const PROBE_STATUS = {
   OK: 200,

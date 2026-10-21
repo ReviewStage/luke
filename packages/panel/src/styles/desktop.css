@@ -2371,18 +2371,6 @@ ul.actor-stack {
   }
 }
 
-/* A task's column with no agent tab to show: the two ways to start one,
-   side by side in the middle of the room the plan's side panel leaves. */
-.desktop-no-agent {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-page-inset);
-}
-
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {
@@ -3222,8 +3210,21 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
+/* An Inbox row's card leads with what holds the item on one line, its key
+   and then its task's name, the name shrinking to what is left of the card
+   rather than dropping under the key. */
+.task-card-standing[data-line="one"] {
+  flex-wrap: nowrap;
+}
+
+/* A chip is never wider than the card: one naming a long task shrinks to
+   the card's width and its words end in an ellipsis (`OneLine`), its mark
+   kept whole before them. */
 .task-card-chip {
   display: inline-flex;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-6);
@@ -3235,12 +3236,18 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
+.task-card-chip > :not(.luke-one-line) {
+  flex: none;
+}
+
 .task-card-chip > .luke-task-mark {
   width: var(--luke-type-caption-size);
   height: var(--luke-type-caption-size);
 }
 
+/* A key is short and read whole; the chip beside it gives way instead. */
 .task-card-key {
+  flex-shrink: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
   font-variant-numeric: tabular-nums;
@@ -3289,6 +3296,7 @@ ul.actor-stack {
 .inbox-card-option {
   min-width: 0;
   flex: 1;
+  overflow-wrap: anywhere;
 }
 
 .inbox-card-recommended {
@@ -3301,9 +3309,11 @@ ul.actor-stack {
 
 .inbox-card-steps > li {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   gap: var(--luke-space-6);
   color: var(--luke-color-text);
+  overflow-wrap: anywhere;
 }
 
 .inbox-card-steps > li > svg {

@@ -373,7 +373,7 @@ async function mountOn(
   return mount(input);
 }
 
-test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers neither Open terminal nor Run", async () => {
+test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Open terminal", async () => {
   const offered = (each: HostCapability) =>
     each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.MAC_TERMINAL;
   await mountOn(DESKTOP_CAPABILITIES, {
@@ -403,12 +403,8 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
     (group) => group.textContent ?? "",
   );
 
-  assert.ok(
-    onDesktop.includes("Open terminal") && onDesktop.includes("Run"),
-    "the desktop offers both",
-  );
+  assert.ok(onDesktop.includes("Open terminal"), "the desktop offers it");
   assert.equal(without.includes("Open terminal"), false);
-  assert.equal(without.includes("Run"), false);
   assert.equal(
     groups.some((group) => group.startsWith("Terminal")),
     false,
