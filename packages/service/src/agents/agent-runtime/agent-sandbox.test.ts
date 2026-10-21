@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { test } from "vitest";
@@ -7,10 +8,12 @@ import { CODER } from "../coder-host/bounds.js";
 import { AGENT_ROLE } from "./role.js";
 import {
   lapsesCredential,
+  parksForLongSleep,
   renewsCredential,
   type SandboxRecord,
   stopsAtTurnEnd,
   withdrawsCredential,
+  withdrawsCredentialForSleep,
 } from "./sandbox.js";
 
 /**
@@ -113,4 +116,73 @@ test("a sandbox opened on a shallow checkout holds no credential: none is renewe
   for (const end of TURN_ENDS) {
     assert.equal(lapsesCredential(AGENT_ROLE.CODER, end, deepenedOnToken), true, end.type);
   }
+});
+
+const STOPS_AT_SECONDS = Duration.toSeconds(CODER.SLEEP_STOPS_AT);
+
+/** A step's requested calls, each a tool by its name with its input. */
+function stepCalling(...calls: readonly { toolName: string; input: object }[]): MessageStreamEvent {
+  return stampedEveEvent(
+    {
+      type: "actions.requested",
+      data: {
+        ...TURN,
+        stepIndex: 1,
+        actions: calls.map((call, index) => ({
+          kind: "tool-call" as const,
+          callId: `call-${index}`,
+          ...call,
+        })),
+      },
+    },
+    OPENED_AT,
+  );
+}
+
+const pause = (seconds: number) => ({ toolName: AGENT_TOOL.SLEEP, input: { seconds } });
+
+test("a coding agent's sandbox is stopped for a step whose one call is a pause of the bound or longer, once a sandbox tool has opened it", () => {
+  assert.equal(
+    parksForLongSleep(AGENT_ROLE.CODER, stepCalling(pause(STOPS_AT_SECONDS)), OPENED),
+    true,
+  );
+  assert.equal(parksForLongSleep(AGENT_ROLE.CODER, stepCalling(pause(480)), OPENED), true);
+  assert.equal(
+    parksForLongSleep(AGENT_ROLE.CODER, stepCalling(pause(STOPS_AT_SECONDS - 1)), OPENED),
+    false,
+  );
+  assert.equal(parksForLongSleep(AGENT_ROLE.CODER, stepCalling(pause(480)), NEVER_OPENED), false);
+  for (const end of TURN_ENDS) {
+    assert.equal(parksForLongSleep(AGENT_ROLE.CODER, end, OPENED), false, end.type);
+  }
+});
+
+test("a long pause beside another call leaves the sandbox up, since that call may use it", () => {
+  const command = {
+    toolName: AGENT_TOOL.BASH,
+    input: { command: "pnpm test", description: "Run the tests" },
+  };
+  assert.equal(
+    parksForLongSleep(AGENT_ROLE.CODER, stepCalling(pause(480), command), OPENED),
+    false,
+  );
+  assert.equal(parksForLongSleep(AGENT_ROLE.CODER, stepCalling(command), OPENED), false);
+});
+
+test("a worker's long pause stops nothing, since the sandbox it reads is its parent's", () => {
+  assert.equal(parksForLongSleep(AGENT_ROLE.CODER_WORKER, stepCalling(pause(480)), OPENED), false);
+});
+
+test("a stop for a long pause takes a member's own token off, once it stands, and never an installation's", () => {
+  assert.equal(
+    withdrawsCredentialForSleep(AGENT_ROLE.CODER, { ...OPENED, memberToken: true }),
+    true,
+  );
+  assert.equal(withdrawsCredentialForSleep(AGENT_ROLE.CODER, OPENED), false);
+  const shallow: SandboxRecord = { ...OPENED, openedShallow: true, memberToken: true };
+  assert.equal(withdrawsCredentialForSleep(AGENT_ROLE.CODER, shallow), false);
+  assert.equal(
+    withdrawsCredentialForSleep(AGENT_ROLE.CODER, { ...shallow, deepenedAt: OPENED_AT }),
+    true,
+  );
 });
