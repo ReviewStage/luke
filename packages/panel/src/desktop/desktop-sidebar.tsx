@@ -37,6 +37,7 @@ import {
   SkeletonRegion,
   UnpinIcon,
   useMenu,
+  useTouchHold,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { forYou } from "@luke/ui/chat-model";
@@ -86,7 +87,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -234,9 +235,6 @@ export function HistoryButtons({
   );
 }
 
-/** How long a press of Back or Forward is held before it opens the list of steps along it, as Safari's are. */
-const HISTORY_HOLD_MS = 450;
-
 /** The steps a list names a step by where nothing named it as the window stood on it. */
 const UNNAMED_STEP = "Earlier page";
 
@@ -265,8 +263,8 @@ function historyGroups(
 }
 
 /**
- * Back or Forward: a press takes one step, and a press held, or a
- * right-click, lists the steps along that way, any of which it goes straight
+ * Back or Forward: a press takes one step, and a press held (`useTouchHold`),
+ * or a right-click, lists the steps along that way, any of which it goes straight
  * to, as a browser's Back and Forward do.
  */
 function HistoryButton({
@@ -288,14 +286,8 @@ function HistoryButton({
 }): React.JSX.Element {
   const menu = useMenu(able);
   const button = useRef<HTMLButtonElement>(null);
-  const hold = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // Whether the press now lifting opened the list, so its click takes no step as well.
-  const held = useRef(false);
-  const letGo = () => {
-    clearTimeout(hold.current);
-    hold.current = undefined;
-  };
-  useEffect(() => letGo, []);
+  // A press held, the mouse's as a touch's, opens the list, as a browser's Back does.
+  const hold = useTouchHold();
   const openList = () => {
     const element = button.current;
     if (element !== null && steps.length > 0) menu.show(dropBelowStart(element), element);
@@ -304,18 +296,13 @@ function HistoryButton({
     <span
       className="title-bar-history"
       onPointerDown={(event) => {
-        if (event.pointerType !== "mouse" || event.button !== 0 || !able) return;
-        held.current = false;
-        hold.current = setTimeout(() => {
-          held.current = true;
-          openList();
-        }, HISTORY_HOLD_MS);
+        if (able) hold.start(event, openList, { mouse: true });
       }}
-      onPointerUp={letGo}
-      onPointerLeave={letGo}
+      onTouchEnd={hold.touchEnd}
       onClickCapture={(event) => {
-        if (!held.current) return;
-        held.current = false;
+        // Note that the release of a press that opened the list is no step as well.
+        if (!hold.held.current) return;
+        hold.held.current = false;
         event.stopPropagation();
       }}
     >

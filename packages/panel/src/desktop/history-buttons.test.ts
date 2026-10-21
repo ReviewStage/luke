@@ -115,7 +115,12 @@ test("Back held opens its list and its release takes no step, while a quick pres
   const down = () =>
     act(() => {
       window.back.dispatchEvent(
-        new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          pointerType: "mouse",
+          isPrimary: true,
+        }),
       );
     });
   const up = () =>
