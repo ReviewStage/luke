@@ -8,10 +8,10 @@ import {
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { lineFileIdOf } from "@luke/features/line-file-wire";
 import { AttachmentChip } from "@luke/ui";
-import { keepPictureRead, PICTURE_STATE, pictureNow } from "@luke/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { isRecord, isWireString } from "@luke/wire";
-import { type ReactNode, useEffect, useReducer, useState } from "react";
-import { useAgentPictures } from "./agent-pictures.js";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type AgentPictureDoor, useAgentPictures } from "./agent-pictures.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
@@ -80,42 +80,48 @@ export function messageFileChips(
   });
 }
 
+/** One kept file read through the window's picture cache, whose read is shared by every row naming it, its `data:` URL told up once it lands. */
+function KeptFileRead({
+  door,
+  id,
+  onRead,
+}: {
+  door: AgentPictureDoor;
+  id: string;
+  onRead: (id: string, url: string) => void;
+}): null {
+  const state = usePicture(door.owner, id, door.read);
+  const url = state.kind === PICTURE_STATE.READY ? state.url : undefined;
+  useEffect(() => {
+    if (url !== undefined) onRead(id, url);
+  }, [id, url, onRead]);
+  return null;
+}
+
 /**
  * The files over a developer's row in an agent's transcript: those it
  * carries inline as they stand, and those the service kept beside the
- * conversation each read once through the transcript's picture door, kept
- * in the window's picture cache as a picture is, so a row drawn again
- * reads nothing twice.
+ * conversation each read through the transcript's picture door and the
+ * window's picture cache, as a picture is, so rows naming the same file
+ * share one read and a row drawn again reads nothing twice.
  */
 export function SentFileChips({ message }: { message: CodingAgentMessage }): ReactNode {
   const door = useAgentPictures();
-  const ids = keptFileIdsOf(message);
-  const idsKey = ids.join(" ");
-  const [, landed] = useReducer((count: number) => count + 1, 0);
-  useEffect(() => {
-    if (door === undefined) return;
-    let standing = true;
-    for (const id of idsKey === "" ? [] : idsKey.split(" ")) {
-      if (pictureNow(door.owner, id).kind === PICTURE_STATE.READY) continue;
-      void door.read(door.owner, id).then(
-        (answer) => {
-          if ("failure" in answer) return;
-          keepPictureRead(door.owner, id, `data:${answer.contentType};base64,${answer.base64}`);
-          if (standing) landed();
-        },
-        () => undefined,
-      );
-    }
-    return () => {
-      standing = false;
-    };
-  }, [door, idsKey]);
-  const kept = new Map<string, string>();
-  for (const id of ids) {
-    const state = door === undefined ? undefined : pictureNow(door.owner, id);
-    if (state?.kind === PICTURE_STATE.READY) kept.set(id, state.url);
-  }
-  return <AttachedFileChips files={messageFileChips(message, kept)} />;
+  const [kept, setKept] = useState<ReadonlyMap<string, string>>(new Map());
+  const onRead = useCallback(
+    (id: string, url: string) =>
+      setKept((was) => (was.get(id) === url ? was : new Map(was).set(id, url))),
+    [],
+  );
+  const ids = [...new Set(keptFileIdsOf(message))];
+  return (
+    <>
+      {door === undefined
+        ? null
+        : ids.map((id) => <KeptFileRead key={id} door={door} id={id} onRead={onRead} />)}
+      <AttachedFileChips files={messageFileChips(message, kept)} />
+    </>
+  );
 }
 
 export function AttachedFileChips({

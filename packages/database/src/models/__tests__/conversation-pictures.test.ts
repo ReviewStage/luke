@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import { Effect, Option } from "effect";
@@ -104,6 +105,25 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
 
       assert.deepEqual(past, Option.none());
       assert.deepEqual(keptAlready, kept, "a picture kept before the budget is still answered");
+    }),
+  );
+
+  it.effect("a file a line carried that is no picture takes nothing of the pictures' bytes", () =>
+    Effect.gen(function* () {
+      const target = yield* openConversation;
+      // Note that the row stands in for a conversation's worth of PDFs, read off its byte count.
+      const db = yield* Database;
+      yield* db.insert(attachment).values({
+        userId: target.userId,
+        conversationId: target.conversationId,
+        sha256: "e".repeat(64),
+        contentType: CODING_AGENT_ATTACHMENT_TYPE.PDF,
+        byteCount: CONVERSATION_PICTURE_BOUNDS.MAX_BYTES_PER_CONVERSATION,
+        bytes: new Uint8Array([0]),
+        createdAt: new Date(),
+      });
+
+      assert.ok(Option.isSome(yield* keepConversationPicture(target, picture(2))));
     }),
   );
 });

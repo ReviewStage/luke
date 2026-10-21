@@ -95,3 +95,32 @@ test("a kept file the door answers nothing for is drawn by its name alone", asyn
   assert.equal(kept[0]?.[0], "flow.png");
   assert.equal(kept[0]?.[3], null, "no thumbnail");
 });
+
+test("rows naming the same kept file share one read", async () => {
+  let reads = 0;
+  const counting: AgentPictureDoor = {
+    owner: "agent-1",
+    read: () => {
+      reads += 1;
+      return Promise.resolve({ contentType: CODING_AGENT_ATTACHMENT_TYPE.PNG, base64: SHOT });
+    },
+  };
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  roots.push(root);
+  const row = rowWith(lineFileUrl(KEPT_ID));
+
+  await act(async () =>
+    root.render(
+      createElement(
+        AgentPicturesProvider,
+        { value: counting },
+        createElement(SentFileChips, { message: row }),
+        createElement(SentFileChips, { message: { ...row, id: "row-2" } }),
+      ),
+    ),
+  );
+
+  assert.equal(reads, 1);
+  assert.equal(chipsOf(host).length, 2);
+});

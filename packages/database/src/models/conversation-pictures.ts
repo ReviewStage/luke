@@ -89,7 +89,13 @@ const sumKept = SqlSchema.findAll({
       db
         .select({ kept: sum(attachment.byteCount).mapWith(Number) })
         .from(attachment)
-        .where(eq(attachment.conversationId, conversationId)),
+        .where(
+          and(
+            eq(attachment.conversationId, conversationId),
+            // A file a line carried that is no picture is the developer's, never the pictures' allowance.
+            isNotNull(attachment.width),
+          ),
+        ),
     ),
 });
 
