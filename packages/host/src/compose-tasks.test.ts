@@ -535,7 +535,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? restored : candidate,
         );
-        return restored;
+        return { task: restored, txid: `txid-${seq}` };
       }),
     editAnswer: undefined,
     pins: [],
@@ -3541,6 +3541,49 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a restore is confirmed once its transaction reaches the followed history, and at once where no history is followed",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.revisions[1] = {
+        seq: 1,
+        document: { body: "# Invites", assumptions: [] },
+        previous: null,
+      };
+      service.historySeals[INVITES] = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          revisions: {
+            capability: "capability-revisions",
+            queryFingerprint: "history",
+            expiresAt: 3_600_000,
+          },
+        },
+      };
+      const realtime = fakeServiceRealtime();
+      const { call } = yield* subject(service, { openLive: realtime.open });
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }), {
+        restored: true,
+      });
+      assert.deepEqual(realtime.awaitingTxids(), [], "no history is followed, so nothing waits");
+
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* boardSettled;
+      realtime.deliver("revisions", []);
+      yield* boardSettled;
+      const restore = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }),
+      );
+      yield* boardSettled;
+      assert.deepEqual(realtime.awaitingTxids(), ["txid-1"]);
+      assert.equal(restore.pollUnsafe(), undefined, "the restore waits for its transaction");
+      realtime.arrive("txid-1");
+      assert.deepEqual(yield* Fiber.join(restore), { restored: true });
     }),
 );
 
