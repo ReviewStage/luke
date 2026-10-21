@@ -61,6 +61,13 @@ function drawn(staged: Staged): HTMLElement {
   return line;
 }
 
+/** The line drawn again over the voice staged anew, as the window draws it when the voice moves. */
+function redrawn(staged: Staged): void {
+  const root = roots.at(-1);
+  assert.ok(root);
+  act(() => root.render(createElement(Line, { staged })));
+}
+
 test("while either speaker is heard and the voice has nothing to say about itself, the line stands empty and hidden: no captions", () => {
   for (const speakers of [LUKE_SPEAKING, DEVELOPER_SPEAKING]) {
     const line = drawn({ speakers });
@@ -90,4 +97,16 @@ test("while Luke speaks into a Mac whose output is off, the line says so with a 
   assert.ok(button);
   act(() => button.click());
   assert.deepEqual(dismissed, ["got it"]);
+});
+
+test("the volume hint leaves at once when it is answered, by Got it or by the output being heard again, while a failure lingers to be read", () => {
+  const hint = drawn({ speakers: LUKE_SPEAKING, silent: true });
+  assert.equal(hint.dataset.shown, "true");
+  redrawn({ speakers: LUKE_SPEAKING, silent: false });
+  assert.equal(hint.dataset.shown, "false", "no stale hint or Got it after it was answered");
+  assert.equal(hint.hasAttribute("inert"), true, "and its button takes no press");
+
+  const failure = drawn({ speakers: NOBODY, error: "The call dropped." });
+  redrawn({ speakers: NOBODY });
+  assert.equal(failure.dataset.shown, "true", "a failure stays a moment so it is read");
 });
