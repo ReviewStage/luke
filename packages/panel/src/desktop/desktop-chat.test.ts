@@ -908,6 +908,25 @@ test("a task's channel offers its repository's files and its agents' pull reques
   ]);
 });
 
+test("an @ or a # word that names nothing says so, and Enter there still posts the words", async () => {
+  const page = mount((chat) => chat, ACME);
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "ask @zzz");
+  const nobody = page.querySelector(".mention-menu .luke-combobox-empty")?.textContent;
+  pressInComposer(box, "Enter");
+  await settle();
+  typeInComposer(box, "see #zzz");
+  const nowhere = page.querySelector(".mention-menu .luke-combobox-empty")?.textContent;
+  pressInComposer(box, "Enter");
+  await settle();
+
+  assert.equal(nobody, "Nothing matches");
+  assert.equal(nowhere, "Nothing matches");
+  assert.deepEqual(words(page).slice(-2), ["ask @zzz", "see #zzz"]);
+  assert.equal(boxWords(box), "");
+});
+
 test("words naming more members than a post tells say under the box that only the first few are told", () => {
   const page = mount(
     (chat) => ({
