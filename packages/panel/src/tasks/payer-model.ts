@@ -58,6 +58,7 @@ const PLAN_OF = {
 /** The statuses of a ChatGPT sign-in the service will not launch Codex on, as `agent-runtime-choice.ts` reads them. */
 const UNUSABLE: ReadonlySet<string> = new Set([
   PROVIDER_KEY_STATUS.INVALID,
+  PROVIDER_KEY_STATUS.INELIGIBLE,
   PROVIDER_KEY_STATUS.UNREADABLE,
 ]);
 

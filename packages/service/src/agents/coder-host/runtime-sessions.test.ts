@@ -636,7 +636,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Codex agent whose starter's ChatGPT sign-in refuses is refused by name, signed out or OpenAI unreachable, and nothing turns to eve",
+      "a Codex agent whose starter's ChatGPT sign-in refuses is refused by name, signed out, OpenAI unreachable, the plan's limit reached or the account not eligible, and nothing turns to eve",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -669,6 +669,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error,
             HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error,
             HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE.error,
+            HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED.error,
+            HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE.error,
           ]);
           assert.deepEqual(eve.calls, []);
         }),

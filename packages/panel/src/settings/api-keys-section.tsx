@@ -91,6 +91,9 @@ function keyStatusWords(provider: ProviderKeyProvider, status: ProviderKeyStatus
     case PROVIDER_KEY_STATUS.INVALID:
       return `${name} rejected this key.`;
     case PROVIDER_KEY_STATUS.QUOTA_EXCEEDED:
+    // Note that a plan's limit and eligibility are a subscription's words, which no API key is answered with.
+    case PROVIDER_KEY_STATUS.LIMIT_REACHED:
+    case PROVIDER_KEY_STATUS.INELIGIBLE:
       return `Out of quota or credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return "This key can no longer be read.";

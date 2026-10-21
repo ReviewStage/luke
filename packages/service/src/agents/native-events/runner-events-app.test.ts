@@ -22,7 +22,7 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -108,7 +108,14 @@ const HARNESS = {
 } as const;
 
 /** A coding agent on the harness given, a runner's bearer recorded for it, and the developer's lines awaiting their turns. */
-const agentOn = (harness: (typeof HARNESS)[keyof typeof HARNESS], lines: readonly string[]) =>
+const agentOn = (
+  harness: {
+    readonly model: string;
+    readonly runtime: (typeof HARNESS)[keyof typeof HARNESS]["runtime"];
+    readonly payer: CodingAgentPayer;
+  },
+  lines: readonly string[],
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;

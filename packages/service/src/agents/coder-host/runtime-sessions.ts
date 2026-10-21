@@ -322,6 +322,10 @@ export function failedCallRefusal(failed: {
   if (failed.planRefusal === PLAN_REFUSAL.UNREACHABLE) {
     return HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE;
   }
+  if (failed.planRefusal === PLAN_REFUSAL.LIMIT_REACHED) {
+    return HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED;
+  }
+  if (failed.planRefusal === PLAN_REFUSAL.INELIGIBLE) return HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE;
   if (failed.planRefusal !== undefined) return HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
     return HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE;

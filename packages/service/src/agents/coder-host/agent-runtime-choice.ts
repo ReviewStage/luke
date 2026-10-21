@@ -65,9 +65,10 @@ const ON_CODEX: AgentRuntimeChoice = {
   payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
 };
 
-/** The statuses of a ChatGPT sign-in an agent cannot launch on: OpenAI signed it out, or the deployment cannot open it. */
+/** The statuses of a ChatGPT sign-in an agent cannot launch on: OpenAI signed it out or said the account is not eligible, or the deployment cannot open it. */
 const UNUSABLE_SIGN_IN: ReadonlySet<string> = new Set([
   PROVIDER_KEY_STATUS.INVALID,
+  PROVIDER_KEY_STATUS.INELIGIBLE,
   PROVIDER_KEY_STATUS.UNREADABLE,
 ]);
 
