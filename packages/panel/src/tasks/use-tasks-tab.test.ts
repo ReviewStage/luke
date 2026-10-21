@@ -721,6 +721,81 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
 });
 
+/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all and at work. */
+function namingRow(lines: readonly string[], total: number, working = 0) {
+  return {
+    ...row(TASK.id, 1),
+    agents: {
+      total,
+      working,
+      agents: lines.map((id) => ({
+        id,
+        title: null,
+        model: RUNNING_AGENT.model,
+        effort: RUNNING_AGENT.effort,
+        status: working > 0 ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
+      })),
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+}
+
+test("a task whose row settles its tab shows that agent's before its agents are read, and one whose row cannot say shows none until they are", async () => {
+  const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
+  const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
+  // The list of agents never answers, so whatever the column shows, the row chose.
+  const unread = { [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise<never>(() => undefined) };
+  const shownOn = async (
+    lines: readonly string[],
+    total: number,
+    recent: readonly string[] | undefined,
+    working = 0,
+  ) => {
+    window.localStorage.setItem(
+      "luke.mainTabs",
+      JSON.stringify({
+        closedAgents: [],
+        tasks:
+          recent === undefined ? {} : { [TASK.id]: { recent: recent.map((agent) => ({ agent })) } },
+      }),
+    );
+    const tab = mount(
+      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total, working)] } },
+      unread,
+    );
+    await settle();
+    assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
+    return tab.control().mainTabs.tab;
+  };
+
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER, UNNAMED], 5, [OLDER]),
+    { agent: OLDER },
+    "the agent last viewed, which the row names",
+  );
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER], 2, undefined),
+    { agent: AGENT_ID },
+    "the newest started, where the row names every agent and none was viewed",
+  );
+  assert.deepEqual(
+    await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
+    { agent: OLDER },
+    "past one viewed since that the row shows is gone",
+  );
+  assert.equal(
+    await shownOn([AGENT_ID, OLDER], 4, [OLDER, UNNAMED]),
+    undefined,
+    "one viewed last that the row does not name may stand among those it leaves out",
+  );
+  assert.equal(
+    await shownOn([AGENT_ID, OLDER], 2, undefined, 1),
+    undefined,
+    "a row naming some at work and some not cannot say which started last",
+  );
+});
+
 test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
   window.localStorage.setItem(
     "luke.mainTabs",

@@ -174,7 +174,12 @@ import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.j
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
-import { type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
+import {
+  type MainTab,
+  type MainTabsControl,
+  type NamedAgents,
+  useMainTabs,
+} from "./use-main-tabs.js";
 import { usePanelArrivals } from "./use-panel-arrivals.js";
 import {
   type HistorySpot,
@@ -1504,10 +1509,22 @@ export function useTasksTab(input: {
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
     [viewed.shownCode],
   );
+  // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
+  const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
+  const rowAgents = openRow?.agents;
+  const rowListed = openRow !== undefined;
+  const named = useMemo<NamedAgents | undefined>(() => {
+    if (!rowListed) return undefined;
+    // Note that a row names agents only for a task with one, so a row with none names a task with none.
+    if (rowAgents === undefined) return { ids: [], total: 0, working: 0 };
+    const { agents: lines, total, working } = rowAgents;
+    return { ids: lines.map((line) => line.id), total, working };
+  }, [rowListed, rowAgents]);
   const mainTabs = useMainTabs(
     fixture !== undefined,
     viewed.activeTaskId,
     agents.agentIds,
+    named,
     agents.draft?.id,
   );
   // The task's Inbox stands on a task holding an agent, an archived one among them, since only an
