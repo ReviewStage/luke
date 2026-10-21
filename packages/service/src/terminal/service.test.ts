@@ -83,6 +83,7 @@ function agents() {
     sandbox,
     connect: unused,
     hold: unused,
+    keepAlive: unused,
     claimRenewal: unused,
     releaseRenewal: unused,
   };

@@ -11,7 +11,7 @@
  */
 
 import {
-  type CodingAgentMessagesAnswerView,
+  type CodingAgentTranscriptPage,
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
   codingAgentCallsAnswerViewSchema,
@@ -48,6 +48,8 @@ import {
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   codingAgentTranscriptKeySchema,
+  codingAgentTranscriptOlderAnswerSchema,
+  codingAgentTranscriptOlderParamsSchema,
   codingAgentWorkspaceListParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { eventIterator, type } from "@orpc/contract";
@@ -120,12 +122,17 @@ export const agentActsContract = {
     "Could not follow the agent's transcript on this system.",
   )
     .input(exactInput(codingAgentTranscriptKeySchema))
-    .output(eventIterator(type<CodingAgentMessagesAnswerView>())),
+    .output(eventIterator(type<CodingAgentTranscriptPage>())),
   [AGENT_ACT_KIND.CODING_AGENTS_PART]: actProcedure(
     "Could not read the agent's output on this system.",
   )
     .input(exactInput(codingAgentPartParamsSchema))
     .output(EffectSchema.flip(codingAgentPartViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: actProcedure(
+    "Could not read the agent's earlier messages on this system.",
+  )
+    .input(exactInput(codingAgentTranscriptOlderParamsSchema))
+    .output(EffectSchema.flip(codingAgentTranscriptOlderAnswerSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actProcedure(
     "Could not message the agent on this system.",
   )
@@ -162,6 +169,11 @@ export const agentActsContract = {
     "Could not note which agent is shown on this system.",
   )
     .input(exactInput(shownParamsSchema))
+    .output(EffectSchema.Void),
+  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actProcedure(
+    "Could not mark the agent as read on this system.",
+  )
+    .input(exactInput(EffectSchema.Struct({ agentId: exactId })))
     .output(EffectSchema.Void),
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
     .input(exactInput(codingAgentPageParamsSchema))

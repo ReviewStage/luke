@@ -26,8 +26,8 @@ import {
  * list never drew, chosen by a link, gets no row. While the list is shown
  * every row keeps the place it was first drawn in, when its item changed and
  * the status it stood under, so an answer, which changes both, moves no row;
- * hidden, or sorted, grouped, scoped, or Whose chosen anew, it is drawn
- * again where each item stands now. A row that leaves the list lets its
+ * hidden, or sorted, grouped, scoped, searched, or Whose chosen anew, it is
+ * drawn again where each item stands now. A row that leaves the list lets its
  * place go, so a later change brings it back where it stands then.
  */
 
@@ -49,13 +49,19 @@ function sameWhose(a: InboxWhose = EVERYONES, b: InboxWhose = EVERYONES): boolea
   return a.userId === b.userId;
 }
 
+/** Whether two searches ask for the same words. */
+function sameSearch(a: readonly string[] = [], b: readonly string[] = []): boolean {
+  return a.length === b.length && a.every((word, at) => word === b[at]);
+}
+
 /** Whether a list drawn under one filter lists the same items as under another, for the same reader. */
 function sameScope(was: InboxFilter | undefined, now: InboxFilter): boolean {
   return (
     was !== undefined &&
     was.show === now.show &&
     was.readerId === now.readerId &&
-    sameWhose(was.whose, now.whose)
+    sameWhose(was.whose, now.whose) &&
+    sameSearch(was.search, now.search)
   );
 }
 

@@ -97,7 +97,14 @@ function drawn(): HTMLElement {
             staged: false,
           },
           room: SHELL_ROOM.WIDE,
-          history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
+          history: {
+            canGoBack: false,
+            canGoForward: false,
+            onBack: ignore,
+            onForward: ignore,
+            steps: { back: [], forward: [] },
+            onGoTo: ignore,
+          },
           subject: taskVersionSubject(tasks),
           account: {
             status: ACCOUNT_STATUS.SIGNED_IN,

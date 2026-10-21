@@ -4,7 +4,7 @@ set -euo pipefail
 # Prints the address of the Vercel Preview built from one commit, or exits
 # without one.
 #
-#   scripts/preview-address.sh [--sha COMMIT] [--repo OWNER/NAME]
+#   scripts/preview-address.sh [--sha COMMIT] [--repo OWNER/NAME] [--branch NAME]
 #
 # The preview is found the way the deployed-shape probe finds it (`apps/web/server/preview-deployment.ts`):
 # through the GitHub deployment record Vercel writes for the head commit, since
@@ -19,7 +19,14 @@ set -euo pipefail
 # own: a commit pushed under a later one has none and is passed over rather
 # than waited on, and so is one whose deployed tree differs. The walk exits
 # NOT_AFFECTED when no ancestor within reach built what this commit would
-# serve. That address is then asked
+# serve. Before that walk, a skipped head's branch is asked for the heads it
+# was pushed at before (GitHub's repository activity, `GET
+# /repos/{owner}/{repo}/activity`), newest first, because the ignore step
+# skips against the branch's last deployment that succeeded, and after a
+# rebase that commit is no ancestor of the head: the first earlier head whose
+# deployed tree matches and that has a record of its own is the build serving
+# it. The branch is the one `--branch` names, or the checkout's own where
+# `--sha` names no other commit; a detached head asks no branch. That address is then asked
 # for one page, because a preview behind Vercel Authentication redirects every
 # stranger to `vercel.com/sso-api`, and a Mac's own requests carry no Vercel
 # session, so such a preview is PROTECTED and useless to point a build at.
@@ -60,9 +67,15 @@ VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/verce
 interval_seconds=${PREVIEW_ADDRESS_INTERVAL_SECONDS:-15}
 attempts=${PREVIEW_ADDRESS_ATTEMPTS:-80}
 ancestors=${PREVIEW_ADDRESS_ANCESTORS:-50}
+# One page of the branch's activity, GitHub's largest: a branch pushed more
+# often than that since its last build is a doubt, and the ancestor walk is
+# still tried after it.
+PUSHED_HEADS_PAGE=100
 
 sha=
 repo=
+branch=
+branch_given=false
 while (($# > 0)); do
     case $1 in
     --sha)
@@ -73,6 +86,11 @@ while (($# > 0)); do
         repo=$2
         shift 2
         ;;
+    --branch)
+        branch=$2
+        branch_given=true
+        shift 2
+        ;;
     *)
         printf 'error: unknown argument: %s\n' "$1" >&2
         exit 2
@@ -81,6 +99,9 @@ while (($# > 0)); do
 done
 
 if [[ -z $sha ]]; then
+    if [[ $branch_given == false ]]; then
+        branch=$(git symbolic-ref --quiet --short HEAD || true)
+    fi
     if ! sha=$(git rev-parse HEAD); then
         printf 'UNREADABLE: could not read the head commit\n' >&2
         exit "$EXIT_UNREADABLE"
@@ -124,9 +145,12 @@ protected_by_vercel() {
 
 # Prints the address of the preview built from `$sha` and exits, or returns
 # when the commit has no build of its own: Vercel skipped it, or it is not
-# the head and has no record. Every other ending exits with its own code.
+# the head and has no record. `$1` is the commit's role: the `head`, an
+# `ancestor` of it, or an `earlier` head of its branch, which also returns
+# where its own build did not succeed. Every other ending exits with its own
+# code.
 read_preview() {
-    local is_head=$1 attempt record status state description address vercel_status
+    local role=$1 attempt record status state description address vercel_status
     for ((attempt = 1; attempt <= attempts; attempt++)); do
         if ! record=$(read_record); then
             printf 'UNREADABLE: gh could not read the deployments of %s\n' "$sha" >&2
@@ -144,6 +168,13 @@ read_preview() {
                 state=$(field "$status" state)
                 description=$(field "$status" description)
                 address=$(field "$status" address)
+            fi
+            # Note that the build serving a skipped head ended before the head was
+            # pushed, so an earlier head whose own build failed or is still on
+            # its way is not it, and an older one is looked at instead.
+            if [[ $role == earlier && $state != success ]]; then
+                printf 'preview: record %s for %s is %s, not the build serving %s; passing over it\n' "$record" "$sha" "${state:-unsettled}" "$head" >&2
+                return
             fi
             case $state in
             success)
@@ -170,7 +201,7 @@ read_preview() {
                 ;;
             esac
             printf 'preview: waiting (record %s is %s)\n' "$record" "${state:-unsettled}" >&2
-        elif [[ $is_head == false ]]; then
+        elif [[ $role != head ]]; then
             return
         else
             # No record means Vercel has not started the build; its commit status
@@ -201,11 +232,50 @@ while IFS= read -r path; do
     deployed_paths+=("$path")
 done <<<"$deployed"
 
+# The commits the branch's head was pushed at, newest first, one a line: the
+# heads a deployment of the branch was built from, rebased ones among them.
+read_pushed_heads() {
+    gh api "repos/$repo/activity?ref=refs/heads/$branch&per_page=$PUSHED_HEADS_PAGE" \
+        --jq '.[] | select(.activity_type == "push" or .activity_type == "force_push" or .activity_type == "branch_creation") | .after'
+}
+
+# Whether the commit `$1` deploys what the head does, fetched by its sha where
+# the checkout lacks it, as a rebased branch's earlier head is lacked.
+deploys_the_head() {
+    if ! git cat-file -e "$1^{commit}" 2>/dev/null &&
+        ! GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 origin "$1" >/dev/null 2>&1; then
+        printf 'preview: %s could not be fetched; passing over it\n' "$1" >&2
+        return 1
+    fi
+    git diff --quiet "$1" "$head" -- "${deployed_paths[@]}"
+}
+
 head=$sha
-is_head=true
+read_preview head
+# Note that a branch whose pushes cannot be read is passed on to the ancestor
+# walk rather than ended, since that walk alone finds what an unrebased
+# branch serves.
+pushed=
+if [[ -n $branch ]] && ! pushed=$(read_pushed_heads); then
+    printf 'preview: gh could not read the pushes to %s; walking ancestors alone\n' "$branch" >&2
+    pushed=
+fi
+if [[ -n $pushed ]]; then
+    while IFS= read -r candidate; do
+        if [[ -z $candidate || $candidate == "$head" || $candidate =~ ^0+$ ]]; then
+            continue
+        fi
+        if deploys_the_head "$candidate"; then
+            printf 'preview: %s, an earlier head of %s, deploys what %s does; looking there\n' "$candidate" "$branch" "$head" >&2
+            sha=$candidate
+            read_preview earlier
+        fi
+    done <<<"$pushed"
+    sha=$head
+fi
+
 walked=0
 while true; do
-    read_preview "$is_head"
     # Note that the walk passes over an ancestor whose deployed tree differs
     # from the head's rather than stopping there, because the ignore step
     # skips against the branch's last deployment, which a push that changes
@@ -226,5 +296,5 @@ while true; do
         fi
     done
     printf 'preview: %s deploys what %s does; looking there\n' "$sha" "$head" >&2
-    is_head=false
+    read_preview ancestor
 done

@@ -2,6 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentTranscriptKey,
+  type CodingAgentTranscriptPage,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
@@ -25,6 +26,14 @@ import {
 const ignore = () => undefined;
 
 /** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
+/** A page as the host pushes it: caught up where it came back with nothing on it, unless it says otherwise. */
+export function pushedPage(
+  page: CodingAgentMessagesAnswerView | CodingAgentTranscriptPage,
+): CodingAgentTranscriptPage {
+  if ("failure" in page || "caughtUp" in page) return page;
+  return { ...page, caughtUp: page.messages.length === 0 };
+}
+
 /**
  * A follower that answers each follow as the host would: the pages `pagesOf`
  * names for the transcript, pushed to the window in turn, at once; or, where
@@ -32,17 +41,19 @@ const ignore = () => undefined;
  * lands.
  */
 export function pushedTranscripts(
-  pagesOf: (transcript: CodingAgentTranscriptKey) => readonly CodingAgentMessagesAnswerView[],
+  pagesOf: (
+    transcript: CodingAgentTranscriptKey,
+  ) => readonly (CodingAgentMessagesAnswerView | CodingAgentTranscriptPage)[],
   held?: { readonly page: number; readonly release: Promise<void> },
 ): TranscriptFollower {
   return (transcript, hear) => {
     let stopped = false;
     const pages = pagesOf(transcript);
     const cut = held?.page ?? pages.length;
-    for (const page of pages.slice(0, cut)) hear(page);
+    for (const page of pages.slice(0, cut)) hear(pushedPage(page));
     void held?.release.then(() => {
       if (stopped) return;
-      for (const page of pages.slice(cut)) hear(page);
+      for (const page of pages.slice(cut)) hear(pushedPage(page));
     });
     return () => {
       stopped = true;
@@ -289,6 +300,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onSelect: ignore,
     onRestoreTask: ignore,
     onShowAgent: ignore,
+    onShowColumnTab: ignore,
+    onShowPanelTab: ignore,
     onShowSource: ignore,
     onShowTask: ignore,
     onShowMention: ignore,

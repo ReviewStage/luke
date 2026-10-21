@@ -42,7 +42,12 @@ import { experimentsOn } from "@luke/settings/testing";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
-import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
+import {
+  DOCUMENT_REGION,
+  PIN_MOVE_FAILED_NOTE,
+  SETTLED_STATUS,
+  TASKS_PAGE,
+} from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
@@ -3169,4 +3174,37 @@ test("a task opened is timed from the press to its document drawn ready, and one
       },
     ],
   );
+});
+
+/** A status write's payload, read back as the act's own schema admits it. */
+const readStanding = Schema.decodeUnknownOption(
+  Schema.Struct({ taskId: Schema.String, status: Schema.optionalKey(Schema.String) }),
+);
+
+test("Mark done's Undo leaves a status chosen since alone, though that choice is still unanswered", async () => {
+  const view: TasksView = {
+    ...IDLE_TASKS_VIEW,
+    listStatus: TASKS_READ.READY,
+    workspaces: [PERSONAL],
+    tasks: [{ ...row("notes", 4), status: TASK_STATUS.TODO }],
+  };
+  let answered = 0;
+  const tab = mount({ tasks: view }, {
+    // The Mark done is kept, and the status chosen after it waits on the service.
+    [ACT_KIND.TASKS_SET_STANDING]: () => {
+      answered += 1;
+      return answered === 1 ? Promise.resolve(true) : new Promise(() => undefined);
+    },
+  } as Parameters<typeof mount>[1]);
+
+  act(() => tab.control().onSettleTasks(["notes"], SETTLED_STATUS.DONE));
+  await settle();
+  void tab.control().onSetTaskStanding("notes", { status: TASK_STATUS.IN_PROGRESS });
+  act(() => _undoButton().click());
+  await settle();
+
+  const written = tab.payloads
+    .filter(({ kind }) => kind === ACT_KIND.TASKS_SET_STANDING)
+    .map(({ payload }) => Option.getOrUndefined(readStanding(payload))?.status);
+  assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });

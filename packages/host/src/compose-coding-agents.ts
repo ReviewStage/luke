@@ -28,6 +28,8 @@ import {
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
+  type CodingAgentTranscriptOlderAnswer,
+  type CodingAgentTranscriptPage,
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
@@ -56,6 +58,7 @@ import {
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   codingAgentTranscriptKeySchema,
+  codingAgentTranscriptOlderParamsSchema,
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -99,7 +102,7 @@ import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
+import { confirmWrite, type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -152,6 +155,8 @@ export type CodingAgentClient = Pick<
   | "startFrom"
   | "messagesNow"
   | "agentPart"
+  | "messagesNewest"
+  | "messagesBefore"
   | "agentTranscriptLive"
   | "message"
   | "choose"
@@ -216,6 +221,13 @@ export interface CodingAgentsDependencies {
    * it. None where this Mac holds no calls, and every line steers.
    */
   typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
+  /**
+   * Waits for a write's transaction to arrive on the task list followed
+   * live, which holds every agent's row (`TasksComposer.listed`), so a
+   * Start, a rename, an archive, or a pin is confirmed once the list
+   * carries it; none waits for nothing.
+   */
+  listed?: (txid: string | undefined) => Effect.Effect<void>;
 }
 
 export interface CodingAgentsComposer extends Composer {
@@ -321,6 +333,9 @@ function composed(
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
+  /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
+  const chatTxWaits = new Map<string, TxWait>();
+  const listed = dependencies.listed ?? (() => Effect.void);
 
   /**
    * The agent as a line handed to its call leaves it, as a message's answer
@@ -525,6 +540,7 @@ function composed(
         const answer = yield* asked(
           taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
         );
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -541,7 +557,7 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const { transcript, key } = yield* agentTranscriptOf(params);
-        const tell = (page: CodingAgentMessagesAnswerView) =>
+        const tell = (page: CodingAgentTranscriptPage) =>
           Effect.sync(() =>
             kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
           );
@@ -550,12 +566,25 @@ function composed(
               transcripts,
               key,
               // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens.
-              (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
+              {
+                newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
+                after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
+              },
               tell,
             )
           : tell(UNANSWERED);
         yield* FiberMap.run(followed, key, follow);
         return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, callId, before } = yield* read(
+          codingAgentTranscriptOlderParamsSchema,
+          params,
+          "reading an older page names the transcript and where to read below",
+        );
+        const answer = yield* asked(client.messagesBefore(agentId, before, callId, true));
+        return carried<CodingAgentTranscriptOlderAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -600,6 +629,7 @@ function composed(
           "renaming an agent names the agent and its title",
         );
         const answer = yield* asked(client.rename(agentId, request));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_SERVERS]: (params) =>
@@ -620,6 +650,7 @@ function composed(
           "archiving an agent names the agent and whether it is archived",
         );
         const answer = yield* asked(client.archive(agentId, request));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PIN]: (params) =>
@@ -630,6 +661,7 @@ function composed(
           "pinning an agent names the agent and whether it is pinned",
         );
         const answer = yield* asked(client.pin(agentId, request));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>
@@ -650,6 +682,7 @@ function composed(
           "deleting an agent names one agent",
         );
         const answer = yield* asked(client.delete(agentId));
+        if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentDeleteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PAGE]: (params) =>
@@ -910,6 +943,8 @@ function composed(
           "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
         );
         const answer = yield* asked(client.chatPost(workspaceId, write));
+        // As Neon's mutations guide says: answered once the followed chat holds the write.
+        if (!("failure" in answer)) yield* confirmWrite(chatTxWaits.get(workspaceId), answer.txid);
         return carried<CodingAgentChatWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW]: (params) =>
@@ -923,6 +958,7 @@ function composed(
           Effect.sync(() =>
             kernel.emit(GATEWAY_EVENT.CHAT_CHANGED, carried({ workspaceId, chat })),
           );
+        let mine: TxWait | undefined;
         const follow = gate()
           ? followWorkspaceChat({
               join: () => asked(client.chatJoin(workspaceId)),
@@ -930,6 +966,15 @@ function composed(
               openLive: dependencies.openLive ?? openRealtimeClient,
               now: kernel.now,
               tell,
+              onTxWait: (wait) => {
+                // Note that only this follow's own wait is let go, never a newer follow's.
+                if (wait !== undefined) {
+                  mine = wait;
+                  chatTxWaits.set(workspaceId, wait);
+                } else if (chatTxWaits.get(workspaceId) === mine) {
+                  chatTxWaits.delete(workspaceId);
+                }
+              },
             })
           : tell(UNANSWERED);
         yield* FiberMap.run(chats, workspaceId, follow);

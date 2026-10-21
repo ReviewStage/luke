@@ -185,17 +185,6 @@ function corner(page: HTMLElement, side: "left" | "right"): HTMLElement {
   return handle;
 }
 
-/** The S, M, and L options, by their letters. */
-function sizeOption(page: HTMLElement, letter: string): HTMLElement {
-  const group = videoRoom(page)?.querySelector<HTMLElement>('[aria-label="Video size"]');
-  assert.ok(group, "the video offers its sizes");
-  const option = [...group.querySelectorAll<HTMLElement>('[role="radio"]')].find(
-    (each) => each.textContent?.trim() === letter,
-  );
-  assert.ok(option, `the video offers ${letter}`);
-  return option;
-}
-
 /** The tile inside the video's room, which it must hold. */
 function tileOf(room: HTMLElement): HTMLElement {
   const tile = room.querySelector<HTMLElement>(".call-video-tile");
@@ -310,14 +299,11 @@ test("the video's room takes height in the tab's flow, so the transcript ends ab
   }
 });
 
-test("the video starts at S, its size is held between its bounds and snaps to S, M, and L, and it is kept for the next call", async () => {
+test("the video starts at 120 px, its size is held between its bounds, a drag moves it smoothly, and it is kept for the next call", async () => {
   const live = { avatar: { status: AVATAR_STATUS.LIVE } } as const;
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
-  assert.equal(videoHeight(page), "120px", "a first call opens on S");
-  assert.equal(sizeOption(page, "S").getAttribute("aria-checked"), "true");
+  assert.equal(videoHeight(page), "120px", "a first call opens on 120 px");
 
-  act(() => sizeOption(page, "L").click());
-  assert.equal(videoHeight(page), "300px", "L is a press away");
   act(() =>
     corner(page, "left").dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })),
   );
@@ -335,16 +321,16 @@ test("the video starts at S, its size is held between its bounds and snaps to S,
   );
   assert.equal(videoHeight(page), "112px", "↑ grows it, as it grows upward");
 
-  // A drag from the top-left corner, up past M, lands near it and settles on it.
+  // A drag from the top-left corner follows the pointer, with no snapping.
   const handle = corner(page, "left");
   act(() => handle.dispatchEvent(pointer("pointerdown", 100, 400)));
   act(() => handle.dispatchEvent(pointer("pointermove", 100, 315)));
-  assert.equal(videoHeight(page), "200px", "a drag landing near M settles on M");
+  assert.equal(videoHeight(page), "197px", "a drag near 200 px stays where it lands");
   act(() => handle.dispatchEvent(pointer("pointermove", 100, -2000)));
   assert.equal(videoHeight(page), "360px", "a drag past the greatest holds there");
   act(() => handle.dispatchEvent(pointer("pointermove", 100, 330)));
   act(() => handle.dispatchEvent(pointer("pointerup", 100, 330)));
-  assert.equal(videoHeight(page), "182px", "between the sizes it stands where it was left");
+  assert.equal(videoHeight(page), "182px", "it stands where it was left");
   act(() => roots.pop()?.unmount());
 
   const next = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, live);
@@ -366,16 +352,16 @@ test("hovering the video brings out its resize controls, each named and reached 
   const laid = layContainersAt({});
   try {
     const controls = () =>
-      [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner, .agent-call-video-sizes")]
+      [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner")]
         .map((each) => getComputedStyle(each).opacity)
         .join(" ");
     assert.equal(room.dataset.reveal, "false");
-    assert.equal(controls(), "0 0 0", "at rest the video is the video alone");
+    assert.equal(controls(), "0 0", "at rest the video is the video alone");
     act(() => {
       tileOf(room).dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
     assert.equal(room.dataset.reveal, "true");
-    assert.equal(controls(), "1 1 1", "under the pointer its corners and sizes show");
+    assert.equal(controls(), "1 1", "under the pointer its corners show");
     act(() => {
       tileOf(room).dispatchEvent(
         new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
@@ -387,14 +373,10 @@ test("hovering the video brings out its resize controls, each named and reached 
   }
   const touch = layContainersAt({}, { touch: true });
   try {
-    const controls = [
-      ...room.querySelectorAll<HTMLElement>(".agent-call-video-corner, .agent-call-video-sizes"),
-    ].map((each) => getComputedStyle(each).opacity);
-    assert.deepEqual(
-      controls,
-      ["1", "1", "1"],
-      "a touch screen, which has no hover, always shows them",
+    const controls = [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner")].map(
+      (each) => getComputedStyle(each).opacity,
     );
+    assert.deepEqual(controls, ["1", "1"], "a touch screen, which has no hover, always shows them");
   } finally {
     touch.remove();
   }
@@ -404,7 +386,11 @@ test("hovering the video brings out its resize controls, each named and reached 
     assert.match(handle.getAttribute("aria-label") ?? "", /^Resize video/u);
     assert.equal(handle.getAttribute("role"), "slider");
   }
-  assert.ok(sizeOption(page, "M"));
+  assert.equal(
+    room.querySelector('[aria-label="Video size"], [role="radiogroup"], [role="radio"]'),
+    null,
+    "the video has no size control, its corners alone resize it",
+  );
 });
 
 test("on a call the voice's notice line floats just over the video's room, never on the video, and no captions stand anywhere in the tab", async () => {

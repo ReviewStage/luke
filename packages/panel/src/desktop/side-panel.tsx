@@ -154,6 +154,7 @@ import {
   useTranscriptCopier,
   type WorkerStandings,
 } from "./strip-tabs.js";
+import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
 
@@ -957,6 +958,8 @@ function PanelTabs({
     inboxDrafted,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
+  // Note that only a task's panel hands its looks over, since an agent's page holds its panel under the agent's id.
+  useStripLooks(LOOK_STRIP.PANEL, holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined, strip);
   const copyLink = useCopyLinkItem();
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
@@ -1246,17 +1249,29 @@ export function taskCards(input: {
         read={subagentCardReading(drawn, agents, held, chosen(drawn.tab))}
       />
     );
+  // Note that each agent's cards are the same value for as long as these are, so a transcript handed them draws nothing again for them.
+  const byAgent = new Map<string, TranscriptCards>();
   return {
     call: { target, agent, worker: () => undefined },
-    agent: (agentId) => ({
-      target,
-      agent,
-      task,
-      worker: ({ callId, task, status }) =>
-        card(
-          drawnSubagent({ subagent: callId, delegation: { agent: agentId, task } }, status, held),
-        ),
-    }),
+    agent: (agentId) => {
+      const known = byAgent.get(agentId);
+      if (known !== undefined) return known;
+      const cards: TranscriptCards = {
+        target,
+        agent,
+        task,
+        worker: ({ callId, task: job, status }) =>
+          card(
+            drawnSubagent(
+              { subagent: callId, delegation: { agent: agentId, task: job } },
+              status,
+              held,
+            ),
+          ),
+      };
+      byAgent.set(agentId, cards);
+      return cards;
+    },
   };
 }
 

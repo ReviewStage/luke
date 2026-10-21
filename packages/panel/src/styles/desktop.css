@@ -697,6 +697,38 @@ body,
   opacity: 0.8;
 }
 
+/* The member Luke, an agent, or an automation acted for, on the corner of
+   its square: their face at a share of the mark's edge, cut from the ground
+   by a ring of it, so a task one of them made reads as theirs and its
+   member's at once. The face is drawn at the smallest size and scaled, so
+   a letter keeps its weight at every size the mark is. */
+.actor-mark-for {
+  position: absolute;
+  right: -22%;
+  bottom: -18%;
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
+  transform: scale(0.6);
+  transform-origin: bottom right;
+}
+
+.actor-mark[data-size="inline"] .actor-mark-for {
+  transform: scale(0.68);
+}
+
+.actor-mark:is([data-size="row"], [data-size="account"]) .actor-mark-for {
+  transform: scale(0.8);
+}
+
+.actor-mark:is([data-size="card"], [data-size="page"]) .actor-mark-for {
+  right: -8%;
+  bottom: -8%;
+  transform: scale(1);
+}
+
 /* A line that names an actor: its words and the actor in one row centred on
    the disc, so the disc never rides above the words' baseline. Note that
    its spaces stand inside its words, because a row drops a run that is
@@ -2347,22 +2379,20 @@ ul.actor-stack {
 
 /* How the video resizes, brought out while the pointer is over it, a drag
    is under way, or the keyboard is on one of them (`AgentCallVideo`): a
-   bracket on each top corner, since the video grows upward, and S, M and L
-   at its foot. */
-.agent-call-video-corner,
-.agent-call-video-sizes {
+   bracket on each top corner, since the video grows upward. */
+.agent-call-video-corner {
   opacity: 0;
   transition: opacity var(--duration-hover) ease;
 }
 
-.agent-call-video[data-reveal="true"] :is(.agent-call-video-corner, .agent-call-video-sizes),
-.agent-call-video:focus-within :is(.agent-call-video-corner, .agent-call-video-sizes) {
+.agent-call-video[data-reveal="true"] .agent-call-video-corner,
+.agent-call-video:focus-within .agent-call-video-corner {
   opacity: 1;
 }
 
 /* A touch screen has no hover to bring them out, so there they always stand. */
 @media (hover: none) {
-  .agent-call-video :is(.agent-call-video-corner, .agent-call-video-sizes) {
+  .agent-call-video .agent-call-video-corner {
     opacity: 1;
   }
 }
@@ -2395,15 +2425,6 @@ ul.actor-stack {
 
 .agent-call-video-corner:is(:hover, :active, :focus-visible) {
   border-color: var(--luke-color-accent);
-}
-
-.agent-call-video-sizes {
-  position: absolute;
-  z-index: 1;
-  bottom: var(--luke-space-6);
-  left: 50%;
-  width: max-content;
-  transform: translateX(-50%);
 }
 
 /* Anywhere no call's tab is drawn (Settings, the home page, a panel
@@ -3078,6 +3099,13 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--luke-color-border);
+}
+
+/* The list's search, open, stands in its head's name and takes the room the
+   name had, on the page's bar and in the sidebar's head alike. */
+.inbox-search {
+  min-width: 0;
+  flex: 1;
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -7454,6 +7482,173 @@ polygon.factory-campus-edge[data-edge="selected"] {
   }
 }
 
+/* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
+   as a row of cards over the window, drawn as ⌘K's palette is, its ground,
+   edge, corner, shadow, and scrim, and stood in the middle of the stage, as
+   ⌘Tab's are. A card is its preview over its glyph and name, its task and
+   strip under them; the card chosen is lit as a menu's row is, its edge
+   drawn in the selected border, and the card of the stop here is dimmed. A
+   preview is a still of the tab, or its glyph large until it has one, and
+   the session recording leaves it out by its class (`ph-no-capture`). */
+.tab-switcher-backdrop {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  inset: 0;
+  background: var(--luke-color-scrim);
+  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+}
+
+.tab-switcher {
+  position: fixed;
+  z-index: var(--luke-z-dialog);
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) / 2);
+  left: 50%;
+  display: flex;
+  max-width: calc(100vw - 2 * var(--luke-space-24));
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-dialog-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  color: var(--luke-color-text);
+  overflow: clip;
+  transform: translate(-50%, -50%);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    tab-switcher-rise var(--duration-fast) var(--spring-fast) backwards;
+}
+
+[data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher-cards {
+  display: flex;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  overflow-x: auto;
+}
+
+.tab-switcher-card {
+  display: flex;
+  width: 176px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6);
+  border: 1px solid transparent;
+  border-radius: var(--luke-radius-10);
+  cursor: default;
+}
+
+.tab-switcher-card[aria-selected="true"] {
+  border-color: var(--luke-color-border-selected);
+  background: var(--luke-color-fill-strong);
+}
+
+.tab-switcher-preview {
+  display: flex;
+  height: 110px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-surface);
+  overflow: hidden;
+}
+
+.tab-switcher-card[data-here="true"] .tab-switcher-preview {
+  opacity: 0.55;
+}
+
+/* A still fills the preview from its top left, as the tab it was taken of stands. */
+.tab-switcher-still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+/* A stop with no still yet wears its glyph, large and quiet, in the preview's middle. */
+.tab-switcher-glyph {
+  display: inline-flex;
+  --state-glyph-size: 28px;
+  color: var(--luke-color-text-subtle);
+}
+
+.tab-switcher-glyph :is(svg, img, .state-glyph) {
+  width: 28px;
+  height: 28px;
+}
+
+.tab-switcher-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-2);
+  white-space: nowrap;
+}
+
+/* The glyph keeps its own ink, a task's status mark's among them, as the tab's does. */
+.tab-switcher-name > :is(svg, img, .state-glyph) {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  --state-glyph-size: var(--luke-menu-glyph);
+}
+
+.tab-switcher-name > .luke-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The task and strip under the name, inset to the name's words; the line stands empty where a place has none, so every card is one height. */
+.tab-switcher-detail {
+  display: flex;
+  min-height: calc(var(--luke-type-caption-size) * 1.4);
+  padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
+  white-space: nowrap;
+}
+
+.tab-switcher-detail > .luke-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The keys' hints along the foot, as ⌘K's foot has them. */
+.tab-switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-16);
+  height: 36px;
+  padding: 0 var(--luke-space-16);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.tab-switcher-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+.tab-switcher-footer .shortcut {
+  --shortcut-ink: var(--luke-color-text-muted);
+}
+
+@keyframes tab-switcher-rise {
+  from {
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
 /* Start ------------------------------------------------------------------ */
 
 /* The toolbar's Start, a shared SplitButton, and the note beside it. */
@@ -8503,7 +8698,21 @@ button.tasks-board-card-press:focus-visible::after {
 
 .tasks-board-face {
   display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
   margin-left: auto;
+}
+
+/* Who made a card's task where its member did not by hand, Luke or an
+   agent, named muted before their square, cut short rather than pushing
+   the key aside. */
+.tasks-board-maker {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--luke-color-text-subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* A card's name stands whole under its line, in the label's weight,

@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
-import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
+import { repositoryPinsWrittenSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, type Context, Effect, Option, Result } from "effect";
@@ -79,13 +79,21 @@ function request(
   });
 }
 
+/** An answer read as the wire's, a pin's answer with the transaction it wrote in; failing the test where it is not. */
+function readAnswer(answered: Answer) {
+  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+  const read = readEither(repositoryPinsWrittenSchema)(unparsedWire(answered.body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
+  return read.success;
+}
+
 /** The pins an answer carries, as `[repository, pinnedAt]`, failing the test where it is not the wire's. */
 function pinsOf(answered: Answer): [string, number][] {
-  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-  const read = readEither(repositoryPinsAnswerSchema)(unparsedWire(answered.body));
-  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
-  return read.success.pins.map(({ repository, pinnedAt }) => [repository, pinnedAt]);
+  return readAnswer(answered).pins.map(({ repository, pinnedAt }) => [repository, pinnedAt]);
 }
+
+/** Whether a pin's answer names the transaction it wrote in. */
+const wroteRow = (answered: Answer) => readAnswer(answered).txid !== undefined;
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
@@ -99,14 +107,25 @@ it.layer(getTestDB())("the repository pins route", (it) => {
           ask(request(userId, { method: "PUT", body: { repository, pinned } }));
 
         const first = yield* Clock.currentTimeMillis;
-        pinsOf(yield* pin("acme/relay", true));
+        const pinned = yield* pin("acme/relay", true);
         yield* TestClock.adjust("1 minute");
         const second = yield* Clock.currentTimeMillis;
         const both = pinsOf(yield* pin("acme/ledger", true));
         yield* TestClock.adjust("1 minute");
-        const again = pinsOf(yield* pin("acme/relay", true));
-        const unpinned = pinsOf(yield* pin("acme/ledger", false));
-        const unpinnedTwice = pinsOf(yield* pin("acme/ledger", false));
+        const pinnedAgain = yield* pin("acme/relay", true);
+        const again = pinsOf(pinnedAgain);
+        const unpinnedAnswer = yield* pin("acme/ledger", false);
+        const unpinned = pinsOf(unpinnedAnswer);
+        const unpinnedTwiceAnswer = yield* pin("acme/ledger", false);
+        const unpinnedTwice = pinsOf(unpinnedTwiceAnswer);
+
+        // A pin that wrote a row names its transaction, for the sidebar's follower to wait on; one that moved nothing names none.
+        assert.deepEqual([pinned, pinnedAgain, unpinnedAnswer, unpinnedTwiceAnswer].map(wroteRow), [
+          true,
+          false,
+          true,
+          false,
+        ]);
 
         assert.deepEqual(both, [
           ["acme/ledger", second],

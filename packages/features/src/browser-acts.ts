@@ -138,15 +138,16 @@ export const isBrowserPage = Schema.is(browserPageSchema);
 const keyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(32));
 
 /**
- * A Command chord pressed while a Browser tab's page held the keyboard,
+ * A window's chord pressed while a Browser tab's page held the keyboard,
  * which main hands back to the panel so the window's own chords answer over
- * the page as they do over any tab: the key as the page heard it, and the
- * modifiers beside Command. The page keeps the chords it edits text with.
+ * the page as they do over any tab: the key as the page heard it, and its
+ * modifiers. The page keeps the chords it edits text with.
  */
 const browserKeySchema = Schema.Struct({
   browserId,
   key: keyName,
   code: keyName,
+  meta: Schema.Boolean,
   shift: Schema.Boolean,
   alt: Schema.Boolean,
   control: Schema.Boolean,
@@ -173,7 +174,12 @@ export const isBrowserFocus = Schema.is(browserFocusSchema);
 /** The keys a page keeps under Command, since they edit its text: copy, paste, cut, select all, and undo or redo. */
 const PAGE_KEPT_KEYS: ReadonlySet<string> = new Set(["c", "v", "x", "a", "z"]);
 
-/** Whether a Command chord pressed over a page is the window's to answer, rather than one the page edits text with. */
+/**
+ * Whether a chord pressed over a page is the window's to answer: a Command
+ * chord but those the page edits text with, and ⌃Tab or ⌃⇧Tab, the tab
+ * switcher's, which a page would otherwise take as its own focus move.
+ */
 export function chordIsWindows(chord: Omit<BrowserKey, "browserId" | "code">): boolean {
+  if (!chord.meta) return chord.control && !chord.alt && chord.key === "Tab";
   return chord.alt || chord.control || !PAGE_KEPT_KEYS.has(chord.key.toLowerCase());
 }

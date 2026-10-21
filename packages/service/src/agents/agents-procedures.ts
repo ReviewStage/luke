@@ -35,16 +35,17 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  archiveCodingAgent,
+  archiveCodingAgentCommitted,
   type CodingAgent,
+  type CodingAgentCommitted,
   type CodingAgentLine,
   deleteCodingAgent,
   hasRepository,
   listCodingAgentLines,
   listWorkspaceCodingAgentLines,
   nativeRuntimesOfReached,
-  pinCodingAgent,
-  renameCodingAgent,
+  pinCodingAgentCommitted,
+  renameCodingAgentCommitted,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
@@ -115,10 +116,11 @@ import {
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
+import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
-export interface AgentsProcedureSeams extends EveReach, PublishedReach {
+export interface AgentsProcedureSeams extends EveReach, PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The agent's sandbox as the shells reach it: Vercel's in production, a script's in a test. */
   readonly sandbox: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient>;
@@ -166,6 +168,22 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<{ agent: CodingAgentSummary }, HostedRefusal, DatabaseServices> {
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return { agent: yield* summaryOf(userId, changed.value) };
+});
+
+/**
+ * An agent as a write left it, answered with the transaction the write
+ * committed in where it changed a row, as Neon's mutations guide says, so a
+ * desktop following the task list waits for it to arrive before it
+ * confirms the write.
+ */
+const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  changed: Option.Option<CodingAgentCommitted>,
+): Effect.fn.Return<{ agent: CodingAgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
+  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const agent = yield* summaryOf(userId, changed.value.agent);
+  const { txid } = changed.value;
+  return txid === undefined ? { agent } : { agent, txid };
 });
 
 /**
@@ -251,9 +269,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
   const startAnswer = (started: {
     readonly agent: CodingAgentSummary;
     readonly created: boolean;
+    readonly txid?: string;
   }) => ({
     status: started.created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
-    body: { agent: started.agent },
+    body:
+      started.txid === undefined
+        ? { agent: started.agent }
+        : { agent: started.agent, txid: started.txid },
   });
   return {
     /**
@@ -411,10 +433,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { body } = input;
       if ("title" in body) {
         const { title } = body;
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
+            renameCodingAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
           ),
         );
       }
@@ -423,16 +445,20 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
           yield* stoppedForGood(seams, writer, context.request, userId, agent);
         }
-        return yield* changedAgent(
-          userId,
-          yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, body.archived)),
+        const archived = yield* hostedStoreOrUnavailable(
+          archiveCodingAgentCommitted(userId, agent.id, body.archived),
         );
+        // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
+        if (body.archived && Option.isSome(archived)) {
+          yield* Effect.provide(stoppedInBackground([agent]), seams.sessionSandboxes);
+        }
+        return yield* committedAgent(userId, archived);
       }
       if ("pinned" in body) {
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            pinCodingAgent(userId, agent.id, body.pinned, body.position),
+            pinCodingAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
         );
       }
@@ -479,8 +505,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
       );
       if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-      if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { deleted: true as const };
+      if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { deleted: true as const, txid: deleted.value.txid };
     }),
     /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {

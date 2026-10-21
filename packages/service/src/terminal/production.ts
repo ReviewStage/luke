@@ -6,7 +6,8 @@
  * store that cannot take a keystroke's renewal is logged, since the next
  * keystroke tries again; one that cannot claim the credential's renewal is
  * read as not claimed, and one that cannot give a claim back is logged, so
- * the claim lapses on the agent's own rule.
+ * the claim lapses on the agent's own rule. A keep-alive of the sandbox
+ * Vercel did not confirm is logged, since the next one tries again.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -24,6 +25,7 @@ import { controlsAgent } from "../agents/agent-reach.js";
 import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
 import { agentTurnUnderWay } from "../agents/coder-host/snapshot.js";
 import { connectPty } from "../agents/sandbox-pty.js";
+import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
 import type { GitHubApp } from "../github/github-app.js";
 import type { RelayDependencies } from "./relay.js";
@@ -72,6 +74,7 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
         run(holdSandbox(conversationId, heldUntil)).pipe(
           Effect.catch(() => Effect.logWarning("a terminal's lease was not moved on")),
         ),
+      keepAlive: (sessionId) => run(keepSessionSandboxAlive(sessionId)),
       claimRenewal: (conversationId, sandboxSessionId, now, renewedBefore) =>
         run(claimCredentialRenewal(conversationId, sandboxSessionId, now, renewedBefore)).pipe(
           Effect.orElseSucceed(() => false),

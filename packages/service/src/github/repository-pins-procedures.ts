@@ -38,7 +38,7 @@ export function repositoryPinsProcedures(seams: RepositoryPinsProcedureSeams) {
       );
       // A pin past the bound is a request the service will not keep, as a name past its bound is.
       if (Option.isNone(set)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      return { pins: set.value };
+      return set.value;
     }),
   };
 }

@@ -358,7 +358,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
         // Read by the agent's starter and not by the teammate, so the two read it apart.
-        assert.equal(yield* markInboxItemRead(onTask.agent.userId, first.success.id), true);
+        assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.success.id));
         // A second task of the starter's holding an item, archived, which the Inbox's Archived tab lists.
         const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
         const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
@@ -1264,8 +1264,14 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [[id, true]],
         );
 
-        assert.equal(yield* markInboxItemRead(agent.userId, id), true);
-        assert.equal(yield* markInboxItemRead(agent.userId, id), true, "reading it again is fine");
+        // The read answers the transaction that wrote it, and one already standing writes none.
+        const read = yield* markInboxItemRead(agent.userId, id);
+        assert.match(read === false ? "" : (read.txid ?? ""), /^\d+$/u);
+        assert.deepEqual(
+          yield* markInboxItemRead(agent.userId, id),
+          {},
+          "reading it again is fine",
+        );
         assert.deepEqual(
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
           [false, true],
@@ -1334,11 +1340,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* markInboxItemRead(agent.userId, id);
         yield* markInboxItemRead(teammate, id);
 
-        assert.equal(yield* markInboxItemUnread(agent.userId, id), true);
-        assert.equal(
+        const marked = yield* markInboxItemUnread(agent.userId, id);
+        assert.match(marked === false ? "" : (marked.txid ?? ""), /^\d+$/u);
+        assert.deepEqual(
           yield* markInboxItemUnread(agent.userId, id),
-          true,
-          "marking it again is fine",
+          {},
+          "marking it again is fine, and writes nothing to wait for",
         );
         assert.deepEqual(
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
@@ -1391,7 +1398,9 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* markInboxItemRead(agent.userId, read);
         const other = yield* postedId(elsewhere.agent, SETTINGS.key);
 
-        assert.equal(yield* markInboxRead(agent.userId, workspaceId), 3);
+        const all = yield* markInboxRead(agent.userId, workspaceId);
+        assert.equal(all.marked, 3);
+        assert.match(all.txid ?? "", /^\d+$/u, "one transaction marked them all");
         for (const id of [open, settled, marked, read]) {
           assert.equal(yield* unreadFor(agent.userId, id), false);
         }
@@ -1401,9 +1410,13 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [true, false],
           "the teammate's markers stand as they were",
         );
-        assert.equal(yield* markInboxRead(agent.userId, workspaceId), 0, "nothing is left unread");
+        assert.deepEqual(
+          yield* markInboxRead(agent.userId, workspaceId),
+          { marked: 0 },
+          "nothing is left unread, so nothing was written to wait for",
+        );
 
-        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
         assert.equal(yield* unreadFor(agent.userId, other), false);
       }),
   );
@@ -1425,12 +1438,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         yield* markInboxItemRead(agent.userId, id);
         assert.equal(
-          yield* markInboxRead(agent.userId, undefined),
+          (yield* markInboxRead(agent.userId, undefined)).marked,
           0,
           "nothing moved, so nothing counts",
         );
         yield* markInboxItemUnread(agent.userId, id);
-        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
 
         yield* TestClock.adjust(Duration.seconds(2));
         yield* replyInboxItem(agent, SETTINGS.key, "Before the later change.");
@@ -1461,7 +1474,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
           [false, false],
         );
-        assert.equal(yield* markInboxRead(agent.userId, undefined), 0);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 0);
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* replyInboxItem(agent, SETTINGS.key, "One more thing.");
@@ -1504,6 +1517,34 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         );
         const unmoved = yield* taskInboxPast(teammate, taskId, INBOX_CURSOR_START);
         assert.equal(unmoved.cursor, theirs.cursor, "the teammate's inbox stands where it stood");
+      }),
+  );
+});
+
+it.layer(getTestDB())("a member's writes on an item", (it) => {
+  it.effect(
+    "an answer and a close each answer the transaction they were taken in, which a follower of the inbox waits for, and one taken in another transaction than the last",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const answeredId = yield* postedId(agent, "answered");
+        const closedId = yield* postedId(agent, "closed");
+
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(teammate, answeredId, 1, DONE, randomUUID()),
+        );
+        const closed = Option.getOrThrow(
+          yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID()),
+        );
+        assert.match(answered.txid ?? "", /^\d+$/u);
+        assert.match(closed.txid ?? "", /^\d+$/u);
+        assert.notEqual(answered.txid, closed.txid);
+        assert.ok(
+          Option.isNone(yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID())),
+          "a close that finds the item settled writes nothing, so nothing is waited for",
+        );
       }),
   );
 });

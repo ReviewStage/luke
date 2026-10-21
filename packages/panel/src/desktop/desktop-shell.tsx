@@ -37,7 +37,7 @@ import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-car
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
-import { useTaskLooks } from "../tasks/use-task-looks.js";
+import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -576,6 +576,15 @@ export function DesktopShell({
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
+  // An agent with no plan is looked at as its page is on screen, as the plan is.
+  const { agentId: pageAgentId } = tasks.agentView;
+  useAgentLook(
+    tab === PANEL_TAB.TASKS && pageAgentId !== undefined
+      ? [...tasks.listedAgents.standing, ...tasks.listedAgents.archived].find(
+          (agent) => agent.id === pageAgentId,
+        )
+      : undefined,
+  );
   const mentionedAgents = useMemo(
     () => ({ models: tasks.agents.models, me: tasks.me }),
     [tasks.agents.models, tasks.me],

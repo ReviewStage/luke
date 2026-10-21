@@ -334,6 +334,24 @@ test("the Default avatar an earlier build stored reads as no choice", async (t) 
   assert.equal(appSettingsView(await reopened.snapshot()).videoAvatar, undefined);
 });
 
+test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).set("videoAvatar", VIDEO_AVATAR.CELIA);
+  const file = path.join(directory, SETTINGS_FILE_NAME);
+  const stored = JSON.parse(await readSettingsFile(directory));
+  await fs.writeFile(
+    file,
+    JSON.stringify({ ...stored, apiKeys: { "provider-a": "c2VhbGVk", "provider-b": "c2VhbGVk" } }),
+  );
+
+  const reopened = storeIn(directory);
+  await reopened.retireStoredApiKeys();
+
+  const written = JSON.parse(await readSettingsFile(directory));
+  assert.equal("apiKeys" in written, false);
+  assert.equal(await storeIn(directory).get("videoAvatar"), VIDEO_AVATAR.CELIA);
+});
+
 test("a stored account and a chosen preference survive each other's writes", async (t) => {
   for (const field of APP_SETTING_FIELDS) {
     const directory = await temporaryDirectory(t, "luke-settings-");

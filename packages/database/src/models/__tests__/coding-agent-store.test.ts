@@ -2114,6 +2114,33 @@ it.layer(getTestDB())("the coding-agent store's human names", (it) => {
   );
 });
 
+it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
+  it.effect(
+    "a line written answers the transaction that wrote it, and one already standing under its key answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const line = {
+          text: "Use seven days.",
+          clientKey: "send-1",
+          sender: { kind: MESSAGE_SENDER.LUKE },
+        };
+        const written = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+        const again = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
+
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        assert.match(written.success.value.txid ?? "", /^\d+$/u);
+        assert.ok(Result.isSuccess(again) && Option.isSome(again.success));
+        assert.equal(again.success.value.txid, undefined);
+      }),
+  );
+});
+
 it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
   it.effect(
     "a teammate's delete takes the agent, its pins, and the words said on its calls, keeps the calls, and stamps its conversation deleted; one that no longer stands stopped refuses with nothing written, and an outsider reaches nothing",
@@ -2153,13 +2180,14 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
           beforeDelete: (ids: readonly string[]) => Effect.sync(() => void retired.push([...ids])),
         });
 
-        assert.equal(yield* deleteCodingAgent(outsider, agentId, guard(true)), false);
+        assert.ok(Option.isNone(yield* deleteCodingAgent(outsider, agentId, guard(true))));
         const refused = yield* Effect.result(deleteCodingAgent(teammate, agentId, guard(false)));
         assert.equal(Result.isFailure(refused) && refused.failure._tag, "TaskAgentUnstopped");
         assert.ok(Option.isSome(yield* readCodingAgent(starter, agentId)));
         assert.deepEqual(retired, [], "a refused delete retires nothing");
 
-        assert.equal(yield* deleteCodingAgent(teammate, agentId, guard(true)), true);
+        const deleted = yield* deleteCodingAgent(teammate, agentId, guard(true));
+        assert.match(Option.getOrThrow(deleted).txid, /^\d+$/u);
         assert.deepEqual(retired, [[conversationId]]);
         assert.ok(Option.isNone(yield* readCodingAgent(starter, agentId)));
         const db = yield* Database;
@@ -2183,7 +2211,7 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
           [pins, words, calls, stamped?.deletedAt !== null],
           [[], [], [{ agentId: null }], true],
         );
-        assert.equal(yield* deleteCodingAgent(starter, agentId, guard(true)), false);
+        assert.ok(Option.isNone(yield* deleteCodingAgent(starter, agentId, guard(true))));
       }),
   );
 });

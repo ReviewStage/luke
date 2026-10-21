@@ -75,7 +75,8 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
-  taskId: string;
+  /** The task the call's agent is on; none for a call into an agent with no task. */
+  taskId?: string | undefined;
   agentId?: string | undefined;
   attachId: string;
   model: string;
@@ -239,7 +240,7 @@ const RegisterRequestSchema = Schema.Struct({
   userId: Schema.String,
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
-  taskId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   attachId: Schema.String,
   model: Schema.String,
@@ -574,7 +575,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
             userId: input.userId,
             liveSessionId: input.sessionId,
             delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-            taskId: input.taskId,
+            taskId: input.taskId ?? null,
             agentId: input.agentId ?? null,
             attachId: input.attachId,
             model: input.model,

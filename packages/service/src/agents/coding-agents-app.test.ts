@@ -65,6 +65,7 @@ import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -131,6 +132,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
+  codingAgentMessageAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentNewestAnswerSchema,
   codingAgentOlderAnswerSchema,
@@ -179,6 +181,7 @@ import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
   TASK_LIST_ARCHIVED,
   TASK_STATUS,
+  taskDeleteAnswerSchema,
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
@@ -200,6 +203,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Queue,
   Redacted,
   Result,
   type Schema,
@@ -257,6 +261,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -304,6 +309,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 import { messagesProcedures } from "./messages-procedures.js";
+import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
 
 /**
@@ -602,6 +608,7 @@ const standing = (
   eve: ReturnType<typeof fakeEve>,
   titles: boolean,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
+  sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -641,6 +648,7 @@ const standing = (
       eveAs: (account: string) => eve.eve(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
+      sessionSandboxes,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -833,6 +841,8 @@ const openTask = (
     readonly otherToken?: string | null;
     /** The model a replay's summary is written on; none unless a test names one. */
     readonly summaryModel?: SummaryModelOf;
+    /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
+    readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -860,6 +870,7 @@ const openTask = (
       eve,
       options.titles ?? false,
       options.summaryModel,
+      options.sessionSandboxes,
     );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
@@ -1160,7 +1171,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           }),
         );
 
-        const { plan, agent, agentRefusal } = readAnswer(
+        const { plan, agent, agentRefusal, txid } = readAnswer(
           taskStartAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           started,
@@ -1168,6 +1179,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agentRefusal, undefined);
         assert.ok(agent !== undefined);
         assert.notEqual(plan.id, task.id);
+        const db = yield* Database;
+        const [written] = yield* db
+          .select({ xmin: sql<string>`xmin::text` })
+          .from(taskTable)
+          .where(eq(taskTable.id, plan.id));
+        assert.equal(txid, written?.xmin, "the start answers its last write, the task's standing");
         assert.equal(plan.repository, RELAY_FULL_NAME);
         assert.equal(plan.document.body, "");
         assert.equal(
@@ -4315,9 +4332,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
     turn: { readonly running: boolean } | undefined,
+    sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
   ) =>
     Effect.gen(function* () {
-      const opened = yield* openTask({ eve });
+      const opened = yield* openTask({
+        eve,
+        ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
+      });
       const agent = readAnswer(
         codingAgentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
@@ -4384,7 +4405,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
       const sent = (text: string, clientKey = randomUUID()) =>
         Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
-          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
+          readAnswer(codingAgentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
@@ -4476,6 +4497,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
+  it.effect("a task's archive stops the sandboxes of the agents it archives, keeping them", () =>
+    Effect.gen(function* () {
+      const sandboxes = yield* scriptedSessionSandboxes();
+      const { owner, task, ask, sessionId } = yield* startedAgent(
+        fakeEve(),
+        { running: false },
+        sandboxes.layer,
+      );
+
+      const archived = yield* ask(
+        request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } }),
+      );
+
+      assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
+    }),
+  );
+
   it.effect(
     "over a browser's session cookie a task's delete stops its agent and retires the agent's session as the deployment acting for the cookie's account, before the task goes",
     () =>
@@ -4490,7 +4529,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
 
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
         assert.deepEqual(eve.reset, [sessionId]);
@@ -4536,7 +4578,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [[deploymentFor(messaged.other), messaged.sessionId]],
         );
         assert.equal(agentStop.status, HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
         assert.deepEqual(stopped.eve.cancelled, [[stopped.sessionId, "turn_0"]]);
         assert.deepEqual(stopped.eve.cancelledAs, [deploymentFor(stopped.other)]);
         assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);
@@ -4630,7 +4675,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         const deleted = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
 
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
+        assert.match(JSON.stringify(deleted.body), /^\{"deleted":true,"txid":"\d+"\}$/u);
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.reset, [sessionId]);
         assert.ok(Option.isNone(yield* readCodingAgent(owner, agent.id)));
@@ -4683,7 +4729,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const deleted = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
         const again = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
 
-        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
         assert.deepEqual(again, notFound);
         assert.deepEqual([eve.cancelled, eve.reset], [[], [sessionId]]);
         assert.ok(Option.isSome(yield* readTask(owner, task.id)));
@@ -4955,7 +5001,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(userTexts(read), [SNAPSHOT]);
 
         const sent = readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* asOther("Rename the subject line too."),
         );
@@ -5101,7 +5147,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const sent = readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
@@ -5436,7 +5482,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const steer = () =>
           ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
 
-        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        const first = readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* steer(),
+        );
+        // The send that wrote the line answers the transaction that wrote it.
+        assert.match(first.txid ?? "", /^\d+$/u);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
           [[`Bearer ${other}`, sessionId, target.conversationId]],
@@ -5450,7 +5502,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           status: CODING_AGENT_STATUS.RUNNING,
         });
 
-        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        const again = readAnswer(
+          codingAgentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* steer(),
+        );
+        // A repeat wrote nothing, so there is no transaction to wait for.
+        assert.equal(again.txid, undefined);
         assert.equal(eve.sent.length, 1);
       }),
   );
@@ -5474,7 +5532,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // Charles answers a minute later, which the time each line names says.
         yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
@@ -5862,7 +5920,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
         // The bounds themselves are taken.
         readAnswer(
-          codingAgentAnswerSchema,
+          codingAgentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, {
@@ -6837,15 +6895,22 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [[id, true]],
         );
 
-        assert.deepEqual(
-          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("PUT")),
-          { id, unread: false },
+        // Each mark answers the transaction it was written in, which a window following the inbox waits for.
+        const { txid: readIn, ...markedRead } = readAnswer(
+          inboxReadStateSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* mark("PUT"),
         );
+        assert.deepEqual(markedRead, { id, unread: false });
+        assert.match(readIn ?? "", /^\d+$/u);
         assert.equal(yield* unread(), false);
-        assert.deepEqual(
-          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("DELETE")),
-          { id, unread: true },
+        const { txid: unreadIn, ...markedUnread } = readAnswer(
+          inboxReadStateSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* mark("DELETE"),
         );
+        assert.deepEqual(markedUnread, { id, unread: true });
+        assert.match(unreadIn ?? "", /^\d+$/u);
         assert.equal(yield* unread(), true);
 
         assert.deepEqual(
@@ -6869,14 +6934,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* all({ workspaceId: "" }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(
-          readAnswer(
-            inboxReadAllSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* all({ workspaceId: task.workspaceId }),
-          ),
-          { marked: 1 },
+        const marked = readAnswer(
+          inboxReadAllSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* all({ workspaceId: task.workspaceId }),
         );
+        assert.equal(marked.marked, 1);
+        assert.match(marked.txid ?? "", /^\d+$/u);
         assert.equal(yield* unread(), false);
         assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
           marked: 0,
@@ -11141,10 +11205,11 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const asked = yield* chat.agentAsks("Ship it?");
         const { channelId, seq } = asked.message;
 
-        assert.deepEqual(yield* chat.wrote({ readTo: seq, channelId }), {
-          readSeq: floor,
-          reads: [{ channelId, readSeq: seq }],
-        });
+        const { txid, ...moved } = yield* chat.wrote({ readTo: seq, channelId });
+        assert.deepEqual(moved, { readSeq: floor, reads: [{ channelId, readSeq: seq }] });
+        assert.match(String(txid), /^\d+$/u, "the move answers the transaction it committed in");
+        // Read to where it already stands, nothing is written, so no transaction is answered.
+        assert.ok(!("txid" in (yield* chat.wrote({ readTo: seq, channelId }))));
         const read = yield* chat.read;
         assert.equal(read.readSeq, floor, "the cursor everywhere stays where it was");
         assert.deepEqual(read.reads, [{ channelId, readSeq: seq }]);

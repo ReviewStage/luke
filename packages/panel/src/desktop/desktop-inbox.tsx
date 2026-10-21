@@ -97,7 +97,8 @@ import { taskCardOf } from "./task-card.js";
  * workspace's members (`member-directory.tsx`). The chosen item's box
  * mentions what its repository and workspace hold (`answerPlace`), and
  * its skills are read through its holder and drawn as chips that open
- * their `SKILL.md` on GitHub.
+ * their `SKILL.md` in the panel beside it, as a file the item names opens,
+ * or on GitHub where the item has no plan whose panel could open it.
  *
  * Its items are read and listed by `use-inbox-listing.ts`. While the account
  * has the inbox-first sidebar on, the shell reads them once and hands the
@@ -181,6 +182,8 @@ function InboxShown({
     steps,
     chosen,
     filteredOut,
+    search,
+    searched,
     missing,
     reading,
     choose,
@@ -364,6 +367,7 @@ function InboxShown({
                         unread: anyUnread(standing),
                         onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
                       },
+                      search,
                     }}
                     models={named.models}
                     readerId={tasks.me}
@@ -377,6 +381,7 @@ function InboxShown({
                         counts={counts}
                         onList={columns.onList}
                         onRetry={onRetry}
+                        searched={searched}
                       />
                     }
                     onChoose={open}
@@ -407,8 +412,8 @@ function InboxShown({
                             : { label: BACK_TO_INBOX, onClick: columns.onBack }
                         }
                       />
-                    ) : reading || filteredOut ? null : (
-                      // Note that the list says what the filter left out, so the pane beside it stands bare.
+                    ) : reading || filteredOut || searched !== undefined ? null : (
+                      // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
                       <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
                     )}
                   </section>
@@ -417,13 +422,13 @@ function InboxShown({
                     <SkillFiles
                       source={agents.readSkills}
                       onOpen={(skill) => {
-                        // Note that a skill's file opens on GitHub, as off any plan's page, since the panel beside the Inbox opens only what the item names.
+                        // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
                         if (place === undefined) return;
                         const url = encodeMention(
                           { kind: MENTION_KIND.FILE, path: skill.path },
                           place,
                         );
-                        appPlatform().openGitHub(url);
+                        if (!openHere(url)) appPlatform().openGitHub(url);
                       }}
                     >
                       {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}

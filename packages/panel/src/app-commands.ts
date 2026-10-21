@@ -23,6 +23,7 @@ import {
   type KeyedCommand,
   shortcutEditsText,
   shortcutLayered,
+  shortcutSwitching,
 } from "@luke/settings/shortcuts";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
@@ -36,20 +37,23 @@ const offers = new Map<AppCommand, CommandRun[]>();
 const HELD_UNDER_OVERLAY: ReadonlySet<AppCommand> = new Set([
   APP_COMMAND.BACK,
   APP_COMMAND.FORWARD,
+  APP_COMMAND.NEXT_RECENT_TAB,
+  APP_COMMAND.PREVIOUS_RECENT_TAB,
 ]);
 
 /** How many overlays holding the keyboard stand now that are no dialog: the command palette, while open. */
 let overlaysStanding = 0;
 
 /** Whether an overlay holds the keyboard now: a dialog's card, which every dialog marks modal, or an overlay held by {@link useOverlayHold}. */
-function overlayStands(): boolean {
+export function overlayHoldsKeyboard(): boolean {
   return overlaysStanding > 0 || document.querySelector('[aria-modal="true"]') !== null;
 }
 
-/** The commands the keymap answers: every one but those whose key is the window's layered Escape. */
-const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter(
-  (command) => !shortcutLayered(APP_SHORTCUTS[command].chord),
-);
+/** The commands the keymap answers: every one but those whose key is the window's layered Escape, and the tab switcher's ⌃Tab, which it holds itself. */
+const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter((command) => {
+  const { chord } = APP_SHORTCUTS[command];
+  return !shortcutLayered(chord) && !shortcutSwitching(chord);
+});
 
 /** Whether the press landed in something taking typing, which keeps the keys it edits with. */
 function typingInto(target: EventTarget | null): boolean {
@@ -139,7 +143,7 @@ export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     return appPlatform().onMenuCommand((command) => {
-      if (HELD_UNDER_OVERLAY.has(command) && overlayStands()) return;
+      if (HELD_UNDER_OVERLAY.has(command) && overlayHoldsKeyboard()) return;
       runAppCommand(command);
     });
   }, [enabled]);

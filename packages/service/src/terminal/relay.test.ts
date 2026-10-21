@@ -9,6 +9,7 @@ import {
 } from "@luke/features/terminal-wire";
 import {
   type Cause,
+  Clock,
   Deferred,
   Duration,
   Effect,
@@ -19,6 +20,7 @@ import {
   Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
+import { CODER } from "../agents/coder-host/bounds.js";
 import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
 import {
   type RelayAgent,
@@ -97,7 +99,16 @@ function world(options: {
   let credentialAt: number | undefined;
   const policies: string[] = [];
   const withdrawn: string[] = [];
-  const asked = { attached: 0, resumed: 0, tokens: 0, released: 0, policies, withdrawn };
+  const keptAlive: { readonly sessionId: string; readonly at: number }[] = [];
+  const asked = {
+    attached: 0,
+    resumed: 0,
+    tokens: 0,
+    released: 0,
+    policies,
+    withdrawn,
+    keptAlive,
+  };
   const sandbox: AgentSandboxService = {
     terminals: () => Effect.die("the relay lists nothing"),
     start: () => Effect.die("the relay starts nothing"),
@@ -163,6 +174,10 @@ function world(options: {
         asked.released += 1;
         if (credentialAt === claimedAt.getTime()) credentialAt = undefined;
       }),
+    keepAlive: (sessionId) =>
+      Effect.flatMap(Clock.currentTimeMillis, (at) =>
+        Effect.sync(() => void keptAlive.push({ sessionId, at })),
+      ),
   };
   return { deps, asked, heldUntil: () => heldUntil };
 }
@@ -314,6 +329,48 @@ it.effect("the shell's exit reaches the desktop as exited, and ends the connecti
 
     assert.deepEqual(texts(device.sent).at(-1), { type: TERMINAL_RELAY_FRAME.EXITED, code: 3 });
     assert.deepEqual(device.closed, [TERMINAL_RELAY_CLOSE.EXITED]);
+  }),
+);
+
+it.effect(
+  "a connected terminal keeps the agent's sandbox alive from its attach, every keep-alive interval while someone types, and no longer once it closes",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const device = yield* scriptedSocket;
+      const typing = world({ pty });
+      const every = Duration.toMillis(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(device.socket, ASK, typing.deps)),
+      );
+      yield* Effect.yieldNow;
+      // Typing every four minutes, inside the idle bound, for two keep-alive intervals.
+      for (let typed = 0; typed < 2 * every; typed += Duration.toMillis(Duration.minutes(4))) {
+        yield* TestClock.adjust(Duration.minutes(4));
+        yield* device.push({ bytes: encode("x") });
+        yield* Effect.yieldNow;
+      }
+      yield* device.leave;
+      yield* Fiber.join(relay);
+      yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+
+      assert.deepEqual(
+        typing.asked.keptAlive,
+        [0, every, 2 * every].map((at) => ({ sessionId: "wrun_1", at })),
+      );
+    }),
+);
+
+it.effect("a stopped sandbox is never kept alive by a terminal", () =>
+  Effect.gen(function* () {
+    const pty = yield* scriptedSocket;
+    const device = yield* scriptedSocket;
+    const stopped = world({ sandbox: SANDBOX_STATE.STOPPED, pty });
+
+    yield* Effect.scoped(relayTerminal(device.socket, ASK, stopped.deps));
+
+    assert.deepEqual(stopped.asked.keptAlive, []);
   }),
 );
 

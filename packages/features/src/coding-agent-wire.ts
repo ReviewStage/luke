@@ -758,11 +758,35 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 
 /** A started, stopped, or changed agent (POST, PATCH). */
-export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
+/**
+ * The id of the transaction a write on the agent committed in, as Postgres
+ * counts it, in decimal: present where a Start, a rename, an archive, or a
+ * pin changed a row, so the desktop following the task list waits for it to
+ * arrive before it confirms the write, as Neon's mutations guide says.
+ */
+const codingAgentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 
-/** An agent deleted for good (DELETE), as a task's delete answers. */
+export const codingAgentAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
+
+/**
+ * A message handed to an agent, as the service answers it: the agent as it
+ * then stands, and the transaction that wrote the message's row, where this
+ * send wrote one, which the host waits to see on the transcript's live
+ * subscription before it confirms the send. Absent from a send that wrote
+ * nothing, and from a service older than it.
+ */
+export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
 export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
   deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
 });
 
 /**
@@ -1619,7 +1643,7 @@ export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
  */
-const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+export const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
 });
@@ -1676,6 +1700,23 @@ const turnRecordFields = {
 const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
+
+/**
+ * What sent one of the developer's lines to a coding agent: a member, from
+ * the message box or an Inbox answer; Luke, from a call; an automation's
+ * run, on its creator's behalf; GitHub, telling the agent of a review, a
+ * comment, or a failed check on its pull request, by who caused it there;
+ * or another coding agent of the workspace, through its `message_agent` tool.
+ */
+export const MESSAGE_SENDER = {
+  MEMBER: "member",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+  GITHUB: "github",
+  AGENT: "agent",
+} as const;
+
+export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
 /** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const CODING_AGENT_SENDER = {

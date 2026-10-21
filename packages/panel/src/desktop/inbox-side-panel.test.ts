@@ -379,7 +379,15 @@ test("a click into a Browser tab's page beside the Inbox hands the panel the key
   act(() => main.focus?.({ browserId }));
   await settle();
   act(() =>
-    main.key?.({ browserId, key: "w", code: "KeyW", shift: false, alt: false, control: false }),
+    main.key?.({
+      browserId,
+      key: "w",
+      code: "KeyW",
+      meta: true,
+      shift: false,
+      alt: false,
+      control: false,
+    }),
   );
   await settle();
 

@@ -26,6 +26,7 @@ import {
   automationAnswerSchema,
   automationChangeRequestSchema,
   automationCreateRequestSchema,
+  automationDeletedAnswerSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunRequestSchema,
@@ -90,7 +91,7 @@ export const automationsContract = {
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: AUTOMATION_PATH }))
     .input(EffectSchema.Struct(pathId))
-    .output(EffectSchema.flip(EffectSchema.Struct({}))),
+    .output(EffectSchema.flip(automationDeletedAnswerSchema)),
   run: hostedProcedure
     .meta(bodyCap(RUN_BODY_BYTES))
     .meta(

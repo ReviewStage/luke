@@ -142,6 +142,8 @@ function shellProps(
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
       onLeaveVersionHistory: ignore,
     },
     sidebar: {
@@ -837,6 +839,8 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       canGoForward: false,
       onBack: ignore,
       onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
       onLeaveVersionHistory: ignore,
     },
     sidebar: {

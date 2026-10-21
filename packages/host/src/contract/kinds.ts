@@ -118,6 +118,8 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
   /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
   CODING_AGENTS_PART: "codingAgents.part",
+  /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
@@ -132,6 +134,8 @@ export const AGENT_ACT_KIND = {
    * is held back by, and what clears an agent's tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
+  /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
+  CODING_AGENTS_SEEN: "codingAgents.seen",
   CODING_AGENTS_PAGE: "codingAgents.page",
   /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
   CODING_AGENTS_CALLS: "codingAgents.calls",
@@ -524,6 +528,11 @@ export const WINDOW_SURFACE_ACT_KIND = {
   /** A picture put on the clipboard as a PNG, as a copy from Preview puts one. */
   WINDOW_COPY_IMAGE: "window.copyImage",
   WINDOW_SAVE_FILE: "window.saveFile",
+  /**
+   * A downscaled still of part of the asking panel, as ⌃Tab's card previews a
+   * tab it left: answered to that panel alone and kept nowhere else.
+   */
+  WINDOW_CAPTURE: "window.capture",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 

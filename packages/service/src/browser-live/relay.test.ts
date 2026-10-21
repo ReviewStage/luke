@@ -14,9 +14,10 @@ import {
   type BrowserLiveClientMessage,
 } from "@luke/features/browser-live-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { type Cause, Duration, Effect, Fiber, Option, Queue, Stream } from "effect";
+import { type Cause, Clock, Duration, Effect, Fiber, Option, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { agentBrowserOver } from "../agents/browser/agent-browser.js";
+import { CODER } from "../agents/coder-host/bounds.js";
 import type { RelayFrame } from "../terminal/relay.js";
 import {
   type FakeCdpCommand,
@@ -152,6 +153,7 @@ function world(
 ) {
   let row: ReachedBrowserTab | undefined = options.reached ?? reachedTab(undefined);
   const holds: number[] = [];
+  const keptAlive: { readonly sessionId: string; readonly at: number }[] = [];
   const handedBack: string[] = [];
   const setDriver = (driverUserId: string | null, heldUntil: Date | null) => {
     if (row !== undefined) row = { ...row, tab: { ...row.tab, driverUserId, heldUntil } };
@@ -186,10 +188,15 @@ function world(
         return true;
       }),
     hold: (_conversation, heldUntil) => Effect.sync(() => void holds.push(heldUntil.getTime())),
+    keepAlive: (sessionId) =>
+      Effect.flatMap(Clock.currentTimeMillis, (at) =>
+        Effect.sync(() => void keptAlive.push({ sessionId, at })),
+      ),
   };
   return {
     deps,
     holds,
+    keptAlive,
     handedBack,
     close: () => {
       row = undefined;
@@ -544,6 +551,36 @@ it.effect("a watched coding agent's sandbox is held, and moved on as the panel a
     yield* panel.leave;
     yield* Fiber.join(fiber);
   }),
+);
+
+it.effect(
+  "a watched coding agent's sandbox is kept alive once its browser is reached, every keep-alive interval while the panel acts, and no longer once it closes",
+  () =>
+    Effect.gen(function* () {
+      const coder = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(coder.browser);
+      const every = Duration.toMillis(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+      const { fiber } = yield* started(
+        coder.peer,
+        coder.commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      // The panel acting every four minutes, inside the idle bound, for two keep-alive intervals.
+      for (let acted = 0; acted < 2 * every; acted += Duration.toMillis(Duration.minutes(4))) {
+        yield* TestClock.adjust(Duration.minutes(4));
+        yield* panel.push(VIEWPORT);
+        yield* settle;
+      }
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+      yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+
+      assert.deepEqual(
+        store.keptAlive,
+        [0, every, 2 * every].map((at) => ({ sessionId: SESSION, at })),
+      );
+    }),
 );
 
 it.effect(
