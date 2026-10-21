@@ -543,7 +543,7 @@ function ClaudeTokenPanel({
             label="Claude setup-token"
             placeholder={
               plan === undefined
-                ? "Paste the token from claude setup-token"
+                ? 'Paste the token from "claude setup-token"'
                 : "Paste your Claude setup-token"
             }
             spellCheck={false}

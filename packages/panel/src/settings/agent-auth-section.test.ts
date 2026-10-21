@@ -359,7 +359,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
       'input[aria-label="Claude setup-token"]',
     ) ?? assert.fail("no token field");
   assert.equal(field.type, "password");
-  assert.equal(field.placeholder, "Paste the token from claude setup-token");
+  assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
   await pasteAndSave(field, TOKEN);
   assert.match(dialog.textContent ?? "", /That isn't a Claude setup-token\./u);
   assert.equal(field.value, TOKEN, "a refused paste stands as pasted");
