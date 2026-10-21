@@ -37,13 +37,7 @@ import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import {
-  INBOX_SCOPES,
-  InboxList,
-  InboxListSkeleton,
-  ItemMark,
-  ShowEmpty,
-} from "../tasks/inbox-list.js";
+import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
 import {
   firstChoice,
   INBOX_GROUPING,
@@ -386,7 +380,6 @@ function TaskInboxTab({
         head={{
           shown,
           show,
-          scopes: INBOX_SCOPES.TASK,
           view: undefined,
         }}
         models={tasks.agents.models}
@@ -440,11 +433,6 @@ function TaskInboxTab({
             code,
             onMark: marks.onMark,
             onClose: closeItem,
-            // An archived plan's items are read but not answered, the box giving way to Unarchive.
-            onUnarchive:
-              task.archivedAt === undefined
-                ? undefined
-                : () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE),
           }}
         />
       )}

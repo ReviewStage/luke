@@ -1,11 +1,6 @@
 import { AutomationDirectory } from "../automation-directory.js";
 import { INBOX_COLUMNS, useInboxRowPresses } from "../tasks/inbox-columns.js";
-import {
-  INBOX_LIST_PLACEMENT,
-  INBOX_SCOPES,
-  InboxList,
-  InboxListNote,
-} from "../tasks/inbox-list.js";
+import { INBOX_LIST_PLACEMENT, InboxList, InboxListNote } from "../tasks/inbox-list.js";
 import { anyUnread, type InboxListed, listedItems } from "../tasks/inbox-model.js";
 import { choiceOf, type InboxListing } from "../tasks/use-inbox-listing.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
@@ -54,9 +49,7 @@ export function SidebarInbox({
     search,
     searched,
     read,
-    archivedRead,
     taskless,
-    showArchived,
     onRetry,
     openAutomation,
   } = listing;
@@ -73,7 +66,6 @@ export function SidebarInbox({
         head={{
           shown,
           show: choices,
-          scopes: INBOX_SCOPES.WINDOW,
           view: { choices, folds },
           readAll: {
             unread: anyUnread(standing),
@@ -85,7 +77,7 @@ export function SidebarInbox({
         readerId={tasks.me}
         note={
           <InboxListNote
-            failed={showArchived ? archivedRead.failed : read.failed || taskless.failed}
+            failed={read.failed || taskless.failed}
             reading={reading}
             empty={listedItems(list).length === 0}
             alone={false}

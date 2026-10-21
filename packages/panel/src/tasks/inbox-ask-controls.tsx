@@ -698,17 +698,12 @@ export function hasControls(ask: InboxAsk): boolean {
  * The open question's controls as the draft reply's card's body, over its
  * foot, with no card, border, or head of their own, since the agent's
  * message says what it asks: an Enter on an option or in a field sends the
- * card. Where the
- * item is put away with its task, they stand in the agent's message
- * instead, as a card of their own whose controls take nothing.
+ * card.
  */
 export function DraftQuestion({
-  held,
   pane,
   children,
 }: {
-  /** Whether it stands in the agent's message as a card of its own, taking nothing, its item put away with its task. */
-  held: boolean;
   pane: React.RefObject<HTMLElement | null>;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -716,8 +711,7 @@ export function DraftQuestion({
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the card.
     <div
       className="inbox-draft-ask"
-      data-inbox-draft-ask={held ? undefined : ""}
-      data-held={held ? "" : undefined}
+      data-inbox-draft-ask=""
       onKeyDown={(event) => onResponseKey(pane, event)}
     >
       {children}

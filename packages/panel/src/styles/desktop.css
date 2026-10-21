@@ -3304,6 +3304,18 @@ ul.actor-stack {
   display: inline-flex;
 }
 
+/* An Inbox item's task's status, its mark alone at the time's size before
+   it (`inbox-list.tsx`'s `TaskStatusChip`), and in words at the end of its
+   card's first line, kept whole while the task's chip gives way. */
+.inbox-row-task-status {
+  display: inline-flex;
+}
+
+.inbox-card-task-status {
+  flex: none;
+  color: var(--luke-color-text-muted);
+}
+
 /* A task's card leads with where it stands (`task-card.tsx`): its key, its
    status, and its priority, each a small chip of its mark and its words,
    as the task page's head chips say them. */
@@ -3960,14 +3972,6 @@ ul.actor-stack {
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-4);
-}
-
-/* Put away with its task, the question stands in the agent's message as a
-   card of its own, as a settled ask's does. */
-.inbox-draft-ask[data-held] {
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-overlay);
 }
 
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back

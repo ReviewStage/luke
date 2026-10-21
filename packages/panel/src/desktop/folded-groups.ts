@@ -153,11 +153,10 @@ const storedEarlierTab = Schema.fromJsonString(
   Schema.NullOr(Schema.Literals([...Object.values(INBOX_SHOW), ...Object.values(EARLIER_SHOW)])),
 );
 
-/** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did, and Archived as To do, since it is never where an Inbox opens. */
+/** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did. */
 const SHOW_OF_KEPT = {
   [INBOX_SHOW.TO_DO]: INBOX_SHOW.TO_DO,
   [INBOX_SHOW.ALL]: INBOX_SHOW.ALL,
-  [INBOX_SHOW.ARCHIVED]: INBOX_SHOW.TO_DO,
   [EARLIER_SHOW.NEEDS_YOU]: INBOX_SHOW.TO_DO,
   [EARLIER_SHOW.UNREAD]: INBOX_SHOW.TO_DO,
   [EARLIER_SHOW.OPEN]: INBOX_SHOW.ALL,
@@ -378,18 +377,14 @@ function readSort(): InboxSort {
   return kept === EARLIER_SORT.WAITING ? INBOX_SORT.OLDEST : kept;
 }
 
-/**
- * An Inbox's scope, read from `key` (or `earlier`'s press) and kept there as
- * it is chosen. Note that Archived is never kept, because it is a look into
- * the archive rather than where the Inbox should open on what waits.
- */
+/** An Inbox's scope, read from `key` (or `earlier`'s press) and kept there as it is chosen. */
 function useKeptShow(key: string, earlier: string): InboxShowChoice {
   const [show, setShow] = useState<InboxShow>(() => readShow(key, earlier));
   return {
     show,
     onShow: (next) => {
       setShow(next);
-      if (next !== INBOX_SHOW.ARCHIVED) writeKept(key, storedShow, next);
+      writeKept(key, storedShow, next);
     },
   };
 }
