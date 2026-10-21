@@ -14,7 +14,8 @@ import { useOpenLink } from "./use-open-link.js";
  * Drawn for an agent on Codex, which its starter's ChatGPT plan alone pays
  * for. The words are `plan-label-model.ts`'s; the plan's status is read for
  * the starter alone, as the agent's status changes, since a turn's end is
- * what writes a new one. Manage usage opens ChatGPT's usage settings.
+ * what writes a new one, and as the window comes back to the front, as it
+ * does from a reconnect in Settings. Manage usage opens ChatGPT's usage settings.
  */
 
 /** The starter's keys, read again each time the agent's status moves; none for anyone else, outside the cohort, or before the read. */
@@ -26,7 +27,15 @@ function useStarterKeys(
   const inCohort = useNativeAgentsAccess();
   const reads = starter && inCohort;
   const [keys, setKeys] = useState<ProviderKeysAnswer | undefined>(undefined);
-  // Note that the status is a dependency for its change alone: a turn ending is what writes the plan's status.
+  const [returns, setReturns] = useState(0);
+  // A reconnect in Settings moves no agent's status, so the window coming back to the front reads the plan again too.
+  useEffect(() => {
+    if (!reads) return;
+    const back = () => setReturns((count) => count + 1);
+    window.addEventListener("focus", back);
+    return () => window.removeEventListener("focus", back);
+  }, [reads]);
+  // Note that the status and the returns are dependencies for their change alone: each may follow a new status.
   useEffect(() => {
     if (!reads) return;
     let live = true;
@@ -39,7 +48,7 @@ function useStarterKeys(
     return () => {
       live = false;
     };
-  }, [act, reads, status]);
+  }, [act, reads, status, returns]);
   return reads ? keys : undefined;
 }
 

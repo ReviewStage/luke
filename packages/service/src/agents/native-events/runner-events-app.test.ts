@@ -1004,7 +1004,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   /** The account's ChatGPT sign-in, kept as connecting keeps it: sealed, and not yet answered. */
-  const signedIn = (userId: string) =>
+  const signedIn = (userId: string, at = new Date(0)) =>
     saveProviderKey(
       userId,
       PROVIDER_KEY_PROVIDER.OPENAI,
@@ -1012,7 +1012,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-sign-in" },
       "ChatGPT",
       null,
-      new Date(0),
+      at,
     );
 
   /** The ChatGPT row as it stands: its status, and when a reached limit resets. */
@@ -1174,6 +1174,26 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a turn that opened before its starter connected ChatGPT again leaves the new sign-in as it was saved",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(agent.userId);
+        const refused = refusedLaunch(agent.lineId, 0, {
+          message: 'unexpected status 401: {"error":{"code":"subscription_sharing_invalid_user"}}',
+          codexErrorInfo: "unauthorized",
+          additionalDetails: null,
+        });
+        yield* post(agent.bearer, refused.slice(0, 2));
+        yield* signedIn(agent.userId, new Date(60_000));
+        yield* post(agent.bearer, refused.slice(2));
+
+        assert.deepEqual(yield* planRow(agent.userId), [PROVIDER_KEY_STATUS.UNVERIFIED, null]);
       }),
   );
 });

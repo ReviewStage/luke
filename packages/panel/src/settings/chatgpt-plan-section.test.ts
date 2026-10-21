@@ -290,3 +290,29 @@ test("a connected sign-in's switch stands on, and turning it off sends the chang
   );
   assert.equal(planSwitch(group)?.getAttribute("aria-checked"), "false");
 });
+
+test("a sign-in out of usage stays connected, says its reset, and keeps its switch; one OpenAI said isn't eligible asks to connect another", async () => {
+  held = {
+    keys: [],
+    subscriptions: [
+      {
+        ...CONNECTED,
+        status: PROVIDER_KEY_STATUS.LIMIT_REACHED,
+        limitResetsAt: Date.UTC(2026, 9, 21, 19, 30),
+      },
+    ],
+  };
+  const limited = codexGroup(await mount()) ?? assert.fail("no Codex group");
+  assert.match(limited.textContent ?? "", /Usage limit reached · Resets /u);
+  assert.ok(button(limited, "Disconnect"));
+  assert.ok(planSwitch(limited), "the default still stands");
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  held = { keys: [], subscriptions: [{ ...CONNECTED, status: PROVIDER_KEY_STATUS.INELIGIBLE }] };
+  const ineligible = codexGroup(await mount()) ?? assert.fail("no Codex group");
+  assert.match(ineligible.textContent ?? "", /isn't eligible for Codex/u);
+  assert.ok(button(ineligible, "Continue with ChatGPT"));
+  assert.equal(planSwitch(ineligible), null);
+});

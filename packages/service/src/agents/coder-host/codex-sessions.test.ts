@@ -515,6 +515,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           PROVIDER_KEY_STATUS.LIMIT_REACHED,
           new Date(now.getTime() + 30 * 60_000),
           now,
+          now,
         );
         const limited = runnerSandboxApi();
         const limitedSessions = yield* sessionsFor(userId).pipe(Effect.provide(services(limited)));
@@ -540,6 +541,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           PROVIDER_KEY_KIND.CHATGPT_OAUTH,
           PROVIDER_KEY_STATUS.INELIGIBLE,
           undefined,
+          yield* DateTime.nowAsDate,
           yield* DateTime.nowAsDate,
         );
         const ineligible = runnerSandboxApi();

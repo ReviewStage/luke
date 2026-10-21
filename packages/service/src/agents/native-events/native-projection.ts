@@ -79,6 +79,8 @@ const UsageSchema = Schema.Struct({
 const TurnSchema = Schema.Struct({
   /** The store's id for the turn. */
   id: Schema.String,
+  /** When the turn opened, in epoch milliseconds; absent on a turn kept from before it was recorded. */
+  openedAt: Schema.optionalKey(Schema.Number),
   /** The number of the last event told the writer for the turn, which numbers its next. */
   told: Schema.Number,
   /** How many steps the turn has opened. */
@@ -164,6 +166,8 @@ export type NativeWrite =
       readonly status: PlanStatus;
       /** When a reached limit resets, in epoch milliseconds, where the harness said. */
       readonly resetsAt?: number;
+      /** When the turn that found it opened, so a credential saved since is not judged by it. */
+      readonly turnOpenedAt?: number;
     };
 
 /** What one event is projected under: its conversation and number, the instant, the model the agent runs on, and which tools the record holds. */
@@ -235,7 +239,7 @@ class Fold {
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
     const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
     const opened = this.#tell(
-      { id, told: 0, steps: 0, calls: {} },
+      { id, told: 0, steps: 0, calls: {}, openedAt: this.#context.now },
       { kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
     );
     this.#setTurn(opened);
@@ -461,10 +465,12 @@ class Fold {
         // Note that a reached limit resets when the limit the harness last reported says.
         const resetsAt =
           moment.status === PLAN_STATUS.LIMIT_REACHED ? this.state.rateLimitResetsAt : undefined;
+        const turnOpenedAt = this.state.turn?.openedAt;
         this.writes.push({
           kind: NATIVE_WRITE.PLAN_STATUS,
           status: moment.status,
           ...(resetsAt !== undefined ? { resetsAt } : undefined),
+          ...(turnOpenedAt !== undefined ? { turnOpenedAt } : undefined),
         });
         return;
       }

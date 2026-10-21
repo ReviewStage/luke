@@ -266,6 +266,7 @@ function landWrite(
         row.kind,
         write.status,
         write.resetsAt === undefined ? undefined : new Date(write.resetsAt),
+        new Date(write.turnOpenedAt ?? now),
         new Date(now),
       );
     }

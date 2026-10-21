@@ -8,7 +8,7 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, lte, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
@@ -303,6 +303,7 @@ const updatePlanStatus = SqlSchema.void({
     ...KindKeySchema.fields,
     status: PlanStatusSchema,
     limitResetsAt: Schema.NullOr(Schema.Date),
+    savedBy: Schema.Date,
     now: Schema.Date,
   }),
   execute: (write) =>
@@ -316,6 +317,7 @@ const updatePlanStatus = SqlSchema.void({
             eq(accountProviderKey.provider, write.provider),
             eq(accountProviderKey.kind, write.kind),
             ne(accountProviderKey.status, PROVIDER_KEY_STATUS.UNREADABLE),
+            lte(accountProviderKey.createdAt, write.savedBy),
             ...(write.status === PROVIDER_KEY_STATUS.VERIFIED
               ? [
                   ne(accountProviderKey.status, PROVIDER_KEY_STATUS.VERIFIED),
@@ -525,6 +527,8 @@ export type PlanStatus = typeof PlanStatusSchema.Type;
 /**
  * Writes how the provider answered a coding agent's turn on the account's
  * plan of this kind, with when its reached limit resets where it said.
+ * `savedBy` is when the turn opened: a credential saved after it, as a
+ * reconnect saves one, ran none of it and is not judged by it.
  * Note that a row the service cannot read keeps saying so, since only a new
  * credential mends it; that a turn that ran is no word against a renewal
  * that found the sign-in ended, so verified never lifts invalid; and that a
@@ -537,6 +541,7 @@ export function setPlanStatus(
   kind: ProviderKeyKind,
   status: PlanStatus,
   limitResetsAt: Date | undefined,
+  savedBy: Date,
   now: Date,
 ): TaskStoreEffect<void> {
   return updatePlanStatus({
@@ -545,6 +550,7 @@ export function setPlanStatus(
     kind,
     status,
     limitResetsAt: status === PROVIDER_KEY_STATUS.LIMIT_REACHED ? (limitResetsAt ?? null) : null,
+    savedBy,
     now,
   });
 }

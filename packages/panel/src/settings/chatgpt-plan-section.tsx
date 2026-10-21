@@ -29,7 +29,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { HarnessMark } from "../harness-marks.js";
-import { dayText } from "../tasks/task-time.js";
+import { dayAndTimeText, dayText } from "../tasks/task-time.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
@@ -62,6 +62,9 @@ const WORDS = {
   CONNECTED: "Connected",
   SIGNED_OUT: "ChatGPT ended this sign-in. Continue with ChatGPT to connect again.",
   UNREADABLE: "This sign-in can no longer be read. Continue with ChatGPT to connect again.",
+  INELIGIBLE:
+    "OpenAI says this ChatGPT account isn't eligible for Codex. Continue with ChatGPT to use another.",
+  LIMIT_REACHED: "Usage limit reached",
   CONTINUE: "Continue with ChatGPT",
   WAITING: "Waiting for ChatGPT…",
   CANCEL: "Cancel",
@@ -110,17 +113,39 @@ function chatGptOf(answer: ProviderKeysAnswer): SubscriptionKeySummary | undefin
   return answer.subscriptions?.find((one) => one.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH);
 }
 
-/** Whether a stored sign-in still stands for the plan: kept, or answered by OpenAI. */
+/** Whether a stored sign-in still stands for the plan: kept, answered by OpenAI, or only out of usage until its limit resets. */
 function standing(stored: SubscriptionKeySummary): boolean {
   return (
     stored.status === PROVIDER_KEY_STATUS.UNVERIFIED ||
-    stored.status === PROVIDER_KEY_STATUS.VERIFIED
+    stored.status === PROVIDER_KEY_STATUS.VERIFIED ||
+    stored.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
   );
+}
+
+/** What a sign-in that no longer stands says on its row. */
+function endedWords(stored: SubscriptionKeySummary): string {
+  switch (stored.status) {
+    case PROVIDER_KEY_STATUS.UNREADABLE:
+      return WORDS.UNREADABLE;
+    case PROVIDER_KEY_STATUS.INELIGIBLE:
+      return WORDS.INELIGIBLE;
+    default:
+      return WORDS.SIGNED_OUT;
+  }
 }
 
 /** What the row says under its label, by where the sign-in stands. */
 function rowDescription(stored: SubscriptionKeySummary | undefined): React.ReactNode {
   if (stored === undefined) return WORDS.OFFER;
+  if (stored.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
+    return (
+      <span className="settings-state" data-state="attention" role="status">
+        {stored.limitResetsAt === undefined
+          ? WORDS.LIMIT_REACHED
+          : `${WORDS.LIMIT_REACHED} · Resets ${dayAndTimeText(stored.limitResetsAt)}`}
+      </span>
+    );
+  }
   if (standing(stored)) {
     return (
       <>
@@ -133,7 +158,7 @@ function rowDescription(stored: SubscriptionKeySummary | undefined): React.React
   }
   return (
     <span className="settings-state" data-state="attention" role="alert">
-      {stored.status === PROVIDER_KEY_STATUS.UNREADABLE ? WORDS.UNREADABLE : WORDS.SIGNED_OUT}
+      {endedWords(stored)}
     </span>
   );
 }
