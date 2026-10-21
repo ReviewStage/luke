@@ -63,6 +63,7 @@ import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentModelControl } from "./use-agent-model.js";
+import { DICTATION_PHASE } from "./use-dictation.js";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -572,6 +573,15 @@ export function AgentComposer({
     side: listSide,
   });
   const { dictation, dictating } = pickers;
+  // Note that a call taking the microphone ends a dictation under way, keeping
+  // the words already said, so the row it hands the call to is never hidden
+  // under the dictation's strip.
+  const { phase, startedAt, finish, cancel } = dictation;
+  useEffect(() => {
+    if (dictates || phase !== DICTATION_PHASE.RECORDING) return;
+    if (startedAt === undefined) cancel();
+    else finish();
+  }, [dictates, phase, startedAt, finish, cancel]);
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
 
@@ -728,7 +738,7 @@ export function AgentComposer({
           quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
         />
         <PromptInputFooter ref={foot}>
-          {dictating ? (
+          {dictating && dictates ? (
             <DictationStrip dictation={dictation} />
           ) : (
             <>

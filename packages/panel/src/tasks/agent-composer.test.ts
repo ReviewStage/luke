@@ -83,7 +83,14 @@ async function settle(): Promise<void> {
 }
 
 /** The box on the composer's own control, its sends answered by `sender`. */
-function Box({ sender }: { sender: MessageSender }): ReactNode {
+function Box({
+  sender,
+  call,
+}: {
+  sender: MessageSender;
+  /** What stands in Call's place, and whether a call holds the microphone, as an agent's tab hands them. */
+  call?: { controls: ReactNode; onCall: boolean };
+}): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
     taskId: "plan-1",
@@ -91,7 +98,13 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: reading });
+  return createElement(AgentComposer, {
+    ...QUIET_COMPOSER,
+    composer,
+    skills: reading,
+    call: call?.controls,
+    dictates: !(call?.onCall ?? false),
+  });
 }
 
 /** The box mounted, every message it sends written down and answered by `answer`. */
@@ -420,6 +433,53 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   assert.deepEqual(box.sent, [], "the Enter finished the dictation rather than sending");
   typeInComposer(box.container, " again");
   assert.equal(box.shown(), "Fix the bug in again this later", "the caret stands after the words");
+});
+
+test("a call that begins mid-dictation ends it, keeping the words said, and the row holds the call rather than the dictation's strip", async () => {
+  stubMicrophone();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: () => Promise.resolve({ text: "the invite page" }),
+  });
+  const sender: MessageSender = () => new Promise(ignore);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = (onCall: boolean) =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(Box, {
+          sender,
+          call: {
+            onCall,
+            controls: createElement("button", { type: "button", "aria-label": "End call" }),
+          },
+        }),
+      ),
+    );
+  await act(async () => draw(false));
+  await settle();
+  const dictate = container.querySelector<HTMLButtonElement>('button[aria-label="Dictate"]');
+  assert.ok(dictate, "the microphone is offered off a call");
+  act(() => dictate.click());
+  await settle();
+  assert.ok(container.querySelector(".dictation-strip"), "the dictation stands");
+
+  await act(async () => draw(true));
+  await settle();
+  assert.equal(container.querySelector(".dictation-strip"), null);
+  assert.ok(container.querySelector('button[aria-label="End call"]'), "the call's controls stand");
+  assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
+  assert.equal(composerEditor(container).textContent, "the invite page");
 });
 
 /** The box under the window's repository doors, its one message refused for a repository its owner's other workspace reaches, and every later one taken. */

@@ -97,3 +97,35 @@ test("the picture is drawn whole, and a blurred copy fills the tile under it", (
     );
   }
 });
+
+/** An agent's tab's call row: its captions, then its tile, as `agent-call.tsx` draws them. */
+function callRow() {
+  laid = layContainersAt({});
+  document.documentElement.dataset.lukeProfile = "desktop";
+  const row = document.body
+    .appendChild(document.createElement("div"))
+    .appendChild(document.createElement("div"));
+  row.parentElement?.classList.add("agent-call-foot");
+  row.className = "agent-call-float";
+  const caption = row.appendChild(document.createElement("div"));
+  caption.className = "voice-caption";
+  const { tile } = liveTile(row);
+  return { row, caption, tile };
+}
+
+test("an agent's tab's tile is small, square, and as wide as the developer left it, never wider than its row", () => {
+  const { tile } = callRow();
+  const drawn = getComputedStyle(tile);
+  assert.equal(drawn.aspectRatio, "1 / 1");
+  assert.equal(drawn.width, "min(var(--call-tile-width), 100%)");
+  assert.equal(drawn.maxHeight, "none");
+});
+
+test("an agent's tab's captions stand beside its tile while the row has room for a readable line, and wrap onto a line of their own over it where it has not", () => {
+  const { row, caption } = callRow();
+  assert.equal(getComputedStyle(row).flexWrap, "wrap");
+  const drawn = getComputedStyle(caption);
+  assert.equal(drawn.position, "relative", "in the row's flow, not over the window");
+  assert.equal(drawn.flexBasis, "var(--caption-width-min)");
+  assert.equal(drawn.maxWidth, "var(--caption-width-max)");
+});

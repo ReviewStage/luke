@@ -127,6 +127,8 @@ body,
      width they are drawn at over it: no wider than the call bar draws them. */
   --work-left: var(--sidebar-width);
   --caption-width-max: 560px;
+  /* The narrowest the captions stand beside a call's video tile before they take a line of their own over it. */
+  --caption-width-min: 240px;
   --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   /* The stage stands over what is seen of the window: from where a phone
@@ -2292,6 +2294,7 @@ ul.actor-stack {
   bottom: 0;
   left: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: flex-end;
   gap: var(--luke-space-12);
@@ -2300,14 +2303,19 @@ ul.actor-stack {
 }
 
 /* The captions in the row rather than over the window: a box in its flow,
-   centred in the room the tile leaves, rising into place as they do
-   wherever they float. */
+   rising into place as they do wherever they float, and filling the room the
+   tile leaves, up to their own measure and centred there. Where that room is
+   narrower than a readable line, a narrow tab's, they wrap onto a line of
+   their own over the tile, spanning the tab. */
 .agent-call-float > .voice-caption {
   position: relative;
   bottom: auto;
   left: auto;
-  flex: 0 1 var(--caption-width-max);
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: var(--caption-width-min);
   min-width: 0;
+  max-width: var(--caption-width-max);
   margin-inline: auto;
   transform: translateY(var(--luke-space-6));
 }
