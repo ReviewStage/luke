@@ -56,6 +56,7 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
@@ -178,6 +179,16 @@ export function relayChildEvent(
   state: Parameters<CoderHost["relayChild"]>[2],
 ): Promise<void> {
   return edge.relayChildEvent(event, session, state);
+}
+
+/**
+ * The agent's sandbox kept alive for a step of its worker, which reads in it
+ * (`@luke/service/agents/session-sandboxes`'s `keepSessionSandboxAlive`), on
+ * the edge's runner; a keep-alive that fails is logged there and never
+ * reaches the worker.
+ */
+export function keepAgentSandboxAlive(agentSessionId: string): Promise<void> {
+  return runAgent(keepSessionSandboxAlive(agentSessionId));
 }
 
 /**

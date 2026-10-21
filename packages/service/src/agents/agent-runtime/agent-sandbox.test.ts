@@ -6,6 +6,8 @@ import { stampedEveEvent } from "../../testing/eve-events.js";
 import { CODER } from "../coder-host/bounds.js";
 import { AGENT_ROLE } from "./role.js";
 import {
+  keepsAliveAt,
+  keepsSandboxAlive,
   lapsesCredential,
   renewsCredential,
   type SandboxRecord,
@@ -17,7 +19,8 @@ import {
  * The coding agent's sandbox lifecycle as its root's store hook reads it:
  * the sandbox stopped at each turn's end unless a developer's terminal holds
  * it, and its credential renewed as it ages, or, where it is a member's own
- * token, taken off as the sandbox stops and set again at the next turn.
+ * token, taken off as the sandbox stops and set again at the next turn;
+ * and its steps keep it alive past its short timeout every few minutes.
  */
 
 const OPENED_AT = Date.UTC(2026, 9, 13, 9);
@@ -113,4 +116,24 @@ test("a sandbox opened on a shallow checkout holds no credential: none is renewe
   for (const end of TURN_ENDS) {
     assert.equal(lapsesCredential(AGENT_ROLE.CODER, end, deepenedOnToken), true, end.type);
   }
+});
+
+const KEEP_ALIVE_MS = Duration.toMillis(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+
+test("a coding agent's step keeps its opened sandbox alive at the first step, then once a keep-alive interval after the last", () => {
+  assert.equal(keepsSandboxAlive(AGENT_ROLE.CODER, STEP_STARTED, OPENED, OPENED_AT), true);
+  assert.equal(keepsSandboxAlive(AGENT_ROLE.CODER, STEP_STARTED, NEVER_OPENED, OPENED_AT), false);
+  assert.equal(keepsSandboxAlive(AGENT_ROLE.CODER, TURN_COMPLETED, OPENED, OPENED_AT), false);
+  const kept: SandboxRecord = { ...OPENED, keptAliveAt: OPENED_AT };
+  const next = OPENED_AT + KEEP_ALIVE_MS;
+  assert.equal(keepsSandboxAlive(AGENT_ROLE.CODER, STEP_STARTED, kept, next - 1), false);
+  assert.equal(keepsSandboxAlive(AGENT_ROLE.CODER, STEP_STARTED, kept, next), true);
+});
+
+test("a worker's role keeps no sandbox of its own alive, and its steps keep its parent's on the same interval", () => {
+  assert.equal(keepsSandboxAlive(AGENT_ROLE.CODER_WORKER, STEP_STARTED, OPENED, OPENED_AT), false);
+  assert.equal(keepsAliveAt(STEP_STARTED, undefined, OPENED_AT), true);
+  assert.equal(keepsAliveAt(STEP_STARTED, OPENED_AT, OPENED_AT + KEEP_ALIVE_MS - 1), false);
+  assert.equal(keepsAliveAt(STEP_STARTED, OPENED_AT, OPENED_AT + KEEP_ALIVE_MS), true);
+  assert.equal(keepsAliveAt(TURN_COMPLETED, undefined, OPENED_AT), false);
 });
