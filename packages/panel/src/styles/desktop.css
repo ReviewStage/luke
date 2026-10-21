@@ -5624,22 +5624,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   max-height: 320px;
 }
 
-/* The list an `@` or `#` opens stands over the card at its left. */
-.chat-mention-menu {
-  position: absolute;
-  /* It stands over the box, so the searchable menu's own top is let go. */
-  top: auto;
-  bottom: calc(100% + var(--luke-space-4));
-  left: 0;
-  width: 320px;
-  /* Never past the window's edges, nor, on a phone, past its card's, so one
-     a thread's box opens, inset by the thread, stays on screen. */
-  max-width: calc(100vw - 2 * var(--luke-space-12));
-  z-index: 10;
-}
-
-.desktop-shell[data-room="narrow"] .chat-mention-menu {
-  max-width: 100%;
+/* The line under the box where its words name more members than a post
+   tells: a live region that stands empty, and so takes no room, until then. */
+.chat-composer-crowded:not(:empty) {
+  margin: var(--luke-space-6) 0 0;
 }
 
 /* A chat notice in an agent's transcript: a card across the column washed
@@ -5769,10 +5757,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* Home has no toolbar, so its bar stands at the page's top, clear of the
    greeting and its New task. */
-.page-find:has(> .home) > .find-bar {
-  top: var(--luke-space-8);
-}
-
 /* The bar floats as a menu does, on the menu's ground, edge, and entrance,
    and claims its presses back from any drag strip beneath it. */
 .find-bar {
@@ -7825,10 +7809,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* The home page (`desktop-home.tsx`), a `DetailPage`: its sections a
-   little apart, their rows the Inbox's and Recent's own, each with its
-   context, the plan or the repository, in the faint ink between its name
-   and its time. */
+/* The page with no task open (`desktop-tasks.tsx`), which fills the column
+   for a new account's welcome (`desktop-welcome.tsx`). */
 .home {
   display: flex;
   min-height: 0;
@@ -7836,28 +7818,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-/* The box the arrow keys find Home's rows in lays nothing out, so the page
-   fills the room as it would alone. */
-.home-rows {
-  display: contents;
-}
-
-/* New task's composer (`new-task-composer.tsx`) at the top of the page's
-   content, its head row and card as the dialog draws them, as wide as the
-   content, the sections a little under it. */
+/* New task's composer (`new-task-composer.tsx`) under the welcome's line,
+   its head row and card as the dialog draws them. */
 .home-composer {
   margin-bottom: var(--luke-space-32);
-}
-
-/* Signed out, the page draws no composer, and its box takes no room. */
-.home-composer:empty {
-  display: none;
-}
-
-/* Where the page or the welcome lays the composer's one box
-   (`desktop-home.tsx`'s `useComposerSlot`), which lays nothing out itself. */
-.home-composer-slot {
-  display: contents;
 }
 
 .home-section {
@@ -7870,27 +7834,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-top: var(--luke-space-32);
 }
 
-.home-section-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-space-6);
-  margin: 0 0 var(--luke-space-2);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
 /* A section's note, nothing waiting or a read refused, on the title's edge. */
 .home-note {
   margin: var(--luke-space-4) 0;
-}
-
-/* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
-.home-section-count {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-medium);
 }
 
 .home-row .sidebar-task-line {

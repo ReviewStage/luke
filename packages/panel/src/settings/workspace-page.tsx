@@ -516,7 +516,7 @@ function useOwnAutomations(workspaceId: string) {
  * naming what stays and what stops, the automations the reader made among
  * them by name where the service says whose they are. A leave the service
  * carried says so in the window's toast as the window turns to the personal
- * workspace's Home; a refusal, offline among them, is said in the dialog,
+ * workspace, where it rests with no task open; a refusal, offline among them, is said in the dialog,
  * which stays open to try again.
  */
 function MemberLeave({
@@ -1331,7 +1331,7 @@ export interface WorkspaceSettingsControl {
   workspaces: readonly Workspace[];
   /** The workspace the sidebar lists, which the page shows; absent before the workspaces are read. */
   workspaceId: string | undefined;
-  /** Lands the window on the account's own workspace's Home once a workspace is left. */
+  /** Lands the window on the account's own workspace, at rest with no task open, once a workspace is left. */
   onLeft: (workspaceId: string) => void;
   /** Whether the read the workspaces arrive with failed, so none will arrive until it is asked again. */
   listFailed: boolean;

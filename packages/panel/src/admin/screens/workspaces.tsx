@@ -4,7 +4,7 @@ import type {
   AdminWorkspaceList,
   AdminWorkspaceRow,
 } from "@luke/features/admin-answer-wire";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
+import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
@@ -45,7 +45,7 @@ import {
   searchTerm,
   workspacesReadQuery,
 } from "../routing.js";
-import { ADMIN_READ, adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 /**
  * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,

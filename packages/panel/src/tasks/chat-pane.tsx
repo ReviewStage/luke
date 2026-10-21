@@ -13,6 +13,7 @@ import {
 } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
+import type { TaskSummary } from "@luke/features/task-wire";
 import {
   EmptyState,
   TEXT_BUTTON_TONE,
@@ -23,7 +24,6 @@ import {
   TextButton,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
-import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
@@ -34,7 +34,6 @@ import {
   channelLabel,
   channelThreads,
   chatKeywords,
-  chatTargets,
   chatWho,
   continuesRun,
   type ForYouEntry,
@@ -45,6 +44,7 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -61,14 +61,16 @@ import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
-import { ChatComposer } from "./chat-composer.js";
+import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
+import { useChatMentions } from "./chat-mention-source.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { FileRef } from "./file-ref.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { LoneLinkCards } from "./lone-link-card.js";
 import { RelativeTime } from "./relative-time.js";
-import { SentWords } from "./skill-chip.js";
+import { SentWords, SkillFiles } from "./skill-chip.js";
+import type { SkillSource } from "./skill-picker.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -109,6 +111,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * panel, so the masking keeps all of it out of a session recording, and
  * the stream is out of it whole besides (`ph-no-capture`).
  */
+
+/** The tasks of a window that lists none. */
+const NO_TASKS: readonly TaskSummary[] = [];
 
 /** What For you says with nothing waiting. */
 const NOTHING_WAITS = "Nothing waits on you.";
@@ -262,6 +267,10 @@ export interface ChatTaskDoors {
   readonly code: InboxCodeDoors;
   /** None where the page drawing the chat hands the task's mentions itself, as the plan's Chat tab stands on the task's page. */
   readonly mentions?: TaskMentionsValue | undefined;
+  /** Where a person's `/skill` is read from and what opens its file, so it draws as its chip; none where the page hands its own, or the task names no repository. */
+  readonly skills?:
+    | { readonly source: SkillSource; readonly onOpen: (skill: SkillOption) => void }
+    | undefined;
 }
 
 /** What the window draws a message with: the chat, the names, the moment, what the composer offers, and the doors a link, a post, and an answer go through. */
@@ -269,8 +278,9 @@ interface MessageContext {
   readonly chat: ChatAnswer;
   readonly names: ChatNames;
   readonly now: number;
-  /** What a composer posting in the channel offers to name: the members a post there reaches, and the channels. */
-  readonly targetsIn: (channelId: string) => readonly ChatTarget[];
+  /** What a composer posting in the channel offers to name: the members a post there reaches, its task, and the channels. */
+  /** What a composer posting in the channel offers, a reply's by the members of its thread, its root's author and repliers. */
+  readonly mentionsIn: (channelId: string, thread?: readonly string[]) => ChatComposerMentions;
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
@@ -313,7 +323,7 @@ function drawnBlocks(
 /**
  * Hands what is drawn under it the doors of the task whose channel it is:
  * the code doors a link to lines alone on its line reads through, and the
- * task's mentions where the page drawing them does not hand them.
+ * task's mentions and skills where the page drawing them does not hand them.
  */
 function TaskDoorsScope({
   doors,
@@ -323,9 +333,18 @@ function TaskDoorsScope({
   children: React.ReactNode;
 }): React.JSX.Element {
   if (doors === undefined) return <>{children}</>;
+  const { mentions, skills } = doors;
   const cards = <LoneLinkCards doors={doors}>{children}</LoneLinkCards>;
-  if (doors.mentions === undefined) return cards;
-  return <TaskMentions value={doors.mentions}>{cards}</TaskMentions>;
+  const named =
+    skills === undefined ? (
+      cards
+    ) : (
+      <SkillFiles source={skills.source} onOpen={skills.onOpen}>
+        {cards}
+      </SkillFiles>
+    );
+  if (mentions === undefined) return named;
+  return <TaskMentions value={mentions}>{named}</TaskMentions>;
 }
 
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */
@@ -547,7 +566,10 @@ function ThreadRow({
                 channelId={message.channelId}
                 replyTo={message.seq}
                 label="Reply in thread"
-                targets={context.targetsIn(message.channelId)}
+                mentions={context.mentionsIn(message.channelId, [
+                  message.authorId,
+                  ...replies.map((reply) => reply.authorId),
+                ])}
                 keywords={context.keywords}
                 compact
                 onSend={(text, attachments) =>
@@ -727,6 +749,7 @@ export function ChatPane({
   names,
   place,
   mentionPlace,
+  tasks = NO_TASKS,
   now,
   openLink,
   onPost,
@@ -742,6 +765,8 @@ export function ChatPane({
   place: ChatPlace;
   /** The workspace a chip's link is written in; none where it is not known yet, when the composer offers no member to name. */
   mentionPlace?: MentionPlace | undefined;
+  /** The tasks the window lists, whose channels' composers offer them. */
+  tasks?: readonly TaskSummary[];
   now: number;
   openLink: (url: string) => void;
   /** Posts a message; answers why it was refused, or nothing once it is taken. */
@@ -759,16 +784,10 @@ export function ChatPane({
   /** The doors of a task, by its id, that its channel's messages read their code and open their files through; none where the task is not at hand. */
   taskDoors?: ((taskId: string) => ChatTaskDoors | undefined) | undefined;
 }): React.JSX.Element {
-  // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
-  const targetsIn = (channelId: string) =>
-    chatTargets(
-      chat,
-      names,
-      mentionPlace,
-      chat.channels.find((each) => each.id === channelId),
-    );
   const keywords = chatKeywords(chat, names);
   const actorOf = useChatActor(chat, names);
+  // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
+  const mentionsIn = useChatMentions({ chat, names, place: mentionPlace, tasks, actorOf });
   const doorsIn = (channelId: string) => {
     const home = chat.channels.find((each) => each.id === channelId);
     if (home?.kind !== CHANNEL_KIND.TASK || home.planId === undefined) return undefined;
@@ -779,7 +798,7 @@ export function ChatPane({
     chat,
     names,
     now,
-    targetsIn,
+    mentionsIn,
     keywords,
     openLink,
     onPost,
@@ -843,7 +862,7 @@ export function ChatPane({
           key={channel.id}
           channelId={channel.id}
           label={composerLabel(chat, names, channel)}
-          targets={targetsIn(channel.id)}
+          mentions={mentionsIn(channel.id)}
           keywords={keywords}
           onSend={(text, attachments) =>
             onPost({ ...postOf(text, attachments), channelId: channel.id })

@@ -1,4 +1,5 @@
 import type { AdminDayAccount } from "@luke/features/admin-answer-wire";
+import { ADMIN_READ } from "@luke/features/admin-wire";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -17,7 +18,7 @@ import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { dayReadQuery } from "../routing.js";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
-import { ADMIN_READ, adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const DAY_ERROR = "The day endpoint did not answer.";
 

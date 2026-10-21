@@ -1,5 +1,5 @@
 import type { AdminUserAccount } from "@luke/features/admin-answer-wire";
-import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import {
   AVATAR_SIZE,
   BADGE_TONE,
@@ -30,7 +30,7 @@ import {
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { accountReadQuery } from "../routing.js";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
-import { ADMIN_READ, useAdminRead } from "../use-admin-read.js";
+import { useAdminRead } from "../use-admin-read.js";
 import { AccountSupportSections, formatInstant } from "./account-support.js";
 
 const ACCOUNT_ERROR = "The account endpoint did not answer.";

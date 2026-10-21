@@ -26,6 +26,7 @@ const WRAPPER_ROLES: ReadonlySet<string> = new Set([
   "Section",
   "LineBreak",
   "paragraph",
+  "MenuListPopup",
 ]);
 
 /** Roles never printed, nor anything under them: the pieces a text is laid out in. */

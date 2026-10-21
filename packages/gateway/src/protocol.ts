@@ -173,6 +173,10 @@ export const GATEWAY_METHOD = {
   GITHUB_CONNECT: "github.connect",
   /** The account's GitHub disconnected on the service under the Mac's session; the view takes the connection, and the next workspaces read is owed at once. */
   GITHUB_DISCONNECT: "github.disconnect",
+  /** One admin dashboard read, asked of the service now under the account's session and answered to the caller as it came, or why not; never held in the view. */
+  ADMIN_READ: "admin.read",
+  /** The admin dashboard's star set or taken back on one account under the account's session; whether it landed. */
+  ADMIN_FAVORITE: "admin.favorite",
   /** The models a coding agent may run on, read from the service's catalog now. */
   CODING_AGENTS_MODELS: "codingAgents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */

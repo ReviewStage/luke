@@ -606,6 +606,8 @@ export interface ListBacks {
   readonly inbox: (listed: boolean) => void;
   /** Shuts the side panel standing over the plan, the whole pane. */
   readonly panel: () => void;
+  /** Leaves the open task for the step behind it, or, where none stands behind it, for the page the window rests on. */
+  readonly task: () => void;
 }
 
 /** The window's history, with the way a restore leaves a plan's version history. */
@@ -626,6 +628,9 @@ export interface WindowHistoryLists extends WindowHistory {
  * toggle, which reads Close panel, leaving full screen, the window's Escape,
  * and closing the last tab its strip draws, which closes the tab as ever and
  * then shuts the panel through the history rather than as a step of its own.
+ * The window's Escape on an open task, past a panel filling the window, is
+ * the toolbar's Back: one step back, to the page the task was opened from,
+ * and the task is left as ever only where no step stands behind it.
  */
 export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksControl {
   const { sidePanel } = tasks;
@@ -641,8 +646,11 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
       ? { ...sidePanel, onToggle: lists.panel, onToggleFullScreen: lists.panel, onClose }
       : sidePanel,
     back: () => {
-      if (!shutsWhole || tasks.page !== TASKS_PAGE.DOCUMENT) return tasks.back();
-      lists.panel();
+      if (tasks.page !== TASKS_PAGE.DOCUMENT || (!shutsWhole && sidePanel.fullScreen)) {
+        return tasks.back();
+      }
+      if (shutsWhole) lists.panel();
+      else lists.task();
       return true;
     },
     history: { ...tasks.history, onList: lists.versions },
@@ -687,7 +695,7 @@ function standingOf(trail: Trail): HistoryEntry<Place> | undefined {
  * arrival records nothing and the steps ahead are kept. A step it cannot
  * reach is passed over the way the move went, as the window's own step
  * passes over one, and an entry holding no step at all is a page loaded
- * there, which opens on Home. Note that such a move has already happened
+ * there, which opens where the window rests with no task open. Note that such a move has already happened
  * when the window hears it and cannot be refused, so while a page holds
  * unsaved work the adapter is stood back on the window's step first, along
  * the trail or, where the trail no longer holds it, written again after
@@ -707,6 +715,8 @@ function useHistory(input: {
 }): NavigationHistory & {
   backTo: (place: Place) => boolean;
   upTo: (place: Place, stand: () => void) => void;
+  /** A step back, answering whether one stood behind to take, though the leave ask may yet hold it. */
+  stepBack: () => boolean;
 } {
   const { place, address, reachable, guard } = input;
   const history = windowHistory();
@@ -769,7 +779,7 @@ function useHistory(input: {
   }, [history, place, address, own]);
 
   useEffect(() => {
-    // An entry holding no step is a page loaded there, which opens on Home; the window already there writes its step on it.
+    // An entry holding no step is a page loaded there, which opens where the window rests; the window already there writes its step on it.
     const arriveNowhere = (was: HistoryEntry<Place>) => {
       const home: Place = { kind: PLACE_KIND.HOME };
       if (sameStep(was.state, home)) own(() => history.push(was));
@@ -818,11 +828,14 @@ function useHistory(input: {
   }, [history, own]);
 
   // Note that the whole step is what asks, the trail's move with the window's, so a step
-  // cancelled at the ask leaves the trail standing where the window still stands.
+  // cancelled at the ask leaves the trail standing where the window still stands. It
+  // answers whether a step stood there, asked about or taken.
   const goTo = useCallback(
-    (at: number | undefined) => {
+    (at: number | undefined): boolean => {
       const target = at === undefined ? undefined : history.current().entries[at]?.state;
-      if (at === undefined || target === undefined || !latest.current.reachable(target)) return;
+      if (at === undefined || target === undefined || !latest.current.reachable(target)) {
+        return false;
+      }
       asking(
         latest.current,
         target,
@@ -830,11 +843,12 @@ function useHistory(input: {
         own(() => history.go(at - history.current().at));
         latest.current.go(target);
       })();
+      return true;
     },
     [history, own],
   );
   const step = useCallback(
-    (by: -1 | 1) => goTo(nearest(history.current(), by, latest.current.reachable)),
+    (by: -1 | 1): boolean => goTo(nearest(history.current(), by, latest.current.reachable)),
     [history, goTo],
   );
 
@@ -874,6 +888,7 @@ function useHistory(input: {
     onGoTo: goTo,
     backTo,
     upTo,
+    stepBack: () => step(-1),
   };
 }
 
@@ -928,6 +943,7 @@ export function useWindowHistory(input: {
     | "chatView"
     | "boardView"
     | "restoring"
+    | "resting"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -1009,6 +1025,8 @@ export function useWindowHistory(input: {
         listed: narrow ? settingsListed : undefined,
       };
     }
+    // The page the window rests on with no task open is where no page stands, so a step to it is a step home.
+    if (tasks.resting) return { kind: PLACE_KIND.HOME };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (pagePerson !== undefined) {
@@ -1049,6 +1067,7 @@ export function useWindowHistory(input: {
         };
   }, [
     known,
+    tasks.resting,
     tab,
     settingsView,
     settingsListed,
@@ -1219,7 +1238,7 @@ export function useWindowHistory(input: {
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
     else sidePanel.onSetOpen(panel.open);
   };
-  const { backTo, upTo, ...history } = useHistory({
+  const { backTo, upTo, stepBack, ...history } = useHistory({
     place,
     address: addressOf(input.link),
     reachable,
@@ -1271,6 +1290,10 @@ export function useWindowHistory(input: {
         return;
       }
       up({ kind: PLACE_KIND.TASK, taskId: boundFor, panel: { open: false, tab: undefined } }, shut);
+    },
+    // Note that a task with no step behind it, as one a launch reopened or a link loaded, is left as ever.
+    task: () => {
+      if (!stepBack()) tasks.onLeaveTask();
     },
   });
   return useSteadyDoors({

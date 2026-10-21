@@ -1,4 +1,5 @@
 import {
+  type HostedAdminClient,
   type HostedGitHubConnectionClient,
   type HostedTaskClient,
   type HostedWorkspaceClient,
@@ -9,6 +10,12 @@ import {
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "@luke/features";
+import {
+  ADMIN_UNANSWERED,
+  type AdminReadAnswer,
+  adminFavoriteParamsSchema,
+  adminReadParamsSchema,
+} from "@luke/features/admin-wire";
 import {
   browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
@@ -365,6 +372,8 @@ export type TasksClient = Pick<
   >;
   /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
+  /** The admin dashboard's reads and its star, under the account's session; the service's gate decides each. */
+  admin: Pick<HostedAdminClient, "read" | "favorite">;
 };
 
 export interface TasksDependencies {
@@ -2311,6 +2320,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         githubRead += 1;
         write({ github: disconnected.answer });
         return carried<TasksGitHubDisconnectAnswer>({ connection: disconnected.answer });
+      }),
+    // An admin read is answered to the caller as the service answered it and
+    // held nowhere, since it is other accounts' data, which no view keeps.
+    [GATEWAY_METHOD.ADMIN_READ]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(adminReadParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("an admin read names its procedure and query");
+        if (!gate()) return carried<AdminReadAnswer>({ refused: ADMIN_UNANSWERED });
+        return carried<AdminReadAnswer>(yield* served(client.admin.read(read.success)));
+      }),
+    [GATEWAY_METHOD.ADMIN_FAVORITE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(adminFavoriteParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("a star names an account and whether it is set");
+        if (!gate()) return carried<boolean>(false);
+        return carried<boolean>(
+          yield* served(client.admin.favorite(read.success.id, read.success.favorite)),
+        );
       }),
     [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
       Effect.gen(function* () {

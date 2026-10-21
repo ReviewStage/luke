@@ -5,7 +5,7 @@ import type {
   AdminTrend,
 } from "@luke/features/admin-answer-wire";
 import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
-import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
@@ -25,12 +25,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
 import { CHART_PAIR_WIDE, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
-import {
-  ADMIN_READ,
-  type AdminReadHandle,
-  adminReadFailure,
-  useAdminRead,
-} from "../use-admin-read.js";
+import { type AdminReadHandle, adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const METRICS_ERROR = "The metrics endpoint did not answer.";
 

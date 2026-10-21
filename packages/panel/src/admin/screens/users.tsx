@@ -1,5 +1,9 @@
 import type { AdminUserListRow } from "@luke/features/admin-answer-wire";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import {
+  ADMIN_READ,
+  ADMIN_USERS_SEARCH_MAX_LENGTH,
+  type AdminMetricsWindow,
+} from "@luke/features/admin-wire";
 import {
   COLLECTION_STATE,
   EmptyState,
@@ -28,7 +32,7 @@ import {
   searchTerm,
   usersReadQuery,
 } from "../routing.js";
-import { ADMIN_READ, adminReadFailure, useAdminRead, useAdminWrite } from "../use-admin-read.js";
+import { adminReadFailure, useAdminRead, useAdminWrite } from "../use-admin-read.js";
 
 const USERS_ERROR = "The users endpoint did not answer.";
 

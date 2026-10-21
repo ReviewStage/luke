@@ -90,13 +90,13 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
   return container;
 }
 
-/** Where the sidebar draws the Home row and the Tasks list: whether each stands in the column's scroller. */
+/** Where the sidebar draws the Inbox's row and the Tasks list: whether each stands in the column's scroller. */
 function scrolled(sidebar: HTMLElement) {
   const scroller =
     sidebar.querySelector(".sidebar-section .luke-scroll-area") ?? assert.fail("the scroller");
   const home =
-    [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Home")) ??
-    assert.fail("the Home row");
+    [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Inbox")) ??
+    assert.fail("the Inbox's row");
   const list = sidebar.querySelector('nav[aria-label="Tasks"]') ?? assert.fail("the Tasks list");
   return { home: scroller.contains(home), tasks: scroller.contains(list) };
 }

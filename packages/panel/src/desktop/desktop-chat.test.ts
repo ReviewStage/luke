@@ -13,10 +13,14 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
-import type { CodeRef, TaskSummary } from "@luke/features/task-wire";
+import { type CodeRef, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -28,7 +32,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { ChatComposer } from "../tasks/chat-composer.js";
+import { ChatComposer, type ChatComposerMentions } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
   fixtureChat,
@@ -423,6 +427,14 @@ test("an ask posted in a direct message is listed among For you's asks as a dire
   ]);
 });
 
+/** What a box standing alone offers: no member, no task, and no channel, only the dates. */
+const NO_MENTIONS: ChatComposerMentions = {
+  source: { taskId: "", taskName: "", workspace: "", repository: null, text: () => "" },
+  members: { people: [], agents: [] },
+  channels: [],
+  crowded: () => false,
+};
+
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -462,16 +474,70 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("a channel's composer offers its members by name as an @ is typed, writes the one chosen as their chip, and posts to the channel on Enter, leaving the box empty", async () => {
-  const page = mount((chat) => chat, ACME);
+/** The fixture task as the window lists it: its channel's task, about a repository. */
+const INVITATIONS: TaskSummary = {
+  id: FIXTURE_TASK_ID,
+  workspaceId: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
+  name: "Teammate invitations",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "ada/relay",
+};
+
+/** The open list as a reader sees it: each group's heading, then each row's name and what it says beside it. */
+function menuRows(page: HTMLElement): string[] {
+  const list = page.querySelector('.mention-menu [role="listbox"]');
+  if (list === null) return [];
+  return [...list.querySelectorAll('.luke-combobox-heading, [role="option"]')].map((node) => {
+    if (node.classList.contains("luke-combobox-heading")) return `# ${node.textContent}`;
+    const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";
+    const detail = node.querySelector(".luke-combobox-option-detail")?.textContent;
+    return detail === undefined ? name : `${name} · ${detail}`;
+  });
+}
+
+/** The keys the open list says it hears at its foot. */
+function menuKeys(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".mention-menu .mention-menu-foot > *")].map(
+    (key) => key.textContent ?? "",
+  );
+}
+
+test("a channel's composer offers the members a mention there tells under the app's own @ list, each with their face, then the channel's task, writes the one chosen as their chip, and posts to the channel on Enter, leaving the box empty", async () => {
+  const page = mount((chat) => chat, ACME, undefined, undefined, { tasks: [INVITATIONS] });
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
   typeInComposer(box, "@in");
-  const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
-  assert.deepEqual(options, ["@Invite emails", "@Add teammate invitations"]);
+  assert.deepEqual(menuRows(page), [
+    "# Agents",
+    "Invite emails · This task",
+    "Add teammate invitations · This task",
+    "# People",
+    "Maria Chen",
+    "# Plan",
+    "Teammate invitations · The whole plan",
+  ]);
+  assert.deepEqual(menuKeys(page), ["↑↓ Move", "↵ Mention", "esc Close"]);
+  const faces = [...page.querySelectorAll('.mention-menu [role="option"]')].map(
+    (row) => row.querySelector(".luke-combobox-option-glyph")?.childElementCount ?? 0,
+  );
+  assert.ok(
+    faces.every((count) => count > 0),
+    "every row wears its face or its glyph",
+  );
+  // The box names the list it opened and the row highlighted, as any combobox's field does.
+  const field = composerEditor(box);
+  const list = page.querySelector('.mention-menu [role="listbox"]');
+  const highlighted = () => list?.querySelector('[role="option"][aria-selected="true"]')?.id;
+  assert.equal(field.getAttribute("aria-controls"), list?.id);
+  assert.equal(field.getAttribute("aria-activedescendant"), highlighted());
+  pressInComposer(box, "End");
+  assert.equal(field.getAttribute("aria-activedescendant"), highlighted());
+  pressInComposer(box, "Home");
   pressInComposer(box, "Enter");
   assert.ok(box.querySelector("[data-mention-ref]"), "the agent stands in the box as its chip");
   assert.equal(page.querySelector('[role="listbox"]'), null);
+  assert.equal(field.getAttribute("aria-controls"), null);
   typeInComposer(box, "hold the template until #214 lands");
   pressInComposer(box, "Enter");
   await settle();
@@ -905,20 +971,182 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(ask?.querySelector("button"), null);
 });
 
-test("a # at the start of a word offers the channels, and the one chosen is written as its name, the box holding a microphone beside its send", () => {
-  const page = mount();
+test("a # at the start of a word offers the channels in the same list as an @, and the one chosen is written as its name, the box holding a microphone beside its send", () => {
+  const page = mount((chat) => chat, undefined, undefined, undefined, { tasks: [INVITATIONS] });
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInComposer(box, "see #bill");
-  const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
-  assert.deepEqual(options, ["#billing-export"]);
+  typeInComposer(box, "see #");
+  const all = menuRows(page);
+  typeInComposer(box, "bill");
+  assert.deepEqual(all, [
+    "# Channels",
+    "general",
+    "teammate-invitations · Teammate invitations",
+    "billing-export",
+    "members-schema",
+  ]);
+  assert.deepEqual(menuRows(page), ["# Channels", "billing-export"]);
+  assert.deepEqual(menuKeys(page), ["↑↓ Move", "↵ Mention", "esc Close"]);
   pressInComposer(box, "Enter");
   assert.equal(boxWords(box), "see #billing-export ");
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
 });
 
-/** An agent as a plain box writes it: its mention link. */
-const INVITE_EMAILS_CHIP = "[@Invite emails](https://tryluke.dev/acme/plan/plan-1/agent/agent-2)";
+test("a task's channel offers its repository's files and its agents' pull requests as the agent box does, and dates down to the picker", async () => {
+  const told: unknown[] = [];
+  fakeActPort({
+    [ACT_KIND.TASKS_TREE]: (payload) => {
+      told.push(payload);
+      return Promise.resolve({
+        folder: {
+          path: "",
+          repository: "ada/relay",
+          branch: "main",
+          entries: [{ name: "apps/web/invite-email.ts", kind: TASK_TREE_ENTRY.FILE }],
+          truncated: false,
+        },
+      });
+    },
+  });
+  const opened: TaskSummary = {
+    ...INVITATIONS,
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 214,
+          title: "Send invite emails",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 1,
+          deletions: 0,
+          url: "https://github.com/ada/relay/pull/214",
+        },
+      ],
+    },
+  };
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  let kinds: string[];
+  let offered: string[];
+  let dates: string[];
+  try {
+    const page = mount((chat) => chat, ACME, undefined, undefined, { tasks: [opened] });
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "@");
+    await settle();
+    kinds = menuRows(page).slice(menuRows(page).indexOf("# Mention from"));
+    typeInComposer(box, "invite");
+    offered = menuRows(page);
+    pressInComposer(box, "Escape");
+    typeInComposer(box, " @dates:");
+    dates = menuRows(page);
+  } finally {
+    vi.useRealTimers();
+  }
+
+  assert.deepEqual(told, [{ planId: FIXTURE_TASK_ID, path: "", recursive: true }]);
+  // The members a mention tells lead, and the plan, whose words the window's Chat does not hold, says no count of its sections.
+  assert.deepEqual(kinds, [
+    "# Mention from",
+    "Agents · 2 agents",
+    "People · 1 member",
+    "Files and folders · ada/relay",
+    "Plan",
+    "Pull requests · 1 pull request",
+    "Dates · A day, a time, or a range",
+  ]);
+  assert.deepEqual(offered, [
+    "# Agents",
+    "Invite emails · This task",
+    "# Files and folders",
+    "invite-email.ts · apps/web",
+    "# Pull requests",
+    "#214 Send invite emails · Pull request",
+  ]);
+  assert.deepEqual(dates, [
+    "Today · Oct 19, 2026",
+    "Tomorrow · Oct 20, 2026",
+    "Oct 26 · Oct 26, 2026",
+    "Pick a date…",
+  ]);
+});
+
+test("an @ or a # word that names nothing says so, and Enter there still posts the words", async () => {
+  const page = mount((chat) => chat, ACME);
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "ask @zzz");
+  const nobody = page.querySelector(".mention-menu .luke-combobox-empty")?.textContent;
+  pressInComposer(box, "Enter");
+  await settle();
+  typeInComposer(box, "see #zzz");
+  const nowhere = page.querySelector(".mention-menu .luke-combobox-empty")?.textContent;
+  pressInComposer(box, "Enter");
+  await settle();
+
+  assert.equal(nobody, "Nothing matches");
+  assert.equal(nowhere, "Nothing matches");
+  assert.deepEqual(words(page).slice(-2), ["ask @zzz", "see #zzz"]);
+  assert.equal(boxWords(box), "");
+});
+
+test("a post addressing more members than it tells says under its box that only the first few are told, a reply's thread counted after its mentions", () => {
+  const page = mount(
+    (chat) => ({
+      ...chat,
+      answer: {
+        ...chat.answer,
+        members: [
+          ...chat.answer.members,
+          {
+            id: "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8f",
+            kind: MEMBER_KIND.HUMAN,
+            name: "Zoe Park",
+            userId: "zoe",
+            left: false,
+          },
+        ],
+      },
+    }),
+    ACME,
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  const crowded = () => box.querySelector(".chat-composer-crowded")?.textContent ?? "";
+  for (const name of ["@maria", "@invite", "@add"]) {
+    typeInComposer(box, name);
+    pressInComposer(box, "Enter");
+  }
+  const three = crowded();
+  typeInComposer(box, "@zoe");
+  pressInComposer(box, "Enter");
+
+  const four = crowded();
+
+  // A reply tells its thread's author and repliers after those it mentions.
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="48"] button[aria-expanded]')
+      ?.click(),
+  );
+  const reply = boxNamed(page, "Reply in thread");
+  const replyCrowded = () => reply.querySelector(".chat-composer-crowded")?.textContent ?? "";
+  typeInComposer(reply, "@maria");
+  pressInComposer(reply, "Enter");
+  const withThread = replyCrowded();
+  typeInComposer(reply, "@zoe");
+  pressInComposer(reply, "Enter");
+
+  assert.equal(three, "", "three members are each told");
+  assert.equal(four, "Only 3 members are notified of a post.");
+  assert.equal(box.querySelectorAll("[data-mention-ref]").length, 4);
+  assert.equal(withThread, "", "one mention and the thread's two agents are each told");
+  assert.equal(replyCrowded(), "Only 3 members are notified of a post.");
+});
 
 /** Chat's box where the editor's bundle could not be loaded, every post it makes written down. */
 async function plainChat() {
@@ -938,14 +1166,7 @@ async function plainChat() {
           createElement(ChatComposer, {
             channelId: "general",
             label: "Message #general",
-            targets: [
-              {
-                sigil: "@",
-                name: "Invite emails",
-                detail: undefined,
-                markdown: INVITE_EMAILS_CHIP,
-              },
-            ],
+            mentions: NO_MENTIONS,
             keywords: [],
             onSend: (text) => {
               sent.push(text);
@@ -979,14 +1200,14 @@ function pressInField(field: HTMLTextAreaElement, init: KeyboardEventInit): bool
   return !event.defaultPrevented;
 }
 
-test("where the editor's bundle could not be loaded, the box is a plain field that still names a member by their link and posts", async () => {
+test("where the editor's bundle could not be loaded, the box is a plain field that opens no list, as a plan comment's does, and posts its words", async () => {
   const { container, field, sent } = await plainChat();
-  writeInto(field, "@Inv");
-  pressInField(field, { key: "Enter" });
-  writeInto(field, `${field.value}ship it`);
+  writeInto(field, "@tomorrow");
+  assert.equal(container.querySelector('[role="listbox"]'), null);
+  writeInto(field, "@tomorrow ship it");
   pressInField(field, { key: "Enter" });
   await settle();
-  assert.deepEqual(sent, [`${INVITE_EMAILS_CHIP} ship it`]);
+  assert.deepEqual(sent, ["@tomorrow ship it"]);
   assert.equal(field.getAttribute("enterkeyhint"), "send");
   assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
 });
@@ -1205,23 +1426,6 @@ test("an @ word that reads as a date lists it before the members it matches, and
 
     assert.deepEqual(dated, ["TomorrowOct 20, 2026"]);
     assert.equal(page.querySelector('[role="listbox"]'), null);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-test("where the editor's bundle could not be loaded, a date one word names after an @ still offers it, and its pick is written and sent as its link", async () => {
-  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
-  try {
-    const { container, field, sent } = await plainChat();
-    writeInto(field, "ship it @tomorrow");
-    const listed = [...container.querySelectorAll('[role="option"]')].map((row) => row.textContent);
-    pressInField(field, { key: "Enter" });
-    pressInField(field, { key: "Enter" });
-    await settle();
-
-    assert.deepEqual(listed, ["TomorrowOct 20, 2026"]);
-    assert.deepEqual(sent, ["ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
   } finally {
     vi.useRealTimers();
   }
@@ -1814,4 +2018,161 @@ test("outside a task's channel, a code block still names its file and lines, wit
   act(() => railRow(page, "general").click());
   assert.equal(page.querySelector("[data-inbox-code]"), null);
   assert.match(page.querySelector(".chat-stream")?.textContent ?? "", /invites\.ts/u);
+});
+
+test("in the window's Chat, a person's /skill in a task's channel is drawn as its chip, read from the task's skills, and opens its file in the task", async () => {
+  const shown: [string, CodeRef, string | undefined][] = [];
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () =>
+      Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              path: ".agents/skills/release/SKILL.md",
+            },
+          ],
+        },
+      }),
+  });
+  let seq = 0;
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]);
+      seq = posted.answer.messages.at(-1)?.seq ?? 0;
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    { tasks: [INVITES_TASK], onShowFile: (...asked) => shown.push(asked) },
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  const chip = messageWords(page, seq).querySelector<HTMLElement>("[data-skill-ref]");
+  assert.ok(chip, "the skill is its chip");
+  const press = chip.matches("button") ? chip : chip.querySelector<HTMLElement>("button");
+  act(() => press?.click());
+  assert.deepEqual(shown.at(-1), [
+    FIXTURE_TASK_ID,
+    { path: ".agents/skills/release/SKILL.md" },
+    undefined,
+  ]);
+});
+
+test("a task's skills are read once while the listed tasks change around it, rather than again on every draw", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () => {
+      reads += 1;
+      return Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+        },
+      });
+    },
+  });
+  let seq = 0;
+  // Each draw lists the task anew, as a change to any listed task hands the window a new list.
+  const listing: Partial<TasksControl> = {
+    get tasks() {
+      return [{ ...INVITES_TASK }];
+    },
+  };
+  const page = mount(
+    (chat) => {
+      const posted = withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]);
+      seq = posted.answer.messages.at(-1)?.seq ?? 0;
+      return posted;
+    },
+    ACME,
+    undefined,
+    undefined,
+    listing,
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the skill is its chip");
+  // A post draws the window again over a new list of its tasks.
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "shipping it");
+  pressInComposer(box, "Enter");
+  await settle();
+  assert.ok(messageWords(page, seq).querySelector("[data-skill-ref]"), "the chip stands");
+  assert.equal(reads, 1, "the skills are not read again");
+});
+
+test("a task whose repository is let go and chosen again reads its skills afresh", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.TASKS_FILE]: () => new Promise<never>(() => undefined),
+    [ACT_KIND.TASKS_SKILLS]: () => {
+      reads += 1;
+      return Promise.resolve({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release.", path: "SKILL.md" }],
+        },
+      });
+    },
+  });
+  let repository: string | null = INVITES_TASK.repository;
+  const listing: Partial<TasksControl> = {
+    get tasks() {
+      return [{ ...INVITES_TASK, repository }];
+    },
+  };
+  const page = mount(
+    (chat) =>
+      withPosts(chat, "teammate-invitations", [
+        {
+          by: "Dean Stratakos",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "run /release next" }],
+        },
+      ]),
+    ACME,
+    undefined,
+    undefined,
+    listing,
+  );
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  await settle();
+  const post = async (words: string) => {
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, words);
+    pressInComposer(box, "Enter");
+    await settle();
+  };
+  repository = null;
+  await post("dropping the repository");
+  repository = INVITES_TASK.repository;
+  await post("and choosing it again");
+  assert.equal(reads, 2);
 });

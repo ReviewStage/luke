@@ -638,7 +638,7 @@ function AppWindow(): React.JSX.Element {
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
-      // task, then an open task back to the home page. A menu and the
+      // task, then an open task back to the page it was opened from. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here,
       // bar the caret Settings opens with, whose untouched Escape leaves it.
@@ -655,10 +655,11 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
-      // An open task unwinds to the home page, which leaves it and ends
-      // its call. That page is home, so a press there does nothing. A side
-      // panel standing only full screen shuts through the history, as its
-      // Close does.
+      // An open task steps back through the history, as the toolbar's Back
+      // does, to the page it was opened from, which leaves it and ends its
+      // call; a task with no step behind it is left for the page the window
+      // rests on (`resting-page.ts`), where a press does nothing. A side panel
+      // standing only full screen shuts through the history, as its Close does.
       shellDoors.current.back();
     };
     window.addEventListener("keydown", handleKey);
@@ -686,7 +687,7 @@ function AppWindow(): React.JSX.Element {
     () => ({
       workspaces: tasks.workspaces,
       workspaceId: settingsWorkspace.shownId,
-      // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
+      // A leave closes Settings onto the Tasks tab, which rests on its page with no task open.
       onLeft: leftWorkspace,
       listFailed: tasks.listFailed,
       onRetryList: tasks.onRetryList,

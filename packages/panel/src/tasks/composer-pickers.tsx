@@ -140,7 +140,11 @@ export function useComposerPickers({
     dictating: dictation.phase !== DICTATION_PHASE.IDLE,
     field: {
       skills: skillPicker.names,
-      aria: { ...skillPicker.aria, "aria-placeholder": placeholder },
+      // Note that one list stands at a time, so the field names whichever of the two stands.
+      aria: {
+        ...(mentionPicker.aria["aria-expanded"] === "true" ? mentionPicker.aria : skillPicker.aria),
+        "aria-placeholder": placeholder,
+      },
       onKey,
       onTrigger: skillPicker.onTrigger,
       chip: skillPicker.chip,

@@ -189,13 +189,14 @@ export function codingAgentsControl(
 }
 
 /**
- * A signed-in Tasks tab on screen on its home page with no tasks, every
+ * A signed-in Tasks tab on screen with no task open and no tasks, every
  * press ignored, bound for whichever task it is given as open.
  */
 export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
   return {
     page: TASKS_PAGE.HOME,
     restoring: false,
+    resting: false,
     shown: true,
     signedIn: true,
     me: undefined,
@@ -425,7 +426,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       githubIssuesIn: () => undefined,
     },
     onLeaveTask: ignore,
-    onGoHome: ignore,
     onRenameTask: () => Promise.resolve(true),
     onDraftName: ignore,
     onMarkTask: ignore,

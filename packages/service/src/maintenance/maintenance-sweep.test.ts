@@ -40,6 +40,7 @@ interface Recorded {
   sandboxed: number[];
   terminals: number[];
   native: number[];
+  wakeups: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -55,6 +56,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sandboxed: [],
     terminals: [],
     native: [],
+    wakeups: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -98,6 +100,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.native.push(now);
         return NATIVE;
+      }),
+    sweepNativeWakeups: (now) =>
+      Effect.sync(() => {
+        recorded.wakeups.push(now);
+        return { delivered: 1, failed: 0 };
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -146,6 +153,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       sandboxed: [],
       terminals: [],
       native: [],
+      wakeups: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -172,6 +180,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       terminals: [],
       native: [],
+      wakeups: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -185,6 +194,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       terminals: [],
       native: [],
+      wakeups: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -203,6 +213,7 @@ it.effect(
       assert.equal(answer.status, 200);
       assert.deepEqual(answer.body.terminals, TERMINALS);
       assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
+      assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
@@ -217,6 +228,7 @@ it.effect(
         sandboxed: [instant],
         terminals: [instant],
         native: [instant],
+        wakeups: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],

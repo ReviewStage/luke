@@ -4,7 +4,7 @@
  * The panel is served at `/app` whatever Luke link it was opened on
  * (`vercel.json`), so that path names no place: the history writes it for a
  * step whose own address is not this site's, the loaded link reads it as
- * Home, session replay and Sentry name every address of the tab by it, and a
+ * no place, session replay and Sentry name every address of the tab by it, and a
  * connect's landing page goes back to it. The panel's own copy of the path
  * stays in `@luke/panel/navigation-history`, since the panel reaches no
  * shell.

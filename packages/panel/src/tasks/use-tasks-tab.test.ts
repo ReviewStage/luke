@@ -52,6 +52,7 @@ import {
   DOCUMENT_REGION,
   PIN_MOVE_FAILED_NOTE,
   SETTLED_STATUS,
+  TASK_MARK,
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -72,6 +73,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import { usePublishSidebarWalk } from "../desktop/sidebar-walk.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -1593,7 +1595,7 @@ test("the Inbox opened again stands on the item last chosen in it, as a row's ch
       place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
     }),
   );
-  act(() => tab.control().onGoHome());
+  act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().inboxView.onOpen());
   const linked = tab.control().inboxView.chosen;
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -2452,7 +2454,7 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   });
 
   act(() => tab.control().factoryView.onOpen());
-  act(() => tab.control().onGoHome());
+  act(() => tab.control().boardView.onOpen());
   act(() => tab.control().onChooseWorkspace("workspace-other"));
   assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
   assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
@@ -2466,7 +2468,7 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
-test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
+test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and a plan's press puts Factory away", () => {
   const tab = mount({ shown: true, tasks: listRead([listed()]) });
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().factoryView.onOpen());
@@ -2478,30 +2480,101 @@ test("Factory and the Inbox stand in the plan's place in turn: opening one puts 
   assert.equal(tab.control().inboxView.open, true);
 
   act(() => tab.control().factoryView.onOpen());
-  act(() => tab.control().onGoHome());
-  assert.equal(tab.control().factoryView.open, false);
-
-  act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().onSelect(TASK.id));
   assert.equal(tab.control().factoryView.open, false);
 });
 
-test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {
+test("with no plan open the window rests on the Inbox: it stands once the list lands, and closing it or any page over it lands on it again", () => {
+  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+  assert.equal(tab.control().inboxView.open, true, "the window opens on the Inbox");
+
+  act(() => tab.control().inboxView.onClose());
+  assert.equal(tab.control().inboxView.open, true, "the Inbox has nothing under it to close to");
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().factoryView.onClose());
+  assert.equal(tab.control().inboxView.open, true, "Factory put away lands on the Inbox");
+
+  act(() => tab.control().boardView.onOpen());
+  act(() => tab.control().boardView.onClose());
+  assert.equal(tab.control().inboxView.open, true, "the Tasks page put away lands on the Inbox");
+  assert.equal(tab.control().resting, true, "the Inbox stands as the page rested on");
+
+  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
+  assert.equal(tab.control().resting, true, "an item chosen in it keeps it the page rested on");
+
+  act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-2" }));
+  assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
+});
+
+test("leaving an open plan rests on the Inbox, on the item last chosen there", () => {
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
+  assert.equal(tab.control().inboxView.open, false, "an open plan stands with nothing over it");
   act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().onGoHome());
-  assert.equal(tab.control().inboxView.open, false);
+  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
+  act(() => tab.control().onSelect(TASK.id));
+
+  act(() => tab.control().onLeaveTask());
   assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
   assert.equal(tab.control().boundFor, undefined);
+  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: TASK.id, itemId: "item-1" });
+});
 
-  const home = mount({ shown: true, tasks: listRead([]) });
-  act(() => home.control().inboxView.onOpen());
-  act(() => home.control().onGoHome());
-  assert.equal(home.control().inboxView.open, false);
-  assert.ok(!home.told.includes(ACT_KIND.TASKS_CLOSE));
+test("another workspace listed with no plan open rests the window again, on that workspace's Inbox rather than the item chosen in the last", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() =>
+    tab.control().inboxView.onChoose({ agentId: "agent-personal", itemId: "item-personal" }),
+  );
+  assert.deepEqual(tab.control().inboxView.chosen, {
+    agentId: "agent-personal",
+    itemId: "item-personal",
+  });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  assert.equal(tab.control().inboxView.open, true, "the other workspace rests on its Inbox");
+  assert.equal(tab.control().inboxView.chosen, undefined, "on none of the last workspace's items");
+});
+
+test("an account with nothing yet rests on no page, its welcome standing, and neither does a window whose list is still read", () => {
+  const fresh = mount({ shown: true, tasks: listRead([]) });
+  assert.equal(fresh.control().page, TASKS_PAGE.HOME);
+  assert.equal(fresh.control().inboxView.open, false);
+  assert.equal(fresh.control().boardView.open, false);
+
+  const reading = mount({
+    shown: true,
+    tasks: { ...listRead([listed()]), listStatus: TASKS_READ.READING },
+  });
+  assert.equal(reading.control().inboxView.open, false);
+});
+
+test("under the inbox-first sidebar the window rests on the newest item waiting, and on the Tasks page where nothing waits", async () => {
+  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
+  const older = { id: "older", agentId: "agent-1", title: "Older", postedAt: 1 };
+  const newer = { id: "newer", agentId: "agent-1", title: "Newer", postedAt: 2 };
+  const waiting = mount(
+    {
+      shown: true,
+      tasks: listRead([listed()]),
+      inboxWaiting: [{ taskId: TASK.id, items: [older, newer] }],
+    },
+    {},
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  assert.equal(waiting.control().inboxView.open, true);
+  assert.deepEqual(waiting.control().inboxView.chosen, { taskId: TASK.id, itemId: "newer" });
+
+  const none = mount({ shown: true, tasks: listRead([listed()]) }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.equal(none.control().boardView.open, true);
+  assert.equal(none.control().inboxView.open, false);
+  handState({});
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
@@ -3582,3 +3655,96 @@ it.effect(
 
 /** A list's payload, read back as the act's own schema admits it. */
 const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
+
+/** Four tasks of one workspace, listed newest first. */
+const FOUR: TasksView = {
+  ...IDLE_TASKS_VIEW,
+  listStatus: TASKS_READ.READY,
+  workspaces: [PERSONAL],
+  tasks: [row("first", 4), row("second", 3), row("third", 2), row("fourth", 1)],
+};
+
+/** Main's answers: every open, leave, and archive or unarchive lands. */
+const ARCHIVES = {
+  ...OPENS,
+  [ACT_KIND.TASKS_ARCHIVE]: () => Promise.resolve(true),
+};
+
+/** A sidebar drawing `walk`'s tasks, top to bottom, as the window's own publishes them. */
+function SidebarDrawing({ walk }: { walk: readonly string[] }) {
+  usePublishSidebarWalk(walk);
+  return null;
+}
+
+/** The tab mounted with `open` open, beside a sidebar drawing `walk` in the same window. */
+function mountBesideSidebar(
+  walk: readonly string[],
+  open: string,
+  answers: Parameters<typeof mount>[1] = ARCHIVES,
+) {
+  const registry = AtomRegistryModule.make();
+  const tab = mount({ shown: true, tasks: { ...FOUR, activeTaskId: open } }, answers, registry);
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(registry, createElement(SidebarDrawing, { walk }))));
+  return tab;
+}
+
+test("archiving the open task opens the task the sidebar draws after it once the archive lands, and Undo opens the archived one again", async () => {
+  const tab = mountBesideSidebar(["first", "second", "third", "fourth"], "second");
+
+  act(() => tab.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  const atPress = opensAsked(tab.payloads);
+  await settle();
+  const opened = opensAsked(tab.payloads);
+  tab.stand({ tasks: { ...FOUR, activeTaskId: "third" } });
+  act(() => _undoButton().click());
+  await settle();
+
+  assert.deepEqual(atPress, [], "nothing opens before the archive is answered");
+  assert.deepEqual(opened, ["third"]);
+  assert.deepEqual(opensAsked(tab.payloads), ["third", "second"]);
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE), "the task is never left for no task");
+});
+
+test("archiving the open task the sidebar draws last opens the one drawn before it", async () => {
+  const tab = mountBesideSidebar(["first", "second", "third", "fourth"], "fourth");
+
+  act(() => tab.control().onMarkTask("fourth", TASK_MARK.ARCHIVE));
+  await settle();
+
+  assert.deepEqual(opensAsked(tab.payloads), ["third"]);
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE));
+});
+
+test("archiving the only task the sidebar draws, or with no sidebar drawn, leaves the task as before", async () => {
+  const only = mountBesideSidebar(["second"], "second");
+  act(() => only.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  await settle();
+  const undrawn = mount({ shown: true, tasks: { ...FOUR, activeTaskId: "second" } }, ARCHIVES);
+  act(() => undrawn.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  await settle();
+
+  assert.deepEqual(
+    [opensAsked(only.payloads), only.told.includes(ACT_KIND.TASKS_CLOSE)],
+    [[], true],
+  );
+  assert.deepEqual(
+    [opensAsked(undrawn.payloads), undrawn.told.includes(ACT_KIND.TASKS_CLOSE)],
+    [[], true],
+  );
+});
+
+test("an archive of the open task the service refuses opens nothing and leaves nothing", async () => {
+  const tab = mountBesideSidebar(["first", "second", "third"], "second", {
+    ...OPENS,
+    [ACT_KIND.TASKS_ARCHIVE]: () => Promise.resolve(false),
+  });
+
+  act(() => tab.control().onMarkTask("second", TASK_MARK.ARCHIVE));
+  await settle();
+
+  assert.deepEqual(opensAsked(tab.payloads), []);
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE));
+  assert.equal(_toast(), "The task could not be archived. Try again.");
+});

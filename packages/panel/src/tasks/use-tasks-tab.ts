@@ -145,6 +145,7 @@ import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { useSidebarWalkNow, walkSuccessor } from "../desktop/sidebar-walk.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -173,6 +174,7 @@ import type { MessageReveal } from "./message-links.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
+import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./resting-page.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
@@ -545,8 +547,10 @@ export interface NewTaskStart {
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
   page: TasksPage;
-  /** Whether a launch is still opening the task last open, while the home page waits rather than flash before it (`use-last-task.ts`). */
+  /** Whether a launch is still opening the task last open, while the page with no task open waits rather than flash before it (`use-last-task.ts`). */
   restoring: boolean;
+  /** Whether the page standing is the one the window rests on with no task open (`resting-page.ts`), which the window's history steps to as it would to no page at all. */
+  resting: boolean;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's tasks stand in for one. */
@@ -634,7 +638,7 @@ export interface TasksControl {
   agents: CodingAgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
-  /** Opens a task from a list, the drawer, or Home: in a narrow room on its plan. */
+  /** Opens a task from a list, the drawer, or the Inbox: in a narrow room on its plan. */
   onSelect: (taskId: string) => void;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
@@ -809,10 +813,8 @@ export interface TasksControl {
       | ((repository: string, ask: RepositoryIssuesAsk) => Promise<GitHubRepositoryIssuesAnswer>)
       | undefined;
   };
-  /** Leaves the open task for the home page; a call on it stands, as opening another task leaves one. */
+  /** Leaves the open task for the page the window rests on (`resting-page.ts`); a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
-  /** Goes to the home page from wherever the tab stands: the open task left, and the window's Inbox put away. */
-  onGoHome: () => void;
   /**
    * Renames a task to a name already trimmed and changed, drawn under it at
    * once and under its old name again if the service refuses; answers
@@ -868,7 +870,9 @@ export interface TasksControl {
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
-   * task back to the home page.
+   * task left for the page the window rests on. The window's Escape takes an open task back
+   * through its history instead (`navigation-history.ts`'s `throughHistory`),
+   * to the page it was opened from.
    */
   back: () => boolean;
   /** The window's one ask before leaving a page whose unsaved work would be lost. */
@@ -2021,6 +2025,21 @@ export function useTasksTab(input: {
   // another than the one open when it was pressed.
   const openNow = useRef(openTaskId);
   openNow.current = openTaskId;
+  // The tasks as they stand when an archive is answered, and the sidebar's
+  // walk, read at the press, since the archive's row is gone by the answer.
+  const tasksAnswered = useRef(tasksNow);
+  tasksAnswered.current = tasksNow;
+  const walkNow = useSidebarWalkNow();
+  // The open task archived opens the task the sidebar drew after it as the
+  // archive was pressed, or else the nearest before it, passing over any
+  // archived or gone since; with none, the window leaves the task.
+  const leaveArchived = (walk: readonly string[], taskId: string) => {
+    const standing = (each: string) =>
+      tasksAnswered.current.some((task) => task.id === each && task.archivedAt === undefined);
+    const next = walkSuccessor(walk, taskId, (each) => each === taskId || !standing(each));
+    if (next === undefined) leaveTask();
+    else selectNow.current(next);
+  };
 
   // A fixture's tasks are marked nowhere, as they are read from nowhere. A
   // refusal puts back the mark it drew only while no later press replaced it,
@@ -2028,10 +2047,11 @@ export function useTasksTab(input: {
   // that landed, or an unarchive, says so with an Undo, which marks the task
   // back and opens it again if the archive had left it; an undoing says
   // nothing of its own unless it is refused. Note that the open task is left
-  // only once its archive is answered, because leaving ends its call, which a
-  // refusal could not give back, nor can an Undo.
+  // for the next one only once its archive is answered, because leaving ends
+  // its call, which a refusal could not give back, nor can an Undo.
   const markTask = (taskId: string, mark: TaskMark, undoing?: { reopen: boolean }) => {
     if (fixture !== undefined) return;
+    const walk = walkNow();
     const next = { ...marks.get(taskId), ...pendingMark(mark, Date.now()) };
     setMarks((held) => new Map(held).set(taskId, next));
     const pinning = mark === TASK_MARK.PIN || mark === TASK_MARK.UNPIN;
@@ -2055,7 +2075,7 @@ export function useTasksTab(input: {
           return;
         }
         const left = mark === TASK_MARK.ARCHIVE && openNow.current === taskId;
-        if (left) leaveTask();
+        if (left) leaveArchived(walk, taskId);
         if (undoing?.reopen) selectNow.current(taskId);
         if (pinning || undoing !== undefined) return;
         const { note, undo } = MARK_UNDOS[mark];
@@ -2343,6 +2363,84 @@ export function useTasksTab(input: {
   });
   const selectNow = useRef(select);
   selectNow.current = select;
+
+  // With no task open the window rests on a page of its own rather than on
+  // nothing: the Inbox, the inbox-first sidebar's newest thread or the Tasks
+  // page, or a new account's welcome, which is the page with no task open
+  // drawn bare (`resting-page.ts`). Note that it waits for the list, and for
+  // a launch reopening the task last open, so neither flashes before it.
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  const fresh = freshAccount({
+    tasks: sidebar.standing,
+    archived: sidebar.archived,
+    taskless: input.inboxTaskless,
+    readerId: input.accountId,
+  });
+  // A list that could not be read says so on the page rested on, and leaves no account new.
+  const listSettled =
+    tasks.listStatus === TASKS_READ.READY || tasks.listStatus === TASKS_READ.FAILED;
+  // The page last rested on, while it stands: the sidebar turning to or
+  // from the Inbox's threads, another workspace listed, or another account
+  // signing in rests the window again rather than leave it on a page chosen
+  // for the other sidebar, workspace, or account. Note that it is held by its kind, so a choice made
+  // in the Inbox rested on keeps it rested on, and any other page standing
+  // in its place lets it go.
+  const [rested, setRested] = useState<
+    | {
+        readonly kind: StandIn["kind"];
+        readonly inboxFirst: boolean;
+        readonly workspaceId: string | undefined;
+        readonly account: string | undefined;
+      }
+    | undefined
+  >(undefined);
+  const resting = rested !== undefined && standIn?.kind === rested.kind && boundFor === undefined;
+  if (rested !== undefined && !resting && standIn !== undefined) setRested(undefined);
+  if (
+    resting &&
+    (rested.inboxFirst !== inboxFirst ||
+      rested.workspaceId !== listedWorkspaceId ||
+      rested.account !== input.account)
+  ) {
+    setRested(undefined);
+    setStandIn(undefined);
+  } else if (
+    standIn === undefined &&
+    boundFor === undefined &&
+    signedIn &&
+    !restoring &&
+    listSettled
+  ) {
+    const rest = restingPage({
+      fresh: fresh && tasks.listStatus === TASKS_READ.READY,
+      inboxFirst,
+      remembered: rememberedChoice(lastInboxChoice.current, {
+        account: input.account,
+        workspaceId: listedWorkspaceId,
+      }),
+      newest: newestWaiting({
+        tasks: listedInbox.inbox,
+        taskless: input.inboxTaskless,
+        workspaceId: listedWorkspaceId,
+        readerId: input.accountId,
+      }),
+    });
+    const on: StandIn | undefined =
+      rest.kind === RESTING_PAGE.INBOX
+        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: false }
+        : rest.kind === RESTING_PAGE.TASKS
+          ? { kind: STAND_IN.BOARD }
+          : undefined;
+    if (on !== undefined) {
+      setRested({
+        kind: on.kind,
+        inboxFirst,
+        workspaceId: listedWorkspaceId,
+        account: input.account,
+      });
+      setStandIn(on);
+    }
+  }
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -2829,6 +2927,8 @@ export function useTasksTab(input: {
 
   // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
   const standInFor = (standing: StandIn) => {
+    // A page a link asks for is a place of its own, not the page rested on, though it be the Inbox.
+    setRested(undefined);
     setHistoryFor(undefined);
     setStandIn(standing);
   };
@@ -3243,7 +3343,7 @@ export function useTasksTab(input: {
     sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.PLAN);
   };
 
-  // The home page is where the tab rests, so only an open task steps back,
+  // The tab rests on no task, so only an open task steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
     if (page !== TASKS_PAGE.DOCUMENT) return false;
@@ -3256,6 +3356,7 @@ export function useTasksTab(input: {
   return useSteadyDoors({
     page,
     restoring,
+    resting,
     shown,
     signedIn,
     me: fixture === undefined ? input.accountId : undefined,
@@ -3281,9 +3382,9 @@ export function useTasksTab(input: {
         ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
       }),
     // A workspace left lands the window on the account's own workspace's
-    // Home, since nothing of the one left is the reader's to show any more.
+    // resting page, since nothing of the one left is the reader's to show any more.
     // Note that it lists the workspace rather than switching to it, because a
-    // switch reopens the task last open there, and a leave goes Home; the
+    // switch reopens the task last open there, and a leave goes to rest; the
     // navigation it counts passes over any open still on its way.
     onLeftWorkspace: (workspaceId) => {
       const others = viewed.workspaces.filter((each) => each.id !== workspaceId);
@@ -3374,6 +3475,8 @@ export function useTasksTab(input: {
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
       onOpenItem: guard((chosen: InboxChoice) => {
         setHistoryFor(undefined);
+        // An item opened by a press is a place of its own, as a link's is, not the Inbox rested on.
+        setRested(undefined);
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
             ? { ...held, chosen, listed: false }
@@ -3600,9 +3703,6 @@ export function useTasksTab(input: {
       githubIssuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),
-    // Home is the page with no task open, so where none is, only the Inbox, an
-    // agent's page, Factory, the Automations page, or Chat standing over it is put away, and the host is asked nothing.
-    onGoHome: guard(() => (boundFor === undefined ? setStandIn(undefined) : leaveTask())),
     onRenameTask: renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),

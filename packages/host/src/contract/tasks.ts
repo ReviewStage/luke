@@ -9,6 +9,11 @@
  * answers `void`.
  */
 
+import {
+  adminFavoriteParamsSchema,
+  adminReadAnswerSchema,
+  adminReadParamsSchema,
+} from "@luke/features/admin-wire";
 import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
 import {
   codeLinesSchema,
@@ -158,6 +163,12 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.ADMIN_OPEN]: actProcedure("Could not open the admin dashboard on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
+  [TASKS_ACT_KIND.ADMIN_READ]: actProcedure("Could not read the admin dashboard on this system.")
+    .input(exactInput(adminReadParamsSchema))
+    .output(EffectSchema.flip(adminReadAnswerSchema)),
+  [TASKS_ACT_KIND.ADMIN_FAVORITE]: actProcedure("Could not star that account on this system.")
+    .input(exactInput(adminFavoriteParamsSchema))
+    .output(EffectSchema.Boolean),
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: actProcedure("Could not disconnect GitHub on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
