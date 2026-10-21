@@ -47,7 +47,10 @@
   --luke-color-ink: light-dark(#000, #fff);
   /* Words on a fill of the text's own ink, which read in the ground's colour. */
   --luke-color-ink-inverse: var(--luke-color-ground);
-  --luke-color-accent-text: light-dark(#0a72a8, #5cd5ff);
+  /* Links' and text buttons' ink: in the light a step darker than the working
+     teal-blue, at its hue, so it reads at AA on the sidebar's current row
+     (`tokens.test.ts`). */
+  --luke-color-accent-text: light-dark(#00689b, #5cd5ff);
 
   --luke-color-ground: light-dark(#fcfcfc, #0c0c0e);
   /* A settings group's ground, a card's. */
@@ -164,8 +167,10 @@
 [data-luke-profile="web"],
 [data-luke-profile="web"][data-luke-theme="light"] {
   --luke-color-text: oklch(0.145 0 0);
-  --luke-color-text-muted: oklch(0.556 0 0);
-  --luke-color-text-subtle: oklch(0.556 0 0);
+  /* The quieter words, one ink: a step under shadcn's stock muted gray, so a
+     caption reads at AA on the sidebar's current row (`tokens.test.ts`). */
+  --luke-color-text-muted: oklch(0.5 0 0);
+  --luke-color-text-subtle: oklch(0.5 0 0);
   --luke-color-text-body: oklch(0.145 0 0);
   --luke-color-ink: #000;
   --luke-color-ink-inverse: var(--luke-color-ground);
