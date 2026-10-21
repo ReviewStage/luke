@@ -64,6 +64,7 @@ import {
 } from "../http/http-effect.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
 
@@ -212,6 +213,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statement = macCommandsLiveStatement(context.userId, macCommandKindsRead(input.kinds));
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts({ commands: statement.value }, input);
+    }),
+    taskConversation: signedIn.taskConversation.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* rowIdOf(input.id);
+      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = taskConversationLiveStatements(context.userId, taskId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
     }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
