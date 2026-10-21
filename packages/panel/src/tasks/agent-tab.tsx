@@ -293,6 +293,7 @@ const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
+const OLDER_FAILED_LINE = "Earlier messages could not be read.";
 
 /** A worker's transcript: the subagent task it was handed, and the worker starting. */
 const WORKER_LEAD: TranscriptLead = {
@@ -1608,6 +1609,7 @@ function AgentTranscriptView({
   onOpenApiKeys,
   onRetry,
   onOlder,
+  olderFailed = false,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
@@ -1646,6 +1648,8 @@ function AgentTranscriptView({
   onRetry: () => void;
   /** Reads the messages older than the first held, which the log asks for as the reader nears its top; none where none stand. */
   onOlder?: (() => void) | undefined;
+  /** Whether the last read of older messages did not answer, which a line over the log says with Retry. */
+  olderFailed?: boolean;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1725,6 +1729,10 @@ function AgentTranscriptView({
     return (
       <LiveDoors value={live}>
         <Conversation onNearTop={onOlder}>
+          {/* Note that it stands over the log rather than in it, so its coming and going moves no line the reader is on. */}
+          {olderFailed && onOlder !== undefined ? (
+            <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
+          ) : null}
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
             {placed.map(({ message, said, read }, index) => (
@@ -2062,6 +2070,7 @@ function AgentTabView({
                   endTrail={endTrail}
                   onRetry={transcript.onRetry}
                   onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                  olderFailed={transcript.olderFailed}
                   overComposer
                   calls={calls}
                 />
@@ -2470,6 +2479,7 @@ export function AgentSubagentTab({
               ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
               onRetry={transcript.onRetry}
               onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+              olderFailed={transcript.olderFailed}
             />
           </WholePartsProvider>
         </AgentPicturesProvider>

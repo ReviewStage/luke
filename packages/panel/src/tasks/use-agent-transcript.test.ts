@@ -416,9 +416,10 @@ test("an older read that failed leaves what is held and may be asked again", asy
   assert.equal(asked.length, 2);
 });
 
-test("a newest page that meets what is held joins it, older pages and all; one that does not takes its place, so nothing between them is left out", () => {
+test("a newest page that meets what is held joins it, older pages and all; one that does not takes its place, so nothing between them is left out", async () => {
   const { follower, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+  const { older, hand } = scriptedOlder();
+  const { seen, draw } = drawn(follower, older);
 
   draw(true);
   push(AGENT, newestOf(["m-3", "m-4"], "3"));
@@ -435,10 +436,17 @@ test("a newest page that meets what is held joins it, older pages and all; one t
 
   draw(false);
   draw(true);
+  // An older read that failed is the failed cursor's alone.
+  act(() => seen.current?.loadOlder());
+  await hand({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(seen.current?.olderFailed, true);
+  draw(false);
+  draw(true);
   // Shown again after more than a page was written: nothing held is on it.
   push(AGENT, newestOf(["m-90", "m-91"], "90"));
   assert.deepEqual(
     seen.current?.messages.map((message) => message.id),
     ["m-90", "m-91"],
   );
+  assert.equal(seen.current?.olderFailed, false);
 });
