@@ -35,7 +35,7 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
-import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
+import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MailOpenIcon, MessagesSquareIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -181,7 +181,7 @@ function taskGrouping(tasks: TasksControl): ChatTaskGrouping {
           id: section.id,
           title: section.title,
           icon: section.icon,
-          taskIds: sectionOrder(state, section.id).map((entry) => entry.taskId),
+          taskIds: sectionTaskIds(state, section.id),
         }));
   return { pinned, sections };
 }

@@ -325,6 +325,11 @@ const SIDEBAR_SEALED = {
   queries: {
     sections: { capability: "capability-sections", queryFingerprint: "s", expiresAt: 1e15 },
     entries: { capability: "capability-entries", queryFingerprint: "e", expiresAt: 1e15 },
+    agentEntries: {
+      capability: "capability-agent-entries",
+      queryFingerprint: "a",
+      expiresAt: 1e15,
+    },
     pins: { capability: "capability-pins", queryFingerprint: "p", expiresAt: 1e15 },
   },
 };
@@ -338,6 +343,10 @@ function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly Repo
       position: section.position ?? null,
     })),
     entries: (sections?.entries ?? []).map((entry) => ({
+      ...entry,
+      position: entry.position ?? null,
+    })),
+    agentEntries: (sections?.agentEntries ?? []).map((entry) => ({
       ...entry,
       position: entry.position ?? null,
     })),
@@ -413,6 +422,7 @@ function fakeService(tasks: Task[]): FakeService {
     if (part === "capability-installations") return rows.installations;
     if (part === "capability-sections") return sidebar.sections;
     if (part === "capability-entries") return sidebar.entries;
+    if (part === "capability-agent-entries") return sidebar.agentEntries;
     return part === "capability-pins" ? sidebar.pins : undefined;
   };
   /** The workspaces told to every subscription that stands, as Realtime tells a change. */
@@ -1754,7 +1764,7 @@ it.effect(
         title: "Launch",
         createdAt: 5,
       };
-      service.sections = { sections: [launch], entries: [] };
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
       service.pins = [{ repository: "acme/relay", pinnedAt: 3 }];
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
@@ -1765,17 +1775,25 @@ it.effect(
       assert.equal(service.reads.filter((read) => read === "sidebar-live").length, 1);
 
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
-      service.sections = { sections: [launch], entries: [placed] };
+      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place), { changed: true });
-      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(last()?.taskSections, {
+        sections: [launch],
+        entries: [placed],
+        agentEntries: [],
+      });
 
       service.sections = undefined;
       const removal = { ...place, sectionId: null };
       assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, removal), {
         changed: false,
       });
-      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(last()?.taskSections, {
+        sections: [launch],
+        entries: [placed],
+        agentEntries: [],
+      });
       assert.deepEqual(service.sectionWrites, [place, removal]);
 
       const later = {
@@ -1786,7 +1804,7 @@ it.effect(
       };
       service.realtime.deliver(
         "sections",
-        sidebarLiveRows({ sections: [later, launch], entries: [] }, []).sections,
+        sidebarLiveRows({ sections: [later, launch], entries: [], agentEntries: [] }, []).sections,
       );
       service.realtime.deliver("pins", [
         { repository: "acme/relay", pinnedAt: 3 },

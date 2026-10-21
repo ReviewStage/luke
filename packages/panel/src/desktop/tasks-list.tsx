@@ -40,9 +40,11 @@ import {
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
+  isAgentEntry,
   placeWrites,
   sectionEntries,
   sectionOrder,
+  sectionTaskIds,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
 import { RENAME_FAILED_NOTE, TASK_MARK } from "@luke/ui/tasks-model";
@@ -329,7 +331,7 @@ function listSections(tasks: TasksControl): readonly TasksSection[] {
   if (workspaceId === undefined) return [];
   return workspaceSections(tasks.taskSections, workspaceId).map((section) => ({
     sectionId: section.id,
-    taskIds: sectionOrder(tasks.taskSections, section.id).map((entry) => entry.taskId),
+    taskIds: sectionTaskIds(tasks.taskSections, section.id),
   }));
 }
 
@@ -408,10 +410,12 @@ function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
     : [];
 }
 
-/** A section's entries for the tasks its group draws, in its own order. */
+/** A section's entries for the tasks its group draws, in its own order; its agents, which the List draws not, left out. */
 function drawnEntries(tasks: TasksControl, group: TasksGroup, sectionId: string) {
   const drawn = new Set(group.tasks.map((task) => task.id));
-  return sectionOrder(tasks.taskSections, sectionId).filter((entry) => drawn.has(entry.taskId));
+  return sectionOrder(tasks.taskSections, sectionId).flatMap((entry) =>
+    !isAgentEntry(entry) && drawn.has(entry.taskId) ? [entry] : [],
+  );
 }
 
 /** What a group's drag does: its rows moved within it, where it keeps an order, and a row let go over another group's zone. */
@@ -444,7 +448,8 @@ function listDrops(
         const entries = drawnEntries(tasks, group, head.sectionId);
         const entry = entries[from];
         if (entry === undefined) return;
-        tasks.onWriteSections(placeWrites(entries, entry.taskId, head.sectionId, to, Date.now()));
+        const member = { agent: false, id: entry.taskId };
+        tasks.onWriteSections(placeWrites(entries, member, head.sectionId, to, Date.now()));
       };
     }
     return undefined;
@@ -481,7 +486,8 @@ function listDrops(
         );
         const entries = target === undefined ? [] : drawnEntries(tasks, target, onto.sectionId);
         leave();
-        tasks.onWriteSections(placeWrites(entries, task.id, onto.sectionId, at, Date.now()));
+        const member = { agent: false, id: task.id };
+        tasks.onWriteSections(placeWrites(entries, member, onto.sectionId, at, Date.now()));
         return;
       }
       // Note that a row leaves Pinned or its section only once its new status or priority is kept, so a refused change leaves it where it stood.
